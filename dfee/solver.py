@@ -1,0 +1,268 @@
+import numpy as np
+
+class RenderPlanSolver:
+    def __init__(self):
+        pass
+
+    def solve(self, feature_dict, stock_profile, scan_profile, user_controls=None):
+        """
+        Combines feature metrics with stock/scanner behavior to compute the render plan.
+        
+        Args:
+            feature_dict (dict): The output of ImageStateAnalyzer
+            stock_profile (FilmStockProfile): Selected stock behavior profile
+            scan_profile (ScanPrintProfile): Selected scan/print finish profile
+            user_controls (dict): Optional user overrides (adaptation_strength, grain_amount, etc.)
+        """
+        tonal = feature_dict["tonal_distribution"]
+        color = feature_dict["hue_saturation_state"]
+        spatial = feature_dict["spatial_frequency"]
+        channel = feature_dict["channel_behavior"]
+        
+        # Merge user controls with defaults
+        controls = {
+            "adaptation_strength": 1.0,
+            "exposure_intent": "Preserve",
+            "color_cast_handling": "Auto",
+            "grain_amount": "Auto",
+            "halation_amount": "Auto",
+            "output_finish": "Natural"
+        }
+        if user_controls:
+            controls.update(user_controls)
+            
+        adaptation_mult = float(controls["adaptation_strength"])
+        
+        # 1. Input Diagnosis Summary
+        input_diagnosis = {
+            "tonal_state": tonal["tonal_skew"],
+            "dynamic_range_stops": tonal["dynamic_range_stops"],
+            "shadow_cast": "normal" if abs(tonal["shadow_depth"]) < 0.05 else "deep",
+            "midtone_anchor": tonal["midtone_anchor"],
+            "highlight_headroom": tonal["highlight_headroom"],
+            "neon_risk": color["neon_risk"],
+            "specular_candidate_strength": spatial["specular_point_ratio"]
+        }
+        
+        warnings = []
+        
+        # Determine warnings
+        if tonal["tonal_skew"] == "highlight_stressed":
+            warnings.append("HIGH_CHANNEL_CLIPPING")
+        if tonal["shadow_depth"] < 0.02:
+            warnings.append("SHADOW_NOISE_RISK")
+        if color["neon_risk"] > 0.05:
+            warnings.append("NEON_CHROMA_RISK")
+        if feature_dict.get("camera_input_bias", {}).get("neutral_confidence", 1.0) < 0.25:
+            warnings.append("LOW_NEUTRAL_CONFIDENCE")
+        if spatial["large_highlight_area_ratio"] > 0.10:
+            warnings.append("DIFFUSE_HIGHLIGHT_SUPPRESSION")
+            
+        # 2. Pre-Film Normalization
+        # Solve Exposure Compensation
+        # EV offset: log2(target_gray / midtone_anchor)
+        target_gray = 0.18
+        exposure_comp = 0.0
+        
+        if controls["exposure_intent"] == "Auto":
+            # Auto-align midtone anchor to middle gray
+            exposure_comp = float(np.log2(target_gray / tonal["midtone_anchor"]))
+        elif controls["exposure_intent"] == "Lift":
+            exposure_comp = float(np.log2(target_gray / tonal["midtone_anchor"])) + 0.5
+        elif controls["exposure_intent"] == "Darken":
+            exposure_comp = float(np.log2(target_gray / tonal["midtone_anchor"])) - 0.5
+        else: # "Preserve"
+            # Apply subtle correction only to keep midtones within printable limits
+            raw_comp = float(np.log2(target_gray / tonal["midtone_anchor"]))
+            exposure_comp = raw_comp * 0.35  # Gentle correction
+            
+        # Apply adaptation scale and clamp
+        exposure_comp = float(np.clip(exposure_comp * adaptation_mult, -2.5, 2.5))
+        
+        # Color Cast Compensation
+        bias_info = feature_dict.get("camera_input_bias", {})
+        neutral_conf = bias_info.get("neutral_confidence", 0.8)
+        comp_sensitivity = stock_profile.adaptation.get("camera_cast_compensation_sensitivity", 0.7)
+        
+        cast_correction_mult = 0.0
+        if controls["color_cast_handling"] in ["Auto", "Neutralize", "Strong neutralize"]:
+            cast_correction_mult = neutral_conf * comp_sensitivity * adaptation_mult
+            if controls["color_cast_handling"] == "Strong neutralize":
+                cast_correction_mult = max(cast_correction_mult, 0.8)
+        elif controls["color_cast_handling"] == "Preserve warmth":
+            # Correct cool cast but keep warm cast
+            if bias_info.get("warm_cool_bias", 0.0) < 0.0:  # cool cast
+                cast_correction_mult = neutral_conf * comp_sensitivity * 0.8
+            else:
+                cast_correction_mult = neutral_conf * comp_sensitivity * 0.2
+                
+        # Calculate pre-film normalization offsets in OKLab space
+        # We want to subtract a fraction of the midtone/shadow cast
+        shadow_blue_norm = float(bias_info.get("blue_excess_index", 0.0) * cast_correction_mult)
+        green_mag_stab = float(abs(bias_info.get("green_magenta_bias", 0.0)) * cast_correction_mult)
+        
+        # Highlight channel recovery
+        highlight_channel_recovery = 0.0
+        if max(channel["clipping_ratios"].values()) > 0.0:
+            highlight_channel_recovery = float(np.clip(max(channel["clipping_ratios"].values()) * 5.0, 0.1, 0.9))
+            
+        pre_film_normalization = {
+            "exposure_compensation_stops": exposure_comp,
+            "shadow_blue_normalization": shadow_blue_norm,
+            "green_magenta_stabilization": green_mag_stab,
+            "highlight_channel_recovery": highlight_channel_recovery
+        }
+        
+        # 3. Film Response
+        tone = stock_profile.tone_response
+        color_resp = stock_profile.color_response
+        hsv_resp = stock_profile.hue_saturation_response
+        
+        # Adjust curve parameters based on dynamic range and headroom
+        toe_strength = float(tone["toe_strength"])
+        shoulder_strength = float(tone["shoulder_strength"])
+        highlight_rolloff_start = float(tone["highlight_rolloff_start"])
+        black_density = float(tone["black_density_floor"])
+        
+        # Adapt tone curve to scene dynamic range
+        if tonal["dynamic_range_stops"] > 11.5:
+            # High DR: soften shoulder and toe to preserve detail
+            shoulder_strength *= 0.9
+            toe_strength *= 0.85
+        elif tonal["dynamic_range_stops"] < 5.0:
+            # Low DR: punch up contrast
+            toe_strength *= 1.15
+            
+        # Adapt shoulder to highlight headroom
+        if tonal["highlight_headroom"] < 0.15:
+            # Low headroom: roll off sooner and stronger
+            highlight_rolloff_start = max(highlight_rolloff_start - 0.05, 0.5)
+            shoulder_strength = min(shoulder_strength + 0.1, 0.95)
+            
+        # Saturation adjustments
+        highlight_desat = float(hsv_resp["highlight_desaturation"])
+        if tonal["highlight_headroom"] < 0.10:
+            highlight_desat = min(highlight_desat + 0.15, 0.95)
+            
+        film_response = {
+            "toe_strength":            toe_strength,
+            "toe_length":              float(tone["toe_length"]),
+            "midtone_density":         float(tone["midtone_contrast"]),
+            "shoulder_strength":       shoulder_strength,
+            "highlight_rolloff_start": highlight_rolloff_start,
+            "black_density_floor":     black_density,
+            "highlight_desaturation":  highlight_desat,
+            "blue_cyan_compression":   float(hsv_resp["cyan_blue_highlight_compression"]),
+            "red_orange_compression":  float(hsv_resp["red_orange_midtone_compression"]),
+            "neon_compression":        float(hsv_resp.get("neon_compression", 0.0)),
+            # Per-zone color biases from stock profile YAML (used by color_response stage)
+            "shadow_bias_lab":    color_resp.get("shadow_bias_lab",    [0.0, 0.0, 0.0]),
+            "midtone_bias_lab":   color_resp.get("midtone_bias_lab",   [0.0, 0.0, 0.0]),
+            "highlight_bias_lab": color_resp.get("highlight_bias_lab", [0.0, 0.0, 0.0]),
+            # Panchromatic weights for monochrome stocks (Tri-X spectral sensitivity)
+            "pan_weight_r": 0.25,
+            "pan_weight_g": 0.55,
+            "pan_weight_b": 0.20,
+        }
+
+        # 4. Material Effects (Grain, Halation, Bloom)
+        g_cfg = stock_profile.grain
+        grain_strength = float(g_cfg["strength"])
+        grain_size     = float(g_cfg["size"])
+
+        # Manual grain amount override
+        if controls["grain_amount"] == "Off":
+            grain_strength = 0.0
+        elif controls["grain_amount"] == "Low":
+            grain_strength *= 0.5
+        elif controls["grain_amount"] == "High":
+            grain_strength *= 1.5
+            grain_size     *= 1.2
+        # "Medium" / "Auto" → use profile default
+
+        # ── ISO-adaptive grain (uses real EXIF ISO if available) ─────────────
+        # Each film stock has a native/box-speed ISO. Shooting above it (push)
+        # enlarges and strengthens grain; below it (pull) slightly reduces it.
+        # The stock's YAML base ISO is used as the anchor point.
+        if controls["grain_amount"] in ("Auto",):
+            raw_meta  = feature_dict.get("raw_metadata", {})
+            shot_iso  = raw_meta.get("iso", None)
+            # Get the stock's rated box-speed ISO from profile (fall back to 400)
+            base_iso  = float(stock_profile.adaptation.get("base_iso", 400))
+
+            if shot_iso and shot_iso > 0:
+                # Number of stops pushed / pulled relative to box speed
+                push_stops = np.log2(shot_iso / base_iso)  # positive = push
+                if push_stops > 0:
+                    # Push: grain gets stronger and coarser
+                    grain_strength *= (1.0 + 0.20 * push_stops)
+                    grain_size     *= (1.0 + 0.10 * push_stops)
+                elif push_stops < 0:
+                    # Pull: very slightly finer / softer grain
+                    grain_strength *= max(0.6, 1.0 + 0.08 * push_stops)
+
+        # Shadow noise risk — suppress grain to avoid compounding with digital noise
+        if "SHADOW_NOISE_RISK" in warnings:
+            noise_sensitivity = stock_profile.adaptation.get("shadow_noise_sensitivity", 0.6)
+            grain_strength *= (1.0 - 0.20 * noise_sensitivity)
+
+        # Halation & Bloom
+        h_cfg = stock_profile.halation
+        halation_strength = float(h_cfg["strength"])
+        bloom_strength = 0.10 # default bloom base
+        
+        # Scale halation by control
+        if controls["halation_amount"] == "Off":
+            halation_strength = 0.0
+            bloom_strength = 0.0
+        elif controls["halation_amount"] == "Low":
+            halation_strength *= 0.5
+            bloom_strength *= 0.5
+        elif controls["halation_amount"] == "High":
+            halation_strength *= 1.5
+            bloom_strength *= 1.5
+            
+        # Suppress halation if diffuse highlight is high
+        if "DIFFUSE_HIGHLIGHT_SUPPRESSION" in warnings:
+            halation_strength *= 0.3
+            bloom_strength *= 1.2  # Increase soft bloom instead
+            
+        # Edge softening (acutance)
+        edge_softening = float(stock_profile.scanner.get("output_sharpening", 0.15)) * 0.5
+        
+        material_effects = {
+            "grain_strength": grain_strength,
+            "grain_size": grain_size,
+            "grain_chroma_strength": float(g_cfg["chroma_strength"]),
+            "halation_strength": halation_strength,
+            "bloom_strength": bloom_strength,
+            "edge_softening": edge_softening
+        }
+        
+        # Scanner finish: scan_profile.contrast is centred at 1.0 (neutral).
+        # stock scanner.contrast is an additive offset in [-0.3, +0.3] relative to neutral.
+        # Result is clamped to [0.5, 1.5] so it can never crush or massively boost.
+        stock_scanner_contrast = float(stock_profile.scanner.get("contrast", 0.0))
+        scan_contrast = float(np.clip(float(scan_profile.contrast) + stock_scanner_contrast - 0.5, 0.5, 1.5))
+        scan_warmth = float(scan_profile.warmth) + float(stock_profile.scanner.get("warmth", 0.0)) * 0.5
+
+        scanner_finish = {
+            "scan_contrast": scan_contrast,
+            "scan_warmth": scan_warmth,
+            "black_point": float(scan_profile.black_point),
+            "white_point": float(scan_profile.white_point),
+            "color_separation": float(scan_profile.color_separation)
+        }
+        
+        # Package and return Render Plan
+        render_plan = {
+            "stock_type":             stock_profile.stock_type,
+            "input_diagnosis":        input_diagnosis,
+            "pre_film_normalization": pre_film_normalization,
+            "film_response":          film_response,
+            "material_effects":       material_effects,
+            "scanner_finish":         scanner_finish,
+            "warnings":               warnings
+        }
+        
+        return render_plan

@@ -1,0 +1,55 @@
+stock_id: kodachrome_64
+stock_name: Kodak Kodachrome 64
+stock_type: color_reversal
+
+adaptation:
+  base_iso: 64
+  default_strength: 0.90
+  camera_cast_compensation_sensitivity: 0.60
+  highlight_stress_sensitivity: 0.75
+  shadow_noise_sensitivity: 0.50
+
+tone_response:
+  toe_strength: 0.55         # Steep toe for rich dark shadows
+  toe_length: 0.25           # Fairly compact shadow compression
+  midtone_contrast: 1.15     # Punchy midtone contrast (> 1.0)
+  shoulder_strength: 0.85    # Strong shoulder roll-off to avoid harsh clipping
+  highlight_rolloff_start: 0.65  # Highlight roll-off starts early
+  black_density_floor: 0.012  # Very deep black floor (dense blacks)
+
+color_response:
+  # Lab bias shifts (L_shift, a_shift, b_shift)
+  shadow_bias_lab: [-0.5, -0.5, -3.0]    # Cold/blue shadow cast
+  midtone_bias_lab: [0.0, 1.2, 2.5]      # Warm, classic yellow-red midtones
+  highlight_bias_lab: [0.5, 2.0, 4.5]    # Rich, warm golden highlights
+  blue_cast_suppression: 0.20
+  green_magenta_stabilization: 0.35
+
+hue_saturation_response:
+  red_orange_midtone_compression: 0.15   # Low compression -> vibrant reds/oranges
+  yellow_green_muting: 0.10              # Keeps yellows vibrant
+  cyan_blue_highlight_compression: 0.25
+  neon_compression: 0.60
+  highlight_desaturation: 0.30           # Relatively colorful highlights compared to negative film
+
+grain:
+  size: 0.25                 # Very fine grain
+  strength: 0.20             # Subtle grain presence
+  chroma_strength: 0.02      # Almost pure luminance grain
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.70
+
+halation:
+  trigger: specular_only
+  strength: 0.10             # Minimal halation (reversal film backing is very effective)
+  radius_inner: 4
+  radius_outer: 15
+  warm_core: [1.0, 0.55, 0.20]
+  red_fringe: [0.95, 0.15, 0.05]
+
+scanner:
+  style: frontier_soft
+  contrast: 0.45
+  warmth: 0.10
+  black_point: 0.015
+  output_sharpening: 0.25

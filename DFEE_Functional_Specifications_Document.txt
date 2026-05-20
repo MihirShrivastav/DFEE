@@ -1,0 +1,922 @@
+Deterministic Film Emulation EngineDetailed Functional Specifications Document
+Version 1.0 | Value-Based Parametric Film Response Architecture
+
+Prepared as a functional specification for a deterministic RAW image processing system that emulates analog film behavior using measurable image-state parameters: exposure, luminance, hue, saturation, channel balance, density, contrast, spatial frequency, grain receptivity, and optical highlight behavior.
+1. Executive Summary
+The Deterministic Film Emulation Engine (DFEE) is a RAW-first image rendering system designed to transform digital camera images into film-like photographs through a deterministic, scene-adaptive, value-based processing pipeline. The system does not depend on semantic object recognition as its primary logic. It instead emulates how film reacts to light, density, hue, saturation, contrast, color-channel exposure, highlight stress, shadow depth, grain visibility, and optical scattering.
+The core product problem is that Lightroom presets and conventional LUTs assume the input image is within a narrow working range. When the RAW file has unusual exposure, camera-specific color bias, harsh highlights, deep shadows, or oversaturated digital colors, a fixed preset may overcorrect, clip, shift, or flatten the image. DFEE addresses this by first extracting a detailed image-state profile and then computing a render plan that applies a selected film stock profile proportionally and safely.
+1.1 Core Principle
+Film does not know objects. It responds to incoming light. Therefore, DFEE shall emulate film through luminance, chroma, hue, density, channel response, contrast, and spatial-frequency behavior rather than through object-specific edits.
+1.2 Source Basis and Extension
+The initial reference architecture proposed RAW scene-linear ingestion, continuous luminance-zone masks, dynamic range assessment, grain receptivity maps, specular halation triggers, and edge-gradient maps. This specification preserves those valid principles while expanding them into a complete feature extraction, film-response, parameter-solver, and rendering pipeline.
+Area
+Reference Direction
+Specification Extension
+RAW ingestion
+Bypass baked tone mapping and work from linear sensor data.
+Formalize RAW normalization, metadata capture, camera bias estimation, and working color-space conversion.
+Luminance zones
+Use smooth shadow, midtone, and highlight masks.
+Expand into deep shadow, shadow, lower midtone, midtone, upper midtone, highlight, and specular zones.
+Spatial physics
+Use variance for grain masking and high-contrast highlights for halation.
+Add spatial-frequency maps, texture masking, smooth-region detection, digital sharpness score, bloom candidate maps, and adjacency contrast maps.
+Transformation
+Use dynamic tone, color matrices, grain, and halation.
+Reframe as a zone × hue × saturation × channel-balance film stock behavior model.
+
+2. Product Goals and Non-Goals
+2.1 Product Goals
+Produce film-like outputs from RAW digital images without relying on fixed presets or fixed LUTs as the primary rendering mechanism.
+Analyze each image before transformation to understand exposure, tonal distribution, color cast, hue distribution, saturation pressure, channel clipping, shadow density, highlight stress, texture, and grain receptivity.
+Apply film stock behavior as a controlled response system across luminance zones, hue bands, saturation ranges, and spatial-frequency regions.
+Maintain deterministic reproducibility: the same input RAW, selected profile, version, and user controls shall produce the same output.
+Allow camera-specific biases, such as cool/blue shadow casts or green-magenta imbalance, to be normalized before or during film rendering.
+Produce an explainable render report showing input diagnosis and applied rendering decisions.
+Support future extension to multiple film stock styles, scanner styles, and print styles without rewriting the core engine.
+2.2 Product Non-Goals
+DFEE shall not primarily rely on AI object detection, segmentation, or generative image manipulation to create the film look.
+DFEE shall not hallucinate new image content, replace regions, or create semantic edits such as changing sky, skin, face, clothes, or background independently as a core operation.
+DFEE shall not treat film emulation as a single global HSL adjustment, global LUT, or fixed preset stack.
+DFEE shall not attempt exact legal or brand-claimed replication of commercial film stocks unless supported by properly licensed calibration data and branding permissions.
+DFEE shall not assume that all photos should be corrected to a neutral, technically perfect baseline before rendering; film aesthetics may intentionally preserve warmth, darkness, or imperfect exposure.
+3. System Overview
+3.1 End-to-End Functional Flow
+1. Ingest RAW image and metadata.
+2. Convert to scene-linear working representation.
+3. Compute luminance, chroma, hue, saturation, channel, and spatial-frequency diagnostics.
+4. Estimate camera/input color bias and dynamic range state.
+5. Generate continuous luminance-zone masks and value-based control maps.
+6. Combine image-state features with selected film stock and scan/print profile.
+7. Generate deterministic adaptive render plan.
+8. Apply exposure placement, film response curves, channel-density behavior, hue/saturation compression, local contrast shaping, grain synthesis, halation/bloom, and scanner/print finishing.
+9. Export rendered image and sidecar render report.
+3.2 Logical Architecture
+Layer
+Primary Responsibility
+Output
+Input Layer
+RAW decoding, metadata extraction, black/white level normalization, as-shot white balance capture.
+Linear RGB image, metadata object, RAW health report.
+Image-State Analysis Layer
+Measure exposure, luminance distribution, color cast, hue, saturation, channel imbalance, clipping, texture, edges, and optical-highlight candidates.
+Feature dictionary and spatial masks.
+Film Profile Layer
+Store film behavior as parametric rules across luminance, hue, saturation, channel, grain, halation, and scan/print response.
+Selected stock behavior object.
+Parameter Solver
+Compare image starting condition with stock behavior and compute safe adaptive transformation coefficients.
+Render plan JSON.
+Synthesis Engine
+Apply deterministic transformations in appropriate order and color spaces.
+Rendered working image.
+Output Layer
+Finalize color space, bit depth, file format, metadata, preview, and report.
+TIFF/JPEG/PNG/Web preview plus sidecar JSON.
+
+4. User Roles and Primary Use Cases
+Role
+Use Case
+Expected Outcome
+Photographer
+Select a RAW file and a film style.
+Receives a film-like render adapted to that image rather than a fixed preset.
+Power user / colorist
+Tune film stock parameters, scan style, and adaptation strength.
+Receives controlled repeatable output with explainable render settings.
+Developer
+Add new stock profiles and rendering modules.
+Can extend profile YAML and processing modules without changing ingestion logic.
+Batch processing user
+Apply a selected film profile to many RAW files.
+Each image receives its own analysis-driven render plan while maintaining consistent stock identity.
+QA / calibration engineer
+Compare output against reference images and diagnose failures.
+Uses render report, feature dictionary, and module-level diagnostics.
+
+5. Functional Requirements
+5.1 RAW Ingestion and Linearization
+ID
+Requirement
+Acceptance Criteria
+FR-01
+The system shall ingest Sony .ARW files in MVP and support extension to other RAW formats via LibRaw/rawpy.
+A supported RAW file can be decoded into a linear RGB array without baked camera tone curve or auto brightness.
+FR-02
+The system shall extract camera metadata including make, model, ISO, shutter, aperture, focal length where available, white balance multipliers, black level, and white level.
+Metadata is present in render report and available to downstream modules.
+FR-03
+The system shall preserve a scene-linear working representation before any display-referred transformation.
+Linear RGB values are available prior to tone mapping; no default sRGB gamma is applied before analysis.
+FR-04
+The system shall compute a luminance canvas using stable linear RGB weights.
+Luminance map is produced as a float array and is used by tonal and spatial analysis modules.
+FR-05
+The system shall identify raw clipping and near-clipping by channel.
+Channel clipping ratios and masks are reported for R, G, and B.
+
+5.2 Camera/Input Bias Estimation
+ID
+Requirement
+Acceptance Criteria
+FR-06
+The system shall estimate neutral-axis color bias from low-chroma, non-clipped, non-shadow pixels.
+Render report includes neutral confidence score and global/midtone neutral cast.
+FR-07
+The system shall estimate color cast separately for shadows, midtones, and highlights.
+Feature dictionary contains shadow_cast, midtone_cast, and highlight_cast in a perceptual color space.
+FR-08
+The system shall compute blue excess, green-magenta bias, and warm-cool bias indices.
+These indices are numeric and used by the solver before applying stock-specific shifts.
+FR-09
+The system shall distinguish accidental camera cast from intended scene color where confidence is low.
+If neutral confidence is below threshold, correction strength is reduced and flagged in the report.
+FR-10
+The system shall support camera-model-specific baseline profiles.
+Sony input can use Sony-specific bias priors without changing the stock profile.
+
+5.3 Tonal and Luminance Analysis
+ID
+Requirement
+Acceptance Criteria
+FR-11
+The system shall compute luminance percentiles: p01, p05, p25, p50, p75, p95, p99, and p99.5.
+All percentile values are included in the feature dictionary.
+FR-12
+The system shall compute dynamic range in photographic stops using robust percentiles.
+dynamic_range_stops is available and stable against small outliers.
+FR-13
+The system shall compute black point, white point, midtone anchor, highlight headroom, shadow depth, and tonal skew.
+These fields are present in the tonal analysis object.
+FR-14
+The system shall classify the image tonal state as low-key, normal, high-key, harsh-contrast, flat, or highlight-stressed using deterministic thresholds.
+Classification appears in the render report and influences render plan coefficients.
+FR-15
+The system shall generate continuous luminance zone masks rather than hard binary selections.
+All zone masks are float arrays in the range 0 to 1.
+
+5.4 Expanded Luminance Zone Masking
+The MVP reference uses smooth shadow, midtone, and highlight masks. DFEE shall expand this to seven exposure zones to model film behavior more accurately across density ranges.
+Zone
+Description
+Primary Use
+Z0 Deep Shadow
+Near-black and compressed dark values.
+Toe, black density, shadow color drift, grain and noise control.
+Z1 Shadow
+Recoverable shadow values.
+Shadow chroma reduction, film toe, shadow density.
+Z2 Lower Midtone
+Darker subject tones and underexposed mid areas.
+Density shaping, grain visibility, warm/cool bias handling.
+Z3 Midtone
+Main body of image density.
+Core stock color response and balanced contrast.
+Z4 Upper Midtone
+Bright but non-highlight image values.
+Softening, saturation compression, highlight preparation.
+Z5 Highlight
+Bright image values approaching shoulder.
+Highlight roll-off, desaturation, channel repair.
+Z6 Specular
+Very bright localized high-contrast values.
+Halation, bloom, glare, strong shoulder control.
+
+5.5 Hue, Saturation, and Color Volume Analysis
+ID
+Requirement
+Acceptance Criteria
+FR-16
+The system shall compute hue distribution in a perceptual or stable color representation such as OKLab/OKLCH, CIELAB, or equivalent.
+Feature dictionary includes hue histogram and dominant hue bins.
+FR-17
+The system shall compute hue distribution by luminance zone.
+For each zone, hue occupancy is available for stock response decisions.
+FR-18
+The system shall compute saturation/chroma distribution by luminance zone.
+sat_shadow_mean, sat_mid_mean, sat_highlight_mean, sat_p95, and related fields are present.
+FR-19
+The system shall compute high-chroma and neon-risk indicators.
+Solver can reduce extreme digital saturation before or during stock transform.
+FR-20
+The system shall compute color volume occupancy and out-of-gamut risk.
+High-risk colors are compressed rather than clipped after film transform.
+
+5.6 Channel Behavior Analysis
+ID
+Requirement
+Acceptance Criteria
+FR-21
+The system shall compute RGB channel dominance and channel ratios globally and by luminance zone.
+Report includes red, green, and blue dominance measures.
+FR-22
+The system shall compute channel clipping masks and clipping ratios by zone.
+Highlight and specular zones identify whether one or more channels are clipped.
+FR-23
+The system shall estimate channel noise risk in underexposed zones.
+Shadow transform avoids amplifying noisy channels beyond configured limits.
+FR-24
+The system shall compute RGB ratio drift from shadows to highlights.
+Solver can identify cool shadows, warm highlights, or green/magenta contamination.
+
+5.7 Spatial Frequency and Optical Candidate Analysis
+ID
+Requirement
+Acceptance Criteria
+FR-25
+The system shall compute texture density using local variance or multi-scale frequency analysis.
+texture_density and texture maps are available.
+FR-26
+The system shall compute smooth-region masks for grain visibility.
+Smooth skies/walls/gradients receive higher grain receptivity than high-texture regions.
+FR-27
+The system shall compute edge and acutance maps.
+map_edge_gradients and edge_density are available.
+FR-28
+The system shall distinguish large diffuse highlights from localized specular highlights.
+White walls/clouds are not treated as halation sources by default.
+FR-29
+The system shall compute halation source and receiver masks.
+Halation appears around high-intensity, high-contrast sources and bleeds into lower-density neighboring regions.
+FR-30
+The system shall compute digital sharpness score to optionally reduce brittle digital edges before film finishing.
+Over-sharpened inputs can be softened by stock profile or scanner profile.
+
+6. Film Stock Profile Requirements
+6.1 Film Stock as Behavior
+A film profile shall define behavior, not fixed slider values. The selected stock determines how tonal zones, hue bands, saturation ranges, channel relationships, grain, halation, and scanner/print finishing behave. The image-state analysis determines how strongly those behaviors should be applied.
+Profile Area
+Required Parameters
+Tone response
+toe strength, toe length, midtone slope, shoulder strength, highlight rolloff, black density floor, white density ceiling.
+Channel response
+red, green, and blue curve offsets; channel-specific shoulder; shadow and highlight channel bias.
+Hue behavior
+hue shifts and compression rules for red/orange, yellow, green, cyan, blue, magenta, and neutral ranges.
+Saturation behavior
+low-saturation lift, high-saturation compression, highlight desaturation, shadow chroma reduction, neon compression.
+Density behavior
+density build-up by zone, density-to-chroma interaction, midtone weight, shadow density handling.
+Grain behavior
+grain size, strength, chroma grain, luminance peak zone, shadow/highlight grain limits, texture masking.
+Halation and bloom
+specular threshold, radius, falloff, red/orange bias, receiver mask logic, bloom strength.
+Scanner/print finish
+contrast, warmth, black point, white point, color separation, sharpening/softening, scan style.
+
+6.2 Stock Profile Schema Example
+stock_id: color_negative_400_soft
+stock_name: Color Negative 400 Soft
+stock_type: color_negative
+
+adaptation:
+  default_strength: 1.0
+  camera_cast_compensation_sensitivity: 0.70
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.65
+
+tone_response:
+  toe_strength: 0.38
+  toe_length: 0.30
+  midtone_contrast: 0.82
+  shoulder_strength: 0.76
+  highlight_rolloff_start: 0.72
+  black_density_floor: 0.025
+
+color_response:
+  shadow_bias_lab: [0.0, -1.2, -2.5]
+  midtone_bias_lab: [0.0, 0.4, 1.2]
+  highlight_bias_lab: [0.0, 1.0, 2.6]
+  blue_cast_suppression: 0.30
+  green_magenta_stabilization: 0.25
+
+hue_saturation_response:
+  red_orange_midtone_compression: 0.32
+  yellow_green_muting: 0.28
+  cyan_blue_highlight_compression: 0.48
+  neon_compression: 0.72
+  highlight_desaturation: 0.55
+
+grain:
+  size: 0.42
+  strength: 0.35
+  chroma_strength: 0.10
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.85
+
+halation:
+  trigger: specular_only
+  strength: 0.22
+  radius_inner: 6
+  radius_outer: 26
+  warm_core: [1.0, 0.58, 0.24]
+  red_fringe: [1.0, 0.18, 0.08]
+
+scanner:
+  style: frontier_soft
+  contrast: 0.52
+  warmth: 0.18
+  black_point: 0.035
+  output_sharpening: 0.15
+7. Parameter Solver Requirements
+7.1 Solver Objective
+The parameter solver shall combine the input image-state feature dictionary with the selected film stock profile and scan/print profile to generate a deterministic render plan. The solver is responsible for deciding how strongly to apply each stock behavior based on the actual starting condition of the image.
+7.2 Solver Logic
+Input Condition
+Solver Response Example
+Image already has cool blue shadows.
+Reduce accidental blue/cyan bias before applying stock shadow color.
+Image has limited highlight headroom.
+Increase shoulder compression and highlight desaturation.
+Image is flat and overcast.
+Increase midtone density and local contrast while protecting highlight softness.
+Image has high neon saturation.
+Increase hue-specific saturation compression and reduce out-of-gamut risk.
+Image has point light sources.
+Increase halation only if local contrast and receiver-density masks support it.
+Image has large diffuse highlights.
+Use shoulder and bloom; suppress halation.
+Image has underexposed noisy shadows.
+Limit shadow lift, suppress digital noise amplification, add controlled film grain after cleanup.
+
+7.3 Render Plan Output Schema
+{
+  "input_diagnosis": {
+    "tonal_state": "low_key_high_dr",
+    "dynamic_range_stops": 11.4,
+    "shadow_cast": "blue_cyan",
+    "midtone_anchor": 0.29,
+    "highlight_headroom": 0.18,
+    "neon_risk": 0.23,
+    "specular_candidate_strength": 0.28
+  },
+  "pre_film_normalization": {
+    "exposure_compensation_stops": 0.25,
+    "shadow_blue_normalization": 0.32,
+    "green_magenta_stabilization": 0.08,
+    "highlight_channel_recovery": 0.18
+  },
+  "film_response": {
+    "toe_strength": 0.42,
+    "midtone_density": 0.20,
+    "shoulder_strength": 0.72,
+    "highlight_desaturation": 0.50,
+    "blue_cyan_compression": 0.44,
+    "red_orange_compression": 0.22
+  },
+  "material_effects": {
+    "grain_strength": 0.36,
+    "grain_size": 0.42,
+    "halation_strength": 0.05,
+    "bloom_strength": 0.12,
+    "edge_softening": 0.10
+  },
+  "scanner_finish": {
+    "scan_contrast": 0.52,
+    "scan_warmth": 0.18,
+    "black_point": 0.035
+  }
+}
+8. Rendering Engine Functional Modules
+8.1 Module RE-01: Pre-Film Normalization
+This module prepares the image for film rendering without making it sterile or over-corrected. It shall handle exposure placement, camera cast normalization, channel clipping repair where possible, and noise-risk protection.
+Function
+Description
+Controls
+Exposure placement
+Reposition midtones using percentile anchors and stock target density.
+exposure_compensation_stops, midtone_anchor_target.
+Camera cast normalization
+Reduce accidental camera or white-balance bias before stock color behavior.
+neutral_confidence, shadow_cast_correction, blue_excess_control.
+Highlight repair
+Recover or soften clipped channel relationships where possible.
+channel_recovery_strength, shoulder_preconditioning.
+Noise-risk protection
+Prevent shadow lifting from revealing digital noise.
+shadow_noise_limit, pre_grain_denoise_strength.
+
+8.2 Module RE-02: Film Tone Response
+This module applies the selected stock’s toe, midtone slope, and shoulder behavior in a log-exposure or density-like domain. The response may be channel-specific, but hue integrity must be protected from unstable shifts.
+Apply toe compression to deep shadows and shadows.
+Apply midtone density and contrast according to selected stock.
+Apply highlight shoulder and white-density compression based on highlight headroom.
+Support separate red, green, and blue channel response curves for film-like color behavior.
+Preserve proportional chromaticity during pure luminance remapping unless stock profile explicitly modifies color response.
+8.3 Module RE-03: Zone × Hue × Saturation Color Response
+This is the core color module. The system shall apply stock-specific behavior based on the intersection of luminance zone, hue band, and saturation/chroma level.
+Dimension
+Examples of Behavior
+Luminance zone
+Deep shadows lose chroma; upper midtones soften; highlights desaturate and roll off.
+Hue band
+Cyan/blue may be softened; greens may shift olive or fresh; red/orange may be compressed to avoid digital skin/warm-light clipping.
+Saturation range
+Low saturation may receive gentle color separation; high saturation is compressed; neon colors are strongly controlled.
+Channel state
+Existing channel imbalance may reduce or increase the strength of stock-specific shifts.
+
+8.4 Module RE-04: Density and Color Volume Compression
+This module prevents digitally harsh color behavior after tone and color response. It shall compress extreme chroma according to hue, luminance, and film stock density behavior, rather than applying a global saturation slider.
+Compress high-chroma blues/cyans in highlights and upper midtones when required.
+Compress red/orange in midtones if the source is already warm or channel-stressed.
+Mute or reshape green/yellow ranges according to stock behavior.
+Apply highlight desaturation proportional to shoulder compression.
+Prevent output gamut clipping by using perceptual color-volume compression.
+8.5 Module RE-05: Local Contrast and Acutance Shaping
+Film character includes a different relationship between global contrast, local contrast, perceived sharpness, grain, and edge softness. This module shall use low-, mid-, and high-frequency decomposition to shape contrast without creating digital halos.
+Frequency Band
+Treatment
+Low frequency
+Controls global density and large-area contrast.
+Mid frequency
+Controls object separation and film-like presence.
+High frequency
+Controls brittle digital sharpness, texture, and grain interaction.
+Edges
+Supports adjacency effects, soft bloom boundaries, and acutance moderation.
+
+8.6 Module RE-06: Procedural Film Grain
+Grain shall be generated procedurally and modulated by image density, spatial frequency, output resolution, and stock profile. It shall not be applied as a simple static overlay.
+Generate grain in a density-like or perceptually stable domain.
+Use separate luminance and subtle chroma grain components.
+Modulate grain by luminance zone; typically strongest in lower midtones/midtones depending on stock.
+Mask grain in high-texture regions and reveal it in smooth gradients.
+Scale grain size and frequency to output resolution.
+Use deterministic random seeds derived from image hash, profile ID, and engine version unless user selects a custom seed.
+8.7 Module RE-07: Halation, Bloom, and Optical Scatter
+Halation shall be driven by value-based optical conditions rather than global highlight brightness. It should appear around localized, high-intensity, high-contrast highlights and bleed into adjacent lower-density areas.
+Effect
+Trigger
+Output Behavior
+Halation
+Specular source × local contrast × receiver darkness.
+Warm/red-orange bleed with falloff and stock-specific radius.
+Bloom
+Bright area × lens/scan softness × highlight stress.
+Soft glow without necessarily red fringe.
+Veiling glare
+Large bright region or strong light source.
+Low-frequency contrast reduction near strong light.
+Adjacency softness
+Bright-dark boundary with high local contrast.
+Subtle edge softening and density interaction.
+
+8.8 Module RE-08: Scanner / Print Finish
+The final film appearance depends on scan or print interpretation. The renderer shall allow stock and finishing profile to be selected independently.
+Finish Profile
+Characteristics
+Clean lab scan
+Neutral, controlled, low artifact, technically balanced.
+Frontier-like soft scan
+Warm, pleasing contrast, rounded highlights, accessible color.
+Noritsu-like smooth scan
+Smoother color separation, softer tonal transitions.
+Darkroom print
+Richer blacks, print density, slightly more organic contrast.
+Editorial scan
+Controlled color, restrained saturation, high-end publication feel.
+Consumer nostalgic scan
+Warmer, less technically perfect, stronger mood and character.
+
+9. Feature Dictionary Specification
+9.1 Top-Level Feature Dictionary
+{
+  "raw_metadata": {},
+  "camera_input_bias": {},
+  "tonal_distribution": {},
+  "luminance_zone_masks": {},
+  "hue_saturation_state": {},
+  "channel_behavior": {},
+  "spatial_frequency": {},
+  "highlight_shadow_models": {},
+  "render_recommendations": {}
+}
+9.2 RAW Metadata Features
+Feature
+Type
+Description
+camera_make
+string
+Camera manufacturer.
+camera_model
+string
+Camera model identifier.
+iso
+integer
+Capture ISO.
+shutter_speed
+string/float
+Exposure duration.
+aperture
+float
+F-number where available.
+white_balance_multipliers
+array[float]
+As-shot camera white balance gains.
+black_level
+float/int
+Sensor black level.
+white_level
+float/int
+Sensor white saturation level.
+raw_clipping_ratio
+float
+Fraction of pixels near sensor saturation.
+
+9.3 Camera/Input Bias Features
+Feature
+Type
+Description
+neutral_confidence
+float
+Confidence that neutral pixels exist and were reliably identified.
+global_cast_lab
+array[float]
+Overall color cast in Lab-like space.
+shadow_cast_lab
+array[float]
+Color cast in shadow zones.
+midtone_cast_lab
+array[float]
+Color cast in midtone zones.
+highlight_cast_lab
+array[float]
+Color cast in highlight zones.
+blue_excess_index
+float
+Strength of excess blue/cyan bias, especially useful for cool digital files.
+green_magenta_bias
+float
+Green-to-magenta contamination axis.
+warm_cool_bias
+float
+Warm-to-cool axis.
+
+9.4 Tonal Distribution Features
+Feature
+Type
+Description
+dynamic_range_stops
+float
+Robust dynamic range in stops.
+luma_p01...luma_p995
+float
+Robust percentile anchors.
+black_point_actual
+float
+Estimated image black point.
+white_point_actual
+float
+Estimated image white point.
+midtone_anchor
+float
+Median or selected midtone anchor.
+highlight_headroom
+float
+Remaining headroom before clipping.
+shadow_depth
+float
+Lower tonal floor and shadow placement.
+tonal_skew
+enum
+High-key, low-key, normal, flat, harsh, etc.
+contrast_index
+float
+Global contrast estimate.
+local_contrast_index
+float
+Local contrast estimate.
+
+9.5 Hue/Saturation State Features
+Feature
+Type
+Description
+dominant_hue_bins
+array[string]
+Dominant perceptual hue families.
+hue_entropy
+float
+Palette complexity.
+warm_cool_ratio
+float
+Warm versus cool color dominance.
+cyan_blue_ratio
+float
+Cyan/blue dominance and risk.
+red_orange_density
+float
+Red/orange occupancy weighted by density.
+green_yellow_density
+float
+Green/yellow occupancy weighted by density.
+sat_shadow_mean
+float
+Mean saturation in shadows.
+sat_mid_mean
+float
+Mean saturation in midtones.
+sat_highlight_mean
+float
+Mean saturation in highlights.
+sat_p95
+float
+High-end saturation pressure.
+neon_risk
+float
+Probability of harsh digital high-chroma colors.
+
+9.6 Spatial and Optical Features
+Feature
+Type
+Description
+texture_density
+float
+Overall high-frequency texture level.
+smooth_area_ratio
+float
+Portion of image where grain may be visible.
+edge_density
+float
+Strong-edge presence.
+microcontrast_index
+float
+Fine local contrast measure.
+digital_sharpness_score
+float
+Likely brittle digital sharpening.
+specular_point_ratio
+float
+Localized point highlight ratio.
+large_highlight_area_ratio
+float
+Diffuse highlight area ratio.
+halation_source_mask
+array
+Potential halation source map.
+halation_receiver_mask
+array
+Neighboring areas where halation can appear.
+grain_receptivity_mask
+array
+Spatial coefficient for grain visibility.
+
+10. Processing Order and Data Flow
+The order of operations matters. A poor order will produce fake color, clipped highlights, overlay-like grain, or artificial halation.
+1. RAW decode and normalization.
+2. Linear luminance, color, and channel diagnostics.
+3. Camera/input bias estimation.
+4. Exposure-zone and spatial mask generation.
+5. Parameter solver and render plan generation.
+6. Pre-film normalization: exposure, channel repair, and cast correction.
+7. Film tone response in log-exposure/density-like domain.
+8. Zone × hue × saturation color transform.
+9. Density and color-volume compression.
+10. Local contrast/acutance shaping.
+11. Grain synthesis and integration.
+12. Halation, bloom, glare, and adjacency effects.
+13. Scanner/print finishing.
+14. Output conversion and export.
+11. Data Structures and APIs
+11.1 Core Classes
+Class
+Responsibility
+RawIngestor
+Decode RAW, extract metadata, normalize sensor data.
+ImageStateAnalyzer
+Compute feature dictionary and masks.
+CameraBiasEstimator
+Estimate neutral axis and camera/input color bias.
+FilmStockProfile
+Load and validate film stock behavior profile.
+ScanPrintProfile
+Load finishing profile.
+RenderPlanSolver
+Generate deterministic transformation coefficients.
+FilmRenderer
+Execute ordered rendering modules.
+RenderReporter
+Create sidecar JSON and human-readable summary.
+BatchProcessor
+Process multiple RAW files with consistent profile and per-image adaptation.
+
+11.2 Example Python Interface
+engine = DFEEEngine(
+    stock_profile="color_negative_400_soft.yaml",
+    scan_profile="frontier_soft.yaml",
+    adaptation_strength=0.85,
+    output_color_space="sRGB",
+    output_bit_depth=16
+)
+
+result = engine.render(
+    input_path="DSC00123.ARW",
+    output_path="DSC00123_dfee.tif",
+    report_path="DSC00123_dfee_report.json"
+)
+
+print(result.render_plan)
+print(result.output_path)
+12. User Controls
+Although the engine is adaptive, users should have a small number of meaningful controls. Controls should modify high-level behavior rather than expose hundreds of technical parameters by default.
+Control
+Range
+Description
+Film stock
+Profile list
+Selects core film behavior.
+Scan/print style
+Profile list
+Selects final interpretation.
+Adaptation strength
+0–100
+Controls how strongly the solver adapts to each image.
+Exposure intent
+Auto / Preserve / Lift / Darken
+Guides exposure placement without overriding film response.
+Color cast handling
+Auto / Preserve warmth / Neutralize / Strong neutralize
+Controls pre-film camera/input bias correction.
+Grain amount
+Auto / Low / Medium / High / Custom
+Controls grain strength while retaining texture and luminance logic.
+Halation amount
+Auto / Off / Low / Medium / High
+Controls halation intensity after source validation.
+Output finish
+Natural / Editorial / Nostalgic / High density
+Broad finishing control.
+
+13. Batch Processing Requirements
+ID
+Requirement
+Acceptance Criteria
+FR-31
+The system shall process a folder of RAW files using one film profile while adapting each image individually.
+Each file receives a unique render plan and sidecar report.
+FR-32
+The system shall allow locking certain render parameters across a batch.
+User can lock stock, scan profile, grain seed policy, output size, and adaptation strength.
+FR-33
+The system shall allow batch consistency mode.
+Color and exposure adaptation are constrained to prevent excessive variation across a shoot.
+FR-34
+The system shall export a batch summary CSV/JSON.
+Summary includes input filename, profile, key diagnostics, warnings, and output path.
+
+14. Quality, Diagnostics, and Explainability
+14.1 Render Report
+Every render shall produce a sidecar report. This is essential for debugging, calibration, and user trust.
+{
+  "engine_version": "1.0.0",
+  "input_file": "DSC00123.ARW",
+  "stock_profile": "color_negative_400_soft",
+  "scan_profile": "frontier_soft",
+  "image_diagnosis": {},
+  "feature_summary": {},
+  "render_plan": {},
+  "warnings": [],
+  "output_file": "DSC00123_dfee.tif"
+}
+14.2 Warnings
+Warning
+Meaning
+LOW_NEUTRAL_CONFIDENCE
+Scene lacks reliable neutral pixels; cast correction reduced.
+HIGH_CHANNEL_CLIPPING
+One or more channels clipped; highlight reconstruction limited.
+SHADOW_NOISE_RISK
+Deep shadows are likely noisy; shadow lift constrained.
+NEON_CHROMA_RISK
+High-chroma colors may require strong compression.
+DIFFUSE_HIGHLIGHT_SUPPRESSION
+Large bright area detected; halation suppressed.
+OUTPUT_GAMUT_RISK
+Color-volume compression applied to prevent clipping.
+
+15. Non-Functional Requirements
+Category
+Requirement
+Determinism
+Same input, profile, settings, seed, and engine version shall produce identical output.
+Precision
+Internal processing should use float32 minimum; critical operations may use float64 where required.
+Bit depth
+Final high-quality export should support 16-bit TIFF. JPEG preview may be 8-bit.
+Performance
+MVP should process a 24MP RAW within a practical desktop workflow target; GPU acceleration may be added later.
+Modularity
+New film stocks and scan styles must be addable via profile files.
+Traceability
+Render plan and feature dictionary must be exportable.
+Safety
+Processing shall not overwrite input RAW files.
+Extensibility
+Pipeline should support future acceleration via CuPy, OpenCL, Vulkan, Metal, or CUDA equivalents.
+Testing
+Each module must have unit tests for stability, range limits, and deterministic output.
+
+16. MVP Scope
+16.1 MVP Inclusions
+Sony .ARW ingestion through rawpy/LibRaw.
+Linear RGB working representation.
+Camera metadata extraction.
+Luminance and percentile diagnostics.
+Seven-zone luminance masks.
+Neutral-axis and camera/input bias estimation.
+Hue and saturation distribution by luminance zone.
+Channel clipping and channel imbalance detection.
+Texture, smoothness, edge, and specular maps.
+One color negative profile, one vivid negative profile, one cinematic tungsten profile, and one monochrome profile.
+Adaptive render plan generator.
+Tone response, color response, saturation compression, grain, halation, and scan finish modules.
+16-bit TIFF export and JPEG preview.
+Sidecar JSON render report.
+16.2 MVP Exclusions
+Full commercial film stock calibration from lab-measured data.
+AI object detection or semantic segmentation as a required core feature.
+Generative replacement or hallucination of image regions.
+Advanced darkroom paper simulation beyond basic print-style finishing.
+Real-time GPU preview, unless separately scoped.
+Plugin integration with Lightroom, Capture One, or Photoshop in the first release.
+17. Testing and Acceptance Criteria
+17.1 Functional Test Sets
+Test Set
+Purpose
+Underexposed Sony RAWs
+Validate shadow cast handling, noise-risk protection, and toe response.
+Harsh daylight RAWs
+Validate highlight shoulder, channel clipping logic, and saturation compression.
+Warm indoor/night RAWs
+Validate warm highlight handling, halation source detection, and shadow density.
+Overcast flat scenes
+Validate midtone density and local contrast shaping.
+High-chroma scenes
+Validate color-volume compression and neon risk control.
+Smooth gradients/skies
+Validate grain integration without banding.
+Large white diffuse areas
+Validate halation suppression and shoulder handling.
+Point light sources
+Validate halation and bloom behavior.
+
+17.2 Acceptance Criteria
+Output should not show hard clipping introduced by the film transform unless the selected profile intentionally supports severe contrast.
+Camera color cast correction should not over-neutralize scenes with low neutral-confidence scores.
+Film stock identity should remain recognizable across different images while adaptation prevents destructive over-application.
+Grain should appear integrated into image density, not as an overlay floating above the image.
+Halation should be absent or minimal on large diffuse highlights and more visible near localized high-intensity sources.
+Highly saturated colors should be compressed gracefully rather than clipped or globally desaturated.
+The render report should explain the major decisions made by the solver.
+Batch processing should produce consistent stock identity while allowing per-image tonal adaptation.
+18. Development Roadmap
+Phase
+Scope
+Deliverables
+Phase 1: Analysis Core
+RAW ingestion, feature extraction, masks, diagnostics.
+Feature dictionary, visual mask exports, render report skeleton.
+Phase 2: Basic Film Renderer
+Tone curve, color response, saturation compression, 2–3 profiles.
+Initial TIFF/JPEG output with adaptive render plan.
+Phase 3: Material Effects
+Grain, halation, bloom, local contrast, scanner finishing.
+Integrated film-like output with sidecar report.
+Phase 4: Calibration Toolkit
+Reference image comparison, profile tuning, batch metrics.
+Profile editor, test suite, comparison dashboard.
+Phase 5: Productization
+UI, batch mode, presets as profiles, export workflow.
+Desktop app/CLI package and documentation.
+Phase 6: Advanced Acceleration
+GPU acceleration and optional AI-assisted parameter prediction.
+Fast preview and larger batch throughput.
+
+19. Key Design Decisions
+Decision
+Rationale
+Use value-based analysis, not object-aware editing.
+This better matches how film actually behaves and keeps the system deterministic and explainable.
+Use RAW scene-linear data as the foundation.
+Film response is exposure-driven; baked gamma images lose essential information.
+Use continuous masks rather than binary selections.
+Avoids posterization, hard transitions, and fake local edits.
+Use stock behavior profiles rather than slider presets.
+Allows the same film identity to adapt safely across different inputs.
+Separate camera/input normalization from film response.
+Prevents camera-specific bias from being amplified by film color transforms.
+Separate film stock from scanner/print finish.
+The perceived film look is film plus interpretation; this gives flexible creative control.
+Generate render reports.
+Improves debugging, calibration, trust, and repeatability.
+
+20. Open Questions for Calibration
+What reference set should be used for initial stock behavior calibration: lab scans, print scans, curated RAW-to-film-look pairs, or photographer-tuned targets?
+What degree of camera-specific priors should be included for Sony, Canon, Nikon, Fuji, and phone RAW files?
+Should stock profiles be branded as “inspired by” looks or purely original aesthetic families?
+What is the acceptable processing time per 24MP/33MP/45MP RAW for MVP?
+Will the first release be CLI-only, desktop UI, or plugin-oriented?
+How much manual tuning should power users be allowed before the product becomes too complex?
+21. Conclusion
+DFEE should be built as a deterministic, adaptive film-response engine rather than a preset system. The core of the system is not semantic understanding of objects, but precise measurement of image state: exposure, luminance zones, hue distribution, saturation pressure, camera color bias, channel clipping, shadow depth, highlight stress, spatial frequency, texture, and optical-source structure. Film stock profiles then act as behavioral response models applied through a parameter solver.
+This architecture allows each RAW image to receive an individualized film rendering plan while preserving repeatability, explainability, and consistent stock identity. It directly addresses the fundamental weakness of presets: fixed transformations applied to unpredictable inputs.

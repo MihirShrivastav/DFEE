@@ -1,0 +1,8 @@
+scanner_id: darkroom_print
+scanner_name: Darkroom Print Finish
+contrast: 0.65             # Richer, deeper analog paper contrast
+warmth: 0.00               # True neutral backing
+black_point: 0.015         # Dense blacks
+white_point: 0.995         # High brightness headroom
+output_sharpening: 0.05    # Soft edge profile (typical of optical enlarging)
+color_separation: 0.20     # Natural, chemically blended colors

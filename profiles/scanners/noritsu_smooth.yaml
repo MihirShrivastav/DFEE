@@ -1,0 +1,8 @@
+scanner_id: noritsu_smooth
+scanner_name: Noritsu Smooth Scan
+contrast: 0.55             # Smooth, standard contrast curve
+warmth: 0.02               # Neutral/cool calibration
+black_point: 0.025         # Slightly deeper blacks than Frontier
+white_point: 0.990         # Slightly higher highlight point
+output_sharpening: 0.18    # Slightly crisper digital sharpening
+color_separation: 0.50     # Higher color separation (distinct hues)

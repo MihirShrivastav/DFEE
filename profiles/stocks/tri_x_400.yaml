@@ -1,0 +1,58 @@
+stock_id: tri_x_400
+stock_name: Kodak Tri-X 400
+stock_type: monochrome
+
+adaptation:
+  base_iso: 400
+  default_strength: 1.00
+  camera_cast_compensation_sensitivity: 0.50
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.60
+
+tone_response:
+  toe_strength: 0.45         # Distinct toe for deep blacks
+  toe_length: 0.30           # Smooth progression into shadow detail
+  midtone_contrast: 1.10     # Strong midtone contrast (classic black and white punch)
+  shoulder_strength: 0.80    # Strong shoulder roll-off to give bright whites
+  highlight_rolloff_start: 0.68
+  black_density_floor: 0.015
+
+color_response:
+  # Monochrome uses color response to specify color filter behavior (spectral sensitivity)
+  # Standard panchromatic weights are around Red: 0.25, Green: 0.55, Blue: 0.20
+  # We can customize this if needed. For Tri-X, we use typical panchromatic mix.
+  shadow_bias_lab: [0.0, 0.0, 0.0]
+  midtone_bias_lab: [0.0, 0.0, 0.0]
+  highlight_bias_lab: [0.0, 0.0, 0.0]
+  blue_cast_suppression: 0.0
+  green_magenta_stabilization: 0.0
+
+hue_saturation_response:
+  # Desaturate fully (monochrome)
+  red_orange_midtone_compression: 1.00
+  yellow_green_muting: 1.00
+  cyan_blue_highlight_compression: 1.00
+  neon_compression: 1.00
+  highlight_desaturation: 1.00
+
+grain:
+  size: 0.65                 # Coarse, organic grain
+  strength: 0.55             # Highly visible, classic B&W grain
+  chroma_strength: 0.00      # Zero chroma grain (strictly monochrome)
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.50      # Less masking so grain stands out in detailed regions too
+
+halation:
+  trigger: specular_only
+  strength: 0.15             # Moderate halation bloom in highlights
+  radius_inner: 4
+  radius_outer: 18
+  warm_core: [1.0, 1.0, 1.0] # White highlights (no color)
+  red_fringe: [1.0, 1.0, 1.0]
+
+scanner:
+  style: darkroom_print
+  contrast: 0.60
+  warmth: 0.00
+  black_point: 0.020
+  output_sharpening: 0.20

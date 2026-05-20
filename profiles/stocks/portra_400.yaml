@@ -1,0 +1,54 @@
+stock_id: portra_400
+stock_name: Kodak Portra 400
+stock_type: color_negative
+
+adaptation:
+  base_iso: 400
+  default_strength: 1.00
+  camera_cast_compensation_sensitivity: 0.80
+  highlight_stress_sensitivity: 0.90
+  shadow_noise_sensitivity: 0.70
+
+tone_response:
+  toe_strength: 0.32         # Soft toe for open shadows
+  toe_length: 0.35           # Long, smooth shadow gradation
+  midtone_contrast: 0.85     # Gentle, lower midtone contrast for latitude
+  shoulder_strength: 0.65    # Soft shoulder for highlight protection
+  highlight_rolloff_start: 0.75  # Late, gentle roll-off
+  black_density_floor: 0.035  # Slightly elevated, soft blacks
+
+color_response:
+  shadow_bias_lab: [0.0, -1.0, -1.5]     # Subtle cool-cyan shadows
+  midtone_bias_lab: [0.0, 0.8, 1.5]      # Pastel, warm skin-friendly midtones
+  highlight_bias_lab: [0.0, 0.5, 1.8]    # Soft, creamy highlights
+  blue_cast_suppression: 0.40            # Keep blues pleasingly compressed
+  green_magenta_stabilization: 0.30
+
+hue_saturation_response:
+  red_orange_midtone_compression: 0.40   # Compress red/orange to protect skin tones
+  yellow_green_muting: 0.35              # Mute green/yellow for organic foliage
+  cyan_blue_highlight_compression: 0.45
+  neon_compression: 0.75
+  highlight_desaturation: 0.60           # Strong highlight desaturation
+
+grain:
+  size: 0.45                 # Medium grain size
+  strength: 0.38             # Noticeable but pleasing grain
+  chroma_strength: 0.08      # Subtle chroma component
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.80
+
+halation:
+  trigger: specular_only
+  strength: 0.25             # Pronounced halation (classic color negative film feature)
+  radius_inner: 6
+  radius_outer: 24
+  warm_core: [1.0, 0.60, 0.30]
+  red_fringe: [1.0, 0.20, 0.05]
+
+scanner:
+  style: frontier_soft
+  contrast: 0.50
+  warmth: 0.15
+  black_point: 0.030
+  output_sharpening: 0.10
