@@ -1,0 +1,77 @@
+stock_id: velvia_50
+stock_name: Fujifilm Velvia 50
+stock_type: color_reversal
+
+adaptation:
+  base_iso: 50
+  default_strength: 0.95
+  camera_cast_compensation_sensitivity: 0.50   # Reversal holds its own colour very firmly
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.35               # ISO 50 — very clean shadows
+
+tone_response:
+  toe_strength: 0.70         # Very steep, abrupt toe — Velvia blocks up shadows fast
+  toe_length: 0.20           # Short toe — the shadow crush is the character
+  midtone_contrast: 1.30     # Exceptionally high midtone punch
+  shoulder_strength: 0.92    # Strong shoulder — clipped highlights have a definite roof
+  highlight_rolloff_start: 0.58   # Early roll-off — Velvia has limited highlight latitude
+  black_density_floor: 0.003  # Reversal film — virtually zero base density
+  channel_toe_mult:      [1.00, 1.00, 1.25]  # Blue clips even sooner
+  channel_shoulder_mult: [1.00, 1.05, 1.40]  # Blue and slightly green shoulder early
+  channel_midtone_mult:  [1.00, 1.05, 0.90]  # Strong green/red midtone, less blue
+
+color_response:
+  # Lab bias shifts (L_shift, a_shift, b_shift)
+  # Velvia: deep blue shadows, vivid green/yellow midtones, warm golden highlights
+  shadow_bias_lab: [0.0, -1.5, -5.0]     # Intense cool-blue shadow cast
+  midtone_bias_lab: [0.0, -1.8, 0.5]     # Green push in midtones (foliage pops)
+  highlight_bias_lab: [0.5, 0.5, 3.0]    # Warm golden highlights
+  blue_cast_suppression: 0.05            # Velvia's blues should stay very blue
+  green_magenta_stabilization: 0.20
+
+hue_saturation_response:
+  saturation_boost: 1.55          # Velvia is THE most saturated film ever made
+  red_orange_midtone_compression: 0.10   # Reds allowed to be very vivid
+  yellow_green_muting: 0.05              # Greens must pop — almost no muting
+  cyan_blue_highlight_compression: 0.12  # Rich, dense blues
+  neon_compression: 0.45                 # Some neon protection needed at this saturation
+  highlight_desaturation: 0.18           # Reversal keeps colour into highlights
+
+grain:
+  size: 0.10                 # Exceptionally fine grain — ISO 50 reversal
+  strength: 0.06             # Near-invisible grain
+  chroma_strength: 0.005     # Essentially pure luminance grain
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.85
+
+halation:
+  trigger: specular_only
+  strength: 0.07             # Reversal has anti-halation backing — very minimal
+  radius_inner: 3
+  radius_outer: 12
+  warm_core: [1.0, 0.60, 0.25]
+  red_fringe: [0.95, 0.20, 0.05]
+
+scanner:
+  style: frontier_soft
+  contrast: 1.08    # Slide scanned with some punch to honor its contrast character
+  warmth: 0.05
+  black_point: 0.004
+  output_sharpening: 0.20
+
+chroma_coupling:
+  hi_rolloff_start: 0.68   # Starts early — Velvia compresses highlights aggressively
+  hi_rolloff_rate:  3.5    # Very sharp cutoff — signature Velvia clip
+  hi_compression:   0.80   # Strong: highlights go pale fast
+  sh_rolloff_start: 0.14   # Deep shadow absorption
+  sh_compression:   0.60   # Strong shadow colour loss
+  hi_hue_conv_rad:  0.10   # Nearly neutral white-point
+  hi_hue_conv_str:  0.10
+
+dye_contamination:
+  r_to_g: 0.00
+  g_to_r: 0.00
+  b_to_g: 0.00
+  b_to_r: 0.00
+  r_to_b: 0.00
+  g_to_b: 0.00

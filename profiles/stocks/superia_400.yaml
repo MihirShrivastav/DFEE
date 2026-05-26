@@ -15,7 +15,10 @@ tone_response:
   midtone_contrast: 0.95     # Punchier than Portra
   shoulder_strength: 0.70    # Decent shoulder roll-off
   highlight_rolloff_start: 0.72
-  black_density_floor: 0.028
+  black_density_floor: 0.012  # Negative film base fog
+  channel_toe_mult:      [0.95, 1.00, 1.15]
+  channel_shoulder_mult: [0.92, 1.00, 1.20]
+  channel_midtone_mult:  [1.02, 1.00, 0.96]
 
 color_response:
   shadow_bias_lab: [0.0, -1.8, -1.0]     # Cool, green-cyan shadows (Fujifilm look)
@@ -25,6 +28,7 @@ color_response:
   green_magenta_stabilization: 0.15      # Low stabilization to allow strong green tones
 
 hue_saturation_response:
+  saturation_boost: 1.28          # Fuji Superia — punchy greens, rich cyans/blues
   red_orange_midtone_compression: 0.25
   yellow_green_muting: 0.15              # Fuji preserves punchy, deep greens
   cyan_blue_highlight_compression: 0.35   # Gorgeous, rich sky blues
@@ -48,7 +52,23 @@ halation:
 
 scanner:
   style: noritsu_smooth
-  contrast: 0.55
+  contrast: 1.00   # Neutral — Fuji scanned on Noritsu with no added contrast push
   warmth: 0.05
-  black_point: 0.025
+  black_point: 0.020
   output_sharpening: 0.15
+chroma_coupling:
+  hi_rolloff_start: 0.70
+  hi_rolloff_rate:  1.8
+  hi_compression:   0.55
+  sh_rolloff_start: 0.19
+  sh_compression:   0.48
+  hi_hue_conv_rad:  0.28
+  hi_hue_conv_str:  0.18
+
+dye_contamination:
+  r_to_g: 0.028
+  g_to_r: 0.013
+  b_to_g: 0.011
+  b_to_r: 0.005
+  r_to_b: 0.000
+  g_to_b: 0.006

@@ -90,7 +90,26 @@ class PreviewRequest(BaseModel):
     contrast: float = 0.0    # -100 to +100
     temp: float = 0.0        # -100 to +100
     tint: float = 0.0        # -100 to +100
-    adaptation: float = 1.0  # 0.0 to 1.0
+    saturation: float = 0.0  # -100 to +100
+    vibrance: float = 0.0    # -100 to +100
+    # Curves: JSON-encoded list of [x, y] control points, e.g. [[0,0],[0.5,0.5],[1,1]]
+    curves: str = "[[0,0],[1,1]]"
+    # HSL (8 hue ranges × 3 params) — all in [-100, +100]
+    hsl_red_h: float = 0.0;  hsl_red_s: float = 0.0;  hsl_red_l: float = 0.0
+    hsl_orange_h: float = 0.0; hsl_orange_s: float = 0.0; hsl_orange_l: float = 0.0
+    hsl_yellow_h: float = 0.0; hsl_yellow_s: float = 0.0; hsl_yellow_l: float = 0.0
+    hsl_green_h: float = 0.0;  hsl_green_s: float = 0.0;  hsl_green_l: float = 0.0
+    hsl_aqua_h: float = 0.0;   hsl_aqua_s: float = 0.0;   hsl_aqua_l: float = 0.0
+    hsl_blue_h: float = 0.0;   hsl_blue_s: float = 0.0;   hsl_blue_l: float = 0.0
+    hsl_purple_h: float = 0.0; hsl_purple_s: float = 0.0; hsl_purple_l: float = 0.0
+    hsl_magenta_h: float = 0.0; hsl_magenta_s: float = 0.0; hsl_magenta_l: float = 0.0
+    # Detail
+    clarity: float = 0.0    # -100 to +100
+    texture: float = 0.0    # -100 to +100
+    dehaze: float = 0.0     # -100 to +100
+    # Film effects
+    bloom: float = 0.0      # 0 to 100
+    adaptation: float = 1.0
     grain: str = "Auto"
     halation: str = "Auto"
 
@@ -211,13 +230,13 @@ def list_profiles():
     # List stocks — prepend a 'none' passthrough option
     stocks_files = glob.glob(os.path.join(STOCKS_DIR, "*.yaml"))
     stocks = [{"id": "none", "name": "No emulation (RAW)", "type": "passthrough"}]
-    for f in stocks_files:
+    for f in sorted(stocks_files):
         name = os.path.splitext(os.path.basename(f))[0]
         try:
             p = FilmStockProfile(f)
             stocks.append({
                 "id": name,
-                "name": name.replace("_", " ").title(),
+                "name": p.stock_name,   # use the human-readable name from YAML
                 "type": p.stock_type
             })
         except:
@@ -237,6 +256,113 @@ def list_profiles():
             pass
             
     return {"stocks": stocks, "scanners": scanners}
+
+
+def _apply_post_film_color(rendered, saturation, vibrance):
+    """
+    Post-film colour density adjustments applied to the fully rendered linear image.
+
+    Saturation  — global OKLCH chroma scale. Positive = richer colours everywhere,
+                  negative = desaturate. Simple and predictable.
+
+    Vibrance    — smart saturation. Boosts muted/dull colours more than vivid ones,
+                  and protects skin-tone hues from over-saturation. Mimics the way
+                  film dye layers have a natural saturation ceiling.
+
+                  Formula per pixel:
+                    C_ref   = 0.22 (typical max chroma for natural scenes in OKLCH)
+                    dullness = 1 - clip(C / C_ref, 0, 1)   [1 for grey, 0 for vivid]
+                    skin_w   = cos(H - 0.55)^4              [1 at warm skin hue, 0 elsewhere]
+                    vib_mult = 1 + factor * dullness * (1 - 0.6 * skin_w)
+    """
+    from dfee.color_spaces import rgb_to_oklab, oklab_to_rgb, oklab_to_oklch, oklch_to_oklab
+
+    if saturation == 0 and vibrance == 0:
+        return rendered
+
+    oklab = rgb_to_oklab(rendered)
+    lch   = oklab_to_oklch(oklab)
+
+    C = lch[:, :, 1].copy()
+    H = lch[:, :, 2]
+
+    # ── Saturation (global uniform chroma scale) ──────────────────────────────
+    if saturation != 0:
+        sat_factor = saturation / 100.0          # -1 … +1
+        # Map linearly: +100 → ×2.0, -100 → ×0.0
+        C = C * (1.0 + sat_factor)
+
+    # ── Vibrance (chroma-weighted, skin-protected) ────────────────────────────
+    if vibrance != 0:
+        vib_factor = vibrance / 100.0            # -1 … +1
+
+        # How "dull" is this pixel? Near 0 C = very dull (gets max boost),
+        # near C_ref = already vivid (gets no boost).
+        C_ref    = 0.22                          # natural scene chroma reference
+        dullness = 1.0 - np.clip(C / C_ref, 0.0, 1.0)
+
+        # Skin-tone protection: warm orange-pink hue in OKLCH ≈ 0.3–0.8 rad.
+        # We reduce vibrance for those hues so skin stays natural.
+        skin_hue_center = 0.55
+        skin_w = np.clip(np.cos(H - skin_hue_center), 0.0, 1.0) ** 4
+        protection = 1.0 - skin_w * 0.6         # 0.4 at peak skin hue, 1.0 elsewhere
+
+        vib_mult = 1.0 + vib_factor * dullness * protection
+        C = C * np.clip(vib_mult, 0.01, 4.0)
+
+    lch_new = lch.copy()
+    lch_new[:, :, 1] = np.clip(C, 0.0, None)
+    oklab_new = oklch_to_oklab(lch_new)
+    oklab_new[:, :, 0] = oklab[:, :, 0]
+    return oklab_to_rgb(oklab_new)
+
+
+def _apply_post_film_effects(rendered, curves_json, hsl_dict,
+                             clarity, texture, dehaze, bloom):
+    """
+    Orchestrates all post-film creative effects in the correct order.
+    All effects are no-ops when at default values so performance is unaffected.
+    """
+    import json
+    from dfee.post_effects import (apply_curves, apply_hsl, apply_clarity,
+                                   apply_texture, apply_dehaze, apply_bloom)
+
+    # 1. Curves
+    try:
+        pts = json.loads(curves_json) if isinstance(curves_json, str) else curves_json
+        if pts and not (len(pts) == 2 and pts[0] == [0, 0] and pts[1] == [1, 1]):
+            rendered = apply_curves(rendered, pts)
+            rendered = np.clip(rendered, 0.0, 1.0)
+    except Exception:
+        pass
+
+    # 2. HSL
+    if hsl_dict and any(float(v) != 0 for v in hsl_dict.values()):
+        rendered = apply_hsl(rendered, hsl_dict)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+    # 3. Clarity
+    if clarity != 0:
+        rendered = apply_clarity(rendered, clarity)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+    # 4. Texture
+    if texture != 0:
+        rendered = apply_texture(rendered, texture)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+    # 5. Dehaze
+    if dehaze != 0:
+        rendered = apply_dehaze(rendered, dehaze)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+    # 6. Bloom
+    if bloom > 0:
+        rendered = apply_bloom(rendered, bloom)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+    return rendered
+
 
 @app.post("/api/select")
 def select_file(req: SelectRequest):
@@ -350,6 +476,21 @@ def get_preview(
     contrast: float = 0.0,
     temp: float = 0.0,
     tint: float = 0.0,
+    saturation: float = 0.0,
+    vibrance: float = 0.0,
+    curves: str = "[[0,0],[1,1]]",
+    hsl_red_h: float = 0.0,    hsl_red_s: float = 0.0,    hsl_red_l: float = 0.0,
+    hsl_orange_h: float = 0.0, hsl_orange_s: float = 0.0, hsl_orange_l: float = 0.0,
+    hsl_yellow_h: float = 0.0, hsl_yellow_s: float = 0.0, hsl_yellow_l: float = 0.0,
+    hsl_green_h: float = 0.0,  hsl_green_s: float = 0.0,  hsl_green_l: float = 0.0,
+    hsl_aqua_h: float = 0.0,   hsl_aqua_s: float = 0.0,   hsl_aqua_l: float = 0.0,
+    hsl_blue_h: float = 0.0,   hsl_blue_s: float = 0.0,   hsl_blue_l: float = 0.0,
+    hsl_purple_h: float = 0.0, hsl_purple_s: float = 0.0, hsl_purple_l: float = 0.0,
+    hsl_magenta_h: float = 0.0,hsl_magenta_s: float = 0.0,hsl_magenta_l: float = 0.0,
+    clarity: float = 0.0,
+    texture: float = 0.0,
+    dehaze: float = 0.0,
+    bloom: float = 0.0,
     adaptation: float = 1.0,
     grain: str = "Auto",
     halation: str = "Auto"
@@ -392,11 +533,34 @@ def get_preview(
         )
 
         renderer = FilmRenderer()
-        rendered  = renderer.render(rgb_input, session.masks, plan)
-        rendered  = np.clip(rendered, 0.0, 1.0)
+        rendered = renderer.render(rgb_input, session.masks, plan)
+        rendered = np.clip(rendered, 0.0, 1.0)
 
-        rendered_uint8 = (rendered * 255.0).astype(np.uint8)
-        _, jpeg_bytes  = cv2.imencode('.jpg', cv2.cvtColor(rendered_uint8, cv2.COLOR_RGB2BGR))
+        # Post-film saturation / vibrance
+        rendered = _apply_post_film_color(rendered, saturation, vibrance)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+        # Post-film creative effects (curves, HSL, clarity, texture, dehaze, bloom)
+        hsl_dict = {
+            'red_h': hsl_red_h, 'red_s': hsl_red_s, 'red_l': hsl_red_l,
+            'orange_h': hsl_orange_h, 'orange_s': hsl_orange_s, 'orange_l': hsl_orange_l,
+            'yellow_h': hsl_yellow_h, 'yellow_s': hsl_yellow_s, 'yellow_l': hsl_yellow_l,
+            'green_h': hsl_green_h, 'green_s': hsl_green_s, 'green_l': hsl_green_l,
+            'aqua_h': hsl_aqua_h, 'aqua_s': hsl_aqua_s, 'aqua_l': hsl_aqua_l,
+            'blue_h': hsl_blue_h, 'blue_s': hsl_blue_s, 'blue_l': hsl_blue_l,
+            'purple_h': hsl_purple_h, 'purple_s': hsl_purple_s, 'purple_l': hsl_purple_l,
+            'magenta_h': hsl_magenta_h, 'magenta_s': hsl_magenta_s, 'magenta_l': hsl_magenta_l,
+        }
+        rendered = _apply_post_film_effects(rendered, curves, hsl_dict,
+                                            clarity, texture, dehaze, bloom)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+        # Gamma-encode to sRGB before JPEG — the renderer outputs linear light;
+        # JPEG viewers expect gamma-encoded values. Without this, everything
+        # appears drastically darker (linear 0.18 → 46/255 instead of 118/255).
+        rendered_display = np.clip(rendered ** (1.0 / 2.2), 0.0, 1.0)
+        rendered_uint8   = (rendered_display * 255.0).astype(np.uint8)
+        _, jpeg_bytes    = cv2.imencode('.jpg', cv2.cvtColor(rendered_uint8, cv2.COLOR_RGB2BGR))
 
         return StreamingResponse(io.BytesIO(jpeg_bytes.tobytes()), media_type="image/jpeg")
     except Exception as e:
@@ -461,6 +625,25 @@ def export_file(req: PreviewRequest):
         renderer = FilmRenderer()
         rendered  = renderer.render(rgb_input, masks, plan)
         rendered  = np.clip(rendered, 0.0, 1.0)
+
+        # Post-film saturation / vibrance
+        rendered = _apply_post_film_color(rendered, req.saturation, req.vibrance)
+        rendered = np.clip(rendered, 0.0, 1.0)
+
+        # Post-film creative effects
+        hsl_dict_exp = {
+            'red_h': req.hsl_red_h, 'red_s': req.hsl_red_s, 'red_l': req.hsl_red_l,
+            'orange_h': req.hsl_orange_h, 'orange_s': req.hsl_orange_s, 'orange_l': req.hsl_orange_l,
+            'yellow_h': req.hsl_yellow_h, 'yellow_s': req.hsl_yellow_s, 'yellow_l': req.hsl_yellow_l,
+            'green_h': req.hsl_green_h, 'green_s': req.hsl_green_s, 'green_l': req.hsl_green_l,
+            'aqua_h': req.hsl_aqua_h, 'aqua_s': req.hsl_aqua_s, 'aqua_l': req.hsl_aqua_l,
+            'blue_h': req.hsl_blue_h, 'blue_s': req.hsl_blue_s, 'blue_l': req.hsl_blue_l,
+            'purple_h': req.hsl_purple_h, 'purple_s': req.hsl_purple_s, 'purple_l': req.hsl_purple_l,
+            'magenta_h': req.hsl_magenta_h, 'magenta_s': req.hsl_magenta_s, 'magenta_l': req.hsl_magenta_l,
+        }
+        rendered = _apply_post_film_effects(rendered, req.curves, hsl_dict_exp,
+                                            req.clarity, req.texture, req.dehaze, req.bloom)
+        rendered = np.clip(rendered, 0.0, 1.0)
 
         # Save 16-bit TIFF
         print(f"Saving output TIFF to: {output_path}")

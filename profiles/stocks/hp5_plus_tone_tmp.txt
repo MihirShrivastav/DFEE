@@ -1,0 +1,10 @@
+tone_response:
+  toe_strength: 0.40
+  toe_length: 0.33
+  midtone_contrast: 1.05
+  shoulder_strength: 0.74
+  highlight_rolloff_start: 0.68
+  black_density_floor: 0.010
+  channel_toe_mult:      [1.0, 1.0, 1.0]
+  channel_shoulder_mult: [1.0, 1.0, 1.0]
+  channel_midtone_mult:  [1.0, 1.0, 1.0]

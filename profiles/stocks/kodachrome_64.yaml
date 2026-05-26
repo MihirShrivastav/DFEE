@@ -15,7 +15,10 @@ tone_response:
   midtone_contrast: 1.15     # Punchy midtone contrast (> 1.0)
   shoulder_strength: 0.85    # Strong shoulder roll-off to avoid harsh clipping
   highlight_rolloff_start: 0.65  # Highlight roll-off starts early
-  black_density_floor: 0.012  # Very deep black floor (dense blacks)
+  black_density_floor: 0.005  # Reversal film has nearly zero base density (D-base ≈ 0)
+  channel_toe_mult:      [1.00, 1.00, 1.20]  # Blue layer clips slightly sooner
+  channel_shoulder_mult: [1.00, 1.00, 1.30]  # Blue shoulder cuts earlier
+  channel_midtone_mult:  [1.00, 1.02, 0.93]  # Red/green rich midtones, blue slightly lower
 
 color_response:
   # Lab bias shifts (L_shift, a_shift, b_shift)
@@ -26,6 +29,7 @@ color_response:
   green_magenta_stabilization: 0.35
 
 hue_saturation_response:
+  saturation_boost: 1.35          # Kodachrome's legendary color density — vivid reds, blues, gold
   red_orange_midtone_compression: 0.15   # Low compression -> vibrant reds/oranges
   yellow_green_muting: 0.10              # Keeps yellows vibrant
   cyan_blue_highlight_compression: 0.25
@@ -49,7 +53,24 @@ halation:
 
 scanner:
   style: frontier_soft
-  contrast: 0.45
+  contrast: 1.05   # Slight contrast lift above scan profile — reversal film is punchy
   warmth: 0.10
   black_point: 0.015
   output_sharpening: 0.25
+
+chroma_coupling:
+  hi_rolloff_start: 0.72   # Reversal: rolloff starts relatively early
+  hi_rolloff_rate:  2.8    # Moderate-sharp cutoff (not as abrupt as Velvia)
+  hi_compression:   0.65   # Highlights become noticeably pastel
+  sh_rolloff_start: 0.16   # Shadows lose colour from this L value down
+  sh_compression:   0.50   # Moderate shadow absorption
+  hi_hue_conv_rad:  0.15   # Near-neutral highlight white-point (reversal)
+  hi_hue_conv_str:  0.12   # Subtle convergence
+
+dye_contamination:
+  r_to_g: 0.00   # Reversal: very little inter-layer leakage (direct positive)
+  g_to_r: 0.00
+  b_to_g: 0.00
+  b_to_r: 0.00
+  r_to_b: 0.00
+  g_to_b: 0.00

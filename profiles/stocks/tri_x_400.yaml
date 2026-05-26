@@ -15,7 +15,10 @@ tone_response:
   midtone_contrast: 1.10     # Strong midtone contrast (classic black and white punch)
   shoulder_strength: 0.80    # Strong shoulder roll-off to give bright whites
   highlight_rolloff_start: 0.68
-  black_density_floor: 0.015
+  black_density_floor: 0.010  # B&W negative base fog — slightly raised blacks
+  channel_toe_mult:      [1.0, 1.0, 1.0]   # B&W: all channels identical
+  channel_shoulder_mult: [1.0, 1.0, 1.0]
+  channel_midtone_mult:  [1.0, 1.0, 1.0]
 
 color_response:
   # Monochrome uses color response to specify color filter behavior (spectral sensitivity)
@@ -28,6 +31,7 @@ color_response:
   green_magenta_stabilization: 0.0
 
 hue_saturation_response:
+  saturation_boost: 1.0           # Monochrome — no colour to boost
   # Desaturate fully (monochrome)
   red_orange_midtone_compression: 1.00
   yellow_green_muting: 1.00
@@ -52,7 +56,24 @@ halation:
 
 scanner:
   style: darkroom_print
-  contrast: 0.60
+  contrast: 1.08   # Slightly punchy — darkroom prints tend toward rich blacks
   warmth: 0.00
-  black_point: 0.020
+  black_point: 0.015
   output_sharpening: 0.20
+chroma_coupling:
+  # B&W stock: chroma coupling is a no-op (monochrome has no colour to compress)
+  hi_rolloff_start: 0.70
+  hi_rolloff_rate:  2.0
+  hi_compression:   0.00
+  sh_rolloff_start: 0.18
+  sh_compression:   0.00
+  hi_hue_conv_rad:  0.0
+  hi_hue_conv_str:  0.0
+
+dye_contamination:
+  r_to_g: 0.00   # B&W: no colour dye layers
+  g_to_r: 0.00
+  b_to_g: 0.00
+  b_to_r: 0.00
+  r_to_b: 0.00
+  g_to_b: 0.00

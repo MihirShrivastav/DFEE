@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
+import CurvesPanel, { DEFAULT_POINTS as DEFAULT_CURVES } from './CurvesPanel';
+import HslPanel from './HslPanel';
 
 const API = 'http://localhost:8000';
 
@@ -35,10 +37,21 @@ const DEFAULT_PARAMS = {
   contrast: 0,
   temp: 0,
   tint: 0,
+  saturation: 0,
+  vibrance: 0,
+  clarity: 0,
+  texture: 0,
+  dehaze: 0,
+  bloom: 0,
   adaptation: 1.0,
   grain: 'Auto',
   halation: 'Auto',
 };
+
+const HSL_RANGES_KEYS = ['red','orange','yellow','green','aqua','blue','purple','magenta'];
+const DEFAULT_HSL = Object.fromEntries(
+  HSL_RANGES_KEYS.flatMap(r => ['h','s','l'].map(p => [`${r}_${p}`, 0]))
+);
 
 export default function App() {
   const [files, setFiles] = useState([]);
@@ -48,6 +61,33 @@ export default function App() {
   const [selectLoading, setSelectLoading] = useState(false);
   const [diagnostics, setDiagnostics] = useState(null);
   const [params, setParams] = useState(DEFAULT_PARAMS);
+  const [curves, setCurves] = useState(DEFAULT_CURVES);
+  const [hsl, setHsl] = useState(DEFAULT_HSL);
+
+  // ── Collapsible sections — persisted to localStorage ───────────────────
+  const DEFAULT_OPEN = {
+    Profile: true, Curves: true, HSL: false,
+    Light: true, Color: true, Detail: false, Effects: false,
+    'Film Modifiers': false, Diagnostics: false,
+  };
+  const [openSections, setOpenSections] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dfee_open_sections');
+      return saved ? { ...DEFAULT_OPEN, ...JSON.parse(saved) } : DEFAULT_OPEN;
+    } catch { return DEFAULT_OPEN; }
+  });
+  const toggleSection = (name) => setOpenSections(prev => {
+    const next = { ...prev, [name]: !prev[name] };
+    try { localStorage.setItem('dfee_open_sections', JSON.stringify(next)); } catch {}
+    return next;
+  });
+
+  // ── Reset All ───────────────────────────────────────────────────────
+  const handleResetAll = () => {
+    setParams(DEFAULT_PARAMS);
+    setCurves(DEFAULT_CURVES);
+    setHsl(DEFAULT_HSL);
+  };
   const [previewUrl, setPreviewUrl] = useState('');
   const [rawUrl, setRawUrl] = useState('');
   const [previewReady, setPreviewReady] = useState(false);
@@ -137,7 +177,10 @@ export default function App() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
-      // Build URL here, directly from current params in scope
+      const hslStr = encodeURIComponent(JSON.stringify(hsl));
+      const curvesStr = encodeURIComponent(JSON.stringify(curves));
+      const hslPairs = Object.entries(hsl)
+        .map(([k, v]) => `&hsl_${k}=${v}`).join('');
       const url = `${API}/api/preview?filename=${encodeURIComponent(selectedFile)}`
         + `&stock=${encodeURIComponent(params.stock)}`
         + `&scanner=${encodeURIComponent(params.scanner)}`
@@ -150,6 +193,14 @@ export default function App() {
         + `&contrast=${params.contrast}`
         + `&temp=${params.temp}`
         + `&tint=${params.tint}`
+        + `&saturation=${params.saturation}`
+        + `&vibrance=${params.vibrance}`
+        + `&curves=${curvesStr}`
+        + hslPairs
+        + `&clarity=${params.clarity}`
+        + `&texture=${params.texture}`
+        + `&dehaze=${params.dehaze}`
+        + `&bloom=${params.bloom}`
         + `&adaptation=${params.adaptation}`
         + `&grain=${encodeURIComponent(params.grain)}`
         + `&halation=${encodeURIComponent(params.halation)}`
@@ -180,7 +231,10 @@ export default function App() {
     params.stock, params.scanner, params.exposure, params.highlights,
     params.shadows, params.blacks, params.whites, params.midtones,
     params.contrast, params.temp, params.tint,
+    params.saturation, params.vibrance,
+    params.clarity, params.texture, params.dehaze, params.bloom,
     params.adaptation, params.grain, params.halation,
+    curves, hsl,
   ]);
 
   const handleExport = async () => {
@@ -203,6 +257,14 @@ export default function App() {
           contrast: params.contrast,
           temp: params.temp,
           tint: params.tint,
+          saturation: params.saturation,
+          vibrance: params.vibrance,
+          curves: JSON.stringify(curves),
+          ...Object.fromEntries(Object.entries(hsl).map(([k,v]) => [`hsl_${k}`, v])),
+          clarity: params.clarity,
+          texture: params.texture,
+          dehaze: params.dehaze,
+          bloom: params.bloom,
           adaptation: params.adaptation,
           grain: params.grain,
           halation: params.halation,
@@ -265,8 +327,24 @@ export default function App() {
     {
       title: 'Color',
       rows: [
-        { key: 'temp', label: 'Temperature', min: -100, max: 100, step: 1 },
-        { key: 'tint', label: 'Tint',        min: -100, max: 100, step: 1 },
+        { key: 'temp',       label: 'Temperature', min: -100, max: 100, step: 1 },
+        { key: 'tint',       label: 'Tint',        min: -100, max: 100, step: 1 },
+        { key: 'vibrance',   label: 'Vibrance',    min: -100, max: 100, step: 1 },
+        { key: 'saturation', label: 'Saturation',  min: -100, max: 100, step: 1 },
+      ],
+    },
+    {
+      title: 'Detail',
+      rows: [
+        { key: 'texture', label: 'Texture', min: -100, max: 100, step: 1 },
+        { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1 },
+        { key: 'dehaze',  label: 'Dehaze',  min: -100, max: 100, step: 1 },
+      ],
+    },
+    {
+      title: 'Effects',
+      rows: [
+        { key: 'bloom', label: 'Film Bloom', min: 0, max: 100, step: 1 },
       ],
     },
   ];
@@ -391,98 +469,164 @@ export default function App() {
 
         {/* Controls */}
         <aside className="dfee-controls">
+          <div className="controls-header-bar">
+            <span className="controls-header-title">Develop</span>
+            <button className="reset-all-btn" onClick={handleResetAll} title="Reset all settings to defaults">
+              ↺ Reset All
+            </button>
+          </div>
           <div className="controls-body">
 
-            {/* Profile selectors */}
+            {/* Profile */}
             <div className="control-group">
-              <div className="group-title">Profile</div>
-              <div className="field">
-                <label className="field-label">Film Stock</label>
-                <select className="select" value={params.stock} onChange={set('stock')}>
-                  {profiles.stocks.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
+              <div className="group-title collapsible" onClick={() => toggleSection('Profile')}>
+                <span>Profile</span>
+                <span className={`chevron ${openSections.Profile ? 'open' : ''}`}>›</span>
               </div>
-              <div className="field">
-                <label className="field-label">Scanner / Finish</label>
-                <select className="select" value={params.scanner} onChange={set('scanner')}>
-                  {profiles.scanners.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
+              {openSections.Profile && (
+                <div className="section-body">
+                  <div className="field">
+                    <label className="field-label">Film Stock</label>
+                    <select className="select" value={params.stock} onChange={set('stock')}>
+                      <option value="none">— None —</option>
+                      <optgroup label="Color Negative">
+                        {profiles.stocks.filter(p => p.type === 'color_negative').map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Color Reversal">
+                        {profiles.stocks.filter(p => p.type === 'color_reversal').map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Monochrome">
+                        {profiles.stocks.filter(p => p.type === 'monochrome').map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field-label">Scanner / Finish</label>
+                    <select className="select" value={params.scanner} onChange={set('scanner')}>
+                      {profiles.scanners.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Light + Color sliders */}
+            {/* Curves */}
+            <div className="control-group">
+              <div className="group-title collapsible" onClick={() => toggleSection('Curves')}>
+                <span>Curves</span>
+                <span className={`chevron ${openSections.Curves ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections.Curves && (
+                <div className="section-body">
+                  <CurvesPanel points={curves} onChange={setCurves} />
+                </div>
+              )}
+            </div>
+
+            {/* HSL */}
+            <div className="control-group">
+              <div className="group-title collapsible" onClick={() => toggleSection('HSL')}>
+                <span>HSL</span>
+                <span className={`chevron ${openSections.HSL ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections.HSL && (
+                <div className="section-body">
+                  <HslPanel hsl={hsl} onChange={setHsl} />
+                </div>
+              )}
+            </div>
+
+            {/* Light + Color + Detail + Effects sliders */}
             {sliderGroups.map(group => (
               <div className="control-group" key={group.title}>
-                <div className="group-title">{group.title}</div>
-                {group.rows.map(({ key, label, min, max, step }) => {
-                  const isDirty = params[key] !== DEFAULT_PARAMS[key];
-                  return (
-                    <div className="slider-row" key={key}>
-                      <div className="slider-header">
-                        <span className="slider-label">{label}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {isDirty && (
-                            <button
-                              className="revert-btn"
-                              title={`Reset ${label} to default`}
-                              onClick={() => setParams(p => ({ ...p, [key]: DEFAULT_PARAMS[key] }))}
-                            >↺</button>
-                          )}
-                          <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>
-                            {fmtVal(key, params[key])}
-                          </span>
+                <div className="group-title collapsible" onClick={() => toggleSection(group.title)}>
+                  <span>{group.title}</span>
+                  <span className={`chevron ${openSections[group.title] ? 'open' : ''}`}>›</span>
+                </div>
+                {openSections[group.title] && (
+                  <div className="section-body">
+                    {group.rows.map(({ key, label, min, max, step }) => {
+                      const isDirty = params[key] !== DEFAULT_PARAMS[key];
+                      return (
+                        <div className="slider-row" key={key}>
+                          <div className="slider-header">
+                            <span className="slider-label">{label}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {isDirty && (
+                                <button
+                                  className="revert-btn"
+                                  title={`Reset ${label} to default`}
+                                  onClick={() => setParams(p => ({ ...p, [key]: DEFAULT_PARAMS[key] }))}
+                                >↺</button>
+                              )}
+                              <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>
+                                {fmtVal(key, params[key])}
+                              </span>
+                            </div>
+                          </div>
+                          <input
+                            type="range" min={min} max={max} step={step}
+                            value={params[key]} onChange={set(key)}
+                            className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                          />
                         </div>
-                      </div>
-                      <input
-                        type="range" min={min} max={max} step={step}
-                        value={params[key]} onChange={set(key)}
-                        className={`slider${isDirty ? ' slider--dirty' : ''}`}
-                      />
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
 
-            {/* Film modifiers */}
+            {/* Film Modifiers */}
             <div className="control-group">
-              <div className="group-title">Film Modifiers</div>
-              <div className="slider-row">
-                <div className="slider-header">
-                  <span className="slider-label">Adaptation</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {params.adaptation !== DEFAULT_PARAMS.adaptation && (
-                      <button
-                        className="revert-btn"
-                        title="Reset Adaptation to default"
-                        onClick={() => setParams(p => ({ ...p, adaptation: DEFAULT_PARAMS.adaptation }))}
-                      >↺</button>
-                    )}
-                    <span className={`slider-value${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider-value--dirty' : ''}`}>
-                      {params.adaptation.toFixed(2)}
-                    </span>
+              <div className="group-title collapsible" onClick={() => toggleSection('Film Modifiers')}>
+                <span>Film Modifiers</span>
+                <span className={`chevron ${openSections['Film Modifiers'] ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections['Film Modifiers'] && (
+                <div className="section-body">
+                  <div className="slider-row">
+                    <div className="slider-header">
+                      <span className="slider-label">Adaptation</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {params.adaptation !== DEFAULT_PARAMS.adaptation && (
+                          <button
+                            className="revert-btn"
+                            title="Reset Adaptation to default"
+                            onClick={() => setParams(p => ({ ...p, adaptation: DEFAULT_PARAMS.adaptation }))}
+                          >↺</button>
+                        )}
+                        <span className={`slider-value${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider-value--dirty' : ''}`}>
+                          {params.adaptation.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                    <input type="range" min={0} max={1} step={0.05}
+                      value={params.adaptation} onChange={set('adaptation')}
+                      className={`slider${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider--dirty' : ''}`} />
+                  </div>
+                  <div className="field" style={{ marginTop: 12 }}>
+                    <label className="field-label">Grain</label>
+                    <select className="select" value={params.grain} onChange={set('grain')}>
+                      {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field-label">Halation</label>
+                    <select className="select" value={params.halation} onChange={set('halation')}>
+                      {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
+                    </select>
                   </div>
                 </div>
-                <input type="range" min={0} max={1} step={0.05}
-                  value={params.adaptation} onChange={set('adaptation')}
-                  className={`slider${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider--dirty' : ''}`} />
-              </div>
-              <div className="field" style={{ marginTop: 12 }}>
-                <label className="field-label">Grain</label>
-                <select className="select" value={params.grain} onChange={set('grain')}>
-                  {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label className="field-label">Halation</label>
-                <select className="select" value={params.halation} onChange={set('halation')}>
-                  {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
-                </select>
-              </div>
+              )}
             </div>
 
             {/* Diagnostics */}

@@ -67,6 +67,16 @@ class FilmStockProfile:
     def scanner(self):
         return self.data['scanner']
 
+    @property
+    def chroma_coupling(self):
+        """Luminance-dependent chroma compression parameters (optional, has defaults)."""
+        return self.data.get('chroma_coupling', {})
+
+    @property
+    def dye_contamination(self):
+        """Cross-channel dye contamination matrix (optional, has defaults)."""
+        return self.data.get('dye_contamination', {})
+
 
 class ScanPrintProfile:
     def __init__(self, filepath):

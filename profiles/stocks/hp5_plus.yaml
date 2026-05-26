@@ -1,0 +1,77 @@
+stock_id: hp5_plus
+stock_name: Ilford HP5 Plus 400
+stock_type: monochrome
+
+adaptation:
+  base_iso: 400
+  default_strength: 0.92
+  camera_cast_compensation_sensitivity: 0.30  # Monochrome — colour cast irrelevant
+  highlight_stress_sensitivity: 0.70
+  shadow_noise_sensitivity: 0.60
+
+tone_response:
+  toe_strength: 0.40         # Softer, more forgiving toe than Tri-X
+  toe_length: 0.33           # Gradual shadow entry — wide latitude
+  midtone_contrast: 1.05     # Slightly punchy midtones but more gentle than Tri-X
+  shoulder_strength: 0.74    # Smooth, long shoulder — HP5 holds highlights beautifully
+  highlight_rolloff_start: 0.68
+  black_density_floor: 0.010  # B&W negative base fog
+  channel_toe_mult:      [1.0, 1.0, 1.0]   # B&W: all channels identical
+  channel_shoulder_mult: [1.0, 1.0, 1.0]
+  channel_midtone_mult:  [1.0, 1.0, 1.0]
+
+color_response:
+  # Monochrome — colour response used only for panchromatic channel mixing
+  shadow_bias_lab: [0.0, 0.0, 0.0]
+  midtone_bias_lab: [0.0, 0.0, 0.0]
+  highlight_bias_lab: [0.0, 0.0, 0.0]
+  blue_cast_suppression: 0.0
+  green_magenta_stabilization: 0.0
+
+hue_saturation_response:
+  saturation_boost: 1.0           # Monochrome — no colour
+  # Full desaturation — monochrome conversion
+  red_orange_midtone_compression: 1.00
+  yellow_green_muting: 1.00
+  cyan_blue_highlight_compression: 1.00
+  neon_compression: 1.00
+  highlight_desaturation: 1.00
+
+grain:
+  size: 0.50                 # Classic medium grain — slightly finer than Tri-X
+  strength: 0.44
+  chroma_strength: 0.0       # Monochrome — pure luminance grain
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.65
+
+halation:
+  trigger: specular_only
+  strength: 0.10
+  radius_inner: 4
+  radius_outer: 16
+  warm_core: [1.0, 1.0, 1.0]     # White halation (monochrome)
+  red_fringe: [1.0, 1.0, 1.0]
+
+scanner:
+  style: darkroom_print
+  contrast: 1.05             # HP5 traditionally printed with moderate contrast
+  warmth: 0.00
+  black_point: 0.012
+  output_sharpening: 0.18
+chroma_coupling:
+  # B&W stock: chroma coupling is a no-op (monochrome has no colour to compress)
+  hi_rolloff_start: 0.70
+  hi_rolloff_rate:  2.0
+  hi_compression:   0.00
+  sh_rolloff_start: 0.18
+  sh_compression:   0.00
+  hi_hue_conv_rad:  0.0
+  hi_hue_conv_str:  0.0
+
+dye_contamination:
+  r_to_g: 0.00   # B&W: no colour dye layers
+  g_to_r: 0.00
+  b_to_g: 0.00
+  b_to_r: 0.00
+  r_to_b: 0.00
+  g_to_b: 0.00

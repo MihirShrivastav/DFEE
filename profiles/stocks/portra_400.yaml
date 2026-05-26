@@ -15,7 +15,10 @@ tone_response:
   midtone_contrast: 0.85     # Gentle, lower midtone contrast for latitude
   shoulder_strength: 0.65    # Soft shoulder for highlight protection
   highlight_rolloff_start: 0.75  # Late, gentle roll-off
-  black_density_floor: 0.035  # Slightly elevated, soft blacks
+  black_density_floor: 0.012  # Negative film base fog — faded blacks, not a thick haze
+  channel_toe_mult:      [0.90, 0.95, 1.12]
+  channel_shoulder_mult: [0.85, 0.95, 1.18]
+  channel_midtone_mult:  [1.02, 1.00, 0.96]
 
 color_response:
   shadow_bias_lab: [0.0, -1.0, -1.5]     # Subtle cool-cyan shadows
@@ -25,6 +28,7 @@ color_response:
   green_magenta_stabilization: 0.30
 
 hue_saturation_response:
+  saturation_boost: 1.20          # Color negative — rich, latitude-friendly saturation
   red_orange_midtone_compression: 0.40   # Compress red/orange to protect skin tones
   yellow_green_muting: 0.35              # Mute green/yellow for organic foliage
   cyan_blue_highlight_compression: 0.45
@@ -48,7 +52,24 @@ halation:
 
 scanner:
   style: frontier_soft
-  contrast: 0.50
+  contrast: 1.00   # Neutral scan — color negative scanned flat, grade in post
   warmth: 0.15
-  black_point: 0.030
+  black_point: 0.025
   output_sharpening: 0.10
+
+chroma_coupling:
+  hi_rolloff_start: 0.75
+  hi_rolloff_rate:  1.5
+  hi_compression:   0.48
+  sh_rolloff_start: 0.18
+  sh_compression:   0.43
+  hi_hue_conv_rad:  0.30
+  hi_hue_conv_str:  0.20
+
+dye_contamination:
+  r_to_g: 0.030
+  g_to_r: 0.015
+  b_to_g: 0.012
+  b_to_r: 0.006
+  r_to_b: 0.000
+  g_to_b: 0.006

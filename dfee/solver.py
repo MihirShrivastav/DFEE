@@ -155,6 +155,11 @@ class RenderPlanSolver:
             "blue_cyan_compression":   float(hsv_resp["cyan_blue_highlight_compression"]),
             "red_orange_compression":  float(hsv_resp["red_orange_midtone_compression"]),
             "neon_compression":        float(hsv_resp.get("neon_compression", 0.0)),
+            "chroma_boost":            float(hsv_resp.get("saturation_boost", 1.0)),
+            # Per-channel tone curve differential (B layer has less latitude on real film)
+            "channel_toe_mult":        tone.get("channel_toe_mult",      [1.0, 1.0, 1.0]),
+            "channel_shoulder_mult":   tone.get("channel_shoulder_mult", [1.0, 1.0, 1.0]),
+            "channel_midtone_mult":    tone.get("channel_midtone_mult",  [1.0, 1.0, 1.0]),
             # Per-zone color biases from stock profile YAML (used by color_response stage)
             "shadow_bias_lab":    color_resp.get("shadow_bias_lab",    [0.0, 0.0, 0.0]),
             "midtone_bias_lab":   color_resp.get("midtone_bias_lab",   [0.0, 0.0, 0.0]),
@@ -163,6 +168,12 @@ class RenderPlanSolver:
             "pan_weight_r": 0.25,
             "pan_weight_g": 0.55,
             "pan_weight_b": 0.20,
+            # Luminance-chroma coupling (new)
+            "chroma_coupling":     stock_profile.chroma_coupling,
+            # Cross-channel dye contamination (new)
+            "dye_contamination":   stock_profile.dye_contamination,
+            # stock_type needed by chroma coupling step
+            "stock_type":          stock_profile.stock_type,
         }
 
         # 4. Material Effects (Grain, Halation, Bloom)
@@ -239,11 +250,12 @@ class RenderPlanSolver:
             "edge_softening": edge_softening
         }
         
-        # Scanner finish: scan_profile.contrast is centred at 1.0 (neutral).
-        # stock scanner.contrast is an additive offset in [-0.3, +0.3] relative to neutral.
-        # Result is clamped to [0.5, 1.5] so it can never crush or massively boost.
-        stock_scanner_contrast = float(stock_profile.scanner.get("contrast", 0.0))
-        scan_contrast = float(np.clip(float(scan_profile.contrast) + stock_scanner_contrast - 0.5, 0.5, 1.5))
+        # Scanner finish: both contrast fields are now 1.0-centred slope multipliers.
+        # scan_profile.contrast  = base scan characteristic  (frontier_soft=0.92, noritsu=1.0, darkroom=1.12)
+        # stock.scanner.contrast = stock-specific modifier   (Portra=1.0, Kodachrome=1.05, Tri-X=1.08)
+        # Product: 1.0 × 1.0 = 1.0 (neutral), 0.92 × 1.05 = 0.97 (nearly flat), etc.
+        stock_scanner_contrast = float(stock_profile.scanner.get("contrast", 1.0))
+        scan_contrast = float(np.clip(float(scan_profile.contrast) * stock_scanner_contrast, 0.5, 1.8))
         scan_warmth = float(scan_profile.warmth) + float(stock_profile.scanner.get("warmth", 0.0)) * 0.5
 
         scanner_finish = {

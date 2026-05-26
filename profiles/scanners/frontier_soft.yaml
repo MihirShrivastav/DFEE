@@ -1,8 +1,8 @@
 scanner_id: frontier_soft
 scanner_name: Frontier Soft Scan
-contrast: 0.50             # Warm, gentle scan contrast
+contrast: 0.92             # Slightly softer than neutral (1.0 = neutral flat scan)
 warmth: 0.15               # Slight amber warmth in highlight scan
-black_point: 0.030         # Gentle dark floor
+black_point: 0.005         # Near-zero — scanner calibrates to film D-min
 white_point: 0.985         # Protected whites
 output_sharpening: 0.10    # Minimal digital sharpening
-color_separation: 0.35     # Soft color separation (blends tones nicely)
+color_separation: 0.35     # Soft color separation
