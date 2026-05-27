@@ -69,19 +69,57 @@ class RenderPlanSolver:
         target_gray = 0.18
         exposure_comp = 0.0
         
+        # Calculate raw alignment to middle gray (baseline)
+        raw_comp = float(np.log2(target_gray / max(tonal["midtone_anchor"], 1e-4)))
+        
+        # ── Intelligent Stock-Specific Exposure & Contrast Correction ────
+        stock_type = stock_profile.stock_type
+        stock_id = stock_profile.stock_id
+        
+        # 1. Base Stock Bias (mimicking how photographers expose these stocks in the field)
+        stock_bias = 0.0
+        if stock_type == "color_negative":
+            if stock_id in ["portra_400", "portra_160", "pro_400h"]:
+                # Professional high-latitude negatives are shot overexposed for soft, pastel tones
+                stock_bias = 0.65
+            elif stock_id in ["ektar_100", "gold_200", "ultramax_400", "superia_400"]:
+                # Consumer negatives get a minor lift to open up shadows slightly
+                stock_bias = 0.35
+            else:
+                stock_bias = 0.40
+        elif stock_type == "color_reversal":
+            # Slide films are exposed for highlights (under-exposed to keep rich saturation and avoid blowing highlights)
+            # If the scene has bright/contrasty highlights, we pull exposure down to protect them
+            p95 = tonal["luma_p95"]
+            if p95 > 0.80:
+                # Protect highlights by pulling them down to safe range [0.75, 0.80]
+                stock_bias = float(np.log2(0.78 / p95))
+            else:
+                stock_bias = -0.15
+        elif stock_type == "monochrome":
+            if stock_id == "delta_3200":
+                # Delta 3200 is very low contrast, we give it a minor lift to avoid muddy midtones
+                stock_bias = 0.25
+            else:
+                stock_bias = 0.10
+                
+        # 2. Scene-Adaptive Correction
         if controls["exposure_intent"] == "Auto":
-            # Auto-align midtone anchor to middle gray
-            exposure_comp = float(np.log2(target_gray / tonal["midtone_anchor"]))
+            exposure_comp = raw_comp + stock_bias
         elif controls["exposure_intent"] == "Lift":
-            exposure_comp = float(np.log2(target_gray / tonal["midtone_anchor"])) + 0.5
+            exposure_comp = raw_comp + stock_bias + 0.5
         elif controls["exposure_intent"] == "Darken":
-            exposure_comp = float(np.log2(target_gray / tonal["midtone_anchor"])) - 0.5
+            exposure_comp = raw_comp + stock_bias - 0.5
         else: # "Preserve"
-            # Apply subtle correction only to keep midtones within printable limits
-            raw_comp = float(np.log2(target_gray / tonal["midtone_anchor"]))
-            exposure_comp = raw_comp * 0.35  # Gentle correction
-            
-        # Apply adaptation scale and clamp
+            # Mix raw_comp and stock_bias based on film type behavior
+            if stock_type == "color_reversal":
+                # Slide film contrast requires strict scene highlight protection
+                exposure_comp = raw_comp * 0.45 + stock_bias
+            else:
+                # Negatives can drift, so we let the exposure float more toward the stock bias
+                exposure_comp = raw_comp * 0.25 + stock_bias
+                
+        # Limit exposure compensation to safe bounds [-2.5, 2.5]
         exposure_comp = float(np.clip(exposure_comp * adaptation_mult, -2.5, 2.5))
         
         # Color Cast Compensation
@@ -102,7 +140,6 @@ class RenderPlanSolver:
                 cast_correction_mult = neutral_conf * comp_sensitivity * 0.2
                 
         # Calculate pre-film normalization offsets in OKLab space
-        # We want to subtract a fraction of the midtone/shadow cast
         shadow_blue_norm = float(bias_info.get("blue_excess_index", 0.0) * cast_correction_mult)
         green_mag_stab = float(abs(bias_info.get("green_magenta_bias", 0.0)) * cast_correction_mult)
         
@@ -111,11 +148,66 @@ class RenderPlanSolver:
         if max(channel["clipping_ratios"].values()) > 0.0:
             highlight_channel_recovery = float(np.clip(max(channel["clipping_ratios"].values()) * 5.0, 0.1, 0.9))
             
+        # Stock-and-scene-dependent pre-film adjustments
+        contrast_comp = 0.0
+        highlights_comp = 0.0
+        shadows_comp = 0.0
+        blacks_comp = 0.0
+        whites_comp = 0.0
+        midtones_comp = 0.0
+
+        toe_strength = float(stock_profile.tone_response.get("toe_strength", 0.40))
+
+        # Contrast and tonal adaptations
+        if stock_type == "color_reversal":
+            # slide film is contrasty, compress if scene is harsh
+            if tonal["dynamic_range_stops"] > 10.0:
+                contrast_comp = -12.0 * (tonal["dynamic_range_stops"] - 10.0)
+            # slide highlight protect
+            p95 = tonal["luma_p95"]
+            if p95 > 0.80:
+                highlights_comp = -30.0 * ((p95 - 0.80) / 0.20)
+            # slide shadow lift (to keep shadows from going pitch black immediately)
+            shadows_comp = 12.0 * (1.0 + toe_strength)
+        elif stock_type == "color_negative":
+            # negative film can look flat if scene is flat
+            if tonal["dynamic_range_stops"] < 7.0:
+                contrast_comp = 15.0 * (7.0 - tonal["dynamic_range_stops"])
+            if tonal["tonal_skew"] == "low_key":
+                shadows_comp = 15.0
+        elif stock_type == "monochrome":
+            if stock_id == "delta_3200":
+                # Delta 3200 is flat by default, give it a tiny contrast boost
+                contrast_comp = 8.0
+            else:
+                # Tri-X and HP5 like punchy midtones
+                contrast_comp = 5.0
+                
+        # Midtones anchor protection
+        if tonal["midtone_anchor"] < 0.12:
+            midtones_comp = float(np.clip((0.15 - tonal["midtone_anchor"]) * 100.0, 0.0, 30.0))
+        elif tonal["midtone_anchor"] > 0.35:
+            midtones_comp = float(np.clip((0.25 - tonal["midtone_anchor"]) * 100.0, -25.0, 0.0))
+
+        # Clamp offsets to reasonable slider ranges
+        contrast_comp = float(np.clip(contrast_comp * adaptation_mult, -40.0, 40.0))
+        highlights_comp = float(np.clip(highlights_comp * adaptation_mult, -50.0, 30.0))
+        shadows_comp = float(np.clip(shadows_comp * adaptation_mult, -20.0, 50.0))
+        blacks_comp = float(np.clip(blacks_comp * adaptation_mult, -30.0, 30.0))
+        whites_comp = float(np.clip(whites_comp * adaptation_mult, -30.0, 30.0))
+        midtones_comp = float(np.clip(midtones_comp * adaptation_mult, -40.0, 40.0))
+
         pre_film_normalization = {
             "exposure_compensation_stops": exposure_comp,
             "shadow_blue_normalization": shadow_blue_norm,
             "green_magenta_stabilization": green_mag_stab,
-            "highlight_channel_recovery": highlight_channel_recovery
+            "highlight_channel_recovery": highlight_channel_recovery,
+            "contrast_compensation": contrast_comp,
+            "highlights_compensation": highlights_comp,
+            "shadows_compensation": shadows_comp,
+            "blacks_compensation": blacks_comp,
+            "whites_compensation": whites_comp,
+            "midtones_compensation": midtones_comp
         }
         
         # 3. Film Response
