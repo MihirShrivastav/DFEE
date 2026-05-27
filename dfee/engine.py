@@ -72,18 +72,27 @@ class DFEEEngine:
 
     def _save_image(self, rgb_array, filepath):
         """
-        Saves rendered float32 array as either 16-bit TIFF or 8-bit JPEG.
+        Saves rendered float32 array as either 16-bit TIFF or 8-bit JPEG/PNG,
+        applying the standard sRGB transfer function (gamma correction) for display.
         """
         ext = os.path.splitext(filepath)[1].lower()
         
+        # Apply standard sRGB transfer function (gamma correction) before saving
+        srgb_array = np.clip(rgb_array, 0.0, 1.0)
+        srgb_array = np.where(
+            srgb_array <= 0.0031308,
+            12.92 * srgb_array,
+            1.055 * (srgb_array ** (1.0 / 2.4)) - 0.055
+        )
+        
         if self.output_bit_depth == 16 and ext in ['.tif', '.tiff']:
             # Convert float32 [0.0, 1.0] to uint16 [0, 65535]
-            uint16_data = (rgb_array * 65535.0).astype(np.uint16)
+            uint16_data = (srgb_array * 65535.0).astype(np.uint16)
             img = Image.fromarray(uint16_data)
             img.save(filepath, format="TIFF")
         else:
             # Fallback/Save as 8-bit JPEG/PNG
-            uint8_data = (rgb_array * 255.0).astype(np.uint8)
+            uint8_data = (srgb_array * 255.0).astype(np.uint8)
             img = Image.fromarray(uint8_data)
             if ext in ['.jpg', '.jpeg']:
                 img.save(filepath, format="JPEG", quality=95)

@@ -147,7 +147,7 @@ class FilmRenderer:
             k = 2.0 + s_str * float(sh_mult[c])
             ch_safe = np.where(
                 ch > 1.0,
-                1.0 - 1.0 / (1.0 + k * (ch - 1.0)),
+                1.0 - 1.0 / np.maximum(1e-6, 1.0 + k * (ch - 1.0)),
                 ch
             )
             ch_clamp = np.clip(ch_safe, 1e-12, 1.0 - 1e-12)
@@ -478,108 +478,181 @@ class FilmRenderer:
 
     def _apply_film_grain(self, rgb_proc, masks, effects):
         """
-        Film grain synthesis — physically-informed model.
-
-        Real film grain is NOT random pixel noise. It is caused by silver halide
-        crystal clusters which:
-          • Have a characteristic spatial size (ISO-dependent, coarser for faster film)
-          • Are primarily a LUMINANCE phenomenon — colour film has some chroma grain
-            from separate dye layer registration, but it is small and correlated
-            (NOT independent rainbow speckle on a/b axes)
-          • Cluster in organic, overlapping blobs — modelled by oversampling white
-            noise then Gaussian-blurring and resampling back to image size
-          • Are most visible in upper shadows and midtones (Z2–Z3), falling off in
-            very deep shadows (low signal = low contrast for grain) and highlights
-            (silver is uniformly dense → grain averages out)
-
-        Chroma grain: a SINGLE correlated noise field, tinted along a stock-specific
-        hue direction (warm for negative stocks, cool/neutral for reversal), not two
-        independent a/b channels.
+        Film grain synthesis — channel-independent RGB Boolean model emulating physical emulsion layers.
+        
+        Real color film consists of three separate chemical emulsion layers (Red/Cyan, Green/Magenta, Blue/Yellow)
+        each containing independent, uncorrelated silver halide crystal distributions.
+        
+        This model:
+          • Generates independent noise fields for Red, Green, and Blue channels.
+          • Adapts grain size and strength per-layer (Blue has coarser grain, Red has finer grain).
+          • Uses the Boolean model (convolution of sparse random points with a circular structuring element)
+            to create overlapping, flat-topped grain particles with sharp boundaries rather than cloudy Gaussian noise.
+          • Adjusts particle sizes dynamically based on image resolution to maintain size parity across previews and exports.
+          • Blends independent channel noise and common noise based on the stock's `grain_chroma_strength`
+            to transition between monochromatic grain (B&W) and organic color dye clouds (Color negative).
+          • Modulates grain amplitude as a function of the local channel exposure in gamma-2.2 space
+            using a custom bell curve peaked at 0.40.
         """
         g_str    = effects["grain_strength"]
-        g_sz     = effects["grain_size"]       # 0.0 – 1.0; 0 = very fine, 1 = very coarse
-        g_chroma = effects["grain_chroma_strength"]  # fraction of luma grain in chroma
+        g_sz     = effects["grain_size"]       # 0.0 – 2.0; 0.5 is default
+        g_chroma = effects["grain_chroma_strength"]  # 0.0 (monochrome) to 0.20+ (high-speed negative)
+        g_rough  = effects.get("grain_roughness", 0.5)
 
         if g_str == 0.0:
             return rgb_proc
 
         h, w, _ = rgb_proc.shape
 
+        # ── Resolution scaling factor ────────────────────────────────────────
+        # Maintains consistent grain scale relative to the image frame (baseline: 2048px width)
+        scale_factor = w / 2048.0
+
         # ── Spatial seed from image content ──────────────────────────────────
-        # Use a hash of the first pixel and image shape so each unique image gets
-        # unique grain, but the same image+params always produces the same grain
-        # (reproducible but not a fixed stamp shared across every image).
         content_hash = int(abs(rgb_proc[0, 0, 0] * 1e6 + rgb_proc[h//2, w//2, 1] * 1e4
                                + rgb_proc[-1, -1, 2] * 1e2)) % (2**31)
+
+        # ── Master fields pre-computation (Performance Optimization) ──────────
+        # Avoids repeating expensive CPU random allocations and blurs per channel.
         rng = np.random.default_rng(content_hash)
+        
+        # Master sparse points (density of ~20% is optimal for clumping without saturation)
+        sparse_master = (rng.random((h, w)) < 0.20).astype(np.float32)
 
-        # ── Grain texture via oversample → blur → downsample ─────────────────
-        # Oversampling at 2× then blurring at the native scale creates spatially-
-        # correlated clusters that look organic, unlike blurring white noise at 1×.
-        # The cluster radius in pixels = grain_size * scale_factor.
-        scale  = 2                                  # oversample factor
-        oh, ow = h * scale, w * scale
+        # Master high-frequency pixel grit
+        grit_master = rng.standard_normal((h, w)).astype(np.float32)
+        grit_master = grit_master - cv2.GaussianBlur(grit_master, (3, 3), 0.5)
+        std_grit_m = np.std(grit_master)
+        if std_grit_m > 1e-8:
+            grit_master = grit_master / std_grit_m
 
-        # Luma noise: single channel
-        base_noise = rng.standard_normal((oh, ow)).astype(np.float32)
+        # Helper to generate a single channel's normalized noise field using the Boolean model
+        def generate_noise_channel(sparse_in, grit_in, size_mult):
+            # Compute channel-specific grain size scaled by resolution
+            ch_g_sz = max(0.05, g_sz * size_mult * scale_factor)
 
-        # Grain cluster size — grain_size 0.1 → ~3px radius, 0.6 → ~11px radius
-        # (These are sizes in the OVERSAMPLED domain, so halve for native pixels)
-        sigma = max(0.5, g_sz * 9.0)               # Gaussian sigma in oversampled space
-        k = int(sigma * 4) | 1                     # odd kernel, 4-sigma coverage
-        k = min(k, min(oh, ow) - 1 if min(oh, ow) % 2 == 0 else min(oh, ow))
-        if k < 3: k = 3
-        if k % 2 == 0: k += 1
+            # Construct kernel representing a circular silver halide particle
+            # Kernel width N (odd, tight sizing maps to 3px–7px at 2K for realistic scale)
+            N = int(3.0 + ch_g_sz * 2.5) | 1
+            if N < 3: N = 3
+            N = min(N, min(h, w) - 1 if min(h, w) % 2 == 0 else min(h, w))
+            if N % 2 == 0: N += 1
 
-        blurred = cv2.GaussianBlur(base_noise, (k, k), sigma)
-        std = np.std(blurred)
-        if std > 1e-8:
-            blurred /= std                         # re-normalise so std=1 after blur
+            # Binary flat-topped ellipse/circle structuring element (Boolean Shape Primitive)
+            binary_disk = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (N, N)).astype(np.float32)
+            binary_disk /= np.sum(binary_disk) + 1e-8
 
-        # Downsample back to native resolution
-        noise_luma = cv2.resize(blurred, (w, h), interpolation=cv2.INTER_AREA)
+            # Softened Gaussian disk (tight sigma ensures we take the edge off without blurring the particle)
+            gaussian_disk = cv2.GaussianBlur(binary_disk, (N, N), 0.35 + ch_g_sz * 0.2)
+            gaussian_disk /= np.sum(gaussian_disk) + 1e-8
 
-        # ── Zone-weighted modulation ──────────────────────────────────────────
-        # Grain peaks in Z2 (upper shadows) + Z3 (midtones).
-        # Z1 (deep shadows): low silver density → grain contrast drops → less visible
-        # Z4–Z5 (highlights): dense silver → grain averages out → less visible
-        Z1 = masks["luminance_zone_masks"]["Z1"]
-        Z2 = masks["luminance_zone_masks"]["Z2"]
-        Z3 = masks["luminance_zone_masks"]["Z3"]
-        Z4 = masks["luminance_zone_masks"]["Z4"]
-        density_mod = Z1 * 0.35 + Z2 * 1.0 + Z3 * 0.75 + Z4 * 0.20
+            # Interpolate structuring element between sharp binary and soft Gaussian based on roughness
+            kernel = g_rough * binary_disk + (1.0 - g_rough) * gaussian_disk
+            kernel /= np.sum(kernel) + 1e-8
 
-        smooth_mod  = masks["grain_receptivity_mask"]   # suppresses grain in very flat areas
-        total_mod   = density_mod * smooth_mod
+            # Convolve sparse points to yield overlapping, flat-topped clumps (Boolean Model)
+            noise = cv2.filter2D(sparse_in, -1, kernel)
 
-        # ── Apply to OKLab ────────────────────────────────────────────────────
-        oklab = rgb_to_oklab(rgb_proc)
+            # Normalize to zero-mean and unit variance
+            noise_mean = np.mean(noise)
+            noise_std = np.std(noise)
+            if noise_std > 1e-8:
+                noise = (noise - noise_mean) / noise_std
 
-        # Luminance: the primary grain channel
-        # Scale of 0.04 maps g_str≈0.4 (Tri-X) to a visible but not crushing amount
-        luma_amount = g_str * 0.04
-        oklab[:, :, 0] = np.clip(
-            oklab[:, :, 0] + noise_luma * luma_amount * total_mod,
-            0.0, 1.0
-        )
+            # Apply a steep tanh contrast function after convolution to restore razor-sharp particle boundaries
+            contrast_factor = 4.0 + g_rough * 6.0
+            noise = np.tanh(noise * contrast_factor)
 
-        # Chroma: correlated with luma noise (same spatial texture, small amplitude).
-        # A single tint direction per stock prevents rainbow speckle.
-        # g_chroma is typically 0.0 (monochrome), 0.01–0.03 (reversal), 0.05–0.20 (neg).
-        if g_chroma > 0.0:
-            # The same noise field tinted along a warm direction (a: +red, b: +yellow)
-            # models the dye-layer misregistration in colour film.
-            # We use a scaled version of the luma field — they are correlated spatially.
-            chroma_amount = g_str * g_chroma * 0.018
-            # Tint ratio: slightly more on b (yellow-blue) than a (green-red), matching
-            # typical dye-cloud colour variability in C-41/E-6 processes.
-            oklab[:, :, 1] += noise_luma * chroma_amount * 0.55 * total_mod   # a (red-green)
-            oklab[:, :, 2] += noise_luma * chroma_amount * 0.80 * total_mod   # b (yellow-blue)
-            # Clamp a/b to prevent wild colour from outlier noise values
-            oklab[:, :, 1] = np.clip(oklab[:, :, 1], -0.35, 0.35)
-            oklab[:, :, 2] = np.clip(oklab[:, :, 2], -0.35, 0.35)
+            # Re-normalize clumps to unit variance
+            std_clumps = np.std(noise)
+            if std_clumps > 1e-8:
+                noise = noise / std_clumps
 
-        return oklab_to_rgb(oklab)
+            # Blend macro clumps and micro high-frequency grit based on roughness
+            grit_blend = 0.05 + g_rough * 0.20
+            noise = (1.0 - grit_blend) * noise + grit_blend * grit_in
+
+            # Tactile edge sharpening using a Laplacian kernel
+            if g_rough > 0.0:
+                sharp_factor = g_rough * 1.0
+                kernel_sharp = np.array([
+                    [0, -sharp_factor, 0],
+                    [-sharp_factor, 1.0 + 4.0 * sharp_factor, -sharp_factor],
+                    [0, -sharp_factor, 0]
+                ], dtype=np.float32)
+                noise = cv2.filter2D(noise, -1, kernel_sharp)
+
+            # Final variance normalisation
+            std = np.std(noise)
+            if std > 1e-8:
+                noise = noise / std
+
+            return noise
+
+        # To avoid colored grain on monochrome stocks, check channel equality
+        is_mono = (np.abs(rgb_proc[:, :, 0] - rgb_proc[:, :, 1]).max() < 1e-4 and 
+                   np.abs(rgb_proc[:, :, 1] - rgb_proc[:, :, 2]).max() < 1e-4) or g_chroma <= 0.0
+
+        if is_mono:
+            # Monochrome fast path: only 1 convolution
+            noise_g = generate_noise_channel(sparse_master, grit_master, 1.00)
+            noise_r = noise_g
+            noise_b = noise_g
+        else:
+            # Generate Red, Green, Blue noise fields independently using shifted master seeds
+            # Shift seeds to ensure uncorrelated noise fields (emulates separate dye layers)
+            sparse_r = sparse_master
+            sparse_g = np.roll(sparse_master, 13, axis=0)
+            sparse_b = np.roll(sparse_master, 23, axis=1)
+
+            grit_r = grit_master
+            grit_g = np.roll(grit_master, 13, axis=0)
+            grit_b = np.roll(grit_master, 23, axis=1)
+
+            noise_r_ind = generate_noise_channel(sparse_r, grit_r, 0.80)
+            noise_g = generate_noise_channel(sparse_g, grit_g, 1.00)
+            noise_b_ind = generate_noise_channel(sparse_b, grit_b, 1.25)
+
+            # Blend channels based on chroma strength (g_chroma)
+            # Red and Blue blend with Green (human visual base) to establish correlation
+            chroma_mix = np.clip(g_chroma * 4.0, 0.0, 1.0)
+            noise_r = (1.0 - chroma_mix) * noise_g + chroma_mix * noise_r_ind
+            noise_b = (1.0 - chroma_mix) * noise_g + chroma_mix * noise_b_ind
+
+            # Re-normalize to ensure standard deviation is exactly 1.0 for each channel
+            for noise_ch in (noise_r, noise_g, noise_b):
+                std_ch = np.std(noise_ch)
+                if std_ch > 1e-8:
+                    noise_ch /= std_ch
+
+        # ── Apply to RGB in Gamma Space ───────────────────────────────────────
+        # Apply grain in perceptual gamma space to emulate visual log density matching
+        rgb_g = np.power(np.clip(rgb_proc, 1e-12, 1.0), 1.0 / 2.2).astype(np.float32)
+
+        # Flat region receptivity mask to suppress grain in perfectly smooth gradients
+        smooth_mod = masks["grain_receptivity_mask"]
+
+        # Channel parameters: Red (Cyan dye), Green (Magenta dye), Blue (Yellow dye)
+        # Blue channel (Yellow dye) has the highest grain visibility on film
+        strength_mults = [0.75, 0.95, 1.35]
+        noise_channels = [noise_r, noise_g, noise_b]
+
+        for c in range(3):
+            ch = rgb_g[:, :, c]
+
+            # Channel-independent modulation curve (bell-curve peaked at 0.4)
+            # mod(x) = (x^0.6 * (1-x)^0.9) / 0.364
+            mod = (ch ** 0.6 * (1.0 - ch) ** 0.9) / 0.364
+            mod = mod * smooth_mod
+
+            # Opacity scale
+            ch_str = g_str * 0.038 * strength_mults[c]
+
+            # Inject grain noise
+            rgb_g[:, :, c] = np.clip(ch + noise_channels[c] * ch_str * mod, 0.0, 1.0)
+
+        # Convert back to linear space
+        return np.power(rgb_g, 2.2).astype(np.float32)
 
 
     # ─── Scanner Finish ───────────────────────────────────────────────────────

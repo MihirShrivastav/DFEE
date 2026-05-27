@@ -45,6 +45,9 @@ const DEFAULT_PARAMS = {
   bloom: 0,
   adaptation: 1.0,
   grain: 'Auto',
+  grain_strength: -1.0,
+  grain_size: -1.0,
+  grain_roughness: -1.0,
   halation: 'Auto',
 };
 
@@ -68,7 +71,7 @@ export default function App() {
   const DEFAULT_OPEN = {
     Profile: true, Curves: true, HSL: false,
     Light: true, Color: true, Detail: false, Effects: false,
-    'Film Modifiers': false, Diagnostics: false,
+    'Film Modifiers': false, Diagnostics: false, History: true,
   };
   const [openSections, setOpenSections] = useState(() => {
     try {
@@ -93,13 +96,180 @@ export default function App() {
   const [previewReady, setPreviewReady] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState('png8'); // 'png8' | 'png16' | 'tiff'
   const [toast, setToast] = useState(null);
   const [comparePos, setComparePos] = useState(50);
   const [dragging, setDragging] = useState(false);
   const [diagOpen, setDiagOpen] = useState(true);
-  const containerRef = useRef(null);
-  const debounceRef = useRef(null);
-  const inflightRef = useRef(null); // cancel stale image loads
+  const containerRef   = useRef(null);
+  const viewerRef      = useRef(null);  // the .compare-wrap / zoom container
+  const debounceRef    = useRef(null);
+  const inflightRef    = useRef(null);
+  const historyDebRef  = useRef(null);
+  const lastPushedRef  = useRef(null);  // snapshot of last history entry pushed
+
+  // ── Zoom state ──────────────────────────────────────────────────────────
+  const [zoom,    setZoom]    = useState(1.0); // 1.0 = fit
+  const [pan,     setPan]     = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart  = useRef(null);
+  const FIT = 1.0;
+
+  const clampPan = (px, py, z, rect) => {
+    if (!rect) return { x: px, y: py };
+    const maxX = Math.max(0, (rect.width  * z - rect.width)  / 2);
+    const maxY = Math.max(0, (rect.height * z - rect.height) / 2);
+    return { x: Math.max(-maxX, Math.min(maxX, px)), y: Math.max(-maxY, Math.min(maxY, py)) };
+  };
+
+  const zoomTo = useCallback((newZ, focalX, focalY) => {
+    const el = viewerRef.current;
+    if (!el) { setZoom(newZ); setPan({ x: 0, y: 0 }); return; }
+    const rect = el.getBoundingClientRect();
+    // Adjust pan so focal point stays under cursor
+    if (focalX !== undefined) {
+      setPan(prev => {
+        const ratio = newZ / zoom;
+        const fx = focalX - rect.left - rect.width  / 2;
+        const fy = focalY - rect.top  - rect.height / 2;
+        const nx = (prev.x + fx) * ratio - fx;
+        const ny = (prev.y + fy) * ratio - fy;
+        return clampPan(nx, ny, newZ, rect);
+      });
+    } else {
+      setPan(prev => clampPan(prev.x, prev.y, newZ, rect));
+    }
+    setZoom(newZ);
+  }, [zoom]);
+
+  const resetZoom = useCallback(() => { setZoom(FIT); setPan({ x: 0, y: 0 }); }, []);
+
+  // Mouse wheel zoom
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!previewReady) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      const newZ = Math.max(FIT, Math.min(8, zoom * factor));
+      zoomTo(newZ, e.clientX, e.clientY);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, zoomTo, previewReady]);
+
+  // Pan drag
+  useEffect(() => {
+    if (!isPanning) return;
+    const onMove = (e) => {
+      if (!panStart.current) return;
+      const dx = e.clientX - panStart.current.x;
+      const dy = e.clientY - panStart.current.y;
+      panStart.current = { x: e.clientX, y: e.clientY };
+      const el = viewerRef.current;
+      setPan(prev => clampPan(prev.x + dx, prev.y + dy, zoom, el?.getBoundingClientRect()));
+    };
+    const onUp = () => { setIsPanning(false); panStart.current = null; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup',   onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [isPanning, zoom]);
+
+  // Double-click toggles fit ↔ 2×
+  const handleViewerDblClick = useCallback((e) => {
+    if (!previewReady) return;
+    if (zoom === FIT) zoomTo(2.0, e.clientX, e.clientY);
+    else resetZoom();
+  }, [zoom, zoomTo, resetZoom, previewReady]);
+
+  const handlePanStart = useCallback((e) => {
+    if (zoom <= FIT || e.button !== 0) return;
+    e.preventDefault();
+    panStart.current = { x: e.clientX, y: e.clientY };
+    setIsPanning(true);
+  }, [zoom]);
+
+  // ── Edit History ─────────────────────────────────────────────────────────
+  const MAX_HISTORY = 60;
+  const [history, setHistory]   = useState([]);
+  const [histIdx, setHistIdx]   = useState(-1); // -1 = live (no revert active)
+  const isRestoring = useRef(false);
+
+  // Label: describe what changed vs previous snapshot
+  const makeLabel = (next, prev) => {
+    if (!prev) return 'Initial state';
+    const np = next.params;  const pp = prev.params;
+    const changes = [];
+    if (np.stock   !== pp.stock)   changes.push(`Stock → ${np.stock === 'none' ? 'None' : np.stock.replace(/_/g,' ')}`);
+    if (np.scanner !== pp.scanner) changes.push(`Scanner → ${np.scanner}`);
+    const numericKeys = Object.keys(DEFAULT_PARAMS).filter(k => 
+      typeof DEFAULT_PARAMS[k] === 'number' && 
+      k !== 'adaptation' &&
+      k !== 'grain_strength' &&
+      k !== 'grain_size' &&
+      k !== 'grain_roughness'
+    );
+    for (const k of numericKeys) {
+      if (np[k] !== pp[k]) {
+        const diff = np[k] - pp[k];
+        changes.push(`${k.charAt(0).toUpperCase()+k.slice(1)} ${diff > 0 ? '+' : ''}${k === 'exposure' ? diff.toFixed(2)+' EV' : diff}`);
+      }
+    }
+    if (np.adaptation !== pp.adaptation) changes.push(`Adaptation → ${np.adaptation.toFixed(2)}`);
+    if (np.grain !== pp.grain) changes.push(`Grain mode → ${np.grain}`);
+    if (np.grain_strength !== pp.grain_strength && np.grain_strength !== -1.0) {
+      changes.push(`Grain strength → ${np.grain_strength.toFixed(2)}`);
+    }
+    if (np.grain_size !== pp.grain_size && np.grain_size !== -1.0) {
+      changes.push(`Grain size → ${np.grain_size.toFixed(2)}`);
+    }
+    if (np.grain_roughness !== pp.grain_roughness && np.grain_roughness !== -1.0) {
+      changes.push(`Grain roughness → ${np.grain_roughness.toFixed(2)}`);
+    }
+    if (np.halation !== pp.halation) changes.push(`Halation → ${np.halation}`);
+    if (next.curves !== prev.curves) changes.push('Curves adjusted');
+    if (next.hsl    !== prev.hsl)    changes.push('HSL adjusted');
+    return changes.length > 0 ? changes.slice(0, 3).join(', ') : 'Settings changed';
+  };
+
+  // Push to history after 700ms settle
+  useEffect(() => {
+    if (isRestoring.current) return; // don't re-push when we apply a history state
+    if (historyDebRef.current) clearTimeout(historyDebRef.current);
+    historyDebRef.current = setTimeout(() => {
+      const snap = { params, curves, hsl };
+      const last = lastPushedRef.current;
+      // Only push if something actually changed
+      if (last &&
+          JSON.stringify(last.params)  === JSON.stringify(snap.params) &&
+          JSON.stringify(last.curves)  === JSON.stringify(snap.curves) &&
+          JSON.stringify(last.hsl)     === JSON.stringify(snap.hsl)) return;
+      const label = makeLabel(snap, last);
+      const entry = { id: Date.now(), label, ...snap };
+      lastPushedRef.current = snap;
+      setHistory(prev => [entry, ...prev].slice(0, MAX_HISTORY));
+      setHistIdx(-1); // back to live
+    }, 700);
+    return () => clearTimeout(historyDebRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, curves, hsl]);
+
+  const applyHistoryEntry = useCallback((entry, idx) => {
+    isRestoring.current = true;
+    setParams(entry.params);
+    setCurves(entry.curves);
+    setHsl(entry.hsl);
+    setHistIdx(idx);
+    // Let the state settle before re-enabling history tracking
+    setTimeout(() => { isRestoring.current = false; }, 100);
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    setHistIdx(-1);
+    lastPushedRef.current = null;
+  }, []);
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
@@ -203,6 +373,9 @@ export default function App() {
         + `&bloom=${params.bloom}`
         + `&adaptation=${params.adaptation}`
         + `&grain=${encodeURIComponent(params.grain)}`
+        + `&grain_strength=${params.grain_strength}`
+        + `&grain_size=${params.grain_size}`
+        + `&grain_roughness=${params.grain_roughness}`
         + `&halation=${encodeURIComponent(params.halation)}`
         + `&t=${Date.now()}`;
 
@@ -233,7 +406,7 @@ export default function App() {
     params.contrast, params.temp, params.tint,
     params.saturation, params.vibrance,
     params.clarity, params.texture, params.dehaze, params.bloom,
-    params.adaptation, params.grain, params.halation,
+    params.adaptation, params.grain, params.grain_strength, params.grain_size, params.grain_roughness, params.halation,
     curves, hsl,
   ]);
 
@@ -267,12 +440,16 @@ export default function App() {
           bloom: params.bloom,
           adaptation: params.adaptation,
           grain: params.grain,
+          grain_strength: params.grain_strength,
+          grain_size: params.grain_size,
+          grain_roughness: params.grain_roughness,
           halation: params.halation,
+          export_format: exportFormat,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      showToast(`Saved to: ${data.output_path}`, 'success');
+      showToast(`${data.format} saved → ${data.output_path}`, 'success');
     } catch (e) {
       showToast(`Export failed: ${e.message}`, 'error');
     } finally {
@@ -289,7 +466,7 @@ export default function App() {
     setParams(p => ({ ...p, ...presets[name] }));
   };
 
-  // Compare drag
+  // Compare drag — only active when NOT zoomed in
   useEffect(() => {
     const onMove = (e) => {
       if (!dragging || !containerRef.current) return;
@@ -418,10 +595,10 @@ export default function App() {
             </div>
           ) : selectedFile && previewReady ? (
             <div className="viewer-inner">
-              {/* Subtle loading pulse when re-rendering */}
+              {/* Rendering indicator */}
               {previewLoading && (
                 <div style={{
-                  position: 'absolute', top: 12, right: 16, zIndex: 20,
+                  position: 'absolute', top: 12, right: 60, zIndex: 20,
                   display: 'flex', alignItems: 'center', gap: 7,
                   background: 'rgba(0,0,0,0.55)', borderRadius: 4,
                   padding: '4px 10px', backdropFilter: 'blur(4px)',
@@ -430,31 +607,68 @@ export default function App() {
                   <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>Rendering…</span>
                 </div>
               )}
-              <div className="view-labels">
-                <span className="view-label">RAW</span>
-                <span className="view-label">DFEE</span>
+
+              {/* Zoom toolbar */}
+              <div className="zoom-toolbar">
+                <button className="zoom-btn" onClick={resetZoom} title="Fit to window">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                    <path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+                  </svg>
+                </button>
+                <button className="zoom-btn" onClick={() => zoomTo(Math.max(FIT, zoom / 1.3))} title="Zoom out">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <span className="zoom-pct">{zoom === FIT ? 'Fit' : `${Math.round(zoom * 100)}%`}</span>
+                <button className="zoom-btn" onClick={() => zoomTo(Math.min(8, zoom * 1.3))} title="Zoom in">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <button className="zoom-btn zoom-btn--1to1" onClick={() => zoomTo(2.0)} title="1:1 pixel view">
+                  <span>1:1</span>
+                </button>
               </div>
-              <div className="compare-wrap" ref={containerRef}>
-                {/* After (film) */}
-                <div className="img-after">
-                  <img src={previewUrl} alt="Film emulation" />
+
+              {zoom === FIT && (
+                <div className="view-labels">
+                  <span className="view-label">RAW</span>
+                  <span className="view-label">DFEE</span>
                 </div>
-                {/* Before (raw) clipped */}
+              )}
+
+              {/* Zoom + pan container */}
+              <div
+                ref={viewerRef}
+                className={`zoom-container${zoom > FIT ? ' zoomed' : ''}`}
+                style={{ cursor: zoom > FIT ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+                onMouseDown={handlePanStart}
+                onDoubleClick={handleViewerDblClick}
+              >
                 <div
-                  className="img-before-wrap"
-                  style={{ clipPath: `polygon(0 0, ${comparePos}% 0, ${comparePos}% 100%, 0 100%)` }}
+                  className="zoom-content"
+                  style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
                 >
-                  <img src={rawUrl} alt="RAW sensor" />
-                </div>
-                {/* Divider */}
-                <div
-                  className="compare-divider"
-                  style={{ left: `${comparePos}%` }}
-                  onMouseDown={() => setDragging(true)}
-                >
-                  <div className="compare-handle">
-                    <ArrowsIcon />
-                  </div>
+                  {zoom === FIT ? (
+                    <div className="compare-wrap" ref={containerRef}>
+                      <div className="img-after">
+                        <img src={previewUrl} alt="Film emulation" />
+                      </div>
+                      <div
+                        className="img-before-wrap"
+                        style={{ clipPath: `polygon(0 0, ${comparePos}% 0, ${comparePos}% 100%, 0 100%)` }}
+                      >
+                        <img src={rawUrl} alt="RAW sensor" />
+                      </div>
+                      <div
+                        className="compare-divider"
+                        style={{ left: `${comparePos}%` }}
+                        onMouseDown={(e) => { e.stopPropagation(); setDragging(true); }}
+                      >
+                        <div className="compare-handle"><ArrowsIcon /></div>
+                      </div>
+                    </div>
+                  ) : (
+                    <img src={previewUrl} alt="Film emulation" style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', imageRendering: 'pixelated' }} />
+                  )}
                 </div>
               </div>
             </div>
@@ -613,11 +827,123 @@ export default function App() {
                       value={params.adaptation} onChange={set('adaptation')}
                       className={`slider${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider--dirty' : ''}`} />
                   </div>
-                  <div className="field" style={{ marginTop: 12 }}>
-                    <label className="field-label">Grain</label>
-                    <select className="select" value={params.grain} onChange={set('grain')}>
-                      {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
-                    </select>
+                  {/* Custom Grain Controls */}
+                  <div style={{ marginTop: 12, marginBottom: 12 }}>
+                    <label className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        className="checkbox-input"
+                        checked={params.grain === 'Auto'}
+                        onChange={(e) => {
+                          const isAuto = e.target.checked;
+                          if (isAuto) {
+                            setParams(p => ({
+                              ...p,
+                              grain: 'Auto',
+                              grain_strength: -1.0,
+                              grain_size: -1.0,
+                              grain_roughness: -1.0
+                            }));
+                          } else {
+                            setParams(p => ({
+                              ...p,
+                              grain: 'Custom',
+                              grain_strength: 0.5,
+                              grain_size: 0.6,
+                              grain_roughness: 0.5
+                            }));
+                          }
+                        }}
+                      />
+                      <span className="checkbox-label">Auto (ISO-Adaptive) Grain</span>
+                    </label>
+
+                    {/* Grain Strength Slider */}
+                    <div className={`slider-row ${params.grain === 'Auto' ? 'disabled' : ''}`}>
+                      <div className="slider-header">
+                        <span className="slider-label">Grain Strength</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {params.grain !== 'Auto' && params.grain_strength !== 0.5 && (
+                            <button
+                              className="revert-btn"
+                              title="Reset Strength to default"
+                              onClick={() => setParams(p => ({ ...p, grain_strength: 0.5 }))}
+                            >↺</button>
+                          )}
+                          <span className={`slider-value ${params.grain !== 'Auto' && params.grain_strength !== 0.5 ? 'slider-value--dirty' : ''}`}>
+                            {params.grain === 'Auto' ? 'Auto' : params.grain_strength.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="range" min={0.0} max={2.0} step={0.05}
+                        value={params.grain_strength === -1.0 ? 0.5 : params.grain_strength}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setParams(p => ({ ...p, grain_strength: val }));
+                        }}
+                        disabled={params.grain === 'Auto'}
+                        className={`slider ${params.grain !== 'Auto' && params.grain_strength !== 0.5 ? 'slider--dirty' : ''}`}
+                      />
+                    </div>
+
+                    {/* Grain Size Slider */}
+                    <div className={`slider-row ${params.grain === 'Auto' ? 'disabled' : ''}`} style={{ marginTop: 8 }}>
+                      <div className="slider-header">
+                        <span className="slider-label">Grain Size</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {params.grain !== 'Auto' && params.grain_size !== 0.6 && (
+                            <button
+                              className="revert-btn"
+                              title="Reset Size to default"
+                              onClick={() => setParams(p => ({ ...p, grain_size: 0.6 }))}
+                            >↺</button>
+                          )}
+                          <span className={`slider-value ${params.grain !== 'Auto' && params.grain_size !== 0.6 ? 'slider-value--dirty' : ''}`}>
+                            {params.grain === 'Auto' ? 'Auto' : params.grain_size.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="range" min={0.1} max={2.0} step={0.05}
+                        value={params.grain_size === -1.0 ? 0.6 : params.grain_size}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setParams(p => ({ ...p, grain_size: val }));
+                        }}
+                        disabled={params.grain === 'Auto'}
+                        className={`slider ${params.grain !== 'Auto' && params.grain_size !== 0.6 ? 'slider--dirty' : ''}`}
+                      />
+                    </div>
+
+                    {/* Grain Roughness Slider */}
+                    <div className={`slider-row ${params.grain === 'Auto' ? 'disabled' : ''}`} style={{ marginTop: 8 }}>
+                      <div className="slider-header">
+                        <span className="slider-label">Grain Roughness / Crispness</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {params.grain !== 'Auto' && params.grain_roughness !== 0.5 && (
+                            <button
+                              className="revert-btn"
+                              title="Reset Roughness to default"
+                              onClick={() => setParams(p => ({ ...p, grain_roughness: 0.5 }))}
+                            >↺</button>
+                          )}
+                          <span className={`slider-value ${params.grain !== 'Auto' && params.grain_roughness !== 0.5 ? 'slider-value--dirty' : ''}`}>
+                            {params.grain === 'Auto' ? 'Auto' : params.grain_roughness.toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="range" min={0.0} max={1.0} step={0.05}
+                        value={params.grain_roughness === -1.0 ? 0.5 : params.grain_roughness}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value);
+                          setParams(p => ({ ...p, grain_roughness: val }));
+                        }}
+                        disabled={params.grain === 'Auto'}
+                        className={`slider ${params.grain !== 'Auto' && params.grain_roughness !== 0.5 ? 'slider--dirty' : ''}`}
+                      />
+                    </div>
                   </div>
                   <div className="field">
                     <label className="field-label">Halation</label>
@@ -683,13 +1009,77 @@ export default function App() {
                 )}
               </div>
             )}
+
+            {/* History */}
+            {history.length > 0 && (
+              <div className="control-group">
+                <div className="group-title collapsible" onClick={() => toggleSection('History')}>
+                  <span>History</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="history-count">{history.length}</span>
+                    <span className={`chevron ${openSections.History ? 'open' : ''}`}>›</span>
+                  </div>
+                </div>
+                {openSections['History'] && (
+                  <div className="section-body">
+                    <div className="history-list">
+                      <div
+                        className={`history-entry${histIdx === -1 ? ' history-entry--active' : ''}`}
+                        onClick={() => { if (histIdx !== -1 && history.length > 0) applyHistoryEntry(history[0], -1); }}
+                        style={{ fontStyle: 'italic', opacity: histIdx === -1 ? 1 : 0.6 }}
+                      >
+                        <span className="history-dot history-dot--live" />
+                        <span className="history-label">Current state</span>
+                      </div>
+                      {history.map((entry, idx) => (
+                        <div
+                          key={entry.id}
+                          className={`history-entry${histIdx === idx ? ' history-entry--active' : ''}`}
+                          onClick={() => applyHistoryEntry(entry, idx)}
+                          title={new Date(entry.id).toLocaleTimeString()}
+                        >
+                          <span className="history-dot" />
+                          <div className="history-entry-content">
+                            <span className="history-label">{entry.label}</span>
+                            <span className="history-time">{new Date(entry.id).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button className="history-clear-btn" onClick={clearHistory}>Clear history</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Export */}
           {selectedFile && (
             <div className="controls-footer">
+              {/* Format picker */}
+              <div className="export-format-row">
+                <span className="export-format-label">Format</span>
+                <div className="export-format-pills">
+                  {[
+                    { id: 'png8',  label: 'PNG',      sub: '8-bit'  },
+                    { id: 'png16', label: 'PNG',      sub: '16-bit' },
+                    { id: 'tiff',  label: 'TIFF',     sub: '16-bit' },
+                  ].map(({ id, label, sub }) => (
+                    <button
+                      key={id}
+                      className={`format-pill${exportFormat === id ? ' active' : ''}`}
+                      onClick={() => setExportFormat(id)}
+                    >
+                      <span className="format-pill-name">{label}</span>
+                      <span className="format-pill-sub">{sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <button className="export-btn" onClick={handleExport} disabled={exporting || !previewReady}>
-                {exporting ? <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Exporting…</> : 'Export 16-bit TIFF'}
+                {exporting
+                  ? <><div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Exporting…</>
+                  : `Export ${exportFormat === 'png8' ? '8-bit PNG' : exportFormat === 'png16' ? '16-bit PNG' : '16-bit TIFF'}`}
               </button>
             </div>
           )}
@@ -701,8 +1091,15 @@ export default function App() {
         <div className="export-overlay">
           <div className="export-card">
             <div className="spinner" style={{ width: 32, height: 32 }} />
-            <p>Rendering full resolution…</p>
-            <span>Writing 16-bit TIFF and sidecar JSON</span>
+            <p>Exporting full resolution…</p>
+            <span>
+              {exportFormat === 'png8'  ? 'Ingesting RAW · Rendering · Saving 8-bit PNG'
+             : exportFormat === 'png16' ? 'Ingesting RAW · Rendering · Saving 16-bit PNG'
+             :                            'Ingesting RAW · Rendering · Saving 16-bit TIFF'}
+            </span>
+            <span style={{ fontSize: 10, opacity: 0.45, marginTop: 4 }}>
+              This takes 30–90s — full-res RAW must be re-rendered
+            </span>
           </div>
         </div>
       )}

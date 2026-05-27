@@ -25,6 +25,9 @@ class RenderPlanSolver:
             "exposure_intent": "Preserve",
             "color_cast_handling": "Auto",
             "grain_amount": "Auto",
+            "grain_strength": -1.0,
+            "grain_size": -1.0,
+            "grain_roughness": -1.0,
             "halation_amount": "Auto",
             "output_finish": "Natural"
         }
@@ -180,37 +183,57 @@ class RenderPlanSolver:
         g_cfg = stock_profile.grain
         grain_strength = float(g_cfg["strength"])
         grain_size     = float(g_cfg["size"])
+        grain_roughness = float(g_cfg.get("roughness", 0.5))
 
-        # Manual grain amount override
-        if controls["grain_amount"] == "Off":
-            grain_strength = 0.0
-        elif controls["grain_amount"] == "Low":
-            grain_strength *= 0.5
-        elif controls["grain_amount"] == "High":
-            grain_strength *= 1.5
-            grain_size     *= 1.2
-        # "Medium" / "Auto" → use profile default
+        # Manual grain overrides
+        u_strength  = float(controls.get("grain_strength", -1.0))
+        u_size      = float(controls.get("grain_size", -1.0))
+        u_roughness = float(controls.get("grain_roughness", -1.0))
 
-        # ── ISO-adaptive grain (uses real EXIF ISO if available) ─────────────
-        # Each film stock has a native/box-speed ISO. Shooting above it (push)
-        # enlarges and strengthens grain; below it (pull) slightly reduces it.
-        # The stock's YAML base ISO is used as the anchor point.
-        if controls["grain_amount"] in ("Auto",):
-            raw_meta  = feature_dict.get("raw_metadata", {})
-            shot_iso  = raw_meta.get("iso", None)
-            # Get the stock's rated box-speed ISO from profile (fall back to 400)
-            base_iso  = float(stock_profile.adaptation.get("base_iso", 400))
+        # Determine size and roughness
+        if u_size >= 0.0:
+            grain_size = u_size
+        else:
+            # Use profile default, and check if we are in "Auto" mode to apply ISO adaptation
+            if controls["grain_amount"] in ("Auto",):
+                raw_meta  = feature_dict.get("raw_metadata", {})
+                shot_iso  = raw_meta.get("iso", None)
+                base_iso  = float(stock_profile.adaptation.get("base_iso", 400))
+                if shot_iso and shot_iso > 0:
+                    push_stops = np.log2(shot_iso / base_iso)
+                    if push_stops > 0:
+                        grain_size *= (1.0 + 0.10 * push_stops)
 
-            if shot_iso and shot_iso > 0:
-                # Number of stops pushed / pulled relative to box speed
-                push_stops = np.log2(shot_iso / base_iso)  # positive = push
-                if push_stops > 0:
-                    # Push: grain gets stronger and coarser
-                    grain_strength *= (1.0 + 0.20 * push_stops)
-                    grain_size     *= (1.0 + 0.10 * push_stops)
-                elif push_stops < 0:
-                    # Pull: very slightly finer / softer grain
-                    grain_strength *= max(0.6, 1.0 + 0.08 * push_stops)
+        if u_roughness >= 0.0:
+            grain_roughness = u_roughness
+        else:
+            grain_roughness = float(g_cfg.get("roughness", 0.5))
+
+        # Determine strength
+        if u_strength >= 0.0:
+            grain_strength = u_strength
+        else:
+            # Check old grain_amount selector override first
+            if controls["grain_amount"] == "Off":
+                grain_strength = 0.0
+            elif controls["grain_amount"] == "Low":
+                grain_strength *= 0.5
+            elif controls["grain_amount"] == "High":
+                grain_strength *= 1.5
+                if u_size < 0.0:
+                    grain_size *= 1.2
+            else:
+                # "Auto" or default
+                if controls["grain_amount"] in ("Auto",):
+                    raw_meta  = feature_dict.get("raw_metadata", {})
+                    shot_iso  = raw_meta.get("iso", None)
+                    base_iso  = float(stock_profile.adaptation.get("base_iso", 400))
+                    if shot_iso and shot_iso > 0:
+                        push_stops = np.log2(shot_iso / base_iso)
+                        if push_stops > 0:
+                            grain_strength *= (1.0 + 0.20 * push_stops)
+                        elif push_stops < 0:
+                            grain_strength *= max(0.6, 1.0 + 0.08 * push_stops)
 
         # Shadow noise risk — suppress grain to avoid compounding with digital noise
         if "SHADOW_NOISE_RISK" in warnings:
@@ -244,6 +267,7 @@ class RenderPlanSolver:
         material_effects = {
             "grain_strength": grain_strength,
             "grain_size": grain_size,
+            "grain_roughness": grain_roughness,
             "grain_chroma_strength": float(g_cfg["chroma_strength"]),
             "halation_strength": halation_strength,
             "bloom_strength": bloom_strength,

@@ -41,27 +41,49 @@ os.makedirs(RAW_DIR, exist_ok=True)
 class ActiveSession:
     def __init__(self):
         self.filename = None
-        # Full-res linear data
+        # Draft-res linear data (ingested once on /api/select)
         self.rgb_linear = None
         self.Y = None
         self.clipping_masks = None
         self.clipping_ratios = None
         self.metadata = None
-        
+
         # Preview-res linear data (for fast renders)
         self.preview_rgb_linear = None
         self.preview_Y = None
         self.preview_clipping_masks = None
-        
-        # Cached analysis features
+
+        # Cached preview-res analysis features
         self.feature_dict = None
         self.masks = None
         self.cached_diagnostics = None  # Cached so re-selecting same file is instant
-        
+
+        # Cached FULL-res linear data (ingested once on first export)
+        self.fullres_rgb_linear = None
+        self.fullres_Y = None
+        self.fullres_clipping_masks = None
+        self.fullres_clipping_ratios = None
+        self.fullres_metadata = None
+
+        # Cached FULL-res analysis (computed once on first export, reused after)
+        self.fullres_feature_dict = None
+        self.fullres_masks = None
+
         # Raw before preview image (JPEG bytes)
         self.raw_preview_bytes = None
 
 session = ActiveSession()
+
+def linear_to_srgb(linear):
+    """
+    Applies the standard sRGB transfer function to convert linear RGB [0, 1] to sRGB.
+    """
+    linear = np.clip(linear, 0.0, 1.0)
+    return np.where(
+        linear <= 0.0031308,
+        12.92 * linear,
+        1.055 * (linear ** (1.0 / 2.4)) - 0.055
+    ).astype(np.float32)
 
 # Helper: Downsample image to preview size (max 1024px on long edge)
 def downsample_to_preview(img, max_edge=1024):
@@ -111,7 +133,11 @@ class PreviewRequest(BaseModel):
     bloom: float = 0.0      # 0 to 100
     adaptation: float = 1.0
     grain: str = "Auto"
+    grain_strength: float = -1.0
+    grain_size: float = -1.0
+    grain_roughness: float = -1.0
     halation: str = "Auto"
+    export_format: str = "tiff"   # "tiff" | "png16" | "png8"
 
 
 def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
@@ -421,9 +447,18 @@ def select_file(req: SelectRequest):
         session.preview_clipping_masks = preview_clip
         session.feature_dict = feature_dict
         session.masks = masks
+
+        # Reset full-res cache on new file selection
+        session.fullres_rgb_linear = None
+        session.fullres_Y = None
+        session.fullres_clipping_masks = None
+        session.fullres_clipping_ratios = None
+        session.fullres_metadata = None
+        session.fullres_feature_dict = None
+        session.fullres_masks = None
         
         # Build and cache raw preview JPEG
-        raw_display = np.clip(preview_rgb ** (1.0 / 2.2), 0.0, 1.0)
+        raw_display = linear_to_srgb(preview_rgb)
         raw_display_uint8 = (raw_display * 255.0).astype(np.uint8)
         _, raw_jpeg_bytes = cv2.imencode('.jpg', cv2.cvtColor(raw_display_uint8, cv2.COLOR_RGB2BGR))
         session.raw_preview_bytes = raw_jpeg_bytes.tobytes()
@@ -493,6 +528,9 @@ def get_preview(
     bloom: float = 0.0,
     adaptation: float = 1.0,
     grain: str = "Auto",
+    grain_strength: float = -1.0,
+    grain_size: float = -1.0,
+    grain_roughness: float = -1.0,
     halation: str = "Auto"
 ):
     if session.filename != filename:
@@ -520,6 +558,9 @@ def get_preview(
             "adaptation_strength": adaptation,
             "exposure_intent": "Preserve",
             "grain_amount": grain,
+            "grain_strength": grain_strength,
+            "grain_size": grain_size,
+            "grain_roughness": grain_roughness,
             "halation_amount": halation
         }
         plan = solver.solve(session.feature_dict, stock_profile, scan_profile, user_overrides)
@@ -558,7 +599,7 @@ def get_preview(
         # Gamma-encode to sRGB before JPEG — the renderer outputs linear light;
         # JPEG viewers expect gamma-encoded values. Without this, everything
         # appears drastically darker (linear 0.18 → 46/255 instead of 118/255).
-        rendered_display = np.clip(rendered ** (1.0 / 2.2), 0.0, 1.0)
+        rendered_display = linear_to_srgb(rendered)
         rendered_uint8   = (rendered_display * 255.0).astype(np.uint8)
         _, jpeg_bytes    = cv2.imencode('.jpg', cv2.cvtColor(rendered_uint8, cv2.COLOR_RGB2BGR))
 
@@ -584,30 +625,57 @@ def export_file(req: PreviewRequest):
         stock_profile = FilmStockProfile(stock_path)
         scan_profile  = ScanPrintProfile(scan_path)
 
-        basename        = os.path.splitext(req.filename)[0]
-        output_filename = f"{basename}_{req.stock}_dfee.tif"
-        output_path     = os.path.join(RAW_DIR, output_filename)
-        report_path     = os.path.join(RAW_DIR, f"{basename}_{req.stock}_report.json")
+        basename    = os.path.splitext(req.filename)[0]
+        report_path = os.path.join(RAW_DIR, f"{basename}_{req.stock}_report.json")
+        # output_path/filename set in the format block below
 
-        # Full-res ingest
-        print("Ingesting full-res RAW for export...")
-        ingestor = RawIngestor(filepath)
-        rgb_linear, Y, clipping_masks, clipping_ratios, metadata = ingestor.ingest(draft_mode=False)
+        # ── Use cached full-res data if available (avoids re-reading RAW from disk) ──
+        if session.filename == req.filename and session.fullres_rgb_linear is not None:
+            print("[export] Using cached full-res RGB from session (skipping re-ingest)")
+            rgb_linear      = session.fullres_rgb_linear
+            Y               = session.fullres_Y
+            clipping_masks  = session.fullres_clipping_masks
+            clipping_ratios = session.fullres_clipping_ratios
+            metadata        = session.fullres_metadata
+        else:
+            print("[export] Session miss — ingesting full-res RAW from disk...")
+            ingestor = RawIngestor(filepath)
+            rgb_linear, Y, clipping_masks, clipping_ratios, metadata = ingestor.ingest(draft_mode=False)
+            if session.filename == req.filename:
+                session.fullres_rgb_linear      = rgb_linear
+                session.fullres_Y               = Y
+                session.fullres_clipping_masks  = clipping_masks
+                session.fullres_clipping_ratios = clipping_ratios
+                session.fullres_metadata        = metadata
 
-        print("Analyzing full-res canvas...")
-        analyzer = ImageStateAnalyzer()
-        feature_dict, masks = analyzer.analyze(rgb_linear, Y, clipping_masks, clipping_ratios)
-
-        bias_estimator = CameraBiasEstimator()
-        bias_info = bias_estimator.estimate_bias(rgb_linear, Y, clipping_masks, masks["luminance_zone_masks"])
-        feature_dict["camera_input_bias"] = bias_info
-        feature_dict["raw_metadata"]      = metadata
+        # ── Full-res analysis — cached after first export ────────────────────────
+        if (session.filename == req.filename
+                and session.fullres_feature_dict is not None
+                and session.fullres_masks is not None):
+            print("[export] Using cached full-res analysis")
+            feature_dict = session.fullres_feature_dict
+            masks        = session.fullres_masks
+        else:
+            print("[export] Running full-res analysis (will be cached for next export)...")
+            analyzer = ImageStateAnalyzer()
+            feature_dict, masks = analyzer.analyze(rgb_linear, Y, clipping_masks, clipping_ratios)
+            bias_estimator = CameraBiasEstimator()
+            bias_info = bias_estimator.estimate_bias(rgb_linear, Y, clipping_masks, masks["luminance_zone_masks"])
+            feature_dict["camera_input_bias"] = bias_info
+            feature_dict["raw_metadata"]      = metadata
+            # Cache for subsequent exports of the same file
+            if session.filename == req.filename:
+                session.fullres_feature_dict = feature_dict
+                session.fullres_masks        = masks
 
         solver = RenderPlanSolver()
         user_overrides = {
             "adaptation_strength": req.adaptation,
             "exposure_intent": "Preserve",
             "grain_amount": req.grain,
+            "grain_strength": req.grain_strength,
+            "grain_size": req.grain_size,
+            "grain_roughness": req.grain_roughness,
             "halation_amount": req.halation
         }
         plan = solver.solve(feature_dict, stock_profile, scan_profile, user_overrides)
@@ -645,11 +713,43 @@ def export_file(req: PreviewRequest):
                                             req.clarity, req.texture, req.dehaze, req.bloom)
         rendered = np.clip(rendered, 0.0, 1.0)
 
-        # Save 16-bit TIFF
-        print(f"Saving output TIFF to: {output_path}")
-        uint16_data = (rendered * 65535.0).astype(np.uint16)
-        img = Image.fromarray(uint16_data)
-        img.save(output_path, format="TIFF")
+        # ── Determine output format ────────────────────────────────────────
+        fmt = (req.export_format or "tiff").lower().strip()
+        if fmt not in ("tiff", "png16", "png8"):
+            fmt = "tiff"
+
+        rendered_clipped = np.clip(rendered, 0.0, 1.0)
+        srgb_data = linear_to_srgb(rendered_clipped)
+
+        if fmt == "tiff":
+            output_filename = f"{basename}_{req.stock}_dfee.tif"
+            output_path     = os.path.join(RAW_DIR, output_filename)
+            print(f"Saving 16-bit sRGB TIFF to: {output_path}")
+            uint16_data = (srgb_data * 65535.0).astype(np.uint16)
+            uint16_data = np.ascontiguousarray(uint16_data)
+            import tifffile
+            tifffile.imwrite(output_path, uint16_data, photometric='rgb', compression=None)
+            format_label = "16-bit TIFF"
+
+        elif fmt == "png16":
+            output_filename = f"{basename}_{req.stock}_dfee_16.png"
+            output_path     = os.path.join(RAW_DIR, output_filename)
+            print(f"Saving 16-bit sRGB PNG to: {output_path}")
+            uint16_data = (srgb_data * 65535.0).astype(np.uint16)
+            uint16_data = np.ascontiguousarray(uint16_data)
+            import tifffile
+            # tifffile writes 16-bit PNG correctly
+            tifffile.imwrite(output_path, uint16_data, photometric='rgb')
+            format_label = "16-bit PNG"
+
+        else:  # png8
+            output_filename = f"{basename}_{req.stock}_dfee.png"
+            output_path     = os.path.join(RAW_DIR, output_filename)
+            print(f"Saving 8-bit sRGB PNG to: {output_path}")
+            uint8_data = (srgb_data * 255.0).astype(np.uint8)
+            img = Image.fromarray(uint8_data, mode="RGB")
+            img.save(output_path, format="PNG", optimize=False, compress_level=1)
+            format_label = "8-bit PNG"
 
         reporter = RenderReporter()
         reporter.write_report(
@@ -660,7 +760,8 @@ def export_file(req: PreviewRequest):
         return {
             "status": "success",
             "output_path": output_path,
-            "report_path": report_path
+            "report_path": report_path,
+            "format": format_label,
         }
     except Exception as e:
         import traceback
