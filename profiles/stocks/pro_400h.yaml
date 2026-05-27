@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.55
 
 tone_response:
-  toe_strength: 0.20         # Extremely gentle toe — Pro 400H's signature open shadows
-  toe_length: 0.40           # Long, luminous shadow gradation
-  midtone_contrast: 0.72     # Deliberately low contrast — high latitude, dreamy look
-  shoulder_strength: 0.48    # Very soft shoulder — extraordinary highlight latitude
-  highlight_rolloff_start: 0.82   # Very late rolloff — captures highlights other films clip
-  black_density_floor: 0.014  # Some negative base fog, but soft
+  toe_strength: 0.24         # Very gentle toe — Pro 400H has open, breathing shadows
+  toe_length: 0.40           # Long toe — shadows transition slowly
+  midtone_contrast: 0.90     # Dreamy, lower contrast than Portra but not flat
+  shoulder_strength: 0.48    # Very gentle shoulder — extraordinary highlight holding power
+  highlight_rolloff_start: 0.82  # Late rolloff — Pro 400H captures highlights beautifully
+  black_density_floor: 0.014  # Slightly higher D-min from fourth color layer — barely perceptible warm cast in blacks
   channel_toe_mult:      [0.88, 0.93, 1.08]
   channel_shoulder_mult: [0.82, 0.93, 1.15]
   channel_midtone_mult:  [1.00, 1.00, 0.97]
@@ -57,7 +57,6 @@ scanner:
   style: frontier_soft
   contrast: 0.88   # Scanned soft — Pro 400H always scanned low contrast to preserve its feel
   warmth: 0.05
-  black_point: 0.010
   output_sharpening: 0.08
 
 chroma_coupling:

@@ -10,10 +10,10 @@ adaptation:
   shadow_noise_sensitivity: 0.60
 
 tone_response:
-  toe_strength: 0.45         # Distinct toe for deep blacks
+  toe_strength: 0.46         # Distinct toe for deep blacks
   toe_length: 0.30           # Smooth progression into shadow detail
-  midtone_contrast: 1.10     # Strong midtone contrast (classic black and white punch)
-  shoulder_strength: 0.80    # Strong shoulder roll-off to give bright whites
+  midtone_contrast: 1.08     # Strong midtone contrast (classic black and white punch)
+  shoulder_strength: 0.78    # Strong shoulder roll-off to give bright whites
   highlight_rolloff_start: 0.68
   black_density_floor: 0.010  # B&W negative base fog — slightly raised blacks
   channel_toe_mult:      [1.0, 1.0, 1.0]   # B&W: all channels identical
@@ -58,7 +58,6 @@ scanner:
   style: darkroom_print
   contrast: 1.08   # Slightly punchy — darkroom prints tend toward rich blacks
   warmth: 0.00
-  black_point: 0.015
   output_sharpening: 0.20
 chroma_coupling:
   # B&W stock: chroma coupling is a no-op (monochrome has no colour to compress)

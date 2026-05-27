@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.52
 
 tone_response:
-  toe_strength: 0.42         # Moderate toe — consumer film is more forgiving
-  toe_length: 0.32
-  midtone_contrast: 1.00     # Moderate contrast — consumer look
-  shoulder_strength: 0.55
-  highlight_rolloff_start: 0.70
-  black_density_floor: 0.015  # Consumer film — some base fog
+  toe_strength: 0.46         # Consumer film toe — more abrupt shadows than pro stocks
+  toe_length: 0.28           # Short-moderate toe — shadows go deep faster
+  midtone_contrast: 1.04     # Consumer tuning — punchy, vibrant look
+  shoulder_strength: 0.55    # Moderate shoulder
+  highlight_rolloff_start: 0.68  # Earlier rolloff
+  black_density_floor: 0.015  # Consumer emulsion — slightly higher fog level than pro stocks
   channel_toe_mult:      [0.95, 1.00, 1.15]
   channel_shoulder_mult: [0.92, 1.00, 1.22]
   channel_midtone_mult:  [1.03, 1.00, 0.95]
@@ -56,7 +56,6 @@ scanner:
   style: frontier_soft
   contrast: 1.00
   warmth: 0.12               # Accent the warmth — Gold looks best warm
-  black_point: 0.010
   output_sharpening: 0.10
 
 chroma_coupling:

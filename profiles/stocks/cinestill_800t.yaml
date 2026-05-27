@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.65
 
 tone_response:
-  toe_strength: 0.30         # Cinematic toe — open, lifted shadows
-  toe_length: 0.35
-  midtone_contrast: 0.90     # Slightly flat — cinema stocks have wide exposure latitude
-  shoulder_strength: 0.58    # Moderate shoulder
-  highlight_rolloff_start: 0.65
-  black_density_floor: 0.012
+  toe_strength: 0.36         # Cinema-style toe — open shadows
+  toe_length: 0.32           # Long toe — cinema stocks are latitude-first
+  midtone_contrast: 0.95     # Pleasant cinematic contrast — not flat
+  shoulder_strength: 0.52    # Gentle shoulder — cinema stocks roll off highlights gracefully
+  highlight_rolloff_start: 0.72  # Good highlight latitude
+  black_density_floor: 0.012  # Cinema stock D-min — similar to color negative pro stocks
   channel_toe_mult:      [0.95, 1.00, 1.18]
   channel_shoulder_mult: [0.90, 1.00, 1.25]
   channel_midtone_mult:  [1.00, 1.00, 0.94]
@@ -59,7 +59,6 @@ scanner:
   style: noritsu_smooth
   contrast: 0.95
   warmth: -0.05              # Slight cool trim to accent the tungsten character
-  black_point: 0.010
   output_sharpening: 0.12
 chroma_coupling:
   hi_rolloff_start: 0.65   # Cinema stock: aggressive shoulder compression

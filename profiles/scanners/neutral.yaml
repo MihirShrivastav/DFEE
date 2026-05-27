@@ -1,0 +1,8 @@
+scanner_id: neutral
+scanner_name: No Scan Finish
+contrast: 1.00             # Flat — no scanner characteristic curve
+warmth: 0.00               # No warmth shift
+black_point: 0.000         # True zero — no scanner black lift
+white_point: 1.000         # True unity — no highlight compression
+output_sharpening: 0.00    # No scanner sharpening
+color_separation: 0.50     # Neutral color separation

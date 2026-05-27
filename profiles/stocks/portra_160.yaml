@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.42
 
 tone_response:
-  toe_strength: 0.28         # Very gentle toe — finer grain, more open shadows than Portra 400
-  toe_length: 0.38           # Longer, more gradual shadow gradation
-  midtone_contrast: 0.80     # Lower contrast than Portra 400 — finer, more refined character
-  shoulder_strength: 0.62    # Slightly firmer shoulder
-  highlight_rolloff_start: 0.78   # Excellent highlight latitude
-  black_density_floor: 0.010
+  toe_strength: 0.34         # Gentle toe — finer grain stock shadow definition
+  toe_length: 0.34           # Long toe — smooth progression into shadows
+  midtone_contrast: 0.94     # sub-unity but realistic contrast — keeps Portra 160 soft but not flat
+  shoulder_strength: 0.58    # Good shoulder — gentle highlight roll-off
+  highlight_rolloff_start: 0.74  # Excellent highlight latitude
+  black_density_floor: 0.010  # Slightly cleaner than 400 due to finer grain emulsion
   channel_toe_mult:      [0.90, 0.95, 1.10]
   channel_shoulder_mult: [0.85, 0.95, 1.15]
   channel_midtone_mult:  [1.02, 1.00, 0.97]
@@ -56,7 +56,6 @@ scanner:
   style: frontier_soft
   contrast: 1.00
   warmth: 0.06
-  black_point: 0.006
   output_sharpening: 0.12
 
 chroma_coupling:

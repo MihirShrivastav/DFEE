@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.70
 
 tone_response:
-  toe_strength: 0.32         # Soft toe for open shadows
-  toe_length: 0.35           # Long, smooth shadow gradation
-  midtone_contrast: 0.85     # Gentle, lower midtone contrast for latitude
-  shoulder_strength: 0.65    # Soft shoulder for highlight protection
-  highlight_rolloff_start: 0.75  # Late, gentle roll-off
-  black_density_floor: 0.012  # Negative film base fog — faded blacks, not a thick haze
+  toe_strength: 0.32         # Gentle toe — Portra's signature open, breathing shadows
+  toe_length: 0.36           # Long toe — shadows gradiate smoothly
+  midtone_contrast: 0.96     # sub-unity but realistic contrast — keeps Portra soft but not flat
+  shoulder_strength: 0.55    # Gentle shoulder — superb highlight rolloff and latitude
+  highlight_rolloff_start: 0.76  # Late rolloff — Portra holds highlights longer than almost any negative film
+  black_density_floor: 0.012  # Color neg D-min — orange-masked base fog, barely perceptible in absolute blacks only
   channel_toe_mult:      [0.90, 0.95, 1.12]
   channel_shoulder_mult: [0.85, 0.95, 1.18]
   channel_midtone_mult:  [1.02, 1.00, 0.96]
@@ -54,7 +54,6 @@ scanner:
   style: frontier_soft
   contrast: 1.00   # Neutral scan — color negative scanned flat, grade in post
   warmth: 0.15
-  black_point: 0.025
   output_sharpening: 0.10
 
 chroma_coupling:

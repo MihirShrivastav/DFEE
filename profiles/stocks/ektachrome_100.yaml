@@ -1,0 +1,74 @@
+stock_id: ektachrome_100
+stock_name: Kodak Ektachrome E100
+stock_type: color_reversal
+
+adaptation:
+  base_iso: 100
+  default_strength: 0.98
+  camera_cast_compensation_sensitivity: 0.55
+  highlight_stress_sensitivity: 0.88
+  shadow_noise_sensitivity: 0.40
+
+tone_response:
+  toe_strength: 0.52         # Steep reversal toe — shadows fall quickly into deep density
+  toe_length: 0.26           # Compact shadow entry
+  midtone_contrast: 1.18     # High midtone punch (classic E-6 look)
+  shoulder_strength: 0.88    # Hard highlight shoulder
+  highlight_rolloff_start: 0.65  # Very narrow highlight latitude
+  black_density_floor: 0.004  # Reversal D-max — deep, ink-like shadow base
+  channel_toe_mult:      [1.00, 1.00, 1.10]  # Blue shadows clip slightly faster
+  channel_shoulder_mult: [1.00, 1.00, 1.15]  # Blue highlights compress early
+  channel_midtone_mult:  [1.00, 1.00, 1.02]  # Balanced midtones
+
+color_response:
+  shadow_bias_lab: [0.0, -1.0, -4.0]     # Cool, rich cobalt blue shadows
+  midtone_bias_lab: [0.0, 0.0, -1.0]      # Cool/neutral-cool midtones
+  highlight_bias_lab: [0.2, 0.0, 0.5]     # Clean, neutral-cool highlights
+  blue_cast_suppression: 0.15            # Keeps blues bright and dense
+  green_magenta_stabilization: 0.25
+
+hue_saturation_response:
+  saturation_boost: 1.30          # Richly saturated but neutral color palette
+  red_orange_midtone_compression: 0.25
+  yellow_green_muting: 0.15
+  cyan_blue_highlight_compression: 0.20  # Holds rich blue saturation in sky highlights
+  neon_compression: 0.55
+  highlight_desaturation: 0.25           # Retains color well into highlight clipping
+
+grain:
+  size: 0.15                 # Extremely fine, clean grain structure
+  strength: 0.12             # Subtle, smooth luminance grain
+  chroma_strength: 0.01      # Negligible chromatic grain noise
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.80
+
+halation:
+  trigger: specular_only
+  strength: 0.06             # Minimal halation (strong anti-halation backing)
+  radius_inner: 3
+  radius_outer: 10
+  warm_core: [1.0, 0.80, 0.60]
+  red_fringe: [1.0, 0.15, 0.05]
+
+scanner:
+  style: frontier_soft
+  contrast: 1.05             # Clean, direct transparency scan style
+  warmth: 0.02
+  output_sharpening: 0.15
+
+chroma_coupling:
+  hi_rolloff_start: 0.70
+  hi_rolloff_rate:  3.0
+  hi_compression:   0.70
+  sh_rolloff_start: 0.16
+  sh_compression:   0.55
+  hi_hue_conv_rad:  0.15
+  hi_hue_conv_str:  0.15
+
+dye_contamination:
+  r_to_g: 0.00
+  g_to_r: 0.00
+  b_to_g: 0.00
+  b_to_r: 0.00
+  r_to_b: 0.00
+  g_to_b: 0.00

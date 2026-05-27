@@ -163,7 +163,16 @@ class FilmRenderer:
                 s_curve_gamma = s_curve ** (1.0 / mid_c)
                 s_curve = s_curve * (1.0 - mid_weight) + s_curve_gamma * mid_weight
 
-            rgb_toned[:, :, c] = d_floor + (1.0 - d_floor) * s_curve
+            # Toe-only shadow lift: only lifts the deepest shadows, fades out by mid-shadow
+            # (s_curve ≈ 0.20). Leaves midtones and highlights completely untouched.
+            # Physical basis: film D-min / base fog lifts just the underexposed toe —
+            # it does NOT compress or shift bright areas (unlike a global level shift).
+            #
+            # Weight: 1.0 at s_curve=0 (pure black), decays smoothly toward 0
+            # The knee at 0.25 means the lift is gone by the lower-mid shadows.
+            toe_fade = np.clip(s_curve / 0.25, 0.0, 1.0)  # 0→1 transition over [0, 0.25]
+            shadow_weight = (1.0 - toe_fade) ** 2          # quadratic ease-out
+            rgb_toned[:, :, c] = s_curve + d_floor * shadow_weight
 
         return np.clip(rgb_toned, 0.0, 1.0)
 
@@ -417,7 +426,7 @@ class FilmRenderer:
     # ─── Acutance Shaping ─────────────────────────────────────────────────────
 
     def _apply_acutance_shaping(self, rgb_proc, effects):
-        """Multi-scale frequency decomposition to shape local contrast and acutance."""
+        """Multi-scale frequency decomposition to shape local contrast and acutance, followed by Contrast-Adaptive Sharpening (CAS) with luminance masking."""
         oklab = rgb_to_oklab(rgb_proc)
         L = oklab[:, :, 0]
         h, w = L.shape
@@ -435,8 +444,66 @@ class FilmRenderer:
         # Keep the boost small to avoid halos bleeding from bright into dark areas.
         edge_soft = effects["edge_softening"]
         L_new = L_low + L_mid * 1.05 + L_high * (1.0 - edge_soft)
+        L_processed = np.clip(L_new, 0.0, 1.0)
 
-        oklab[:, :, 0] = np.clip(L_new, 0.0, 1.0)
+        # Contrast-Adaptive Sharpening (CAS) on Lightness channel
+        sharpness = effects.get("sharpness", 0.0)
+        sharpness_mask = effects.get("sharpness_mask", 0.5)
+
+        if sharpness > 0.0:
+            # Pad to handle edge boundaries
+            L_padded = np.pad(L_processed, ((1, 1), (1, 1)), mode='reflect')
+
+            # Extract 3x3 neighborhood slices
+            a = L_padded[0:-2, 0:-2]
+            b = L_padded[0:-2, 1:-1]
+            c = L_padded[0:-2, 2:]
+            d = L_padded[1:-1, 0:-2]
+            e = L_padded[1:-1, 1:-1]  # center
+            f = L_padded[1:-1, 2:]
+            g = L_padded[2:, 0:-2]
+            h = L_padded[2:, 1:-1]
+            i = L_padded[2:, 2:]
+
+            # Soft min & max (over cardinal neighbors and center)
+            mnRGB = np.minimum(np.minimum(np.minimum(d, e), np.minimum(f, b)), h)
+            mnRGB2 = np.minimum(mnRGB, np.minimum(np.minimum(a, c), np.minimum(g, i)))
+            mnRGB = mnRGB + mnRGB2
+
+            mxRGB = np.maximum(np.maximum(np.maximum(d, e), np.maximum(f, b)), h)
+            mxRGB2 = np.maximum(mxRGB, np.maximum(np.maximum(a, c), np.maximum(g, i)))
+            mxRGB = mxRGB + mxRGB2
+
+            # Smooth minimum distance to signal limit divided by smooth max
+            rcpMRGB = 1.0 / np.maximum(mxRGB, 1e-5)
+            ampRGB = np.clip(np.minimum(mnRGB, 2.0 - mxRGB) * rcpMRGB, 0.0, 1.0)
+
+            # Shaping amount of sharpening (equivalent to shader's rsqrt)
+            ampRGB = np.sqrt(ampRGB)
+
+            # Peak mapping: map sharpness slider [0.0, 2.0] internally for peak scaling
+            sharp_val = np.clip(sharpness, 0.0, 1.0)
+            peak = 8.0 - 3.0 * sharp_val
+
+            # Negative lobe weights (correct AMD CAS weight formula: wRGB = -ampRGB / peak)
+            wRGB = -ampRGB / peak
+
+            # Filter shape: 5-tap filter normalization
+            rcpWeightRGB = 1.0 / (1.0 + 4.0 * wRGB)
+            window = (b + d) + (f + h)
+
+            # Sharpened lightness channel
+            L_sharp = np.clip((window * wRGB + e) * rcpWeightRGB, 0.0, 1.0)
+
+            # Luminance masking: smooth bell curve centered at L_processed = 0.5
+            # Zero at extremes (0 and 1) if sharpness_mask = 1.0, flat 1.0 if sharpness_mask = 0.0
+            luma_mask = 1.0 - sharpness_mask * (1.0 - np.sin(np.pi * L_processed)**2)
+
+            # Blend back based on the mask and overall sharpness
+            delta_L = L_sharp - L_processed
+            L_processed = np.clip(L_processed + delta_L * luma_mask * sharpness, 0.0, 1.0)
+
+        oklab[:, :, 0] = L_processed
         return oklab_to_rgb(oklab)
 
     # ─── Halation & Bloom ─────────────────────────────────────────────────────

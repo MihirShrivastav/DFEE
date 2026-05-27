@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.45
 
 tone_response:
-  toe_strength: 0.42         # Firmer toe than Portra — more shadow punch
-  toe_length: 0.28
-  midtone_contrast: 1.08     # Higher than typical colour negative
-  shoulder_strength: 0.58    # Moderate shoulder — good but not the widest latitude
-  highlight_rolloff_start: 0.70
-  black_density_floor: 0.008  # Fine-grain negative — relatively clean blacks
+  toe_strength: 0.48         # Firmer, more decisive toe — Ektar blocks shadows faster giving rich contrast
+  toe_length: 0.26           # Shorter toe transition — snappier shadow response than Portra
+  midtone_contrast: 1.10     # Punchy midtones — higher contrast is Ektar's design goal
+  shoulder_strength: 0.55    # Moderate shoulder — decent latitude but not Portra-wide
+  highlight_rolloff_start: 0.72  # Earlier rolloff than Portra — less highlight headroom
+  black_density_floor: 0.008  # Very fine grain emulsion — among the cleanest D-min of color neg films
   channel_toe_mult:      [0.95, 1.00, 1.12]
   channel_shoulder_mult: [0.90, 1.00, 1.18]
   channel_midtone_mult:  [1.02, 1.00, 0.96]
@@ -56,7 +56,6 @@ scanner:
   style: noritsu_smooth
   contrast: 1.05
   warmth: 0.08
-  black_point: 0.006
   output_sharpening: 0.22
 
 chroma_coupling:

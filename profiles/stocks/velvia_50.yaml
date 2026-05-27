@@ -10,11 +10,11 @@ adaptation:
   shadow_noise_sensitivity: 0.35               # ISO 50 — very clean shadows
 
 tone_response:
-  toe_strength: 0.70         # Very steep, abrupt toe — Velvia blocks up shadows fast
-  toe_length: 0.20           # Short toe — the shadow crush is the character
-  midtone_contrast: 1.30     # Exceptionally high midtone punch
+  toe_strength: 0.60         # Steep toe — Velvia blocks up shadows fast but not into a flat silhouette
+  toe_length: 0.24           # Compact shadow entry — shadow crush is the character
+  midtone_contrast: 1.25     # Exceptionally high midtone punch
   shoulder_strength: 0.92    # Strong shoulder — clipped highlights have a definite roof
-  highlight_rolloff_start: 0.58   # Early roll-off — Velvia has limited highlight latitude
+  highlight_rolloff_start: 0.60   # Early roll-off — Velvia has limited highlight latitude
   black_density_floor: 0.003  # Reversal film — virtually zero base density
   channel_toe_mult:      [1.00, 1.00, 1.25]  # Blue clips even sooner
   channel_shoulder_mult: [1.00, 1.05, 1.40]  # Blue and slightly green shoulder early
@@ -56,7 +56,6 @@ scanner:
   style: frontier_soft
   contrast: 1.08    # Slide scanned with some punch to honor its contrast character
   warmth: 0.05
-  black_point: 0.004
   output_sharpening: 0.20
 
 chroma_coupling:

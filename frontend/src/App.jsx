@@ -49,12 +49,53 @@ const DEFAULT_PARAMS = {
   grain_size: -1.0,
   grain_roughness: -1.0,
   halation: 'Auto',
+  sharpness: 0.0,
+  sharpness_mask: 0.5,
 };
 
 const HSL_RANGES_KEYS = ['red','orange','yellow','green','aqua','blue','purple','magenta'];
 const DEFAULT_HSL = Object.fromEntries(
   HSL_RANGES_KEYS.flatMap(r => ['h','s','l'].map(p => [`${r}_${p}`, 0]))
 );
+
+const BUILTIN_PRESETS = [
+  {
+    id: 'k64',
+    name: 'Kodachrome 64 Soft',
+    stock: 'kodachrome_64',
+    params: { scanner: 'frontier_soft', exposure: 0.15, contrast: 20, temp: 15, tint: 5, adaptation: 1.0 },
+    curves: DEFAULT_CURVES,
+    hsl: DEFAULT_HSL,
+    isBuiltin: true
+  },
+  {
+    id: 'portra',
+    name: 'Portra 400 Soft Warm',
+    stock: 'portra_400',
+    params: { scanner: 'noritsu_smooth', exposure: 0.4, contrast: -10, temp: 5, tint: -10, adaptation: 0.85 },
+    curves: DEFAULT_CURVES,
+    hsl: DEFAULT_HSL,
+    isBuiltin: true
+  },
+  {
+    id: 'trix',
+    name: 'Tri-X 400 Rich Black',
+    stock: 'tri_x_400',
+    params: { scanner: 'darkroom_print', exposure: 0.0, contrast: 30, temp: 0, tint: 0, adaptation: 1.0 },
+    curves: DEFAULT_CURVES,
+    hsl: DEFAULT_HSL,
+    isBuiltin: true
+  },
+  {
+    id: 'velvia',
+    name: 'Velvia 50 Landscape',
+    stock: 'velvia_50',
+    params: { scanner: 'frontier_soft', exposure: -0.10, contrast: 15, temp: 5, tint: 5, saturation: 10, adaptation: 1.0 },
+    curves: DEFAULT_CURVES,
+    hsl: DEFAULT_HSL,
+    isBuiltin: true
+  }
+];
 
 export default function App() {
   const [files, setFiles] = useState([]);
@@ -66,6 +107,45 @@ export default function App() {
   const [params, setParams] = useState(DEFAULT_PARAMS);
   const [curves, setCurves] = useState(DEFAULT_CURVES);
   const [hsl, setHsl] = useState(DEFAULT_HSL);
+  const [metadata, setMetadata] = useState(null);
+
+  // ── Presets states ──────────────────────────────────────────────────────
+  const [userPresets, setUserPresets] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dfee_user_presets');
+      return saved ? JSON.parse(saved) : [];
+    } catch { return []; }
+  });
+  const [newPresetName, setNewPresetName] = useState('');
+  const [filterByStock, setFilterByStock] = useState(true);
+
+  const getAsShotWB = () => {
+    if (!metadata || !metadata.white_balance_multipliers) return { temp: 5500, tint: 10 };
+    try {
+      const wbm = typeof metadata.white_balance_multipliers === 'string'
+        ? JSON.parse(metadata.white_balance_multipliers)
+        : metadata.white_balance_multipliers;
+      if (wbm && wbm.length >= 3) {
+        const r_mul = wbm[0];
+        const g_mul = (wbm[1] + (wbm[3] || wbm[1])) / 2.0 || 1.0;
+        const b_mul = wbm[2];
+        
+        // Normalize multipliers relative to green
+        const r_norm = r_mul / g_mul;
+        const b_norm = b_mul / g_mul;
+        
+        const ratio = r_norm / (b_norm || 1.0);
+        const temp = Math.round(4668.0 * Math.pow(ratio, 0.578));
+        const tint = Math.round(((r_norm + b_norm) / 2.0 - 1.75) * 30);
+        return { temp, tint };
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return { temp: 5500, tint: 10 };
+  };
+
+  const { temp: T_as_shot, tint: tint_as_shot } = getAsShotWB();
 
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
@@ -278,7 +358,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (key === 'exposure' || key === 'adaptation' ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'adaptation', 'sharpness', 'sharpness_mask'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -322,6 +402,7 @@ export default function App() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setDiagnostics(data.diagnostics);
+      setMetadata(data.metadata);
       setRawUrl(`${API}/api/raw-image?t=${Date.now()}`);
       // Set selectedFile AFTER server confirms session is ready
       // This prevents the preview useEffect from firing before the session exists
@@ -377,6 +458,8 @@ export default function App() {
         + `&grain_size=${params.grain_size}`
         + `&grain_roughness=${params.grain_roughness}`
         + `&halation=${encodeURIComponent(params.halation)}`
+        + `&sharpness=${params.sharpness}`
+        + `&sharpness_mask=${params.sharpness_mask}`
         + `&t=${Date.now()}`;
 
       setPreviewLoading(true);
@@ -407,6 +490,7 @@ export default function App() {
     params.saturation, params.vibrance,
     params.clarity, params.texture, params.dehaze, params.bloom,
     params.adaptation, params.grain, params.grain_strength, params.grain_size, params.grain_roughness, params.halation,
+    params.sharpness, params.sharpness_mask,
     curves, hsl,
   ]);
 
@@ -444,6 +528,8 @@ export default function App() {
           grain_size: params.grain_size,
           grain_roughness: params.grain_roughness,
           halation: params.halation,
+          sharpness: params.sharpness,
+          sharpness_mask: params.sharpness_mask,
           export_format: exportFormat,
         }),
       });
@@ -457,14 +543,60 @@ export default function App() {
     }
   };
 
-  const applyPreset = (name) => {
-    const presets = {
-      k64:   { stock: 'kodachrome_64', scanner: 'frontier_soft',   exposure: 0.15, contrast: 20,  temp: 15, tint: 5,   adaptation: 1.0 },
-      portra:{ stock: 'portra_400',    scanner: 'noritsu_smooth',  exposure: 0.4,  contrast: -10, temp: 5,  tint: -10, adaptation: 0.85 },
-      trix:  { stock: 'tri_x_400',     scanner: 'darkroom_print',  exposure: 0.0,  contrast: 30,  temp: 0,  tint: 0,   adaptation: 1.0 },
-    };
-    setParams(p => ({ ...p, ...presets[name] }));
+  const applyPreset = (preset) => {
+    setParams(p => ({ ...DEFAULT_PARAMS, ...p, ...preset.params, stock: preset.stock }));
+    if (preset.curves) setCurves(preset.curves);
+    if (preset.hsl) setHsl(preset.hsl);
+    showToast(`Applied preset "${preset.name}"`, 'success');
   };
+
+  const savePreset = () => {
+    if (!newPresetName.trim()) {
+      showToast('Please enter a preset name', 'warning');
+      return;
+    }
+    const name = newPresetName.trim();
+    if (userPresets.some(p => p.name.toLowerCase() === name.toLowerCase()) || 
+        BUILTIN_PRESETS.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      showToast('A preset with this name already exists', 'warning');
+      return;
+    }
+    const newPreset = {
+      id: 'user_' + Date.now(),
+      name: name,
+      stock: params.stock,
+      params: { ...params },
+      curves: [...curves],
+      hsl: { ...hsl },
+      isBuiltin: false
+    };
+    const updated = [...userPresets, newPreset];
+    setUserPresets(updated);
+    try {
+      localStorage.setItem('dfee_user_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to save user presets', e);
+    }
+    setNewPresetName('');
+    showToast(`Preset "${name}" saved`, 'success');
+  };
+
+  const deletePreset = (id, e) => {
+    e.stopPropagation();
+    const updated = userPresets.filter(p => p.id !== id);
+    setUserPresets(updated);
+    try {
+      localStorage.setItem('dfee_user_presets', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to update user presets', e);
+    }
+    showToast('Preset deleted', 'info');
+  };
+
+  const allPresets = [...BUILTIN_PRESETS, ...userPresets];
+  const filteredPresets = filterByStock
+    ? allPresets.filter(p => p.stock === params.stock)
+    : allPresets;
 
   // Compare drag — only active when NOT zoomed in
   useEffect(() => {
@@ -484,7 +616,15 @@ export default function App() {
 
   const fmtVal = (key, v) => {
     if (key === 'exposure') return (v > 0 ? '+' : '') + v.toFixed(2) + ' EV';
-    if (key === 'adaptation') return v.toFixed(2);
+    if (key === 'adaptation' || key === 'sharpness' || key === 'sharpness_mask') return v.toFixed(2);
+    if (key === 'temp') {
+      const currentTemp = Math.max(2000, Math.min(20000, Math.round(T_as_shot + v * 80)));
+      return currentTemp + ' K';
+    }
+    if (key === 'tint') {
+      const currentTint = Math.max(-150, Math.min(150, Math.round(tint_as_shot + v * 2)));
+      return (currentTint > 0 ? '+' : '') + currentTint;
+    }
     return (v > 0 ? '+' : '') + v;
   };
 
@@ -516,6 +656,8 @@ export default function App() {
         { key: 'texture', label: 'Texture', min: -100, max: 100, step: 1 },
         { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1 },
         { key: 'dehaze',  label: 'Dehaze',  min: -100, max: 100, step: 1 },
+        { key: 'sharpness', label: 'Detail Sharpness', min: 0.0, max: 2.0, step: 0.05 },
+        { key: 'sharpness_mask', label: 'Luminance Mask', min: 0.0, max: 1.0, step: 0.05 },
       ],
     },
     {
@@ -574,12 +716,71 @@ export default function App() {
           </div>
 
           {selectedFile && (
-            <div className="sidebar-presets">
-              <span className="presets-label">Presets</span>
-              <div className="preset-row">
-                <button className="preset-btn" onClick={() => applyPreset('k64')}>K64</button>
-                <button className="preset-btn" onClick={() => applyPreset('portra')}>Portra</button>
-                <button className="preset-btn" onClick={() => applyPreset('trix')}>Tri-X</button>
+            <div className="sidebar-presets-panel">
+              <div className="presets-panel-header">
+                <span className="presets-label">Presets</span>
+                <label className="presets-filter-toggle" title="Filter presets to match current film stock">
+                  <input
+                    type="checkbox"
+                    checked={filterByStock}
+                    onChange={(e) => setFilterByStock(e.target.checked)}
+                  />
+                  <span>Match Stock</span>
+                </label>
+              </div>
+
+              {/* Save preset form */}
+              <div className="preset-save-bar">
+                <input
+                  type="text"
+                  className="preset-name-input"
+                  placeholder="New preset name..."
+                  value={newPresetName}
+                  onChange={(e) => setNewPresetName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') savePreset();
+                  }}
+                />
+                <button className="preset-save-btn" onClick={savePreset} title="Save current settings as preset">
+                  Save
+                </button>
+              </div>
+
+              {/* Presets List */}
+              <div className="preset-list">
+                {filteredPresets.length === 0 ? (
+                  <div className="preset-list-empty">
+                    No presets found.
+                  </div>
+                ) : (
+                  filteredPresets.map(preset => {
+                    const stockObj = profiles.stocks.find(s => s.id === preset.stock);
+                    const stockName = stockObj ? stockObj.name.replace(/Kodak |Fujifilm |Fuji /g, '') : preset.stock;
+                    return (
+                      <div
+                        key={preset.id}
+                        className={`preset-item ${preset.isBuiltin ? 'builtin' : 'user'}`}
+                        onClick={() => applyPreset(preset)}
+                      >
+                        <div className="preset-info">
+                          <span className="preset-item-name">{preset.name}</span>
+                          <span className={`preset-stock-badge ${preset.stock}`}>
+                            {stockName}
+                          </span>
+                        </div>
+                        {!preset.isBuiltin && (
+                          <button
+                            className="preset-delete-btn"
+                            onClick={(e) => deletePreset(preset.id, e)}
+                            title="Delete preset"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           )}
@@ -769,6 +970,38 @@ export default function App() {
                   <div className="section-body">
                     {group.rows.map(({ key, label, min, max, step }) => {
                       const isDirty = params[key] !== DEFAULT_PARAMS[key];
+                      
+                      let sliderMin = min;
+                      let sliderMax = max;
+                      let sliderStep = step;
+                      let sliderVal = params[key];
+                      let sliderOnChange = set(key);
+                      let sliderClass = `slider${isDirty ? ' slider--dirty' : ''}`;
+
+                      if (key === 'temp') {
+                        sliderMin = 2000;
+                        sliderMax = 20000;
+                        sliderStep = 50;
+                        sliderVal = Math.max(2000, Math.min(20000, Math.round(T_as_shot + params.temp * 80)));
+                        sliderOnChange = (e) => {
+                          const val = parseInt(e.target.value, 10);
+                          const offset = (val - T_as_shot) / 80.0;
+                          setParams(p => ({ ...p, temp: offset }));
+                        };
+                        sliderClass = `slider slider-temp${isDirty ? ' slider--dirty' : ''}`;
+                      } else if (key === 'tint') {
+                        sliderMin = -150;
+                        sliderMax = 150;
+                        sliderStep = 1;
+                        sliderVal = Math.max(-150, Math.min(150, Math.round(tint_as_shot + params.tint * 2)));
+                        sliderOnChange = (e) => {
+                          const val = parseInt(e.target.value, 10);
+                          const offset = (val - tint_as_shot) / 2.0;
+                          setParams(p => ({ ...p, tint: offset }));
+                        };
+                        sliderClass = `slider slider-tint${isDirty ? ' slider--dirty' : ''}`;
+                      }
+
                       return (
                         <div className="slider-row" key={key}>
                           <div className="slider-header">
@@ -787,9 +1020,9 @@ export default function App() {
                             </div>
                           </div>
                           <input
-                            type="range" min={min} max={max} step={step}
-                            value={params[key]} onChange={set(key)}
-                            className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                            type="range" min={sliderMin} max={sliderMax} step={sliderStep}
+                            value={sliderVal} onChange={sliderOnChange}
+                            className={sliderClass}
                           />
                         </div>
                       );

@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.65
 
 tone_response:
-  toe_strength: 0.40         # Moderate toe
-  toe_length: 0.32
-  midtone_contrast: 0.95     # Punchier than Portra
-  shoulder_strength: 0.70    # Decent shoulder roll-off
-  highlight_rolloff_start: 0.72
-  black_density_floor: 0.012  # Negative film base fog
+  toe_strength: 0.42         # Moderate toe — sits in the middle between consumer and pro
+  toe_length: 0.30           # Average shadow gradation
+  midtone_contrast: 1.02     # standard print-scan contrast
+  shoulder_strength: 0.62    # Decent shoulder — better highlight preservation
+  highlight_rolloff_start: 0.70  # Moderate highlight latitude
+  black_density_floor: 0.012  # Standard color negative D-min
   channel_toe_mult:      [0.95, 1.00, 1.15]
   channel_shoulder_mult: [0.92, 1.00, 1.20]
   channel_midtone_mult:  [1.02, 1.00, 0.96]
@@ -54,7 +54,6 @@ scanner:
   style: noritsu_smooth
   contrast: 1.00   # Neutral — Fuji scanned on Noritsu with no added contrast push
   warmth: 0.05
-  black_point: 0.020
   output_sharpening: 0.15
 chroma_coupling:
   hi_rolloff_start: 0.70

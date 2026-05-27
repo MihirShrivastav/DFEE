@@ -1,0 +1,74 @@
+stock_id: ultramax_400
+stock_name: Kodak UltraMax 400
+stock_type: color_negative
+
+adaptation:
+  base_iso: 400
+  default_strength: 1.00
+  camera_cast_compensation_sensitivity: 0.70
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.65
+
+tone_response:
+  toe_strength: 0.50         # Snappy consumer toe — shadows darken quickly but retain grain structure
+  toe_length: 0.28           # Shorter transition — more contrasty than Portra
+  midtone_contrast: 1.05     # Slightly punchy consumer saturation/midtone contrast
+  shoulder_strength: 0.55    # Moderate shoulder
+  highlight_rolloff_start: 0.68  # Earlier highlight compression
+  black_density_floor: 0.015  # Consumer-grade film base+fog (warm-tinted raised blacks)
+  channel_toe_mult:      [0.95, 0.98, 1.15]  # Blue channel has stronger shadow contrast
+  channel_shoulder_mult: [0.90, 0.95, 1.25]  # Blue highlights roll off early
+  channel_midtone_mult:  [1.03, 1.00, 0.94]  # Yellowish midtones
+
+color_response:
+  shadow_bias_lab: [0.0, -1.5, -2.5]     # Cool cyan/blue shadows
+  midtone_bias_lab: [0.0, 1.2, 2.5]      # Saturated, warm skin-friendly midtones
+  highlight_bias_lab: [0.0, 0.5, 2.0]    # Golden/creamy highlights
+  blue_cast_suppression: 0.25            # Keeps skies looking vibrant but natural
+  green_magenta_stabilization: 0.35
+
+hue_saturation_response:
+  saturation_boost: 1.35          # Saturated consumer color palette
+  red_orange_midtone_compression: 0.30   # Moderate control over warm skin tones
+  yellow_green_muting: 0.20              # Allows rich, saturated foliage greens
+  cyan_blue_highlight_compression: 0.35
+  neon_compression: 0.65
+  highlight_desaturation: 0.40           # Moderate highlight desaturation
+
+grain:
+  size: 0.55                 # Medium-coarse grain size (typical ISO 400 consumer film)
+  strength: 0.48             # Pronounced grain texture
+  chroma_strength: 0.12      # Noticeable chromatic grain elements
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.70
+
+halation:
+  trigger: specular_only
+  strength: 0.22             # Moderate halation
+  radius_inner: 5
+  radius_outer: 20
+  warm_core: [1.0, 0.60, 0.30]
+  red_fringe: [1.0, 0.20, 0.05]
+
+scanner:
+  style: frontier_soft
+  contrast: 1.02             # Moderate default print style
+  warmth: 0.10
+  output_sharpening: 0.15
+
+chroma_coupling:
+  hi_rolloff_start: 0.72
+  hi_rolloff_rate:  1.8
+  hi_compression:   0.55
+  sh_rolloff_start: 0.16
+  sh_compression:   0.48
+  hi_hue_conv_rad:  0.25
+  hi_hue_conv_str:  0.20
+
+dye_contamination:
+  r_to_g: 0.035
+  g_to_r: 0.020
+  b_to_g: 0.015
+  b_to_r: 0.010
+  r_to_b: 0.005
+  g_to_b: 0.008

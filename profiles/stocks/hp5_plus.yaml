@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.60
 
 tone_response:
-  toe_strength: 0.40         # Softer, more forgiving toe than Tri-X
-  toe_length: 0.33           # Gradual shadow entry — wide latitude
-  midtone_contrast: 1.05     # Slightly punchy midtones but more gentle than Tri-X
-  shoulder_strength: 0.74    # Smooth, long shoulder — HP5 holds highlights beautifully
-  highlight_rolloff_start: 0.68
-  black_density_floor: 0.010  # B&W negative base fog
+  toe_strength: 0.38         # Softer, more forgiving toe than Tri-X
+  toe_length: 0.34           # Gradual shadow entry — wide latitude
+  midtone_contrast: 1.00     # Flatter midtones — classic HP5 pushability
+  shoulder_strength: 0.70    # Smooth, long shoulder — HP5 holds highlights beautifully
+  highlight_rolloff_start: 0.70  # Standard highlight latitude
+  black_density_floor: 0.012  # B&W negative base fog
   channel_toe_mult:      [1.0, 1.0, 1.0]   # B&W: all channels identical
   channel_shoulder_mult: [1.0, 1.0, 1.0]
   channel_midtone_mult:  [1.0, 1.0, 1.0]
@@ -56,7 +56,6 @@ scanner:
   style: darkroom_print
   contrast: 1.05             # HP5 traditionally printed with moderate contrast
   warmth: 0.00
-  black_point: 0.012
   output_sharpening: 0.18
 chroma_coupling:
   # B&W stock: chroma coupling is a no-op (monochrome has no colour to compress)

@@ -10,12 +10,12 @@ adaptation:
   shadow_noise_sensitivity: 0.40
 
 tone_response:
-  toe_strength: 0.42         # Moderate toe — more forgiving than Velvia
-  toe_length: 0.28           # Average shadow gradation
-  midtone_contrast: 1.08     # Slightly punchy, but not extreme
-  shoulder_strength: 0.70    # Decent shoulder roll-off
-  highlight_rolloff_start: 0.68  # More highlight latitude than Velvia
-  black_density_floor: 0.004  # Reversal — very clean blacks
+  toe_strength: 0.50         # Moderately firm toe, but more open than Velvia or Kodachrome
+  toe_length: 0.28           # Standard chrome shadow gradation, relatively short transition
+  midtone_contrast: 1.08     # Punchy, clean reversal contrast
+  shoulder_strength: 0.76     # Strong shoulder to control highlight blowout
+  highlight_rolloff_start: 0.68  # Reversal latitude
+  black_density_floor: 0.003  # Reversal D-min is very clean
   channel_toe_mult:      [1.00, 1.00, 1.15]
   channel_shoulder_mult: [1.00, 1.00, 1.20]
   channel_midtone_mult:  [1.00, 1.00, 0.97]
@@ -55,7 +55,6 @@ scanner:
   style: noritsu_smooth
   contrast: 1.03
   warmth: 0.02
-  black_point: 0.004
   output_sharpening: 0.15
 
 chroma_coupling:

@@ -29,7 +29,9 @@ class RenderPlanSolver:
             "grain_size": -1.0,
             "grain_roughness": -1.0,
             "halation_amount": "Auto",
-            "output_finish": "Natural"
+            "output_finish": "Natural",
+            "sharpness": 0.0,
+            "sharpness_mask": 0.5,
         }
         if user_controls:
             controls.update(user_controls)
@@ -125,8 +127,10 @@ class RenderPlanSolver:
         toe_strength = float(tone["toe_strength"])
         shoulder_strength = float(tone["shoulder_strength"])
         highlight_rolloff_start = float(tone["highlight_rolloff_start"])
+        # black_density_floor: the inherent film base + fog (FB+F) — always present,
+        # but kept small. This is NOT the scene-driven shadow lift.
         black_density = float(tone["black_density_floor"])
-        
+
         # Adapt tone curve to scene dynamic range
         if tonal["dynamic_range_stops"] > 11.5:
             # High DR: soften shoulder and toe to preserve detail
@@ -153,7 +157,7 @@ class RenderPlanSolver:
             "midtone_density":         float(tone["midtone_contrast"]),
             "shoulder_strength":       shoulder_strength,
             "highlight_rolloff_start": highlight_rolloff_start,
-            "black_density_floor":     black_density,
+            "black_density_floor":     black_density,  # Inherent film FB+F from stock profile
             "highlight_desaturation":  highlight_desat,
             "blue_cyan_compression":   float(hsv_resp["cyan_blue_highlight_compression"]),
             "red_orange_compression":  float(hsv_resp["red_orange_midtone_compression"]),
@@ -271,7 +275,9 @@ class RenderPlanSolver:
             "grain_chroma_strength": float(g_cfg["chroma_strength"]),
             "halation_strength": halation_strength,
             "bloom_strength": bloom_strength,
-            "edge_softening": edge_softening
+            "edge_softening": edge_softening,
+            "sharpness": float(controls.get("sharpness", 0.0)),
+            "sharpness_mask": float(controls.get("sharpness_mask", 0.5))
         }
         
         # Scanner finish: both contrast fields are now 1.0-centred slope multipliers.
