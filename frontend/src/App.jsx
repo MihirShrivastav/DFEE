@@ -51,6 +51,7 @@ const DEFAULT_PARAMS = {
   halation: 'Auto',
   sharpness: 0.0,
   sharpness_mask: 0.5,
+  film_color: 100,
 };
 
 const HSL_RANGES_KEYS = ['red','orange','yellow','green','aqua','blue','purple','magenta'];
@@ -108,6 +109,7 @@ export default function App() {
   const [curves, setCurves] = useState(DEFAULT_CURVES);
   const [hsl, setHsl] = useState(DEFAULT_HSL);
   const [metadata, setMetadata] = useState(null);
+  const [showExif, setShowExif] = useState(true);
 
   // ── Presets states ──────────────────────────────────────────────────────
   const [userPresets, setUserPresets] = useState(() => {
@@ -146,6 +148,53 @@ export default function App() {
   };
 
   const { temp: T_as_shot, tint: tint_as_shot } = getAsShotWB();
+
+  const formatShutterSpeed = (ss, ssStr) => {
+    if (ssStr) return ssStr;
+    if (!ss) return '';
+    const val = parseFloat(ss);
+    if (isNaN(val)) return ss;
+    if (val >= 1) {
+      return `${val.toFixed(1).replace(/\.0$/, '')}"`;
+    }
+    const reciprocal = Math.round(1 / val);
+    return `1/${reciprocal}s`;
+  };
+
+  const formatFocalLength = (fl) => {
+    if (!fl || fl === 'None') return '';
+    const val = parseFloat(fl);
+    if (isNaN(val)) return fl;
+    return `${Math.round(val)}mm`;
+  };
+
+  const formatAperture = (ap) => {
+    if (!ap || ap === 'None') return '';
+    const val = parseFloat(ap);
+    if (isNaN(val)) return ap;
+    return `f/${val.toFixed(1).replace(/\.0$/, '')}`;
+  };
+
+  const formatMegapixels = (width, height) => {
+    if (!width || !height) return '';
+    const w = parseInt(width, 10);
+    const h = parseInt(height, 10);
+    if (isNaN(w) || isNaN(h)) return '';
+    return `${((w * h) / 1000000).toFixed(1)}MP`;
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+        return;
+      }
+      if (e.key === 'i' || e.key === 'I') {
+        setShowExif(v => !v);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
@@ -187,6 +236,7 @@ export default function App() {
   const inflightRef    = useRef(null);
   const historyDebRef  = useRef(null);
   const lastPushedRef  = useRef(null);  // snapshot of last history entry pushed
+  const histogramCanvasRef = useRef(null);
 
   // ── Zoom state ──────────────────────────────────────────────────────────
   const [zoom,    setZoom]    = useState(1.0); // 1.0 = fit
@@ -460,6 +510,7 @@ export default function App() {
         + `&halation=${encodeURIComponent(params.halation)}`
         + `&sharpness=${params.sharpness}`
         + `&sharpness_mask=${params.sharpness_mask}`
+        + `&film_color=${params.film_color}`
         + `&t=${Date.now()}`;
 
       setPreviewLoading(true);
@@ -490,9 +541,124 @@ export default function App() {
     params.saturation, params.vibrance,
     params.clarity, params.texture, params.dehaze, params.bloom,
     params.adaptation, params.grain, params.grain_strength, params.grain_size, params.grain_roughness, params.halation,
-    params.sharpness, params.sharpness_mask,
+    params.sharpness, params.sharpness_mask, params.film_color,
     curves, hsl,
   ]);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = histogramCanvasRef.current;
+      if (!canvas) return;
+
+      const offscreen = document.createElement('canvas');
+      const ctxOff = offscreen.getContext('2d');
+      if (!ctxOff) return;
+
+      const analysisSize = 128;
+      offscreen.width = analysisSize;
+      offscreen.height = analysisSize;
+      ctxOff.drawImage(img, 0, 0, analysisSize, analysisSize);
+
+      try {
+        const imgData = ctxOff.getImageData(0, 0, analysisSize, analysisSize);
+        const data = imgData.data;
+
+        const rHist = new Array(256).fill(0);
+        const gHist = new Array(256).fill(0);
+        const bHist = new Array(256).fill(0);
+        const lumaHist = new Array(256).fill(0);
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const luma = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+
+          rHist[r]++;
+          gHist[g]++;
+          bHist[b]++;
+          lumaHist[luma]++;
+        }
+
+        const width = canvas.width;
+        const height = canvas.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.clearRect(0, 0, width, height);
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.lineWidth = 1;
+        for (let x = width / 4; x < width; x += width / 4) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+
+        const smooth = (arr) => {
+          const smoothed = [...arr];
+          for (let iter = 0; iter < 2; iter++) {
+            for (let i = 1; i < 255; i++) {
+              smoothed[i] = (smoothed[i - 1] + smoothed[i] + smoothed[i + 1]) / 3;
+            }
+          }
+          return smoothed;
+        };
+
+        const rSmooth = smooth(rHist);
+        const gSmooth = smooth(gHist);
+        const bSmooth = smooth(bHist);
+        const lSmooth = smooth(lumaHist);
+
+        let maxVal = 1;
+        for (let i = 2; i < 254; i++) {
+          maxVal = Math.max(maxVal, rSmooth[i], gSmooth[i], bSmooth[i], lSmooth[i]);
+        }
+
+        const drawChannel = (hist, color) => {
+          ctx.beginPath();
+          ctx.moveTo(0, height);
+          for (let i = 0; i < 256; i++) {
+            const x = (i / 255) * width;
+            const normalizedVal = Math.min(hist[i] / maxVal, 1.0);
+            const y = height - normalizedVal * (height - 4);
+            ctx.lineTo(x, y);
+          }
+          ctx.lineTo(width, height);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+        };
+
+        ctx.globalCompositeOperation = 'screen';
+        drawChannel(rSmooth, 'rgba(235, 77, 75, 0.55)');
+        drawChannel(gSmooth, 'rgba(76, 175, 80, 0.55)');
+        drawChannel(bSmooth, 'rgba(58, 123, 213, 0.55)');
+        
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.beginPath();
+        for (let i = 0; i < 256; i++) {
+          const x = (i / 255) * width;
+          const normalizedVal = Math.min(lSmooth[i] / maxVal, 1.0);
+          const y = height - normalizedVal * (height - 4);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+      } catch (err) {
+        console.error("Histogram error:", err);
+      }
+    };
+    img.src = previewUrl;
+  }, [previewUrl]);
 
   const handleExport = async () => {
     if (!selectedFile) return;
@@ -530,6 +696,7 @@ export default function App() {
           halation: params.halation,
           sharpness: params.sharpness,
           sharpness_mask: params.sharpness_mask,
+          film_color: params.film_color,
           export_format: exportFormat,
         }),
       });
@@ -827,12 +994,51 @@ export default function App() {
                 <button className="zoom-btn zoom-btn--1to1" onClick={() => zoomTo(2.0)} title="1:1 pixel view">
                   <span>1:1</span>
                 </button>
+                <button
+                  className={`zoom-btn ${showExif ? 'zoom-btn--active' : ''}`}
+                  onClick={() => setShowExif(v => !v)}
+                  title="Toggle EXIF Metadata Overlay (Key: I)"
+                  style={{ marginLeft: 4 }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="16" x2="12" y2="12"/>
+                    <line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                </button>
               </div>
 
               {zoom === FIT && (
                 <div className="view-labels">
                   <span className="view-label">RAW</span>
                   <span className="view-label">DFEE</span>
+                </div>
+              )}
+
+              {showExif && metadata && (
+                <div className="exif-badge">
+                  <div className="exif-camera">
+                    {(() => {
+                      let text = '';
+                      if (metadata.camera_make && metadata.camera_make !== 'Unknown') text += metadata.camera_make + ' ';
+                      if (metadata.camera_model && metadata.camera_model !== 'Unknown') text += metadata.camera_model;
+                      return text.trim() || 'Unknown Camera';
+                    })()}
+                  </div>
+                  <div className="exif-details">
+                    {[
+                      metadata.lens_model && metadata.lens_model !== 'Unknown' && metadata.lens_model !== 'None' ? metadata.lens_model : null,
+                      formatFocalLength(metadata.focal_length),
+                      formatAperture(metadata.aperture),
+                      formatShutterSpeed(metadata.shutter_speed, metadata.shutter_speed_str),
+                      metadata.iso ? `ISO ${metadata.iso}` : null
+                    ].filter(Boolean).join('   •   ')}
+                    {metadata.image_width && metadata.image_height && (
+                      <span className="exif-dims">
+                        {'   •   '}{formatMegapixels(metadata.image_width, metadata.image_height)} ({metadata.image_width} × {metadata.image_height})
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -891,6 +1097,14 @@ export default function App() {
             </button>
           </div>
           <div className="controls-body">
+            <div className="histogram-container">
+              <canvas
+                ref={histogramCanvasRef}
+                width={260}
+                height={120}
+                className="histogram-canvas"
+              />
+            </div>
 
             {/* Profile */}
             <div className="control-group">
@@ -928,6 +1142,50 @@ export default function App() {
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
+                  </div>
+                  <div className="field" style={{ marginTop: 14 }}>
+                    <div className="slider-header" style={{ marginBottom: 4 }}>
+                      <span className="slider-label">Auto-Compensation (Adaptation)</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {params.adaptation !== DEFAULT_PARAMS.adaptation && (
+                          <button
+                            className="revert-btn"
+                            title="Reset Auto-Compensation to default"
+                            onClick={() => setParams(p => ({ ...p, adaptation: DEFAULT_PARAMS.adaptation }))}
+                          >↺</button>
+                        )}
+                        <span className={`slider-value${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider-value--dirty' : ''}`}>
+                          {Math.round(params.adaptation * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="range" min={0} max={1.5} step={0.05}
+                      value={params.adaptation} onChange={set('adaptation')}
+                      className={`slider${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider--dirty' : ''}`}
+                    />
+                  </div>
+                  <div className="field" style={{ marginTop: 14 }}>
+                    <div className="slider-header" style={{ marginBottom: 4 }}>
+                      <span className="slider-label">Film Color</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {params.film_color !== DEFAULT_PARAMS.film_color && (
+                          <button
+                            className="revert-btn"
+                            title="Reset Film Color to default"
+                            onClick={() => setParams(p => ({ ...p, film_color: DEFAULT_PARAMS.film_color }))}
+                          >↺</button>
+                        )}
+                        <span className={`slider-value${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider-value--dirty' : ''}`}>
+                          {Math.round(params.film_color)}
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="range" min={0} max={200} step={5}
+                      value={params.film_color} onChange={set('film_color')}
+                      className={`slider slider-film-color${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider--dirty' : ''}`}
+                    />
                   </div>
                 </div>
               )}
@@ -1040,26 +1298,6 @@ export default function App() {
               </div>
               {openSections['Film Modifiers'] && (
                 <div className="section-body">
-                  <div className="slider-row">
-                    <div className="slider-header">
-                      <span className="slider-label">Adaptation</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {params.adaptation !== DEFAULT_PARAMS.adaptation && (
-                          <button
-                            className="revert-btn"
-                            title="Reset Adaptation to default"
-                            onClick={() => setParams(p => ({ ...p, adaptation: DEFAULT_PARAMS.adaptation }))}
-                          >↺</button>
-                        )}
-                        <span className={`slider-value${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider-value--dirty' : ''}`}>
-                          {params.adaptation.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    <input type="range" min={0} max={1} step={0.05}
-                      value={params.adaptation} onChange={set('adaptation')}
-                      className={`slider${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider--dirty' : ''}`} />
-                  </div>
                   {/* Custom Grain Controls */}
                   <div style={{ marginTop: 12, marginBottom: 12 }}>
                     <label className="checkbox-row">

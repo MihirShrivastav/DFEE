@@ -28,7 +28,7 @@ def _read_exif(filepath):
     result = {}
     try:
         with open(filepath, 'rb') as f:
-            tags = exifread.process_file(f, stop_tag='EXIF LensModel', details=False)
+            tags = exifread.process_file(f, details=False)
 
         # ISO
         for key in ('EXIF ISOSpeedRatings', 'Image ISOSpeedRatings'):
@@ -45,6 +45,7 @@ def _read_exif(filepath):
                 v = _safe_exif_ratio(tags[key])
                 if v is not None:
                     result['shutter_speed'] = v
+                    result['shutter_speed_str'] = str(tags[key]).strip()
                 break
 
         # Aperture
@@ -68,6 +69,12 @@ def _read_exif(filepath):
             result['make'] = str(tags['Image Make']).strip()
         if 'Image Model' in tags:
             result['model'] = str(tags['Image Model']).strip()
+
+        # Lens Model
+        for key in ('EXIF LensModel', 'Image LensModel'):
+            if key in tags:
+                result['lens_model'] = str(tags[key]).strip()
+                break
 
     except Exception:
         pass
@@ -155,16 +162,20 @@ class RawIngestor:
         model = exif.get('model', 'Unknown')
 
         # Fallbacks if EXIF failed
-        iso          = exif.get('iso',          100)
-        shutter      = exif.get('shutter_speed', 1 / 125.0)
-        aperture     = exif.get('aperture',      4.0)
-        focal_length = exif.get('focal_length',  None)
+        iso               = exif.get('iso',               100)
+        shutter           = exif.get('shutter_speed',     1 / 125.0)
+        shutter_speed_str = exif.get('shutter_speed_str', '')
+        aperture          = exif.get('aperture',          4.0)
+        focal_length      = exif.get('focal_length',      None)
+        lens_model        = exif.get('lens_model',        '')
 
         return {
             'camera_make':             make,
             'camera_model':            model,
+            'lens_model':              lens_model,
             'iso':                     iso,
             'shutter_speed':           shutter,
+            'shutter_speed_str':       shutter_speed_str,
             'aperture':                aperture,
             'focal_length':            focal_length,
             'white_balance_multipliers': wb_multipliers[:4],

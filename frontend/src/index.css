@@ -1661,9 +1661,87 @@ optgroup option {
   background: linear-gradient(to right, #3A7BD5, #ECEFF1, #F2AF29) !important;
 }
 
+/* Film Color slider — gradient from neutral gray to rich dye color to hyper-saturated */
+.slider.slider-film-color {
+  height: 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  background: linear-gradient(
+    to right,
+    #8a8a8a 0%,
+    #a89080 25%,
+    #c4785a 50%,
+    #d45e3a 70%,
+    #e82e1a 100%
+  ) !important;
+}
+
 .slider.slider-tint {
   height: 6px;
   border-radius: 3px;
   border: 1px solid rgba(0, 0, 0, 0.4);
   background: linear-gradient(to right, #4CAF50, #ECEFF1, #E91E63) !important;
+}
+
+/* ─── Histogram ───────────────────────────────── */
+.histogram-container {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  margin: 12px 14px;
+  height: 120px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.histogram-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* EXIF Overlay Badge */
+.exif-badge {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 15;
+  background: rgba(14, 14, 14, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  font-family: inherit;
+  user-select: none;
+}
+
+.exif-camera {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+
+.exif-details {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: monospace;
+}
+
+.exif-dims {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.zoom-btn.zoom-btn--active {
+  color: var(--accent) !important;
+  background: var(--accent-dim) !important;
 }

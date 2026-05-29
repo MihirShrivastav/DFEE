@@ -22,6 +22,9 @@ class FilmRenderer:
         finish    = render_plan["scanner_finish"]
         stock_type = render_plan.get("stock_type", "color_negative")
 
+        # Film Color density multiplier: 0=no film color, 100=stock default, 200=pushed
+        fc = float(response.get("film_color", 100.0)) / 100.0
+
         # 1. Pre-Film Normalization (exposure, cast, highlight repair)
         rgb_proc = self._apply_pre_film_normalization(rgb_linear, masks, pre_film)
 
@@ -33,15 +36,15 @@ class FilmRenderer:
         rgb_proc = self._apply_film_tone_response(rgb_proc, response)
 
         # 4. Cross-channel dye contamination (inter-image effect)
-        rgb_proc = self._apply_dye_contamination(rgb_proc, response)
+        rgb_proc = self._apply_dye_contamination(rgb_proc, response, fc)
 
         # 5. Color Response — zone × hue × saturation using ACTUAL profile values
         if stock_type != "monochrome":
-            rgb_proc = self._apply_color_response(rgb_proc, masks, response, finish)
+            rgb_proc = self._apply_color_response(rgb_proc, masks, response, finish, fc)
 
         # 6. Luminance-chroma coupling (smooth highlight/shadow chroma rolloff)
         if stock_type != "monochrome":
-            rgb_proc = self._apply_luminance_chroma_coupling(rgb_proc, response)
+            rgb_proc = self._apply_luminance_chroma_coupling(rgb_proc, response, fc)
 
         # 7. Local Contrast and Acutance Shaping
         rgb_proc = self._apply_acutance_shaping(rgb_proc, effects)
@@ -178,7 +181,7 @@ class FilmRenderer:
 
     # ─── Cross-Channel Dye Contamination ────────────────────────────────────────────
 
-    def _apply_dye_contamination(self, rgb_proc, response):
+    def _apply_dye_contamination(self, rgb_proc, response, fc=1.0):
         """
         Simulates inter-image dye contamination between film layers.
 
@@ -194,15 +197,15 @@ class FilmRenderer:
         Defaults to identity (no effect) if dye_contamination not in profile.
         """
         dc = response.get("dye_contamination", {})
-        if not dc:
+        if not dc or fc == 0.0:
             return rgb_proc
 
-        r2g = float(dc.get("r_to_g", 0.0))
-        g2r = float(dc.get("g_to_r", 0.0))
-        b2g = float(dc.get("b_to_g", 0.0))
-        b2r = float(dc.get("b_to_r", 0.0))
-        r2b = float(dc.get("r_to_b", 0.0))
-        g2b = float(dc.get("g_to_b", 0.0))
+        r2g = float(dc.get("r_to_g", 0.0)) * fc
+        g2r = float(dc.get("g_to_r", 0.0)) * fc
+        b2g = float(dc.get("b_to_g", 0.0)) * fc
+        b2r = float(dc.get("b_to_r", 0.0)) * fc
+        r2b = float(dc.get("r_to_b", 0.0)) * fc
+        g2b = float(dc.get("g_to_b", 0.0)) * fc
 
         # Skip entirely if all zeros (fast path)
         if r2g == 0 and g2r == 0 and b2g == 0 and b2r == 0 and r2b == 0 and g2b == 0:
@@ -222,10 +225,11 @@ class FilmRenderer:
 
     # ─── Color Response ───────────────────────────────────────────────────────
 
-    def _apply_color_response(self, rgb_proc, masks, response, finish):
+    def _apply_color_response(self, rgb_proc, masks, response, finish, fc=1.0):
         """
         Performs zone × hue × saturation color response in OKLCH/OKLab space.
         Color biases now come from the ACTUAL stock profile YAML values.
+        fc (film_color): scales all color personality; 0=neutral, 1=stock default, 2=pushed.
         """
         oklab = rgb_to_oklab(rgb_proc)
         lch   = oklab_to_oklch(oklab)
@@ -237,7 +241,8 @@ class FilmRenderer:
         # RAW linear data is tonally flat and chromatically desaturated compared
         # to real film dye layers. This multiplicative lift compensates, giving
         # each stock its characteristic colour density before any per-hue shaping.
-        chroma_boost = response.get("chroma_boost", 1.0)
+        # fc scales the *deviation* from neutral (1.0): at fc=0 → boost=1.0 (neutral)
+        chroma_boost = 1.0 + (response.get("chroma_boost", 1.0) - 1.0) * fc
         if chroma_boost != 1.0:
             C = C * chroma_boost
 
@@ -264,28 +269,28 @@ class FilmRenderer:
         a = oklab[:, :, 1].copy()
         b = oklab[:, :, 2].copy()
 
-        # Shadow zone (Z1 + partial Z2)
+        # Shadow zone (Z1 + partial Z2) — bias a/b scaled by fc
         shadow_zone  = Z1 + Z2 * 0.5
-        a += shadow_zone * shadow_bias[1] * SCALE
-        b += shadow_zone * shadow_bias[2] * SCALE
+        a += shadow_zone * shadow_bias[1] * SCALE * fc
+        b += shadow_zone * shadow_bias[2] * SCALE * fc
 
-        # Midtone zone (Z3 + partial Z2 and Z4)
+        # Midtone zone (Z3 + partial Z2 and Z4) — bias a/b scaled by fc
         mid_zone = Z2 * 0.5 + Z3 + Z4 * 0.5
-        a += mid_zone * midtone_bias[1] * SCALE
-        b += mid_zone * midtone_bias[2] * SCALE
+        a += mid_zone * midtone_bias[1] * SCALE * fc
+        b += mid_zone * midtone_bias[2] * SCALE * fc
 
-        # Highlight zone (Z5 + partial Z4)
+        # Highlight zone (Z5 + partial Z4) — bias a/b scaled by fc
         hi_zone = Z4 * 0.5 + Z5
-        a += hi_zone * highlight_bias[1] * SCALE
-        b += hi_zone * highlight_bias[2] * SCALE
+        a += hi_zone * highlight_bias[1] * SCALE * fc
+        b += hi_zone * highlight_bias[2] * SCALE * fc
 
         # ── 2. Hue-specific saturation compression ────────────────────────────
         # Red/orange band ≈ 0.3–0.9 rad, blue/cyan ≈ 3.5–4.5 rad
         weight_red_orange = np.clip(np.cos(H - 0.6), 0.0, 1.0) ** 2
         weight_blue_cyan  = np.clip(np.cos(H - 4.0), 0.0, 1.0) ** 2
 
-        red_comp  = response.get("red_orange_compression",  0.0)
-        blue_comp = response.get("blue_cyan_compression",   0.0)
+        red_comp  = response.get("red_orange_compression",  0.0) * fc
+        blue_comp = response.get("blue_cyan_compression",   0.0) * fc
 
         C_new = C * (1.0 - red_comp  * weight_red_orange * Z3)
         C_new = C_new * (1.0 - blue_comp * weight_blue_cyan  * Z5)
@@ -295,7 +300,7 @@ class FilmRenderer:
         # (neon lights, LED signs, artificial colours) are compressed toward a
         # "film maximum chroma" rather than reproduced linearly.
         # neon_compression ∈ [0,1]: 0 = no effect, 1 = heavy compression.
-        neon_comp = response.get("neon_compression", 0.0)
+        neon_comp = response.get("neon_compression", 0.0) * fc
         if neon_comp > 0.0:
             # The "knee" in OKLCH chroma space.
             # Typical natural-scene chroma in OKLab: 0.0–0.20.
@@ -311,8 +316,8 @@ class FilmRenderer:
             C_neon = knee_start + (C_new - knee_start) * (1.0 - neon_comp * knee_w)
             C_new  = C_new * (1.0 - knee_w) + C_neon * knee_w
 
-        # ── 4. Highlight desaturation ─────────────────────────────────────────
-        h_desat = response.get("highlight_desaturation", 0.0)
+        # ── 4. Highlight desaturation — scaled by fc ──────────────────────────
+        h_desat = response.get("highlight_desaturation", 0.0) * fc
         C_final = C_new * (1.0 - h_desat * Z5)
 
         # Write back — apply BOTH the chroma compression (in LCH) and the
@@ -331,9 +336,10 @@ class FilmRenderer:
 
     # ─── Luminance-Chroma Coupling ────────────────────────────────────────────────────
 
-    def _apply_luminance_chroma_coupling(self, rgb_proc, response):
+    def _apply_luminance_chroma_coupling(self, rgb_proc, response, fc=1.0):
         """
         Applies luminance-dependent chroma compression matching real film dye behaviour.
+        fc (film_color): scales compression strengths and hue convergence.
 
         Physical basis:
           Film forms colour by dye-coupler chemistry. The amount of dye formed at any
@@ -372,19 +378,19 @@ class FilmRenderer:
         if stock_type == "color_negative":
             hi_start   = float(cc.get("hi_rolloff_start",  0.75))
             hi_rate    = float(cc.get("hi_rolloff_rate",   1.8))
-            hi_comp    = float(cc.get("hi_compression",    0.50))
+            hi_comp    = float(cc.get("hi_compression",    0.50)) * fc
             sh_start   = float(cc.get("sh_rolloff_start",  0.18))
-            sh_comp    = float(cc.get("sh_compression",    0.45))
+            sh_comp    = float(cc.get("sh_compression",    0.45)) * fc
             hi_hue_t   = float(cc.get("hi_hue_conv_rad",  0.28))  # warm cream
-            hi_hue_str = float(cc.get("hi_hue_conv_str",  0.18))
+            hi_hue_str = float(cc.get("hi_hue_conv_str",  0.18)) * fc
         elif stock_type == "color_reversal":
             hi_start   = float(cc.get("hi_rolloff_start",  0.70))
             hi_rate    = float(cc.get("hi_rolloff_rate",   3.0))
-            hi_comp    = float(cc.get("hi_compression",    0.70))
+            hi_comp    = float(cc.get("hi_compression",    0.70)) * fc
             sh_start   = float(cc.get("sh_rolloff_start",  0.16))
-            sh_comp    = float(cc.get("sh_compression",    0.55))
+            sh_comp    = float(cc.get("sh_compression",    0.55)) * fc
             hi_hue_t   = float(cc.get("hi_hue_conv_rad",  0.15))  # near-neutral
-            hi_hue_str = float(cc.get("hi_hue_conv_str",  0.12))
+            hi_hue_str = float(cc.get("hi_hue_conv_str",  0.12)) * fc
         else:  # monochrome (shouldn’t be called, but safe)
             return rgb_proc
 

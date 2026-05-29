@@ -32,6 +32,7 @@ class RenderPlanSolver:
             "output_finish": "Natural",
             "sharpness": 0.0,
             "sharpness_mask": 0.5,
+            "film_color": 100.0,
         }
         if user_controls:
             controls.update(user_controls)
@@ -273,6 +274,8 @@ class RenderPlanSolver:
             "dye_contamination":   stock_profile.dye_contamination,
             # stock_type needed by chroma coupling step
             "stock_type":          stock_profile.stock_type,
+            # Film color density multiplier (0-200, 100=stock default)
+            "film_color":          float(controls.get("film_color", 100.0)),
         }
 
         # 4. Material Effects (Grain, Halation, Bloom)
