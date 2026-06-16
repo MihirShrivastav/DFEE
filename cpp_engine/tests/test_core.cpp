@@ -275,6 +275,58 @@ void test_pre_film_normalization() {
     assert(dst_oklab.at(0, 0, 2) > src_oklab.at(0, 0, 2));
 }
 
+void test_panchromatic_conversion() {
+    dfee::Image rgb(2, 1, 3);
+    rgb.pixels = {
+        0.8F, 0.2F, 0.1F,
+        0.1F, 0.8F, 0.2F,
+    };
+
+    dfee::FilmResponsePlan response;
+    response.pan_weight_r = 0.25F;
+    response.pan_weight_g = 0.55F;
+    response.pan_weight_b = 0.20F;
+
+    const dfee::FilmRenderer renderer;
+    const auto mono = renderer.apply_panchromatic_conversion(rgb, response);
+
+    require_close(mono.at(0, 0, 0), mono.at(0, 0, 1), 1.0e-6F);
+    require_close(mono.at(0, 0, 1), mono.at(0, 0, 2), 1.0e-6F);
+    require_close(mono.at(1, 0, 0), mono.at(1, 0, 1), 1.0e-6F);
+    require_close(mono.at(1, 0, 1), mono.at(1, 0, 2), 1.0e-6F);
+    assert(mono.at(1, 0, 0) > mono.at(0, 0, 0));
+}
+
+void test_film_tone_response() {
+    dfee::Image rgb(4, 1, 3);
+    rgb.pixels = {
+        0.02F, 0.02F, 0.02F,
+        0.18F, 0.18F, 0.18F,
+        0.55F, 0.55F, 0.55F,
+        1.35F, 1.35F, 1.35F,
+    };
+
+    dfee::FilmResponsePlan response;
+    response.toe_strength = 0.46F;
+    response.toe_length = 0.30F;
+    response.midtone_density = 1.08F;
+    response.shoulder_strength = 0.78F;
+    response.black_density_floor = 0.01F;
+    response.channel_toe_mult = {1.0F, 1.0F, 1.0F};
+    response.channel_shoulder_mult = {1.0F, 1.0F, 1.0F};
+    response.channel_midtone_mult = {1.0F, 1.0F, 1.0F};
+
+    const dfee::FilmRenderer renderer;
+    const auto toned = renderer.apply_film_tone_response(rgb, response);
+
+    assert(toned.at(0, 0, 0) >= response.black_density_floor);
+    assert(toned.at(1, 0, 0) > toned.at(0, 0, 0));
+    assert(toned.at(2, 0, 0) > toned.at(1, 0, 0));
+    assert(toned.at(3, 0, 0) <= 1.0F);
+    assert(toned.at(3, 0, 0) > toned.at(1, 0, 0));
+    assert(toned.at(3, 0, 0) < toned.at(2, 0, 0));
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -469,6 +521,8 @@ int main() {
         test_camera_bias_estimator();
         test_render_plan_solver();
         test_pre_film_normalization();
+        test_panchromatic_conversion();
+        test_film_tone_response();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";

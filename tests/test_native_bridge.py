@@ -254,6 +254,44 @@ class TestNativeBridge(unittest.TestCase):
         dst_high_spread = float(np.max(normalized[3, 3]) - np.min(normalized[3, 3]))
         self.assertLess(dst_high_spread, src_high_spread)
 
+    def test_python_panchromatic_reference_fixture(self):
+        rgb = np.array(
+            [[[0.8, 0.2, 0.1], [0.1, 0.8, 0.2]]],
+            dtype=np.float32,
+        )
+        response = {
+            "pan_weight_r": 0.25,
+            "pan_weight_g": 0.55,
+            "pan_weight_b": 0.20,
+        }
+        mono = FilmRenderer()._apply_panchromatic_conversion(rgb, response)
+        np.testing.assert_allclose(mono[:, :, 0], mono[:, :, 1], atol=1e-6)
+        np.testing.assert_allclose(mono[:, :, 1], mono[:, :, 2], atol=1e-6)
+        self.assertGreater(float(mono[0, 1, 0]), float(mono[0, 0, 0]))
+
+    def test_python_tone_response_reference_fixture(self):
+        rgb = np.array(
+            [[[0.02, 0.02, 0.02], [0.18, 0.18, 0.18], [0.55, 0.55, 0.55], [1.35, 1.35, 1.35]]],
+            dtype=np.float32,
+        )
+        response = {
+            "toe_strength": 0.46,
+            "toe_length": 0.30,
+            "midtone_density": 1.08,
+            "shoulder_strength": 0.78,
+            "black_density_floor": 0.01,
+            "channel_toe_mult": [1.0, 1.0, 1.0],
+            "channel_shoulder_mult": [1.0, 1.0, 1.0],
+            "channel_midtone_mult": [1.0, 1.0, 1.0],
+        }
+        toned = FilmRenderer()._apply_film_tone_response(rgb, response)
+        self.assertGreaterEqual(float(toned[0, 0, 0]), 0.01)
+        self.assertGreater(float(toned[0, 1, 0]), float(toned[0, 0, 0]))
+        self.assertGreater(float(toned[0, 2, 0]), float(toned[0, 1, 0]))
+        self.assertLessEqual(float(toned[0, 3, 0]), 1.0)
+        self.assertGreater(float(toned[0, 3, 0]), float(toned[0, 1, 0]))
+        self.assertLess(float(toned[0, 3, 0]), float(toned[0, 2, 0]))
+
     def test_select_file(self):
         raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)

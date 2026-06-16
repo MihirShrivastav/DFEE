@@ -9,6 +9,10 @@
 namespace dfee {
 namespace {
 
+[[nodiscard]] float clampf(const float value, const float low, const float high) {
+    return std::clamp(value, low, high);
+}
+
 struct OklabPixel {
     float l = 0.0F;
     float a = 0.0F;
@@ -94,6 +98,67 @@ Image FilmRenderer::apply_pre_film_normalization(
     }
 
     return normalized;
+}
+
+Image FilmRenderer::apply_panchromatic_conversion(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_panchromatic_conversion expects a 3-channel RGB image");
+    }
+
+    Image monochrome(rgb_linear.width, rgb_linear.height, 3);
+    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+        const float y_pan =
+            response.pan_weight_r * rgb_linear.pixels[i * 3 + 0] +
+            response.pan_weight_g * rgb_linear.pixels[i * 3 + 1] +
+            response.pan_weight_b * rgb_linear.pixels[i * 3 + 2];
+        monochrome.pixels[i * 3 + 0] = y_pan;
+        monochrome.pixels[i * 3 + 1] = y_pan;
+        monochrome.pixels[i * 3 + 2] = y_pan;
+    }
+    return monochrome;
+}
+
+Image FilmRenderer::apply_film_tone_response(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_film_tone_response expects a 3-channel RGB image");
+    }
+
+    Image toned(rgb_linear.width, rgb_linear.height, 3);
+    for (int channel = 0; channel < 3; ++channel) {
+        const float alpha = 1.0F + response.toe_strength * response.channel_toe_mult[static_cast<std::size_t>(channel)];
+        const float beta = 1.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
+        const float mid = response.midtone_density * response.channel_midtone_mult[static_cast<std::size_t>(channel)];
+        const float k = 2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
+
+        for (int y = 0; y < rgb_linear.height; ++y) {
+            for (int x = 0; x < rgb_linear.width; ++x) {
+                const float ch = rgb_linear.at(x, y, channel);
+                const float ch_safe = ch > 1.0F
+                    ? 1.0F - 1.0F / std::max(1.0e-6F, 1.0F + k * (ch - 1.0F))
+                    : ch;
+                const float ch_clamp = clampf(ch_safe, 1.0e-12F, 1.0F - 1.0e-12F);
+                float s_curve = std::pow(ch_clamp, alpha) /
+                    (std::pow(ch_clamp, alpha) + std::pow(1.0F - ch_clamp, beta));
+
+                const float delta = s_curve - 0.5F;
+                const float mid_weight = std::exp(-(delta * delta) / (2.0F * 0.12F * 0.12F));
+                if (mid != 1.0F) {
+                    const float s_curve_gamma = std::pow(s_curve, 1.0F / mid);
+                    s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
+                }
+
+                const float toe_fade = clampf(s_curve / 0.25F, 0.0F, 1.0F);
+                const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
+                toned.at(x, y, channel) = clamp01(s_curve + response.black_density_floor * shadow_weight);
+            }
+        }
+    }
+
+    return toned;
 }
 
 }  // namespace dfee
