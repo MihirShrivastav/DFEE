@@ -57,6 +57,27 @@ void test_tonal_analysis() {
     assert(tonal.white_point_actual > tonal.black_point_actual);
 }
 
+void test_color_analysis() {
+    dfee::Image rgb(4, 2, 3);
+    rgb.pixels = {
+        1.0F, 0.0F, 0.0F,   1.0F, 0.5F, 0.0F,   1.0F, 1.0F, 0.0F,   0.0F, 1.0F, 0.0F,
+        0.0F, 1.0F, 1.0F,   0.0F, 0.0F, 1.0F,   1.0F, 0.0F, 1.0F,   0.5F, 0.5F, 0.5F,
+    };
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+    const auto color = analyzer.analyze_color(rgb, zones);
+
+    assert(color.mean_chroma > 0.0F);
+    assert(color.sat_p95 >= color.mean_chroma);
+    assert(color.neon_risk > 0.0F);
+    assert(color.hue_entropy > 0.0F);
+    assert(color.red_orange_density > 0.0F);
+    assert(color.cyan_blue_ratio > 0.0F);
+    assert(color.warm_cool_ratio > 0.0F);
+    assert(!color.dominant_hue_bins[0].empty());
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -246,6 +267,7 @@ int main() {
         test_oklab_roundtrip();
         test_zone_partition();
         test_tonal_analysis();
+        test_color_analysis();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";

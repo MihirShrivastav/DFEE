@@ -50,7 +50,7 @@ Status values:
 | ID | Status | Task | Verification | Notes |
 | --- | --- | --- | --- | --- |
 | M3-001 | done | Port profile model fully to yaml-cpp and validate required schema | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | Native profile loading now uses yaml-cpp, enforces required stock/print sections, rejects invalid `stock_type` values, and skips invalid YAML files during directory listing. |
-| M3-002 | planned | Port color analyzer stages | Synthetic parity tests | Hue/chroma metrics and dominant hue bins. |
+| M3-002 | done | Port color analyzer stages | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | Native analyzer now computes hue/chroma metrics, zonal saturation summaries, dominant hue bins, hue entropy, warm/cool ratios, and neon-risk-style saturation pressure in a single pass plus histogram. |
 | M3-003 | planned | Port spatial analyzer stages | Synthetic parity tests | Texture, edge, specular, halation masks. |
 | M3-004 | planned | Port camera bias estimator | Python-vs-C++ report diff | Preserve current report fields. |
 | M3-005 | planned | Port solver and render-plan schema | Solver schema completeness test | Report shape must remain compatible. |

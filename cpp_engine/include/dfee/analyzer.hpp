@@ -31,6 +31,21 @@ struct ZoneMasks {
     std::array<LuminanceImage, 7> zones;
 };
 
+struct ColorAnalysis {
+    float sat_shadow_mean = 0.0F;
+    float sat_mid_mean = 0.0F;
+    float sat_highlight_mean = 0.0F;
+    float sat_p95 = 0.0F;
+    float neon_risk = 0.0F;
+    std::array<std::string, 3> dominant_hue_bins{"Red", "Orange", "Yellow"};
+    float hue_entropy = 0.0F;
+    float red_orange_density = 0.0F;
+    float green_yellow_density = 0.0F;
+    float warm_cool_ratio = 0.0F;
+    float cyan_blue_ratio = 0.0F;
+    float mean_chroma = 0.0F;
+};
+
 class ImageStateAnalyzer {
 public:
     [[nodiscard]] TonalDistribution analyze_tonal(
@@ -40,6 +55,10 @@ public:
     [[nodiscard]] ZoneMasks generate_zone_masks(
         const LuminanceImage& luminance,
         float midtone_anchor) const;
+
+    [[nodiscard]] ColorAnalysis analyze_color(
+        const Image& rgb_linear,
+        const ZoneMasks& zone_masks) const;
 };
 
 }  // namespace dfee

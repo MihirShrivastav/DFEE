@@ -7,6 +7,7 @@ import math
 import cv2
 import numpy as np
 
+from dfee.analyzer import ImageStateAnalyzer
 from dfee.ingest import RawIngestor
 
 
@@ -91,6 +92,30 @@ class TestNativeBridge(unittest.TestCase):
         profiles = self.session.list_profiles()
         self.assertNotIn("native_invalid_bridge_stock", {stock.stock_id for stock in profiles.stocks})
         self.assertNotIn("native_invalid_bridge_print", {stock.print_stock_id for stock in profiles.print_stocks})
+
+    def test_python_color_analyzer_reference_fixture(self):
+        rgb = np.array(
+            [
+                [[1.0, 0.0, 0.0], [1.0, 0.5, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+                [[0.0, 1.0, 1.0], [0.0, 0.0, 1.0], [1.0, 0.0, 1.0], [0.5, 0.5, 0.5]],
+            ],
+            dtype=np.float32,
+        )
+        Y = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]).astype(np.float32)
+        analyzer = ImageStateAnalyzer()
+        tonal = analyzer._analyze_tonal(Y, {"R": 0.0, "G": 0.0, "B": 0.0})
+        zone_masks = analyzer._generate_zone_masks(Y, tonal["midtone_anchor"])
+        color = analyzer._analyze_color(rgb, zone_masks)
+
+        self.assertGreater(color["mean_chroma"], 0.0)
+        self.assertGreaterEqual(color["sat_p95"], color["mean_chroma"])
+        self.assertGreater(color["hue_entropy"], 0.0)
+        self.assertGreater(color["red_orange_density"], 0.0)
+        self.assertGreater(color["cyan_blue_ratio"], 0.0)
+        self.assertIn(color["dominant_hue_bins"][0], {
+            "Red", "Orange", "Yellow", "Yellow-Green", "Green", "Green-Cyan",
+            "Cyan", "Cyan-Blue", "Blue", "Blue-Violet", "Violet", "Magenta",
+        })
 
     def test_select_file(self):
         raw_filename = self._raw_filename()
