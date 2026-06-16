@@ -25,6 +25,14 @@ import dfee_native_bridge
 class TestNativeBridge(unittest.TestCase):
     def setUp(self):
         self.session = dfee_native_bridge.create_session(BASE_DIR)
+        self._temp_files: list[Path] = []
+
+    def tearDown(self):
+        for path in self._temp_files:
+            try:
+                path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     def _raw_filename(self) -> str:
         return next(
@@ -32,6 +40,12 @@ class TestNativeBridge(unittest.TestCase):
             for entry in (BASE_DIR / "raw_files").iterdir()
             if entry.is_file() and entry.suffix.lower() == ".arw"
         )
+
+    def _create_temp_raw_file(self, name: str, payload: bytes) -> str:
+        path = BASE_DIR / "raw_files" / name
+        path.write_bytes(payload)
+        self._temp_files.append(path)
+        return path.name
 
     @staticmethod
     def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
@@ -197,6 +211,54 @@ class TestNativeBridge(unittest.TestCase):
             with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
                 self.session.raw_preview(raw_filename, max_edge=1024)
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE", "RAW_PREVIEW_NOT_CACHED"})
+
+    def test_unsupported_and_corrupt_raw_failures(self):
+        unsupported_filename = self._create_temp_raw_file(
+            "native_test_unsupported.arw",
+            b"this is not a raw file\n",
+        )
+        source_raw = BASE_DIR / "raw_files" / self._raw_filename()
+        corrupt_filename = self._create_temp_raw_file(
+            "native_test_corrupt.arw",
+            source_raw.read_bytes()[:4096],
+        )
+
+        if self.session.list_profiles().engine.libraw_enabled:
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.read_raw_metadata(unsupported_filename)
+            self.assertIn(ctx.exception.code, {"LIBRAW_UNSUPPORTED_RAW", "LIBRAW_OPEN_FAILED"})
+            self.assertIn(ctx.exception.status, {"unsupported", "error"})
+
+            self.session.select_file(unsupported_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.decode_raw(unsupported_filename, draft_mode=True)
+            self.assertIn(ctx.exception.code, {"LIBRAW_UNSUPPORTED_RAW", "LIBRAW_OPEN_FAILED"})
+            self.assertIn(ctx.exception.status, {"unsupported", "error"})
+
+            unsupported_cache = self.session.cache_state()
+            self.assertFalse(unsupported_cache.draft_decode_cached)
+            self.assertFalse(unsupported_cache.preview_cached)
+            self.assertFalse(unsupported_cache.raw_preview_jpeg_cached)
+
+            self.session.select_file(corrupt_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.decode_raw(corrupt_filename, draft_mode=True)
+            self.assertIn(ctx.exception.code, {"LIBRAW_CORRUPT_RAW", "LIBRAW_OPEN_FAILED"})
+            self.assertEqual(ctx.exception.status, "error")
+
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.raw_preview(corrupt_filename, max_edge=1024)
+            self.assertEqual(ctx.exception.code, "RAW_PREVIEW_NOT_CACHED")
+
+            corrupt_cache = self.session.cache_state()
+            self.assertFalse(corrupt_cache.draft_decode_cached)
+            self.assertFalse(corrupt_cache.preview_cached)
+            self.assertFalse(corrupt_cache.raw_preview_jpeg_cached)
+        else:
+            self.session.select_file(unsupported_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.decode_raw(unsupported_filename, draft_mode=True)
+            self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 
@@ -133,6 +134,60 @@ void test_profile_loading() {
 #endif
 }
 
+void test_raw_failure_paths() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const std::filesystem::path raw_dir = repo_root / "raw_files";
+    dfee::EngineSession session(repo_root);
+
+    const auto unsupported_path = raw_dir / "native_core_test_unsupported.arw";
+    const auto corrupt_path = raw_dir / "native_core_test_corrupt.arw";
+    const auto cleanup = [&]() {
+        std::filesystem::remove(unsupported_path);
+        std::filesystem::remove(corrupt_path);
+    };
+    struct CleanupGuard {
+        decltype(cleanup)& cleanup_fn;
+        ~CleanupGuard() { cleanup_fn(); }
+    } cleanup_guard{cleanup};
+
+    {
+        std::ofstream out(unsupported_path, std::ios::binary);
+        out << "not a real raw file\n";
+    }
+
+    const auto source_raw = raw_dir / "DSC00246.ARW";
+    {
+        std::ifstream in(source_raw, std::ios::binary);
+        std::ofstream out(corrupt_path, std::ios::binary);
+        std::string buffer(4096, '\0');
+        in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        out.write(buffer.data(), in.gcount());
+    }
+
+#if DFEE_HAS_LIBRAW
+    const auto unsupported_metadata = session.read_raw_metadata({.filename = unsupported_path.filename().string()});
+    assert(!unsupported_metadata.ok);
+    assert(unsupported_metadata.error.code == "LIBRAW_UNSUPPORTED_RAW" || unsupported_metadata.error.code == "LIBRAW_OPEN_FAILED");
+
+    const auto unsupported_decode = session.decode_raw({.filename = unsupported_path.filename().string(), .draft_mode = true});
+    assert(!unsupported_decode.ok);
+    assert(unsupported_decode.error.code == "LIBRAW_UNSUPPORTED_RAW" || unsupported_decode.error.code == "LIBRAW_OPEN_FAILED");
+
+    const auto corrupt_decode = session.decode_raw({.filename = corrupt_path.filename().string(), .draft_mode = true});
+    assert(!corrupt_decode.ok);
+    assert(corrupt_decode.error.code == "LIBRAW_CORRUPT_RAW" || corrupt_decode.error.code == "LIBRAW_OPEN_FAILED");
+
+    const auto corrupt_preview = session.raw_preview({.filename = corrupt_path.filename().string(), .max_edge = 1024});
+    assert(!corrupt_preview.ok);
+    assert(corrupt_preview.error.code == "RAW_PREVIEW_NOT_CACHED");
+#else
+    const auto unsupported_decode = session.decode_raw({.filename = unsupported_path.filename().string(), .draft_mode = true});
+    assert(!unsupported_decode.ok);
+    assert(unsupported_decode.error.code == "LIBRAW_UNAVAILABLE");
+#endif
+
+}
+
 }  // namespace
 
 int main() {
@@ -141,6 +196,7 @@ int main() {
         test_zone_partition();
         test_tonal_analysis();
         test_profile_loading();
+        test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

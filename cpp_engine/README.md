@@ -12,7 +12,7 @@ The current native scaffold builds:
 - `dfee_tests`: native unit/parity foundation tests.
 - `dfee_cuda`: optional CUDA target when configured with `DFEE_ENABLE_CUDA=ON`.
 
-The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, YAML stock and print-profile discovery, native session setup, and CUDA status reporting. RAW decode, preview JPEG rendering, full export, and FastAPI route delegation are the next migration slices.
+The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, YAML stock and print-profile discovery, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Full preview render, full export, and FastAPI route delegation are the next migration slices.
 
 ## Build
 
@@ -87,3 +87,5 @@ Stable Python wrapper:
 `EngineSession` now owns draft decode, preview-scale, and full-resolution cache state internally. Re-selecting the same file preserves those caches; selecting a different file invalidates them.
 
 `raw_preview` returns cached JPEG bytes for the preview-scale RAW image. In the vcpkg-backed build it uses OpenCV for area downsampling and JPEG encoding so the native preview path matches the current Python `/api/raw-image` behavior closely.
+
+Unsupported or corrupt RAW inputs are covered in both native and FastAPI-side tests. Native decode and preview paths now fail with structured errors and leave no stale preview/decode caches behind.

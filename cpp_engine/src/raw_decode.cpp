@@ -44,6 +44,36 @@ namespace {
 }
 
 #if DFEE_HAS_LIBRAW
+NativeError make_libraw_decode_error(
+    const int err,
+    const std::string& filename,
+    const std::string& fallback_code,
+    const std::string& fallback_user_message,
+    const std::string& fallback_detail_prefix) {
+    const std::string error_text = libraw_strerror(err);
+    if (err == LIBRAW_FILE_UNSUPPORTED) {
+        return {
+            .code = "LIBRAW_UNSUPPORTED_RAW",
+            .user_message = "The selected file is not a supported RAW format.",
+            .detail = "LibRaw reported an unsupported RAW file for " + filename + ": " + error_text,
+        };
+    }
+
+    if (fallback_code == "LIBRAW_UNPACK_FAILED" || fallback_code == "LIBRAW_PROCESS_FAILED" || fallback_code == "LIBRAW_MEM_IMAGE_FAILED") {
+        return {
+            .code = "LIBRAW_CORRUPT_RAW",
+            .user_message = "The RAW file appears to be corrupt or incomplete.",
+            .detail = fallback_detail_prefix + " for " + filename + ": " + error_text,
+        };
+    }
+
+    return {
+        .code = fallback_code,
+        .user_message = fallback_user_message,
+        .detail = fallback_detail_prefix + " for " + filename + ": " + error_text,
+    };
+}
+
 void fill_metadata_from_raw_processor(NativeRawMetadata& metadata, const LibRaw& raw_processor) {
     const auto& idata = raw_processor.imgdata.idata;
     const auto& lens = raw_processor.imgdata.lens;
@@ -160,11 +190,15 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
     int err = raw_processor.open_file(request.filename.c_str());
     if (err != LIBRAW_SUCCESS) {
         response.status = "error";
-        response.error = {
-            .code = "LIBRAW_OPEN_FAILED",
-            .user_message = "The RAW file could not be opened by LibRaw.",
-            .detail = std::string("LibRaw open_file failed for ") + request.filename,
-        };
+        response.error = make_libraw_decode_error(
+            err,
+            request.filename,
+            "LIBRAW_OPEN_FAILED",
+            "The RAW file could not be opened by LibRaw.",
+            "LibRaw open_file failed");
+        if (response.error.code == "LIBRAW_UNSUPPORTED_RAW") {
+            response.status = "unsupported";
+        }
         return response;
     }
     fill_metadata_from_raw_processor(response.decoded.metadata, raw_processor);
@@ -181,33 +215,36 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
     err = raw_processor.unpack();
     if (err != LIBRAW_SUCCESS) {
         response.status = "error";
-        response.error = {
-            .code = "LIBRAW_UNPACK_FAILED",
-            .user_message = "The RAW file could not be unpacked by LibRaw.",
-            .detail = std::string("LibRaw unpack failed for ") + request.filename,
-        };
+        response.error = make_libraw_decode_error(
+            err,
+            request.filename,
+            "LIBRAW_UNPACK_FAILED",
+            "The RAW file could not be unpacked by LibRaw.",
+            "LibRaw unpack failed");
         return response;
     }
 
     err = raw_processor.dcraw_process();
     if (err != LIBRAW_SUCCESS) {
         response.status = "error";
-        response.error = {
-            .code = "LIBRAW_PROCESS_FAILED",
-            .user_message = "The RAW file could not be processed by LibRaw.",
-            .detail = std::string("LibRaw dcraw_process failed for ") + request.filename,
-        };
+        response.error = make_libraw_decode_error(
+            err,
+            request.filename,
+            "LIBRAW_PROCESS_FAILED",
+            "The RAW file could not be processed by LibRaw.",
+            "LibRaw dcraw_process failed");
         return response;
     }
 
     libraw_processed_image_t* image = raw_processor.dcraw_make_mem_image(&err);
     if (image == nullptr || err != LIBRAW_SUCCESS) {
         response.status = "error";
-        response.error = {
-            .code = "LIBRAW_MEM_IMAGE_FAILED",
-            .user_message = "The RAW file could not be converted into an image buffer.",
-            .detail = std::string("LibRaw dcraw_make_mem_image failed for ") + request.filename,
-        };
+        response.error = make_libraw_decode_error(
+            err,
+            request.filename,
+            "LIBRAW_MEM_IMAGE_FAILED",
+            "The RAW file could not be converted into an image buffer.",
+            "LibRaw dcraw_make_mem_image failed");
         return response;
     }
 

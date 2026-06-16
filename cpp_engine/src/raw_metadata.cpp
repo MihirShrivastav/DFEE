@@ -40,6 +40,23 @@ namespace {
     return (value != nullptr && value[0] != '\0') ? std::string(value) : std::string{};
 }
 
+NativeError make_libraw_metadata_error(const int err, const std::string& filename) {
+    const std::string error_text = libraw_strerror(err);
+    if (err == LIBRAW_FILE_UNSUPPORTED) {
+        return {
+            .code = "LIBRAW_UNSUPPORTED_RAW",
+            .user_message = "The selected file is not a supported RAW format.",
+            .detail = "LibRaw reported an unsupported RAW file for " + filename + ": " + error_text,
+        };
+    }
+
+    return {
+        .code = "LIBRAW_OPEN_FAILED",
+        .user_message = "The RAW file could not be opened by LibRaw.",
+        .detail = "LibRaw open_file failed for " + filename + ": " + error_text,
+    };
+}
+
 }  // namespace
 
 NativeRawMetadataResponse read_raw_metadata_from_file(const NativeRawMetadataRequest& request) {
@@ -70,12 +87,8 @@ NativeRawMetadataResponse read_raw_metadata_from_file(const NativeRawMetadataReq
     LibRaw raw_processor;
     const int open_result = raw_processor.open_file(request.filename.c_str());
     if (open_result != LIBRAW_SUCCESS) {
-        response.status = "error";
-        response.error = {
-            .code = "LIBRAW_OPEN_FAILED",
-            .user_message = "The RAW file could not be opened by LibRaw.",
-            .detail = std::string("LibRaw open_file failed for ") + request.filename,
-        };
+        response.status = open_result == LIBRAW_FILE_UNSUPPORTED ? "unsupported" : "error";
+        response.error = make_libraw_metadata_error(open_result, request.filename);
         return response;
     }
 
