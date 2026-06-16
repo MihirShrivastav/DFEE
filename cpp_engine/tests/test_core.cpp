@@ -78,6 +78,40 @@ void test_color_analysis() {
     assert(!color.dominant_hue_bins[0].empty());
 }
 
+void test_spatial_analysis() {
+    dfee::LuminanceImage luminance(32, 32);
+    for (int y = 0; y < luminance.height; ++y) {
+        for (int x = 0; x < luminance.width; ++x) {
+            const float gradient = static_cast<float>(x) / static_cast<float>(luminance.width - 1);
+            luminance.at(x, y) = 0.05F + 0.25F * gradient;
+        }
+    }
+    for (int y = 8; y < 24; ++y) {
+        for (int x = 8; x < 24; ++x) {
+            if (((x + y) % 2) == 0) {
+                luminance.at(x, y) += 0.15F;
+            }
+        }
+    }
+    luminance.at(16, 16) = 1.0F;
+    luminance.at(17, 16) = 0.94F;
+    luminance.at(16, 17) = 0.92F;
+    luminance.at(17, 17) = 0.88F;
+
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto [spatial, masks] = analyzer.analyze_spatial(luminance);
+
+    assert(spatial.texture_density > 0.0F);
+    assert(spatial.smooth_area_ratio >= 0.0F && spatial.smooth_area_ratio <= 1.0F);
+    assert(spatial.edge_density > 0.0F);
+    assert(spatial.specular_point_ratio > 0.0F);
+    assert(spatial.large_highlight_area_ratio >= 0.0F);
+    assert(masks.grain_receptivity_mask.width == luminance.width);
+    assert(masks.grain_receptivity_mask.height == luminance.height);
+    assert(masks.halation_source_mask.at(16, 16) > 0.0F);
+    assert(masks.halation_receiver_mask.at(15, 15) > 0.0F);
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -268,6 +302,7 @@ int main() {
         test_zone_partition();
         test_tonal_analysis();
         test_color_analysis();
+        test_spatial_analysis();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";

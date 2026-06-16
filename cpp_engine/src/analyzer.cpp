@@ -4,7 +4,12 @@
 #include <array>
 #include <cmath>
 #include <numbers>
+#include <stdexcept>
 #include <vector>
+
+#if DFEE_HAS_OPENCV
+#include <opencv2/imgproc.hpp>
+#endif
 
 namespace dfee {
 namespace {
@@ -54,6 +59,253 @@ namespace {
         std::sqrt(a * a + b_lab * b_lab),
         hue,
     };
+}
+
+[[nodiscard]] LuminanceImage resize_luminance_linear(
+    const LuminanceImage& source,
+    const int target_width,
+    const int target_height) {
+    if (target_width <= 0 || target_height <= 0) {
+        throw std::invalid_argument("resize_luminance_linear expects positive target dimensions");
+    }
+    if (source.empty() || (source.width == target_width && source.height == target_height)) {
+        return source;
+    }
+
+#if DFEE_HAS_OPENCV
+    cv::Mat source_mat(source.height, source.width, CV_32F, const_cast<float*>(source.values.data()));
+    cv::Mat resized_mat;
+    cv::resize(source_mat, resized_mat, cv::Size(target_width, target_height), 0.0, 0.0, cv::INTER_LINEAR);
+
+    LuminanceImage resized(target_width, target_height);
+    for (int y = 0; y < target_height; ++y) {
+        for (int x = 0; x < target_width; ++x) {
+            resized.at(x, y) = resized_mat.at<float>(y, x);
+        }
+    }
+    return resized;
+#else
+    LuminanceImage resized(target_width, target_height);
+    const float x_scale = static_cast<float>(source.width) / static_cast<float>(target_width);
+    const float y_scale = static_cast<float>(source.height) / static_cast<float>(target_height);
+    for (int y = 0; y < target_height; ++y) {
+        const float src_y = (static_cast<float>(y) + 0.5F) * y_scale - 0.5F;
+        const int y0 = std::clamp(static_cast<int>(std::floor(src_y)), 0, source.height - 1);
+        const int y1 = std::clamp(y0 + 1, 0, source.height - 1);
+        const float fy = src_y - static_cast<float>(y0);
+        for (int x = 0; x < target_width; ++x) {
+            const float src_x = (static_cast<float>(x) + 0.5F) * x_scale - 0.5F;
+            const int x0 = std::clamp(static_cast<int>(std::floor(src_x)), 0, source.width - 1);
+            const int x1 = std::clamp(x0 + 1, 0, source.width - 1);
+            const float fx = src_x - static_cast<float>(x0);
+            const float top = source.at(x0, y0) * (1.0F - fx) + source.at(x1, y0) * fx;
+            const float bottom = source.at(x0, y1) * (1.0F - fx) + source.at(x1, y1) * fx;
+            resized.at(x, y) = top * (1.0F - fy) + bottom * fy;
+        }
+    }
+    return resized;
+#endif
+}
+
+[[nodiscard]] LuminanceImage box_filter_square(const LuminanceImage& source, const int kernel_size) {
+    if (source.empty()) {
+        return source;
+    }
+    const int size = std::max(1, kernel_size | 1);
+
+#if DFEE_HAS_OPENCV
+    cv::Mat source_mat(source.height, source.width, CV_32F, const_cast<float*>(source.values.data()));
+    cv::Mat filtered_mat;
+    cv::boxFilter(source_mat, filtered_mat, -1, cv::Size(size, size));
+
+    LuminanceImage filtered(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            filtered.at(x, y) = filtered_mat.at<float>(y, x);
+        }
+    }
+    return filtered;
+#else
+    const int radius = size / 2;
+    const int stride = source.width + 1;
+    std::vector<float> integral(static_cast<std::size_t>(source.height + 1) * stride, 0.0F);
+    for (int y = 0; y < source.height; ++y) {
+        float row_sum = 0.0F;
+        for (int x = 0; x < source.width; ++x) {
+            row_sum += source.at(x, y);
+            integral[static_cast<std::size_t>(y + 1) * stride + static_cast<std::size_t>(x + 1)] =
+                integral[static_cast<std::size_t>(y) * stride + static_cast<std::size_t>(x + 1)] + row_sum;
+        }
+    }
+
+    LuminanceImage filtered(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        const int y0 = std::max(0, y - radius);
+        const int y1 = std::min(source.height - 1, y + radius);
+        for (int x = 0; x < source.width; ++x) {
+            const int x0 = std::max(0, x - radius);
+            const int x1 = std::min(source.width - 1, x + radius);
+            const std::size_t top_left = static_cast<std::size_t>(y0) * stride + static_cast<std::size_t>(x0);
+            const std::size_t top_right = static_cast<std::size_t>(y0) * stride + static_cast<std::size_t>(x1 + 1);
+            const std::size_t bottom_left = static_cast<std::size_t>(y1 + 1) * stride + static_cast<std::size_t>(x0);
+            const std::size_t bottom_right = static_cast<std::size_t>(y1 + 1) * stride + static_cast<std::size_t>(x1 + 1);
+            const float sum = integral[bottom_right] - integral[top_right] - integral[bottom_left] + integral[top_left];
+            const float area = static_cast<float>((x1 - x0 + 1) * (y1 - y0 + 1));
+            filtered.at(x, y) = sum / area;
+        }
+    }
+    return filtered;
+#endif
+}
+
+[[nodiscard]] LuminanceImage gaussian_blur_square(const LuminanceImage& source, const int kernel_size) {
+    if (source.empty()) {
+        return source;
+    }
+    const int size = std::max(1, kernel_size | 1);
+
+#if DFEE_HAS_OPENCV
+    cv::Mat source_mat(source.height, source.width, CV_32F, const_cast<float*>(source.values.data()));
+    cv::Mat blurred_mat;
+    cv::GaussianBlur(source_mat, blurred_mat, cv::Size(size, size), 0.0);
+
+    LuminanceImage blurred(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            blurred.at(x, y) = blurred_mat.at<float>(y, x);
+        }
+    }
+    return blurred;
+#else
+    const int radius = size / 2;
+    const float sigma = std::max(static_cast<float>(radius) / 2.0F, 1.0F);
+    std::vector<float> kernel(static_cast<std::size_t>(size), 0.0F);
+    float kernel_sum = 0.0F;
+    for (int i = -radius; i <= radius; ++i) {
+        const float value = std::exp(-(static_cast<float>(i * i)) / (2.0F * sigma * sigma));
+        kernel[static_cast<std::size_t>(i + radius)] = value;
+        kernel_sum += value;
+    }
+    for (float& value : kernel) {
+        value /= kernel_sum;
+    }
+
+    LuminanceImage horizontal(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            float accum = 0.0F;
+            for (int k = -radius; k <= radius; ++k) {
+                const int sample_x = std::clamp(x + k, 0, source.width - 1);
+                accum += source.at(sample_x, y) * kernel[static_cast<std::size_t>(k + radius)];
+            }
+            horizontal.at(x, y) = accum;
+        }
+    }
+
+    LuminanceImage blurred(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            float accum = 0.0F;
+            for (int k = -radius; k <= radius; ++k) {
+                const int sample_y = std::clamp(y + k, 0, source.height - 1);
+                accum += horizontal.at(x, sample_y) * kernel[static_cast<std::size_t>(k + radius)];
+            }
+            blurred.at(x, y) = accum;
+        }
+    }
+    return blurred;
+#endif
+}
+
+[[nodiscard]] float mean_sobel_gradient(const LuminanceImage& source) {
+    if (source.empty()) {
+        return 0.0F;
+    }
+
+#if DFEE_HAS_OPENCV
+    cv::Mat source_mat(source.height, source.width, CV_32F, const_cast<float*>(source.values.data()));
+    cv::Mat sobel_x;
+    cv::Mat sobel_y;
+    cv::Sobel(source_mat, sobel_x, CV_32F, 1, 0, 3);
+    cv::Sobel(source_mat, sobel_y, CV_32F, 0, 1, 3);
+
+    double gradient_sum = 0.0;
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            const float gx = sobel_x.at<float>(y, x);
+            const float gy = sobel_y.at<float>(y, x);
+            gradient_sum += std::sqrt(gx * gx + gy * gy);
+        }
+    }
+    return static_cast<float>(gradient_sum / static_cast<double>(source.values.size()));
+#else
+    if (source.width < 3 || source.height < 3) {
+        return 0.0F;
+    }
+    double gradient_sum = 0.0;
+    for (int y = 1; y < source.height - 1; ++y) {
+        for (int x = 1; x < source.width - 1; ++x) {
+            const float gx =
+                -source.at(x - 1, y - 1) + source.at(x + 1, y - 1) +
+                -2.0F * source.at(x - 1, y) + 2.0F * source.at(x + 1, y) +
+                -source.at(x - 1, y + 1) + source.at(x + 1, y + 1);
+            const float gy =
+                -source.at(x - 1, y - 1) - 2.0F * source.at(x, y - 1) - source.at(x + 1, y - 1) +
+                source.at(x - 1, y + 1) + 2.0F * source.at(x, y + 1) + source.at(x + 1, y + 1);
+            gradient_sum += std::sqrt(gx * gx + gy * gy);
+        }
+    }
+    return static_cast<float>(gradient_sum / static_cast<double>(source.values.size()));
+#endif
+}
+
+[[nodiscard]] LuminanceImage dilate_mask_ellipse(const LuminanceImage& source, const int kernel_size) {
+    if (source.empty()) {
+        return source;
+    }
+    const int size = std::max(1, kernel_size | 1);
+
+#if DFEE_HAS_OPENCV
+    cv::Mat source_mat(source.height, source.width, CV_32F, const_cast<float*>(source.values.data()));
+    cv::Mat dilated_mat;
+    const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(size, size));
+    cv::dilate(source_mat, dilated_mat, kernel);
+
+    LuminanceImage dilated(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            dilated.at(x, y) = dilated_mat.at<float>(y, x);
+        }
+    }
+    return dilated;
+#else
+    const int radius = size / 2;
+    std::vector<std::pair<int, int>> offsets;
+    offsets.reserve(static_cast<std::size_t>(size * size));
+    for (int dy = -radius; dy <= radius; ++dy) {
+        for (int dx = -radius; dx <= radius; ++dx) {
+            const float nx = static_cast<float>(dx) / static_cast<float>(radius == 0 ? 1 : radius);
+            const float ny = static_cast<float>(dy) / static_cast<float>(radius == 0 ? 1 : radius);
+            if ((nx * nx + ny * ny) <= 1.0F) {
+                offsets.emplace_back(dx, dy);
+            }
+        }
+    }
+
+    LuminanceImage dilated(source.width, source.height);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            float max_value = 0.0F;
+            for (const auto& [dx, dy] : offsets) {
+                const int sample_x = std::clamp(x + dx, 0, source.width - 1);
+                const int sample_y = std::clamp(y + dy, 0, source.height - 1);
+                max_value = std::max(max_value, source.at(sample_x, sample_y));
+            }
+            dilated.at(x, y) = max_value;
+        }
+    }
+    return dilated;
+#endif
 }
 
 }  // namespace
@@ -236,6 +488,87 @@ ColorAnalysis ImageStateAnalyzer::analyze_color(const Image& rgb_linear, const Z
     result.warm_cool_ratio = warm_sum / std::max(cool_sum, 1.0e-5F);
     result.cyan_blue_ratio = hue_dist[6] + hue_dist[7] + hue_dist[8];
     return result;
+}
+
+std::pair<SpatialAnalysis, SpatialMasks> ImageStateAnalyzer::analyze_spatial(const LuminanceImage& luminance) const {
+    if (luminance.empty()) {
+        throw std::invalid_argument("analyze_spatial expects a non-empty luminance image");
+    }
+
+    const int width = luminance.width;
+    const int height = luminance.height;
+    float scale = 1.0F;
+    LuminanceImage downsampled = luminance;
+    if (height > 1000 || width > 1000) {
+        scale = 1000.0F / static_cast<float>(std::max(height, width));
+        const int target_width = std::max(1, static_cast<int>(std::round(static_cast<float>(width) * scale)));
+        const int target_height = std::max(1, static_cast<int>(std::round(static_cast<float>(height) * scale)));
+        downsampled = resize_luminance_linear(luminance, target_width, target_height);
+    }
+
+    const LuminanceImage mean_y = box_filter_square(downsampled, 15);
+    LuminanceImage squared(downsampled.width, downsampled.height);
+    for (std::size_t i = 0; i < downsampled.values.size(); ++i) {
+        squared.values[i] = downsampled.values[i] * downsampled.values[i];
+    }
+    const LuminanceImage mean_y_sq = box_filter_square(squared, 15);
+
+    LuminanceImage local_var_small(downsampled.width, downsampled.height);
+    for (std::size_t i = 0; i < local_var_small.values.size(); ++i) {
+        local_var_small.values[i] = std::max(mean_y_sq.values[i] - mean_y.values[i] * mean_y.values[i], 0.0F);
+    }
+
+    const LuminanceImage local_var_full =
+        scale != 1.0F ? resize_luminance_linear(local_var_small, width, height) : local_var_small;
+
+    double texture_sum = 0.0;
+    for (const float value : local_var_full.values) {
+        texture_sum += value;
+    }
+
+    const float max_var = std::max(percentile(local_var_full.values, 95.0F), 1.0e-5F);
+    SpatialMasks masks;
+    masks.grain_receptivity_mask = LuminanceImage(width, height);
+    std::size_t smooth_pixels = 0;
+    for (std::size_t i = 0; i < local_var_full.values.size(); ++i) {
+        const float norm_var = clamp01(local_var_full.values[i] / max_var);
+        masks.grain_receptivity_mask.values[i] = 1.0F - norm_var;
+        smooth_pixels += norm_var < 0.1F ? 1U : 0U;
+    }
+
+    const float edge_density = mean_sobel_gradient(downsampled);
+
+    const LuminanceImage blurred = gaussian_blur_square(luminance, 25);
+    masks.halation_source_mask = LuminanceImage(width, height);
+    masks.halation_receiver_mask = LuminanceImage(width, height);
+    std::size_t specular_pixels = 0;
+    std::size_t large_highlight_pixels = 0;
+    for (std::size_t i = 0; i < luminance.values.size(); ++i) {
+        const float y = luminance.values[i];
+        const float local_delta = y - blurred.values[i];
+        const bool specular = y > 0.8F && local_delta > 0.1F;
+        const bool large_highlight = y > 0.7F && local_delta <= 0.1F;
+        masks.halation_source_mask.values[i] = specular ? 1.0F : 0.0F;
+        specular_pixels += specular ? 1U : 0U;
+        large_highlight_pixels += large_highlight ? 1U : 0U;
+    }
+
+    const LuminanceImage dilated_sources = dilate_mask_ellipse(masks.halation_source_mask, 15);
+    for (std::size_t i = 0; i < luminance.values.size(); ++i) {
+        masks.halation_receiver_mask.values[i] = dilated_sources.values[i] * (1.0F - luminance.values[i]);
+    }
+
+    SpatialAnalysis result;
+    result.texture_density = static_cast<float>(texture_sum / static_cast<double>(local_var_full.values.size()));
+    result.smooth_area_ratio =
+        static_cast<float>(smooth_pixels) / static_cast<float>(luminance.values.size());
+    result.edge_density = edge_density;
+    result.digital_sharpness_score = edge_density / std::max(result.texture_density * 100.0F, 1.0e-4F);
+    result.specular_point_ratio =
+        static_cast<float>(specular_pixels) / static_cast<float>(luminance.values.size());
+    result.large_highlight_area_ratio =
+        static_cast<float>(large_highlight_pixels) / static_cast<float>(luminance.values.size());
+    return {result, masks};
 }
 
 }  // namespace dfee

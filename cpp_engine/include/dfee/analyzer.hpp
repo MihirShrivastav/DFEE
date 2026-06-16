@@ -3,6 +3,7 @@
 #include <array>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "dfee/image.hpp"
 
@@ -46,6 +47,21 @@ struct ColorAnalysis {
     float mean_chroma = 0.0F;
 };
 
+struct SpatialAnalysis {
+    float texture_density = 0.0F;
+    float smooth_area_ratio = 0.0F;
+    float edge_density = 0.0F;
+    float digital_sharpness_score = 0.0F;
+    float specular_point_ratio = 0.0F;
+    float large_highlight_area_ratio = 0.0F;
+};
+
+struct SpatialMasks {
+    LuminanceImage grain_receptivity_mask;
+    LuminanceImage halation_source_mask;
+    LuminanceImage halation_receiver_mask;
+};
+
 class ImageStateAnalyzer {
 public:
     [[nodiscard]] TonalDistribution analyze_tonal(
@@ -59,6 +75,9 @@ public:
     [[nodiscard]] ColorAnalysis analyze_color(
         const Image& rgb_linear,
         const ZoneMasks& zone_masks) const;
+
+    [[nodiscard]] std::pair<SpatialAnalysis, SpatialMasks> analyze_spatial(
+        const LuminanceImage& luminance) const;
 };
 
 }  // namespace dfee

@@ -18,7 +18,7 @@ Status values:
 | M0-003 | done | Add CMake presets and vcpkg manifest | Configure/build smoke test | `ninja-dev` requires Ninja on PATH; `windows-msvc` works here. |
 | M0-004 | done | Add core image and luminance containers | `dfee_tests` | Current layout is packed interleaved float32 RGB plus separate luminance. |
 | M0-005 | done | Port OKLab/OKLCH color transforms | `dfee_tests` round trip | Matches current Python math and clamps RGB outputs. |
-| M0-006 | done | Port tonal analysis and 7-zone masks | `dfee_tests` partition check | Spatial/color analyzer stages remain Python-only. |
+| M0-006 | done | Port tonal analysis and 7-zone masks | `dfee_tests` partition check | Initial analyzer foundation; later color/spatial stages are tracked under M3. |
 | M0-007 | done | Add dependency-light YAML profile discovery | CLI lists current stock/print profiles | Temporary parser preserves buildability before yaml-cpp wiring. |
 | M0-008 | done | Add native session/profile/file-selection bridge | Python import smoke test | `select_file` validates file presence only; no RAW decode yet. |
 | M0-009 | done | Add native engine README and architecture doc note | Manual doc review | Docs explicitly state what is and is not migrated. |
@@ -51,7 +51,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | M3-001 | done | Port profile model fully to yaml-cpp and validate required schema | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | Native profile loading now uses yaml-cpp, enforces required stock/print sections, rejects invalid `stock_type` values, and skips invalid YAML files during directory listing. |
 | M3-002 | done | Port color analyzer stages | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | Native analyzer now computes hue/chroma metrics, zonal saturation summaries, dominant hue bins, hue entropy, warm/cool ratios, and neon-risk-style saturation pressure in a single pass plus histogram. |
-| M3-003 | planned | Port spatial analyzer stages | Synthetic parity tests | Texture, edge, specular, halation masks. |
+| M3-003 | done | Port spatial analyzer stages | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | Native analyzer now computes texture variance, edge density, specular/highlight ratios, grain receptivity, and halation source/receiver masks with downsampled statistics plus bounded mask operations. |
 | M3-004 | planned | Port camera bias estimator | Python-vs-C++ report diff | Preserve current report fields. |
 | M3-005 | planned | Port solver and render-plan schema | Solver schema completeness test | Report shape must remain compatible. |
 | M3-006 | planned | Port pre-film controls | Synthetic image parity tests | Exposure, WB, tint, highlights, shadows. |

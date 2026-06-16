@@ -117,6 +117,30 @@ class TestNativeBridge(unittest.TestCase):
             "Cyan", "Cyan-Blue", "Blue", "Blue-Violet", "Violet", "Magenta",
         })
 
+    def test_python_spatial_analyzer_reference_fixture(self):
+        Y = np.full((32, 32), 0.08, dtype=np.float32)
+        Y[:, 8:24] += np.linspace(0.0, 0.25, 16, dtype=np.float32)[None, :]
+        checker = ((np.indices((16, 16)).sum(axis=0) % 2) * 0.15).astype(np.float32)
+        Y[8:24, 8:24] += checker
+        Y[16, 16] = 1.0
+        Y[16, 17] = 0.94
+        Y[17, 16] = 0.92
+        Y[17, 17] = 0.88
+
+        analyzer = ImageStateAnalyzer()
+        spatial, masks = analyzer._analyze_spatial(Y)
+
+        self.assertGreater(spatial["texture_density"], 0.0)
+        self.assertGreaterEqual(spatial["smooth_area_ratio"], 0.0)
+        self.assertLessEqual(spatial["smooth_area_ratio"], 1.0)
+        self.assertGreater(spatial["edge_density"], 0.0)
+        self.assertGreater(spatial["specular_point_ratio"], 0.0)
+        self.assertEqual(masks["grain_receptivity_mask"].shape, Y.shape)
+        self.assertEqual(masks["halation_source_mask"].shape, Y.shape)
+        self.assertEqual(masks["halation_receiver_mask"].shape, Y.shape)
+        self.assertGreater(float(masks["halation_source_mask"][16, 16]), 0.0)
+        self.assertGreater(float(masks["halation_receiver_mask"][15, 15]), 0.0)
+
     def test_select_file(self):
         raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)
