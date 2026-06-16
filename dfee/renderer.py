@@ -19,7 +19,6 @@ class FilmRenderer:
         pre_film  = render_plan["pre_film_normalization"]
         response  = render_plan["film_response"]
         effects   = render_plan["material_effects"]
-        finish    = render_plan["scanner_finish"]
         stock_type = render_plan.get("stock_type", "color_negative")
 
         # Film Color density multiplier: 0=no film color, 100=stock default, 200=pushed
@@ -40,7 +39,7 @@ class FilmRenderer:
 
         # 5. Color Response — zone × hue × saturation using ACTUAL profile values
         if stock_type != "monochrome":
-            rgb_proc = self._apply_color_response(rgb_proc, masks, response, finish, fc)
+            rgb_proc = self._apply_color_response(rgb_proc, masks, response, fc)
 
         # 6. Luminance-chroma coupling (smooth highlight/shadow chroma rolloff)
         if stock_type != "monochrome":
@@ -55,15 +54,12 @@ class FilmRenderer:
         # 9. Procedural Film Grain
         rgb_proc = self._apply_film_grain(rgb_proc, masks, effects)
 
-        # 10. Scanner / Print Finish
-        rgb_final = self._apply_scanner_finish(rgb_proc, finish)
-
-        # 11. Theatrical Print Stock (optional second-stage emulsion)
+        # 10. Theatrical Print Stock (optional second-stage emulsion)
         print_finish = render_plan.get("print_finish")
         if print_finish:
-            rgb_final = self._apply_print_finish(rgb_final, print_finish)
+            rgb_proc = self._apply_print_finish(rgb_proc, print_finish)
 
-        return rgb_final
+        return rgb_proc
 
     # ─── Pre-Film Normalization ───────────────────────────────────────────────
 
@@ -230,7 +226,7 @@ class FilmRenderer:
 
     # ─── Color Response ───────────────────────────────────────────────────────
 
-    def _apply_color_response(self, rgb_proc, masks, response, finish, fc=1.0):
+    def _apply_color_response(self, rgb_proc, masks, response, fc=1.0):
         """
         Performs zone × hue × saturation color response in OKLCH/OKLab space.
         Color biases now come from the ACTUAL stock profile YAML values.
@@ -734,36 +730,6 @@ class FilmRenderer:
         return np.power(rgb_g, 2.2).astype(np.float32)
 
 
-    # ─── Scanner Finish ───────────────────────────────────────────────────────
-
-    def _apply_scanner_finish(self, rgb_proc, finish):
-        """Applies final scan/print contrast, warmth, and black/white point scaling."""
-        oklab = rgb_to_oklab(rgb_proc)
-        L = oklab[:, :, 0]
-
-        # Scanner contrast: simple slope around 0.5 midgray.
-        # Values > 1.0 add contrast, < 1.0 reduce it.
-        # We intentionally keep this mild — the film curve already shaped contrast;
-        # the scanner finish is a subtle paper/print characteristic, not a second S-curve.
-        contrast = finish["scan_contrast"]
-        if contrast != 1.0:
-            # Slope around midgray: brighter above 0.5, darker below 0.5
-            slope  = np.clip(contrast, 0.5, 2.0)
-            L_new  = np.clip(0.5 + (L - 0.5) * slope, 0.0, 1.0)
-            oklab[:, :, 0] = L_new
-
-        warmth = finish["scan_warmth"]
-        oklab[:, :, 2] += warmth * 0.015
-
-        bp = finish["black_point"]
-        wp = finish["white_point"]
-
-        rgb_scan = oklab_to_rgb(oklab)
-        rgb_scan = bp + (wp - bp) * rgb_scan
-
-        return np.clip(rgb_scan, 0.0, 1.0)
-
-    # ─── Theatrical Print Stock Finish ───────────────────────────────────────────
 
     def _apply_print_finish(self, rgb_in, pf):
         """

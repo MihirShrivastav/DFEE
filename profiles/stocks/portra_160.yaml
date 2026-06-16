@@ -1,76 +1,84 @@
 stock_id: portra_160
 stock_name: Kodak Portra 160
 stock_type: color_negative
-
 adaptation:
   base_iso: 160
   default_strength: 0.88
   camera_cast_compensation_sensitivity: 0.62
   highlight_stress_sensitivity: 0.65
   shadow_noise_sensitivity: 0.42
-
 tone_response:
-  toe_strength: 0.34         # Gentle toe — finer grain stock shadow definition
-  toe_length: 0.34           # Long toe — smooth progression into shadows
-  midtone_contrast: 0.94     # sub-unity but realistic contrast — keeps Portra 160 soft but not flat
-  shoulder_strength: 0.58    # Good shoulder — gentle highlight roll-off
-  highlight_rolloff_start: 0.74  # Excellent highlight latitude
-  black_density_floor: 0.010  # Slightly cleaner than 400 due to finer grain emulsion
-  channel_toe_mult:      [0.90, 0.95, 1.10]
-  channel_shoulder_mult: [0.85, 0.95, 1.15]
-  channel_midtone_mult:  [1.02, 1.00, 0.97]
-
+  toe_strength: 0.34
+  toe_length: 0.34
+  midtone_contrast: 0.94
+  shoulder_strength: 0.58
+  highlight_rolloff_start: 0.74
+  black_density_floor: 0.01
+  channel_toe_mult:
+  - 0.9
+  - 0.95
+  - 1.1
+  channel_shoulder_mult:
+  - 0.85
+  - 0.95
+  - 1.15
+  channel_midtone_mult:
+  - 1.02
+  - 1.0
+  - 0.97
 color_response:
-  # Portra 160: slightly more neutral/cool than Portra 400, even finer skin rendering.
-  # Preferred for controlled studio and fashion work where precise colour matters.
-  shadow_bias_lab: [0.0, -1.5, -2.0]     # Cool shadows — slightly bluer than Portra 400
-  midtone_bias_lab: [0.0, 0.8, 1.5]      # Natural warm midtones (less warm than 400)
-  highlight_bias_lab: [0.3, 1.5, 2.5]    # Clean warm highlights
+  shadow_bias_lab:
+  - 0.0
+  - -1.5
+  - -2.0
+  midtone_bias_lab:
+  - 0.0
+  - 0.8
+  - 1.5
+  highlight_bias_lab:
+  - 0.3
+  - 1.5
+  - 2.5
   blue_cast_suppression: 0.22
   green_magenta_stabilization: 0.32
-
 hue_saturation_response:
-  saturation_boost: 1.18          # Slightly less than Portra 400 — more refined
-  red_orange_midtone_compression: 0.42   # Skin-tone protection
+  saturation_boost: 1.18
+  red_orange_midtone_compression: 0.42
   yellow_green_muting: 0.38
-  cyan_blue_highlight_compression: 0.40
+  cyan_blue_highlight_compression: 0.4
   neon_compression: 0.75
   highlight_desaturation: 0.62
-
 grain:
-  size: 0.28                 # Very fine grain — ISO 160 professional
-  strength: 0.20
+  size: 0.28
+  strength: 0.2
   chroma_strength: 0.03
   peak_zone: lower_mid_to_mid
   texture_masking: 0.78
-
 halation:
   trigger: specular_only
-  strength: 0.10
+  strength: 0.1
   radius_inner: 5
   radius_outer: 18
-  warm_core: [1.0, 0.60, 0.28]
-  red_fringe: [0.95, 0.18, 0.05]
-
-scanner:
-  style: frontier_soft
-  contrast: 1.00
-  warmth: 0.06
-  output_sharpening: 0.12
-
+  warm_core:
+  - 1.0
+  - 0.6
+  - 0.28
+  red_fringe:
+  - 0.95
+  - 0.18
+  - 0.05
 chroma_coupling:
-  hi_rolloff_start: 0.76   # Portra: famous wide latitude, late rolloff
-  hi_rolloff_rate:  1.4    # Gradual — Portra keeps colour long into highlights
-  hi_compression:   0.45   # Moderate: highlights go pastel but not too fast
+  hi_rolloff_start: 0.76
+  hi_rolloff_rate: 1.4
+  hi_compression: 0.45
   sh_rolloff_start: 0.17
-  sh_compression:   0.42
-  hi_hue_conv_rad:  0.30   # Warm cream highlight convergence
-  hi_hue_conv_str:  0.20
-
+  sh_compression: 0.42
+  hi_hue_conv_rad: 0.3
+  hi_hue_conv_str: 0.2
 dye_contamination:
-  r_to_g: 0.030
+  r_to_g: 0.03
   g_to_r: 0.015
   b_to_g: 0.012
   b_to_r: 0.006
-  r_to_b: 0.000
+  r_to_b: 0.0
   g_to_b: 0.006

@@ -4,14 +4,13 @@ class RenderPlanSolver:
     def __init__(self):
         pass
 
-    def solve(self, feature_dict, stock_profile, scan_profile, user_controls=None):
+    def solve(self, feature_dict, stock_profile, user_controls=None):
         """
-        Combines feature metrics with stock/scanner behavior to compute the render plan.
+        Combines feature metrics with stock behavior to compute the render plan.
         
         Args:
             feature_dict (dict): The output of ImageStateAnalyzer
             stock_profile (FilmStockProfile): Selected stock behavior profile
-            scan_profile (ScanPrintProfile): Selected scan/print finish profile
             user_controls (dict): Optional user overrides (adaptation_strength, grain_amount, etc.)
         """
         tonal = feature_dict["tonal_distribution"]
@@ -382,23 +381,7 @@ class RenderPlanSolver:
             "sharpness_mask": float(controls.get("sharpness_mask", 0.5))
         }
         
-        # Scanner finish: both contrast fields are now 1.0-centred slope multipliers.
-        # scan_profile.contrast  = base scan characteristic  (frontier_soft=0.92, noritsu=1.0, darkroom=1.12)
-        # stock.scanner.contrast = stock-specific modifier   (Portra=1.0, Kodachrome=1.05, Tri-X=1.08)
-        # Product: 1.0 × 1.0 = 1.0 (neutral), 0.92 × 1.05 = 0.97 (nearly flat), etc.
-        stock_scanner_contrast = float(stock_profile.scanner.get("contrast", 1.0))
-        scan_contrast = float(np.clip(float(scan_profile.contrast) * stock_scanner_contrast, 0.5, 1.8))
-        scan_warmth = float(scan_profile.warmth) + float(stock_profile.scanner.get("warmth", 0.0)) * 0.5
 
-        scanner_finish = {
-            "scan_contrast": scan_contrast,
-            "scan_warmth": scan_warmth,
-            "black_point": float(scan_profile.black_point),
-            "white_point": float(scan_profile.white_point),
-            "color_separation": float(scan_profile.color_separation)
-        }
-        
-        # Print stock finish — optional second-stage theatrical emulsion
         print_finish = None
         print_stock_profile = controls.get("print_stock")
         if print_stock_profile is not None:
@@ -436,7 +419,7 @@ class RenderPlanSolver:
             "pre_film_normalization": pre_film_normalization,
             "film_response":          film_response,
             "material_effects":       material_effects,
-            "scanner_finish":         scanner_finish,
+
             "print_finish":           print_finish,
             "warnings":               warnings
         }

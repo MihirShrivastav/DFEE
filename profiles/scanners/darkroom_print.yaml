@@ -1,8 +1,0 @@
-scanner_id: darkroom_print
-scanner_name: Darkroom Print Finish
-contrast: 1.12             # Richer, deeper analog paper contrast
-warmth: 0.00               # True neutral backing
-black_point: 0.012         # Paper D-min — darkroom prints have a subtle paper base
-white_point: 0.995         # High brightness headroom
-output_sharpening: 0.05    # Soft edge profile (typical of optical enlarging)
-color_separation: 0.20     # Natural, chemically blended colors

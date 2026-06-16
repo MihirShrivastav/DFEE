@@ -1,74 +1,84 @@
 stock_id: vision3_500t
 stock_name: Kodak Vision3 500T
 stock_type: color_negative
-
 adaptation:
   base_iso: 500
-  default_strength: 1.00
-  camera_cast_compensation_sensitivity: 0.80
+  default_strength: 1.0
+  camera_cast_compensation_sensitivity: 0.8
   highlight_stress_sensitivity: 0.88
-  shadow_noise_sensitivity: 0.80
-
+  shadow_noise_sensitivity: 0.8
 tone_response:
-  toe_strength: 0.32         # Open cinema shadows to retain details in high contrast
-  toe_length: 0.36           # Long shadow range entry
-  midtone_contrast: 0.90     # Softer midtone scale typical of film scanned for digital intermediate grading
-  shoulder_strength: 0.55    # Superb highlight roll-off and latitude
-  highlight_rolloff_start: 0.76  # Holds highlights exceptionally long
-  black_density_floor: 0.012  # Professional cinema base fog density
-  channel_toe_mult:      [0.94, 0.98, 1.08]  # Subtle cool tungsten shadow bias
-  channel_shoulder_mult: [0.90, 0.98, 1.15]
-  channel_midtone_mult:  [0.98, 1.00, 1.04]
-
+  toe_strength: 0.32
+  toe_length: 0.36
+  midtone_contrast: 0.9
+  shoulder_strength: 0.55
+  highlight_rolloff_start: 0.76
+  black_density_floor: 0.012
+  channel_toe_mult:
+  - 0.94
+  - 0.98
+  - 1.08
+  channel_shoulder_mult:
+  - 0.9
+  - 0.98
+  - 1.15
+  channel_midtone_mult:
+  - 0.98
+  - 1.0
+  - 1.04
 color_response:
-  shadow_bias_lab: [-0.5, -1.0, -2.5]    # Cooler cyan-blue shadows
-  midtone_bias_lab: [0.0, 0.5, 1.0]      # Warm skin tones
-  highlight_bias_lab: [0.0, 0.2, 0.8]    # Neutral-warm highlights
-  blue_cast_suppression: 0.30
-  green_magenta_stabilization: 0.30
-
+  shadow_bias_lab:
+  - -0.5
+  - -1.0
+  - -2.5
+  midtone_bias_lab:
+  - 0.0
+  - 0.5
+  - 1.0
+  highlight_bias_lab:
+  - 0.0
+  - 0.2
+  - 0.8
+  blue_cast_suppression: 0.3
+  green_magenta_stabilization: 0.3
 hue_saturation_response:
-  saturation_boost: 1.10          # Natural, subtle movie saturation
-  red_orange_midtone_compression: 0.40   # Compresses red/orange midtones to protect skin tones
-  yellow_green_muting: 0.28              # organic foliage greens
+  saturation_boost: 1.1
+  red_orange_midtone_compression: 0.4
+  yellow_green_muting: 0.28
   cyan_blue_highlight_compression: 0.35
-  neon_compression: 0.70
-  highlight_desaturation: 0.60           # Desaturate blown highlights gracefully
-
+  neon_compression: 0.7
+  highlight_desaturation: 0.6
 grain:
-  size: 0.48                 # Noticeable but fine ISO 500 halide structure
-  strength: 0.35             # Elegant, organic cinema grain texture
-  chroma_strength: 0.06      # Subtle color grain noise
+  size: 0.48
+  strength: 0.35
+  chroma_strength: 0.06
   peak_zone: lower_mid_to_mid
-  texture_masking: 0.80
-
+  texture_masking: 0.8
 halation:
   trigger: specular_only
-  strength: 0.12             # Subtle movie halation (remjet layer restricts excessive flare)
+  strength: 0.12
   radius_inner: 4
   radius_outer: 16
-  warm_core: [1.0, 0.55, 0.25]
-  red_fringe: [1.0, 0.12, 0.02]
-
-scanner:
-  style: frontier_soft
-  contrast: 0.98
-  warmth: 0.08
-  output_sharpening: 0.10
-
+  warm_core:
+  - 1.0
+  - 0.55
+  - 0.25
+  red_fringe:
+  - 1.0
+  - 0.12
+  - 0.02
 chroma_coupling:
   hi_rolloff_start: 0.76
-  hi_rolloff_rate:  1.5
-  hi_compression:   0.48
+  hi_rolloff_rate: 1.5
+  hi_compression: 0.48
   sh_rolloff_start: 0.16
-  sh_compression:   0.40
-  hi_hue_conv_rad:  0.30
-  hi_hue_conv_str:  0.20
-
+  sh_compression: 0.4
+  hi_hue_conv_rad: 0.3
+  hi_hue_conv_str: 0.2
 dye_contamination:
   r_to_g: 0.028
   g_to_r: 0.012
-  b_to_g: 0.010
+  b_to_g: 0.01
   b_to_r: 0.005
-  r_to_b: 0.000
+  r_to_b: 0.0
   g_to_b: 0.004

@@ -1,75 +1,84 @@
 stock_id: kodachrome_64
 stock_name: Kodak Kodachrome 64
 stock_type: color_reversal
-
 adaptation:
   base_iso: 64
-  default_strength: 0.90
-  camera_cast_compensation_sensitivity: 0.60
+  default_strength: 0.9
+  camera_cast_compensation_sensitivity: 0.6
   highlight_stress_sensitivity: 0.75
-  shadow_noise_sensitivity: 0.50
-
+  shadow_noise_sensitivity: 0.5
 tone_response:
-  toe_strength: 0.56         # Steeper, firmer toe than negative film — classic slide response
-  toe_length: 0.26           # Short toe transition — shadow detail compresses rapidly but retains separation
-  midtone_contrast: 1.14     # Punchy midtones — Kodachrome's signature contrast and pop
-  shoulder_strength: 0.80    # Strong shoulder — bright highlights roll off gracefully
-  highlight_rolloff_start: 0.65  # Early rolloff — limited highlight latitude characteristic of chromes
-  black_density_floor: 0.002  # Reversal film D-min is virtually zero (transparent base)
-  channel_toe_mult:      [1.00, 1.00, 1.20]  # Blue layer clips slightly sooner
-  channel_shoulder_mult: [1.00, 1.00, 1.30]  # Blue shoulder cuts earlier
-  channel_midtone_mult:  [1.00, 1.02, 0.93]  # Red/green rich midtones, blue slightly lower
-
+  toe_strength: 0.56
+  toe_length: 0.26
+  midtone_contrast: 1.14
+  shoulder_strength: 0.8
+  highlight_rolloff_start: 0.65
+  black_density_floor: 0.002
+  channel_toe_mult:
+  - 1.0
+  - 1.0
+  - 1.2
+  channel_shoulder_mult:
+  - 1.0
+  - 1.0
+  - 1.3
+  channel_midtone_mult:
+  - 1.0
+  - 1.02
+  - 0.93
 color_response:
-  # Lab bias shifts (L_shift, a_shift, b_shift)
-  shadow_bias_lab: [-0.5, -0.5, -3.0]    # Cold/blue shadow cast
-  midtone_bias_lab: [0.0, 1.2, 2.5]      # Warm, classic yellow-red midtones
-  highlight_bias_lab: [0.5, 2.0, 4.5]    # Rich, warm golden highlights
-  blue_cast_suppression: 0.20
+  shadow_bias_lab:
+  - -0.5
+  - -0.5
+  - -3.0
+  midtone_bias_lab:
+  - 0.0
+  - 1.2
+  - 2.5
+  highlight_bias_lab:
+  - 0.5
+  - 2.0
+  - 4.5
+  blue_cast_suppression: 0.2
   green_magenta_stabilization: 0.35
-
 hue_saturation_response:
-  saturation_boost: 1.35          # Kodachrome's legendary color density — vivid reds, blues, gold
-  red_orange_midtone_compression: 0.15   # Low compression -> vibrant reds/oranges
-  yellow_green_muting: 0.10              # Keeps yellows vibrant
+  saturation_boost: 1.35
+  red_orange_midtone_compression: 0.15
+  yellow_green_muting: 0.1
   cyan_blue_highlight_compression: 0.25
-  neon_compression: 0.60
-  highlight_desaturation: 0.30           # Relatively colorful highlights compared to negative film
-
+  neon_compression: 0.6
+  highlight_desaturation: 0.3
 grain:
-  size: 0.25                 # Very fine grain
-  strength: 0.20             # Subtle grain presence
-  chroma_strength: 0.02      # Almost pure luminance grain
+  size: 0.25
+  strength: 0.2
+  chroma_strength: 0.02
   peak_zone: lower_mid_to_mid
-  texture_masking: 0.70
-
+  texture_masking: 0.7
 halation:
   trigger: specular_only
-  strength: 0.10             # Minimal halation (reversal film backing is very effective)
+  strength: 0.1
   radius_inner: 4
   radius_outer: 15
-  warm_core: [1.0, 0.55, 0.20]
-  red_fringe: [0.95, 0.15, 0.05]
-
-scanner:
-  style: frontier_soft
-  contrast: 1.05   # Slight contrast lift above scan profile — reversal film is punchy
-  warmth: 0.10
-  output_sharpening: 0.25
-
+  warm_core:
+  - 1.0
+  - 0.55
+  - 0.2
+  red_fringe:
+  - 0.95
+  - 0.15
+  - 0.05
 chroma_coupling:
-  hi_rolloff_start: 0.72   # Reversal: rolloff starts relatively early
-  hi_rolloff_rate:  2.8    # Moderate-sharp cutoff (not as abrupt as Velvia)
-  hi_compression:   0.65   # Highlights become noticeably pastel
-  sh_rolloff_start: 0.16   # Shadows lose colour from this L value down
-  sh_compression:   0.50   # Moderate shadow absorption
-  hi_hue_conv_rad:  0.15   # Near-neutral highlight white-point (reversal)
-  hi_hue_conv_str:  0.12   # Subtle convergence
-
+  hi_rolloff_start: 0.72
+  hi_rolloff_rate: 2.8
+  hi_compression: 0.65
+  sh_rolloff_start: 0.16
+  sh_compression: 0.5
+  hi_hue_conv_rad: 0.15
+  hi_hue_conv_str: 0.12
 dye_contamination:
-  r_to_g: 0.00   # Reversal: very little inter-layer leakage (direct positive)
-  g_to_r: 0.00
-  b_to_g: 0.00
-  b_to_r: 0.00
-  r_to_b: 0.00
-  g_to_b: 0.00
+  r_to_g: 0.0
+  g_to_r: 0.0
+  b_to_g: 0.0
+  b_to_r: 0.0
+  r_to_b: 0.0
+  g_to_b: 0.0

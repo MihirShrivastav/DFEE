@@ -1,73 +1,84 @@
 stock_id: superia_400
 stock_name: Fujifilm Superia 400
 stock_type: color_negative
-
 adaptation:
   base_iso: 400
   default_strength: 0.95
   camera_cast_compensation_sensitivity: 0.75
   highlight_stress_sensitivity: 0.85
   shadow_noise_sensitivity: 0.65
-
 tone_response:
-  toe_strength: 0.42         # Moderate toe — sits in the middle between consumer and pro
-  toe_length: 0.30           # Average shadow gradation
-  midtone_contrast: 1.02     # standard print-scan contrast
-  shoulder_strength: 0.62    # Decent shoulder — better highlight preservation
-  highlight_rolloff_start: 0.70  # Moderate highlight latitude
-  black_density_floor: 0.012  # Standard color negative D-min
-  channel_toe_mult:      [0.95, 1.00, 1.15]
-  channel_shoulder_mult: [0.92, 1.00, 1.20]
-  channel_midtone_mult:  [1.02, 1.00, 0.96]
-
+  toe_strength: 0.42
+  toe_length: 0.3
+  midtone_contrast: 1.02
+  shoulder_strength: 0.62
+  highlight_rolloff_start: 0.7
+  black_density_floor: 0.012
+  channel_toe_mult:
+  - 0.95
+  - 1.0
+  - 1.15
+  channel_shoulder_mult:
+  - 0.92
+  - 1.0
+  - 1.2
+  channel_midtone_mult:
+  - 1.02
+  - 1.0
+  - 0.96
 color_response:
-  shadow_bias_lab: [0.0, -1.8, -1.0]     # Cool, green-cyan shadows (Fujifilm look)
-  midtone_bias_lab: [0.0, -0.5, 0.5]     # Slightly cool, neutral midtones
-  highlight_bias_lab: [0.0, -0.2, 1.2]    # Balanced highlight tones
-  blue_cast_suppression: 0.30
-  green_magenta_stabilization: 0.15      # Low stabilization to allow strong green tones
-
+  shadow_bias_lab:
+  - 0.0
+  - -1.8
+  - -1.0
+  midtone_bias_lab:
+  - 0.0
+  - -0.5
+  - 0.5
+  highlight_bias_lab:
+  - 0.0
+  - -0.2
+  - 1.2
+  blue_cast_suppression: 0.3
+  green_magenta_stabilization: 0.15
 hue_saturation_response:
-  saturation_boost: 1.28          # Fuji Superia — punchy greens, rich cyans/blues
+  saturation_boost: 1.28
   red_orange_midtone_compression: 0.25
-  yellow_green_muting: 0.15              # Fuji preserves punchy, deep greens
-  cyan_blue_highlight_compression: 0.35   # Gorgeous, rich sky blues
+  yellow_green_muting: 0.15
+  cyan_blue_highlight_compression: 0.35
   neon_compression: 0.68
-  highlight_desaturation: 0.50
-
+  highlight_desaturation: 0.5
 grain:
-  size: 0.48                 # Slightly coarser grain than Portra
+  size: 0.48
   strength: 0.42
-  chroma_strength: 0.12      # More color noise in grain
+  chroma_strength: 0.12
   peak_zone: lower_mid_to_mid
   texture_masking: 0.75
-
 halation:
   trigger: specular_only
-  strength: 0.20
+  strength: 0.2
   radius_inner: 5
   radius_outer: 20
-  warm_core: [1.0, 0.50, 0.25]
-  red_fringe: [1.0, 0.15, 0.08]
-
-scanner:
-  style: noritsu_smooth
-  contrast: 1.00   # Neutral — Fuji scanned on Noritsu with no added contrast push
-  warmth: 0.05
-  output_sharpening: 0.15
+  warm_core:
+  - 1.0
+  - 0.5
+  - 0.25
+  red_fringe:
+  - 1.0
+  - 0.15
+  - 0.08
 chroma_coupling:
-  hi_rolloff_start: 0.70
-  hi_rolloff_rate:  1.8
-  hi_compression:   0.55
+  hi_rolloff_start: 0.7
+  hi_rolloff_rate: 1.8
+  hi_compression: 0.55
   sh_rolloff_start: 0.19
-  sh_compression:   0.48
-  hi_hue_conv_rad:  0.28
-  hi_hue_conv_str:  0.18
-
+  sh_compression: 0.48
+  hi_hue_conv_rad: 0.28
+  hi_hue_conv_str: 0.18
 dye_contamination:
   r_to_g: 0.028
   g_to_r: 0.013
   b_to_g: 0.011
   b_to_r: 0.005
-  r_to_b: 0.000
+  r_to_b: 0.0
   g_to_b: 0.006

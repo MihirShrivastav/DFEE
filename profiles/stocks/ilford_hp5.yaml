@@ -1,74 +1,84 @@
 stock_id: ilford_hp5
 stock_name: Ilford HP5 Plus 400
 stock_type: monochrome
-
 adaptation:
   base_iso: 400
-  default_strength: 1.00
-  camera_cast_compensation_sensitivity: 0.50
-  highlight_stress_sensitivity: 0.80
+  default_strength: 1.0
+  camera_cast_compensation_sensitivity: 0.5
+  highlight_stress_sensitivity: 0.8
   shadow_noise_sensitivity: 0.75
-
 tone_response:
-  toe_strength: 0.38         # Very gentle toe — HP5 has massive shadow latitude
-  toe_length: 0.40           # Extremely long transition into shadows
-  midtone_contrast: 0.95     # Naturally flat and forgiving
-  shoulder_strength: 0.50    # Huge highlight latitude, very smooth rolloff
-  highlight_rolloff_start: 0.80
-  black_density_floor: 0.012  # Classic B&W base fog
-  channel_toe_mult:      [1.0, 1.0, 1.0]
-  channel_shoulder_mult: [1.0, 1.0, 1.0]
-  channel_midtone_mult:  [1.0, 1.0, 1.0]
-
+  toe_strength: 0.38
+  toe_length: 0.4
+  midtone_contrast: 0.95
+  shoulder_strength: 0.5
+  highlight_rolloff_start: 0.8
+  black_density_floor: 0.012
+  channel_toe_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+  channel_shoulder_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+  channel_midtone_mult:
+  - 1.0
+  - 1.0
+  - 1.0
 color_response:
-  shadow_bias_lab: [0.0, 0.0, 0.0]
-  midtone_bias_lab: [0.0, 0.0, 0.0]
-  highlight_bias_lab: [0.0, 0.0, 0.0]
+  shadow_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  midtone_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  highlight_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
   blue_cast_suppression: 0.0
   green_magenta_stabilization: 0.0
-
 hue_saturation_response:
   saturation_boost: 1.0
-  red_orange_midtone_compression: 1.00
-  yellow_green_muting: 1.00
-  cyan_blue_highlight_compression: 1.00
-  neon_compression: 1.00
-  highlight_desaturation: 1.00
-
+  red_orange_midtone_compression: 1.0
+  yellow_green_muting: 1.0
+  cyan_blue_highlight_compression: 1.0
+  neon_compression: 1.0
+  highlight_desaturation: 1.0
 grain:
-  size: 0.55                 # Classic organic cubic grain
-  strength: 0.45             # Pronounced but pleasant
-  chroma_strength: 0.00
+  size: 0.55
+  strength: 0.45
+  chroma_strength: 0.0
   peak_zone: midtones
-  texture_masking: 0.60
-
+  texture_masking: 0.6
 halation:
   trigger: specular_only
-  strength: 0.10             # Minimal halation on modern HP5
+  strength: 0.1
   radius_inner: 4
   radius_outer: 15
-  warm_core: [1.0, 1.0, 1.0]
-  red_fringe: [1.0, 1.0, 1.0]
-
-scanner:
-  style: darkroom_print
-  contrast: 1.10   # Often printed punchy to counteract the flat negative
-  warmth: 0.00
-  output_sharpening: 0.15
-
+  warm_core:
+  - 1.0
+  - 1.0
+  - 1.0
+  red_fringe:
+  - 1.0
+  - 1.0
+  - 1.0
 chroma_coupling:
-  hi_rolloff_start: 0.70
-  hi_rolloff_rate:  2.0
-  hi_compression:   0.00
+  hi_rolloff_start: 0.7
+  hi_rolloff_rate: 2.0
+  hi_compression: 0.0
   sh_rolloff_start: 0.18
-  sh_compression:   0.00
-  hi_hue_conv_rad:  0.0
-  hi_hue_conv_str:  0.0
-
+  sh_compression: 0.0
+  hi_hue_conv_rad: 0.0
+  hi_hue_conv_str: 0.0
 dye_contamination:
-  r_to_g: 0.00
-  g_to_r: 0.00
-  b_to_g: 0.00
-  b_to_r: 0.00
-  r_to_b: 0.00
-  g_to_b: 0.00
+  r_to_g: 0.0
+  g_to_r: 0.0
+  b_to_g: 0.0
+  b_to_r: 0.0
+  r_to_b: 0.0
+  g_to_b: 0.0

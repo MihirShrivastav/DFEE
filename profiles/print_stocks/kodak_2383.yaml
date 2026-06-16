@@ -6,14 +6,14 @@ print_stock_name: Kodak Vision 2383
 # Used on: The Dark Knight, No Country for Old Men, Inception, There Will Be Blood.
 
 tone:
-  shadow_lift: 0.024          # D-min base lift — prints have a characteristic black density floor
-  contrast_boost: 1.14        # Print stock adds contrast on top of negative curve (steep gamma)
+  shadow_lift: 0.008          # Lower D-min for richer, more sophisticated blacks
+  contrast_boost: 1.18        # Print stock adds contrast on top of negative curve (steep gamma)
   highlight_rolloff: 0.78     # Highlight compression point — where print starts rolling off
   highlight_rolloff_rate: 2.2 # Speed of the shoulder rolloff (higher = snappier compression)
-  toe_depth: 0.85             # How deeply shadows are anchored (0.0=open, 1.0=very crushed)
+  toe_depth: 0.92             # Deeply anchored shadows
 
 color:
-  shadow_bias_lab: [0.8, 0.4, 1.2]    # Warm amber-orange base in shadows (projection-era characteristic)
+  shadow_bias_lab: [0.4, 0.2, 0.8]    # Subtle warm amber base in shadows (cleaner projection look)
   midtone_bias_lab: [0.0, 0.6, 1.8]   # Warm golden midtones — classic Kodak skin tone rendering
   highlight_bias_lab: [0.0, 0.0, 0.5] # Nearly neutral highlights (matched RGB toe curves)
   blue_suppression: 0.22               # Blue layer compression (warm bias, signature 2383 trait)

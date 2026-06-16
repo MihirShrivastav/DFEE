@@ -1,74 +1,84 @@
 stock_id: portra_400
 stock_name: Kodak Portra 400
 stock_type: color_negative
-
 adaptation:
   base_iso: 400
-  default_strength: 1.00
-  camera_cast_compensation_sensitivity: 0.80
-  highlight_stress_sensitivity: 0.90
-  shadow_noise_sensitivity: 0.70
-
+  default_strength: 1.0
+  camera_cast_compensation_sensitivity: 0.8
+  highlight_stress_sensitivity: 0.9
+  shadow_noise_sensitivity: 0.7
 tone_response:
-  toe_strength: 0.32         # Gentle toe — Portra's signature open, breathing shadows
-  toe_length: 0.36           # Long toe — shadows gradiate smoothly
-  midtone_contrast: 0.96     # sub-unity but realistic contrast — keeps Portra soft but not flat
-  shoulder_strength: 0.55    # Gentle shoulder — superb highlight rolloff and latitude
-  highlight_rolloff_start: 0.76  # Late rolloff — Portra holds highlights longer than almost any negative film
-  black_density_floor: 0.012  # Color neg D-min — orange-masked base fog, barely perceptible in absolute blacks only
-  channel_toe_mult:      [0.90, 0.95, 1.12]
-  channel_shoulder_mult: [0.85, 0.95, 1.18]
-  channel_midtone_mult:  [1.02, 1.00, 0.96]
-
+  toe_strength: 0.32
+  toe_length: 0.36
+  midtone_contrast: 0.96
+  shoulder_strength: 0.55
+  highlight_rolloff_start: 0.76
+  black_density_floor: 0.012
+  channel_toe_mult:
+  - 0.9
+  - 0.95
+  - 1.12
+  channel_shoulder_mult:
+  - 0.85
+  - 0.95
+  - 1.18
+  channel_midtone_mult:
+  - 1.02
+  - 1.0
+  - 0.96
 color_response:
-  shadow_bias_lab: [0.0, -1.0, -1.5]     # Subtle cool-cyan shadows
-  midtone_bias_lab: [0.0, 0.8, 1.5]      # Pastel, warm skin-friendly midtones
-  highlight_bias_lab: [0.0, 0.5, 1.8]    # Soft, creamy highlights
-  blue_cast_suppression: 0.40            # Keep blues pleasingly compressed
-  green_magenta_stabilization: 0.30
-
+  shadow_bias_lab:
+  - 0.0
+  - -1.0
+  - -1.5
+  midtone_bias_lab:
+  - 0.0
+  - 0.8
+  - 1.5
+  highlight_bias_lab:
+  - 0.0
+  - 0.5
+  - 1.8
+  blue_cast_suppression: 0.4
+  green_magenta_stabilization: 0.3
 hue_saturation_response:
-  saturation_boost: 1.20          # Color negative — rich, latitude-friendly saturation
-  red_orange_midtone_compression: 0.40   # Compress red/orange to protect skin tones
-  yellow_green_muting: 0.35              # Mute green/yellow for organic foliage
+  saturation_boost: 1.2
+  red_orange_midtone_compression: 0.4
+  yellow_green_muting: 0.35
   cyan_blue_highlight_compression: 0.45
   neon_compression: 0.75
-  highlight_desaturation: 0.60           # Strong highlight desaturation
-
+  highlight_desaturation: 0.6
 grain:
-  size: 0.45                 # Medium grain size
-  strength: 0.38             # Noticeable but pleasing grain
-  chroma_strength: 0.08      # Subtle chroma component
+  size: 0.45
+  strength: 0.38
+  chroma_strength: 0.08
   peak_zone: lower_mid_to_mid
-  texture_masking: 0.80
-
+  texture_masking: 0.8
 halation:
   trigger: specular_only
-  strength: 0.25             # Pronounced halation (classic color negative film feature)
+  strength: 0.25
   radius_inner: 6
   radius_outer: 24
-  warm_core: [1.0, 0.60, 0.30]
-  red_fringe: [1.0, 0.20, 0.05]
-
-scanner:
-  style: frontier_soft
-  contrast: 1.00   # Neutral scan — color negative scanned flat, grade in post
-  warmth: 0.15
-  output_sharpening: 0.10
-
+  warm_core:
+  - 1.0
+  - 0.6
+  - 0.3
+  red_fringe:
+  - 1.0
+  - 0.2
+  - 0.05
 chroma_coupling:
   hi_rolloff_start: 0.75
-  hi_rolloff_rate:  1.5
-  hi_compression:   0.48
+  hi_rolloff_rate: 1.5
+  hi_compression: 0.48
   sh_rolloff_start: 0.18
-  sh_compression:   0.43
-  hi_hue_conv_rad:  0.30
-  hi_hue_conv_str:  0.20
-
+  sh_compression: 0.43
+  hi_hue_conv_rad: 0.3
+  hi_hue_conv_str: 0.2
 dye_contamination:
-  r_to_g: 0.030
+  r_to_g: 0.03
   g_to_r: 0.015
   b_to_g: 0.012
   b_to_r: 0.006
-  r_to_b: 0.000
+  r_to_b: 0.0
   g_to_b: 0.006

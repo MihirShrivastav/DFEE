@@ -1,8 +1,0 @@
-scanner_id: noritsu_smooth
-scanner_name: Noritsu Smooth Scan
-contrast: 1.00             # Neutral scan — no contrast modification
-warmth: 0.02               # Neutral/cool calibration
-black_point: 0.004         # Near-zero — Noritsu calibrates tightly to film D-min
-white_point: 0.990         # Slightly high highlight point
-output_sharpening: 0.18    # Slightly crisper digital sharpening
-color_separation: 0.50     # Higher color separation (distinct hues)

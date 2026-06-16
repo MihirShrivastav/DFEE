@@ -27,7 +27,7 @@ const CameraIcon = () => (
 
 const DEFAULT_PARAMS = {
   stock: 'none',
-  scanner: 'none',
+
   exposure: 0.0,
   highlights: 0,
   shadows: 0,
@@ -71,7 +71,7 @@ const BUILTIN_PRESETS = [
     id: 'k64',
     name: 'Kodachrome 64 Soft',
     stock: 'kodachrome_64',
-    params: { scanner: 'frontier_soft', exposure: 0.15, contrast: 20, temp: 15, tint: 5, adaptation: 1.0 },
+    params: { exposure: 0.15, contrast: 20, temp: 15, tint: 5, adaptation: 1.0 },
     curves: DEFAULT_CURVES,
     hsl: DEFAULT_HSL,
     isBuiltin: true
@@ -80,7 +80,7 @@ const BUILTIN_PRESETS = [
     id: 'portra',
     name: 'Portra 400 Soft Warm',
     stock: 'portra_400',
-    params: { scanner: 'noritsu_smooth', exposure: 0.4, contrast: -10, temp: 5, tint: -10, adaptation: 0.85 },
+    params: { exposure: 0.4, contrast: -10, temp: 5, tint: -10, adaptation: 0.85 },
     curves: DEFAULT_CURVES,
     hsl: DEFAULT_HSL,
     isBuiltin: true
@@ -89,7 +89,7 @@ const BUILTIN_PRESETS = [
     id: 'trix',
     name: 'Tri-X 400 Rich Black',
     stock: 'tri_x_400',
-    params: { scanner: 'darkroom_print', exposure: 0.0, contrast: 30, temp: 0, tint: 0, adaptation: 1.0 },
+    params: { exposure: 0.0, contrast: 30, temp: 0, tint: 0, adaptation: 1.0 },
     curves: DEFAULT_CURVES,
     hsl: DEFAULT_HSL,
     isBuiltin: true
@@ -98,7 +98,7 @@ const BUILTIN_PRESETS = [
     id: 'velvia',
     name: 'Velvia 50 Landscape',
     stock: 'velvia_50',
-    params: { scanner: 'frontier_soft', exposure: -0.10, contrast: 15, temp: 5, tint: 5, saturation: 10, adaptation: 1.0 },
+    params: { exposure: -0.10, contrast: 15, temp: 5, tint: 5, saturation: 10, adaptation: 1.0 },
     curves: DEFAULT_CURVES,
     hsl: DEFAULT_HSL,
     isBuiltin: true
@@ -107,7 +107,7 @@ const BUILTIN_PRESETS = [
 
 export default function App() {
   const [files, setFiles] = useState([]);
-  const [profiles, setProfiles] = useState({ stocks: [], scanners: [], print_stocks: [] });
+  const [profiles, setProfiles] = useState({ stocks: [], print_stocks: [] });
   const [selectedFile, setSelectedFile] = useState(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [selectLoading, setSelectLoading] = useState(false);
@@ -339,7 +339,7 @@ export default function App() {
     const np = next.params;  const pp = prev.params;
     const changes = [];
     if (np.stock   !== pp.stock)   changes.push(`Stock → ${np.stock === 'none' ? 'None' : np.stock.replace(/_/g,' ')}`);
-    if (np.scanner !== pp.scanner) changes.push(`Scanner → ${np.scanner}`);
+
     const numericKeys = Object.keys(DEFAULT_PARAMS).filter(k => 
       typeof DEFAULT_PARAMS[k] === 'number' && 
       k !== 'adaptation' &&
@@ -491,7 +491,7 @@ export default function App() {
         .map(([k, v]) => `&hsl_${k}=${v}`).join('');
       const url = `${API}/api/preview?filename=${encodeURIComponent(selectedFile)}`
         + `&stock=${encodeURIComponent(params.stock)}`
-        + `&scanner=${encodeURIComponent(params.scanner)}`
+
         + `&exposure=${params.exposure}`
         + `&highlights=${params.highlights}`
         + `&shadows=${params.shadows}`
@@ -549,7 +549,7 @@ export default function App() {
     return () => clearTimeout(debounceRef.current);
   }, [
     selectedFile,
-    params.stock, params.scanner, params.exposure, params.highlights,
+    params.stock, params.exposure, params.highlights,
     params.shadows, params.blacks, params.whites, params.midtones,
     params.contrast, params.temp, params.tint,
     params.saturation, params.vibrance,
@@ -687,7 +687,7 @@ export default function App() {
         body: JSON.stringify({
           filename: selectedFile,
           stock: params.stock,
-          scanner: params.scanner,
+
           exposure: params.exposure,
           highlights: params.highlights,
           shadows: params.shadows,
@@ -1159,14 +1159,7 @@ export default function App() {
                       </optgroup>
                     </select>
                   </div>
-                  <div className="field">
-                    <label className="field-label">Scanner / Finish</label>
-                    <select className="select" value={params.scanner} onChange={set('scanner')}>
-                      {profiles.scanners.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
+
                   <div className="field">
                     <label className="field-label" title="Applies a theatrical positive print stock emulation on top of the camera negative, adding characteristic shadow lift and contrast.">
                       Print Finish

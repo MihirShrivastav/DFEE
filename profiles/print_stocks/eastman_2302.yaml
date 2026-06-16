@@ -7,14 +7,14 @@ print_stock_name: Eastman Color Print 5381
 # the cyan dye fades first, shifting towards warm orange-red over time.
 
 tone:
-  shadow_lift: 0.032          # Higher D-min — vintage stock base density
+  shadow_lift: 0.018          # Vintage D-min
   contrast_boost: 1.18        # High print contrast characteristic of older stocks
   highlight_rolloff: 0.72     # Earlier rolloff — old prints compressed highlights faster
   highlight_rolloff_rate: 2.0 # Medium rolloff rate
-  toe_depth: 0.88             # Deep, crushing shadow density
+  toe_depth: 0.90             # Deep shadow density
 
 color:
-  shadow_bias_lab: [1.5, 1.2, 2.5]    # Warm orange-brown shadow cast (vintage base fog)
+  shadow_bias_lab: [0.8, 0.6, 1.5]    # Warm orange-brown shadow cast
   midtone_bias_lab: [0.0, 1.0, 3.5]   # Strong golden-orange midtones (Eastman Color signature)
   highlight_bias_lab: [0.0, 0.5, 2.0] # Warm-orange highlights (characteristic vintage fade)
   blue_suppression: 0.32               # Strong blue suppression (cyan dye age degradation)

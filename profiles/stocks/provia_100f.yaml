@@ -1,75 +1,84 @@
 stock_id: provia_100f
 stock_name: Fujifilm Provia 100F
 stock_type: color_reversal
-
 adaptation:
   base_iso: 100
-  default_strength: 0.90
+  default_strength: 0.9
   camera_cast_compensation_sensitivity: 0.55
-  highlight_stress_sensitivity: 0.70
-  shadow_noise_sensitivity: 0.40
-
+  highlight_stress_sensitivity: 0.7
+  shadow_noise_sensitivity: 0.4
 tone_response:
-  toe_strength: 0.50         # Moderately firm toe, but more open than Velvia or Kodachrome
-  toe_length: 0.28           # Standard chrome shadow gradation, relatively short transition
-  midtone_contrast: 1.08     # Punchy, clean reversal contrast
-  shoulder_strength: 0.76     # Strong shoulder to control highlight blowout
-  highlight_rolloff_start: 0.68  # Reversal latitude
-  black_density_floor: 0.003  # Reversal D-min is very clean
-  channel_toe_mult:      [1.00, 1.00, 1.15]
-  channel_shoulder_mult: [1.00, 1.00, 1.20]
-  channel_midtone_mult:  [1.00, 1.00, 0.97]
-
+  toe_strength: 0.5
+  toe_length: 0.28
+  midtone_contrast: 1.08
+  shoulder_strength: 0.76
+  highlight_rolloff_start: 0.68
+  black_density_floor: 0.003
+  channel_toe_mult:
+  - 1.0
+  - 1.0
+  - 1.15
+  channel_shoulder_mult:
+  - 1.0
+  - 1.0
+  - 1.2
+  channel_midtone_mult:
+  - 1.0
+  - 1.0
+  - 0.97
 color_response:
-  # Provia: renowned for accurate, neutral colour reproduction — a reference slide film
-  shadow_bias_lab: [0.0, -0.5, -1.5]     # Subtle cool-blue shadow
-  midtone_bias_lab: [0.0, 0.0, 0.5]      # Near-neutral midtones (very accurate)
-  highlight_bias_lab: [0.3, 0.5, 1.5]    # Very slightly warm highlights
+  shadow_bias_lab:
+  - 0.0
+  - -0.5
+  - -1.5
+  midtone_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.5
+  highlight_bias_lab:
+  - 0.3
+  - 0.5
+  - 1.5
   blue_cast_suppression: 0.15
   green_magenta_stabilization: 0.25
-
 hue_saturation_response:
-  saturation_boost: 1.15          # Vivid but measured — not as extreme as Velvia
+  saturation_boost: 1.15
   red_orange_midtone_compression: 0.22
   yellow_green_muting: 0.18
   cyan_blue_highlight_compression: 0.22
   neon_compression: 0.55
   highlight_desaturation: 0.25
-
 grain:
-  size: 0.18                 # Very fine grain (ISO 100 professional reversal)
+  size: 0.18
   strength: 0.12
-  chroma_strength: 0.010
+  chroma_strength: 0.01
   peak_zone: lower_mid_to_mid
-  texture_masking: 0.80
-
+  texture_masking: 0.8
 halation:
   trigger: specular_only
   strength: 0.06
   radius_inner: 3
   radius_outer: 12
-  warm_core: [1.0, 0.55, 0.22]
-  red_fringe: [0.92, 0.15, 0.04]
-
-scanner:
-  style: noritsu_smooth
-  contrast: 1.03
-  warmth: 0.02
-  output_sharpening: 0.15
-
+  warm_core:
+  - 1.0
+  - 0.55
+  - 0.22
+  red_fringe:
+  - 0.92
+  - 0.15
+  - 0.04
 chroma_coupling:
   hi_rolloff_start: 0.74
-  hi_rolloff_rate:  2.5
-  hi_compression:   0.60
+  hi_rolloff_rate: 2.5
+  hi_compression: 0.6
   sh_rolloff_start: 0.17
-  sh_compression:   0.45
-  hi_hue_conv_rad:  0.12
-  hi_hue_conv_str:  0.10
-
+  sh_compression: 0.45
+  hi_hue_conv_rad: 0.12
+  hi_hue_conv_str: 0.1
 dye_contamination:
-  r_to_g: 0.00
-  g_to_r: 0.00
-  b_to_g: 0.00
-  b_to_r: 0.00
-  r_to_b: 0.00
-  g_to_b: 0.00
+  r_to_g: 0.0
+  g_to_r: 0.0
+  b_to_g: 0.0
+  b_to_r: 0.0
+  r_to_b: 0.0
+  g_to_b: 0.0

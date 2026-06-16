@@ -32,7 +32,6 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_DIR = os.path.join(BASE_DIR, "raw_files")
 STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "stocks")
-SCANNERS_DIR = os.path.join(BASE_DIR, "profiles", "scanners")
 PRINT_STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "print_stocks")
 
 # Ensure directories exist
@@ -103,7 +102,6 @@ class SelectRequest(BaseModel):
 class PreviewRequest(BaseModel):
     filename: str
     stock: str
-    scanner: str
     exposure: float = 0.0    # EV stops
     highlights: float = 0.0  # -100 to +100
     shadows: float = 0.0     # -100 to +100
@@ -288,19 +286,7 @@ def list_profiles():
         except:
             pass
             
-    # List scanners — prepend a 'none' passthrough option
-    scanners_files = glob.glob(os.path.join(SCANNERS_DIR, "*.yaml"))
-    scanners = [{"id": "none", "name": "No scan finish"}]
-    for f in scanners_files:
-        name = os.path.splitext(os.path.basename(f))[0]
-        try:
-            scanners.append({
-                "id": name,
-                "name": name.replace("_", " ").title()
-            })
-        except:
-            pass
-            
+
     # List print stocks
     print_stocks_files = glob.glob(os.path.join(PRINT_STOCKS_DIR, "*.yaml"))
     print_stocks = [{"id": "none", "name": "No print finish"}]
@@ -314,7 +300,7 @@ def list_profiles():
         except:
             pass
 
-    return {"stocks": stocks, "scanners": scanners, "print_stocks": print_stocks}
+    return {"stocks": stocks, "print_stocks": print_stocks}
 
 
 def _apply_post_film_color(rendered, saturation, vibrance):
@@ -534,7 +520,6 @@ def get_raw_image():
 def get_preview(
     filename: str,
     stock: str,
-    scanner: str,
     exposure: float = 0.0,
     highlights: float = 0.0,
     shadows: float = 0.0,
@@ -585,16 +570,11 @@ def get_preview(
             raise HTTPException(status_code=400, detail="No active session")
         return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 
-    # Scanner passthrough
-    if scanner == "none":
-        scan_path = os.path.join(SCANNERS_DIR, "neutral.yaml")
-    else:
-        scan_path = os.path.join(SCANNERS_DIR, f"{scanner}.yaml")
+
 
     try:
         stock_path   = os.path.join(STOCKS_DIR, f"{stock}.yaml")
         stock_profile = FilmStockProfile(stock_path)
-        scan_profile  = ScanPrintProfile(scan_path)
 
         solver = RenderPlanSolver()
         user_overrides = {
@@ -616,18 +596,18 @@ def get_preview(
             "print_contrast": print_contrast,
             "print_black_point": print_black_point,
         }
-        plan = solver.solve(session.feature_dict, stock_profile, scan_profile, user_overrides)
+        render_plan, feature_metrics = solver.solve(session.feature_dict, stock_profile, user_overrides)
 
         # Apply all pre-film slider adjustments (corrected pipeline order)
         rgb_input = session.preview_rgb_linear.copy()
         rgb_input = _apply_pre_film_sliders(
             rgb_input, session.masks,
             exposure, highlights, shadows,
-            blacks, whites, midtones, contrast, temp, tint, plan
+            blacks, whites, midtones, contrast, temp, tint, render_plan
         )
 
         renderer = FilmRenderer()
-        rendered = renderer.render(rgb_input, session.masks, plan)
+        rendered = renderer.render(rgb_input, session.masks, render_plan)
         rendered = np.clip(rendered, 0.0, 1.0)
 
         # Post-film saturation / vibrance
@@ -670,13 +650,7 @@ def export_file(req: PreviewRequest):
 
     try:
         stock_path = os.path.join(STOCKS_DIR, f"{req.stock}.yaml")
-        if req.scanner == "none":
-            scan_path = os.path.join(SCANNERS_DIR, "neutral.yaml")
-        else:
-            scan_path = os.path.join(SCANNERS_DIR, f"{req.scanner}.yaml")
-
         stock_profile = FilmStockProfile(stock_path)
-        scan_profile  = ScanPrintProfile(scan_path)
 
         basename    = os.path.splitext(req.filename)[0]
         report_path = os.path.join(RAW_DIR, f"{basename}_{req.stock}_report.json")
@@ -741,7 +715,7 @@ def export_file(req: PreviewRequest):
             "print_contrast": req.print_contrast,
             "print_black_point": req.print_black_point,
         }
-        plan = solver.solve(feature_dict, stock_profile, scan_profile, user_overrides)
+        render_plan, _ = solver.solve(feature_dict, stock_profile, user_overrides)
 
         # Apply all pre-film slider adjustments (same corrected pipeline as preview)
         print("Rendering full resolution image...")

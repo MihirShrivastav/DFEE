@@ -1,78 +1,84 @@
 stock_id: cinestill_800t
 stock_name: CineStill 800T
 stock_type: color_negative
-
 adaptation:
   base_iso: 800
   default_strength: 0.88
-  camera_cast_compensation_sensitivity: 0.40   # Tungsten balance is intentional — don't fight it
-  highlight_stress_sensitivity: 0.80
+  camera_cast_compensation_sensitivity: 0.4
+  highlight_stress_sensitivity: 0.8
   shadow_noise_sensitivity: 0.65
-
 tone_response:
-  toe_strength: 0.36         # Cinema-style toe — open shadows
-  toe_length: 0.32           # Long toe — cinema stocks are latitude-first
-  midtone_contrast: 0.95     # Pleasant cinematic contrast — not flat
-  shoulder_strength: 0.52    # Gentle shoulder — cinema stocks roll off highlights gracefully
-  highlight_rolloff_start: 0.72  # Good highlight latitude
-  black_density_floor: 0.012  # Cinema stock D-min — similar to color negative pro stocks
-  channel_toe_mult:      [0.95, 1.00, 1.18]
-  channel_shoulder_mult: [0.90, 1.00, 1.25]
-  channel_midtone_mult:  [1.00, 1.00, 0.94]
-
+  toe_strength: 0.36
+  toe_length: 0.32
+  midtone_contrast: 0.95
+  shoulder_strength: 0.52
+  highlight_rolloff_start: 0.72
+  black_density_floor: 0.012
+  channel_toe_mult:
+  - 0.95
+  - 1.0
+  - 1.18
+  channel_shoulder_mult:
+  - 0.9
+  - 1.0
+  - 1.25
+  channel_midtone_mult:
+  - 1.0
+  - 1.0
+  - 0.94
 color_response:
-  # CineStill 800T = Kodak Vision3 500T without the remjet backing.
-  # Tungsten-balanced: strong blue throughout the scene under daylight.
-  # Tungsten light sources (warm) appear natural; daylight appears strongly blue.
-  shadow_bias_lab: [0.0, -2.5, -6.0]     # Very strong cool-blue shadow cast (daylight as blue)
-  midtone_bias_lab: [0.0, -1.5, -3.5]    # Blue-cyan midtone cast
-  highlight_bias_lab: [0.5, 2.0, 5.0]    # Tungsten lights appear warm-orange in highlights
-  blue_cast_suppression: 0.00            # Do NOT suppress — the blue is the character
+  shadow_bias_lab:
+  - 0.0
+  - -2.5
+  - -6.0
+  midtone_bias_lab:
+  - 0.0
+  - -1.5
+  - -3.5
+  highlight_bias_lab:
+  - 0.5
+  - 2.0
+  - 5.0
+  blue_cast_suppression: 0.0
   green_magenta_stabilization: 0.15
-
 hue_saturation_response:
   saturation_boost: 1.18
   red_orange_midtone_compression: 0.22
   yellow_green_muting: 0.25
-  cyan_blue_highlight_compression: 0.12  # Rich blues — let them through
+  cyan_blue_highlight_compression: 0.12
   neon_compression: 0.58
   highlight_desaturation: 0.48
-
 grain:
-  size: 0.62                 # Visibly coarse grain — ISO 800 cinema stock
+  size: 0.62
   strength: 0.55
-  chroma_strength: 0.20      # CineStill has notable colour grain
+  chroma_strength: 0.2
   peak_zone: lower_mid_to_mid
   texture_masking: 0.55
-
 halation:
-  # CineStill's defining characteristic — Kodak removed the remjet (anti-halation layer)
-  # to allow home processing. The result: intense red/orange glow around any light source.
   trigger: specular_only
-  strength: 0.60             # Very strong — the signature CineStill trait
+  strength: 0.6
   radius_inner: 8
-  radius_outer: 40           # Halation bleeds far — large glowing orbs
-  warm_core: [1.0, 0.35, 0.05]     # Intense orange-red core
-  red_fringe: [1.0, 0.08, 0.00]    # Deep red fringe
-
-scanner:
-  style: noritsu_smooth
-  contrast: 0.95
-  warmth: -0.05              # Slight cool trim to accent the tungsten character
-  output_sharpening: 0.12
+  radius_outer: 40
+  warm_core:
+  - 1.0
+  - 0.35
+  - 0.05
+  red_fringe:
+  - 1.0
+  - 0.08
+  - 0.0
 chroma_coupling:
-  hi_rolloff_start: 0.65   # Cinema stock: aggressive shoulder compression
-  hi_rolloff_rate:  2.2
-  hi_compression:   0.70
-  sh_rolloff_start: 0.20
-  sh_compression:   0.55
-  hi_hue_conv_rad:  0.15   # Tungsten-balanced: slightly cool highlight target
-  hi_hue_conv_str:  0.15
-
+  hi_rolloff_start: 0.65
+  hi_rolloff_rate: 2.2
+  hi_compression: 0.7
+  sh_rolloff_start: 0.2
+  sh_compression: 0.55
+  hi_hue_conv_rad: 0.15
+  hi_hue_conv_str: 0.15
 dye_contamination:
-  r_to_g: 0.020
-  g_to_r: 0.010
+  r_to_g: 0.02
+  g_to_r: 0.01
   b_to_g: 0.008
   b_to_r: 0.004
-  r_to_b: 0.000
+  r_to_b: 0.0
   g_to_b: 0.004

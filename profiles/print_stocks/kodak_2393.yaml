@@ -5,11 +5,11 @@ print_stock_name: Kodak Vision Premier 2393
 # dyes, and more aggressive compression. Sought after for high-impact theatrical releases.
 
 tone:
-  shadow_lift: 0.018          # Lower D-min than 2383 — cleaner, deeper blacks
-  contrast_boost: 1.22        # Higher print contrast than 2383 — snappier, punchier
+  shadow_lift: 0.004          # Clean, deep OLED-like blacks
+  contrast_boost: 1.25        # High print contrast — snappier, punchier
   highlight_rolloff: 0.75     # Earlier highlight shoulder — compresses sooner
   highlight_rolloff_rate: 2.6 # Faster rolloff — more dramatic highlight compression
-  toe_depth: 0.92             # Deeper, richer shadow density
+  toe_depth: 0.96             # Extremely rich, deep shadow density
 
 color:
   shadow_bias_lab: [0.5, 0.3, 0.8]    # Slightly cooler/cleaner shadows than 2383

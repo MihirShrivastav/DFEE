@@ -1,78 +1,84 @@
 stock_id: tri_x_400
 stock_name: Kodak Tri-X 400
 stock_type: monochrome
-
 adaptation:
   base_iso: 400
-  default_strength: 1.00
-  camera_cast_compensation_sensitivity: 0.50
+  default_strength: 1.0
+  camera_cast_compensation_sensitivity: 0.5
   highlight_stress_sensitivity: 0.85
-  shadow_noise_sensitivity: 0.60
-
+  shadow_noise_sensitivity: 0.6
 tone_response:
-  toe_strength: 0.46         # Distinct toe for deep blacks
-  toe_length: 0.30           # Smooth progression into shadow detail
-  midtone_contrast: 1.08     # Strong midtone contrast (classic black and white punch)
-  shoulder_strength: 0.78    # Strong shoulder roll-off to give bright whites
+  toe_strength: 0.46
+  toe_length: 0.3
+  midtone_contrast: 1.08
+  shoulder_strength: 0.78
   highlight_rolloff_start: 0.68
-  black_density_floor: 0.010  # B&W negative base fog — slightly raised blacks
-  channel_toe_mult:      [1.0, 1.0, 1.0]   # B&W: all channels identical
-  channel_shoulder_mult: [1.0, 1.0, 1.0]
-  channel_midtone_mult:  [1.0, 1.0, 1.0]
-
+  black_density_floor: 0.01
+  channel_toe_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+  channel_shoulder_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+  channel_midtone_mult:
+  - 1.0
+  - 1.0
+  - 1.0
 color_response:
-  # Monochrome uses color response to specify color filter behavior (spectral sensitivity)
-  # Standard panchromatic weights are around Red: 0.25, Green: 0.55, Blue: 0.20
-  # We can customize this if needed. For Tri-X, we use typical panchromatic mix.
-  shadow_bias_lab: [0.0, 0.0, 0.0]
-  midtone_bias_lab: [0.0, 0.0, 0.0]
-  highlight_bias_lab: [0.0, 0.0, 0.0]
+  shadow_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  midtone_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  highlight_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
   blue_cast_suppression: 0.0
   green_magenta_stabilization: 0.0
-
 hue_saturation_response:
-  saturation_boost: 1.0           # Monochrome — no colour to boost
-  # Desaturate fully (monochrome)
-  red_orange_midtone_compression: 1.00
-  yellow_green_muting: 1.00
-  cyan_blue_highlight_compression: 1.00
-  neon_compression: 1.00
-  highlight_desaturation: 1.00
-
+  saturation_boost: 1.0
+  red_orange_midtone_compression: 1.0
+  yellow_green_muting: 1.0
+  cyan_blue_highlight_compression: 1.0
+  neon_compression: 1.0
+  highlight_desaturation: 1.0
 grain:
-  size: 0.65                 # Coarse, organic grain
-  strength: 0.55             # Highly visible, classic B&W grain
-  chroma_strength: 0.00      # Zero chroma grain (strictly monochrome)
+  size: 0.65
+  strength: 0.55
+  chroma_strength: 0.0
   peak_zone: lower_mid_to_mid
-  texture_masking: 0.50      # Less masking so grain stands out in detailed regions too
-
+  texture_masking: 0.5
 halation:
   trigger: specular_only
-  strength: 0.15             # Moderate halation bloom in highlights
+  strength: 0.15
   radius_inner: 4
   radius_outer: 18
-  warm_core: [1.0, 1.0, 1.0] # White highlights (no color)
-  red_fringe: [1.0, 1.0, 1.0]
-
-scanner:
-  style: darkroom_print
-  contrast: 1.08   # Slightly punchy — darkroom prints tend toward rich blacks
-  warmth: 0.00
-  output_sharpening: 0.20
+  warm_core:
+  - 1.0
+  - 1.0
+  - 1.0
+  red_fringe:
+  - 1.0
+  - 1.0
+  - 1.0
 chroma_coupling:
-  # B&W stock: chroma coupling is a no-op (monochrome has no colour to compress)
-  hi_rolloff_start: 0.70
-  hi_rolloff_rate:  2.0
-  hi_compression:   0.00
+  hi_rolloff_start: 0.7
+  hi_rolloff_rate: 2.0
+  hi_compression: 0.0
   sh_rolloff_start: 0.18
-  sh_compression:   0.00
-  hi_hue_conv_rad:  0.0
-  hi_hue_conv_str:  0.0
-
+  sh_compression: 0.0
+  hi_hue_conv_rad: 0.0
+  hi_hue_conv_str: 0.0
 dye_contamination:
-  r_to_g: 0.00   # B&W: no colour dye layers
-  g_to_r: 0.00
-  b_to_g: 0.00
-  b_to_r: 0.00
-  r_to_b: 0.00
-  g_to_b: 0.00
+  r_to_g: 0.0
+  g_to_r: 0.0
+  b_to_g: 0.0
+  b_to_r: 0.0
+  r_to_b: 0.0
+  g_to_b: 0.0

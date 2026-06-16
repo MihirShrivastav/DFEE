@@ -5,14 +5,14 @@ print_stock_name: Fujifilm Eterna CP 3510
 # moody quality. The "Fuji look" — favored by Sofia Coppola, Wes Anderson era of cinema.
 
 tone:
-  shadow_lift: 0.026          # Slightly higher D-min — softer shadow blacks than Kodak
-  contrast_boost: 1.08        # Lower print contrast — flatter, more atmospheric grade
+  shadow_lift: 0.010          # Sophisticated soft shadow base
+  contrast_boost: 1.12        # Flatter, atmospheric grade but still punchy enough
   highlight_rolloff: 0.80     # Later highlight rolloff — holds highlights longer
   highlight_rolloff_rate: 1.8 # Gentler shoulder — smooth, gradual highlight compression
-  toe_depth: 0.78             # Open, breathable shadows
+  toe_depth: 0.88             # Cleaner, deep shadows
 
 color:
-  shadow_bias_lab: [0.4, -1.2, -2.0]  # Teal-cyan shadow bias (signature Fuji trait)
+  shadow_bias_lab: [0.2, -0.6, -1.0]  # Subtle teal shadow bias
   midtone_bias_lab: [0.0, 0.2, 0.5]   # Muted, desaturated midtones
   highlight_bias_lab: [0.0, -0.2, 0.3] # Cool-neutral highlights
   blue_suppression: -0.05              # Fuji preserves blues slightly (cooler look)

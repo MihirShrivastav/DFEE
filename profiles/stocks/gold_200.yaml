@@ -1,76 +1,84 @@
 stock_id: gold_200
 stock_name: Kodak Gold 200
 stock_type: color_negative
-
 adaptation:
   base_iso: 200
   default_strength: 0.85
   camera_cast_compensation_sensitivity: 0.65
   highlight_stress_sensitivity: 0.68
   shadow_noise_sensitivity: 0.52
-
 tone_response:
-  toe_strength: 0.46         # Consumer film toe — more abrupt shadows than pro stocks
-  toe_length: 0.28           # Short-moderate toe — shadows go deep faster
-  midtone_contrast: 1.04     # Consumer tuning — punchy, vibrant look
-  shoulder_strength: 0.55    # Moderate shoulder
-  highlight_rolloff_start: 0.68  # Earlier rolloff
-  black_density_floor: 0.015  # Consumer emulsion — slightly higher fog level than pro stocks
-  channel_toe_mult:      [0.95, 1.00, 1.15]
-  channel_shoulder_mult: [0.92, 1.00, 1.22]
-  channel_midtone_mult:  [1.03, 1.00, 0.95]
-
+  toe_strength: 0.46
+  toe_length: 0.28
+  midtone_contrast: 1.04
+  shoulder_strength: 0.55
+  highlight_rolloff_start: 0.68
+  black_density_floor: 0.015
+  channel_toe_mult:
+  - 0.95
+  - 1.0
+  - 1.15
+  channel_shoulder_mult:
+  - 0.92
+  - 1.0
+  - 1.22
+  channel_midtone_mult:
+  - 1.03
+  - 1.0
+  - 0.95
 color_response:
-  # Kodak Gold: famously warm, golden, orange-yellow colour bias throughout.
-  # Classic "summertime" look. Skin tones appear warm and flattering.
-  shadow_bias_lab: [0.0, 1.0, 2.5]       # Warm golden shadows — even blacks are warm
-  midtone_bias_lab: [0.0, 1.8, 4.5]      # Strong golden-yellow midtone cast
-  highlight_bias_lab: [0.5, 1.2, 3.5]    # Warm, cheerful bright highlights
-  blue_cast_suppression: 0.45            # Strong blue suppression — Gold has virtually no blue cast
+  shadow_bias_lab:
+  - 0.0
+  - 1.0
+  - 2.5
+  midtone_bias_lab:
+  - 0.0
+  - 1.8
+  - 4.5
+  highlight_bias_lab:
+  - 0.5
+  - 1.2
+  - 3.5
+  blue_cast_suppression: 0.45
   green_magenta_stabilization: 0.35
-
 hue_saturation_response:
   saturation_boost: 1.22
-  red_orange_midtone_compression: 0.18   # Warm reds kept vivid — it's Gold
+  red_orange_midtone_compression: 0.18
   yellow_green_muting: 0.22
-  cyan_blue_highlight_compression: 0.42  # Blues aren't Gold's strong suit
+  cyan_blue_highlight_compression: 0.42
   neon_compression: 0.68
-  highlight_desaturation: 0.50
-
+  highlight_desaturation: 0.5
 grain:
-  size: 0.45                 # Moderate grain — consumer film, not the finest
+  size: 0.45
   strength: 0.38
-  chroma_strength: 0.12      # Consumer emulsion has some colour grain in shadows
+  chroma_strength: 0.12
   peak_zone: lower_mid_to_mid
   texture_masking: 0.62
-
 halation:
   trigger: specular_only
-  strength: 0.22             # Consumer film has some halation
+  strength: 0.22
   radius_inner: 6
   radius_outer: 22
-  warm_core: [1.0, 0.60, 0.25]     # Warm golden halation fits the Gold character
-  red_fringe: [1.0, 0.22, 0.06]
-
-scanner:
-  style: frontier_soft
-  contrast: 1.00
-  warmth: 0.12               # Accent the warmth — Gold looks best warm
-  output_sharpening: 0.10
-
+  warm_core:
+  - 1.0
+  - 0.6
+  - 0.25
+  red_fringe:
+  - 1.0
+  - 0.22
+  - 0.06
 chroma_coupling:
-  hi_rolloff_start: 0.68   # Consumer film: less latitude, rolloff starts earlier
-  hi_rolloff_rate:  2.0
-  hi_compression:   0.60
-  sh_rolloff_start: 0.20
-  sh_compression:   0.52
-  hi_hue_conv_rad:  0.35   # Warmest highlight convergence (consumer film warm bias)
-  hi_hue_conv_str:  0.22
-
+  hi_rolloff_start: 0.68
+  hi_rolloff_rate: 2.0
+  hi_compression: 0.6
+  sh_rolloff_start: 0.2
+  sh_compression: 0.52
+  hi_hue_conv_rad: 0.35
+  hi_hue_conv_str: 0.22
 dye_contamination:
-  r_to_g: 0.035   # Consumer film: slightly more inter-layer scatter
+  r_to_g: 0.035
   g_to_r: 0.018
   b_to_g: 0.015
   b_to_r: 0.008
-  r_to_b: 0.000
+  r_to_b: 0.0
   g_to_b: 0.008
