@@ -9,6 +9,7 @@ import numpy as np
 
 from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
+from dfee.color_spaces import oklab_to_oklch, rgb_to_oklab
 from dfee.ingest import RawIngestor
 from dfee.profile import FilmStockProfile, PrintStockProfile
 from dfee.renderer import FilmRenderer
@@ -291,6 +292,58 @@ class TestNativeBridge(unittest.TestCase):
         self.assertLessEqual(float(toned[0, 3, 0]), 1.0)
         self.assertGreater(float(toned[0, 3, 0]), float(toned[0, 1, 0]))
         self.assertLess(float(toned[0, 3, 0]), float(toned[0, 2, 0]))
+
+    def test_python_color_response_reference_fixture(self):
+        stock = FilmStockProfile(str(BASE_DIR / "profiles" / "stocks" / "portra_400.yaml"))
+        rgb = np.array(
+            [[[0.65, 0.25, 0.18], [0.60, 0.50, 0.18], [0.62, 0.66, 0.92]]],
+            dtype=np.float32,
+        )
+        Y = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]).astype(np.float32)
+        zone_masks = ImageStateAnalyzer()._generate_zone_masks(Y, 0.18)
+        masks = {"luminance_zone_masks": zone_masks}
+        response = {
+            "chroma_boost": stock.hue_saturation_response["saturation_boost"],
+            "red_orange_compression": stock.hue_saturation_response["red_orange_midtone_compression"],
+            "blue_cyan_compression": stock.hue_saturation_response["cyan_blue_highlight_compression"],
+            "neon_compression": stock.hue_saturation_response["neon_compression"],
+            "highlight_desaturation": stock.hue_saturation_response["highlight_desaturation"],
+            "shadow_bias_lab": stock.color_response["shadow_bias_lab"],
+            "midtone_bias_lab": stock.color_response["midtone_bias_lab"],
+            "highlight_bias_lab": stock.color_response["highlight_bias_lab"],
+            "film_color": 100.0,
+        }
+        adjusted = FilmRenderer()._apply_color_response(rgb, masks, response, fc=1.0)
+        src_oklab = rgb_to_oklab(rgb)
+        dst_oklab = rgb_to_oklab(adjusted)
+        self.assertGreater(float(dst_oklab[0, 0, 1]), float(src_oklab[0, 0, 1]))
+        self.assertGreater(float(dst_oklab[0, 0, 2]), float(src_oklab[0, 0, 2]))
+        self.assertGreater(abs(float(dst_oklab[0, 2, 2] - src_oklab[0, 2, 2])), 1e-4)
+
+    def test_python_luminance_chroma_coupling_reference_fixture(self):
+        rgb = np.array(
+            [[[0.12, 0.07, 0.03], [0.82, 0.70, 0.42], [0.92, 0.78, 0.70]]],
+            dtype=np.float32,
+        )
+        response = {
+            "stock_type": "color_negative",
+            "film_color": 100.0,
+            "chroma_coupling": {
+                "hi_rolloff_start": 0.75,
+                "hi_rolloff_rate": 1.5,
+                "hi_compression": 0.48,
+                "sh_rolloff_start": 0.18,
+                "sh_compression": 0.43,
+                "hi_hue_conv_rad": 0.30,
+                "hi_hue_conv_str": 0.20,
+            },
+        }
+        adjusted = FilmRenderer()._apply_luminance_chroma_coupling(rgb, response, fc=1.0)
+        src_lch = oklab_to_oklch(rgb_to_oklab(rgb))
+        dst_lch = oklab_to_oklch(rgb_to_oklab(adjusted))
+        self.assertLess(float(dst_lch[0, 0, 1]), float(src_lch[0, 0, 1]))
+        self.assertLess(float(dst_lch[0, 2, 1]), float(src_lch[0, 2, 1]))
+        self.assertGreater(abs(float(dst_lch[0, 2, 2] - src_lch[0, 2, 2])), 1e-4)
 
     def test_select_file(self):
         raw_filename = self._raw_filename()

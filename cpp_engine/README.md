@@ -12,7 +12,7 @@ The current native scaffold builds:
 - `dfee_tests`: native unit/parity foundation tests.
 - `dfee_cuda`: optional CUDA target when configured with `DFEE_ENABLE_CUDA=ON`.
 
-The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, render-plan solving, pre-film normalization, monochrome panchromatic conversion, film tone response, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
+The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, render-plan solving, pre-film normalization, monochrome panchromatic conversion, film tone response, post-tone color response, luminance-chroma coupling, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
 
 ## Build
 
@@ -103,3 +103,5 @@ The native solver now reproduces the current Python render-plan contract from th
 The native renderer now includes the first concrete image-processing stage after solver parity: pre-film normalization. That stage applies exposure compensation, neutral highlight repair near clipping, and zone-weighted shadow blue plus green-magenta cast correction directly in native code.
 
 The native renderer also now includes the next film-emulation stages: monochrome panchromatic conversion for B&W stocks and the current per-channel film tone-response curves. This gives the C++ path the same basic toe, shoulder, midtone-density, and overrange highlight-compression behavior that the Python renderer currently uses.
+
+The native renderer now also includes the current stock color-response stages: zone-weighted OKLab biasing, hue-targeted chroma compression for warm and cyan highlight families, neon taming, highlight desaturation, and luminance-driven chroma/hue coupling. The implementation keeps this stage efficient by applying OKLab/OKLCH conversions per pixel rather than materializing full-frame temporary color-space images.

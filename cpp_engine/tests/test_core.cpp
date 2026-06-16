@@ -327,6 +327,84 @@ void test_film_tone_response() {
     assert(toned.at(3, 0, 0) < toned.at(2, 0, 0));
 }
 
+void test_color_response() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "portra_400.yaml");
+
+    dfee::Image rgb(3, 1, 3);
+    rgb.pixels = {
+        0.65F, 0.25F, 0.18F,
+        0.60F, 0.50F, 0.18F,
+        0.62F, 0.66F, 0.92F,
+    };
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    dfee::FilmResponsePlan response;
+    response.chroma_boost = static_cast<float>(stock.numeric_values.at("hue_saturation_response.saturation_boost"));
+    response.red_orange_compression = static_cast<float>(stock.numeric_values.at("hue_saturation_response.red_orange_midtone_compression"));
+    response.blue_cyan_compression = static_cast<float>(stock.numeric_values.at("hue_saturation_response.cyan_blue_highlight_compression"));
+    response.neon_compression = static_cast<float>(stock.numeric_values.at("hue_saturation_response.neon_compression"));
+    response.highlight_desaturation = static_cast<float>(stock.numeric_values.at("hue_saturation_response.highlight_desaturation"));
+    response.shadow_bias_lab = {
+        static_cast<float>(stock.numeric_arrays.at("color_response.shadow_bias_lab")[0]),
+        static_cast<float>(stock.numeric_arrays.at("color_response.shadow_bias_lab")[1]),
+        static_cast<float>(stock.numeric_arrays.at("color_response.shadow_bias_lab")[2]),
+    };
+    response.midtone_bias_lab = {
+        static_cast<float>(stock.numeric_arrays.at("color_response.midtone_bias_lab")[0]),
+        static_cast<float>(stock.numeric_arrays.at("color_response.midtone_bias_lab")[1]),
+        static_cast<float>(stock.numeric_arrays.at("color_response.midtone_bias_lab")[2]),
+    };
+    response.highlight_bias_lab = {
+        static_cast<float>(stock.numeric_arrays.at("color_response.highlight_bias_lab")[0]),
+        static_cast<float>(stock.numeric_arrays.at("color_response.highlight_bias_lab")[1]),
+        static_cast<float>(stock.numeric_arrays.at("color_response.highlight_bias_lab")[2]),
+    };
+    response.film_color = 100.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_color_response(rgb, zones, response);
+    const auto src_oklab = dfee::rgb_to_oklab(rgb);
+    const auto dst_oklab = dfee::rgb_to_oklab(adjusted);
+
+    assert(dst_oklab.at(0, 0, 1) > src_oklab.at(0, 0, 1));
+    assert(dst_oklab.at(0, 0, 2) > src_oklab.at(0, 0, 2));
+    assert(std::fabs(dst_oklab.at(2, 0, 2) - src_oklab.at(2, 0, 2)) > 1.0e-4F);
+}
+
+void test_luminance_chroma_coupling() {
+    dfee::Image rgb(3, 1, 3);
+    rgb.pixels = {
+        0.12F, 0.07F, 0.03F,
+        0.82F, 0.70F, 0.42F,
+        0.92F, 0.78F, 0.70F,
+    };
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.chroma_coupling = {
+        {"hi_rolloff_start", 0.75F},
+        {"hi_rolloff_rate", 1.5F},
+        {"hi_compression", 0.48F},
+        {"sh_rolloff_start", 0.18F},
+        {"sh_compression", 0.43F},
+        {"hi_hue_conv_rad", 0.30F},
+        {"hi_hue_conv_str", 0.20F},
+    };
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_luminance_chroma_coupling(rgb, response);
+    const auto src_lch = dfee::oklab_to_oklch(dfee::rgb_to_oklab(rgb));
+    const auto dst_lch = dfee::oklab_to_oklch(dfee::rgb_to_oklab(adjusted));
+
+    assert(dst_lch.at(0, 0, 1) < src_lch.at(0, 0, 1));
+    assert(dst_lch.at(2, 0, 1) < src_lch.at(2, 0, 1));
+    assert(std::fabs(dst_lch.at(2, 0, 2) - src_lch.at(2, 0, 2)) > 1.0e-4F);
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -523,6 +601,8 @@ int main() {
         test_pre_film_normalization();
         test_panchromatic_conversion();
         test_film_tone_response();
+        test_color_response();
+        test_luminance_chroma_coupling();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
