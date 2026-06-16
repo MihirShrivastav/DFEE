@@ -109,11 +109,40 @@ PyObject* timings_to_list(const std::vector<dfee::NativeStageTiming>& timings) {
     return list;
 }
 
+PyObject* raw_metadata_to_dict(const dfee::NativeRawMetadata& metadata) {
+    PyObject* dict = PyDict_New();
+    PyObject* wb = PyList_New(static_cast<Py_ssize_t>(metadata.white_balance_multipliers.size()));
+    for (Py_ssize_t i = 0; i < static_cast<Py_ssize_t>(metadata.white_balance_multipliers.size()); ++i) {
+        PyList_SET_ITEM(wb, i, PyFloat_FromDouble(metadata.white_balance_multipliers[static_cast<size_t>(i)]));
+    }
+
+    PyDict_SetItemString(dict, "camera_make", PyUnicode_FromString(metadata.camera_make.c_str()));
+    PyDict_SetItemString(dict, "camera_model", PyUnicode_FromString(metadata.camera_model.c_str()));
+    PyDict_SetItemString(dict, "lens_model", PyUnicode_FromString(metadata.lens_model.c_str()));
+    PyDict_SetItemString(dict, "iso", PyLong_FromLong(metadata.iso));
+    PyDict_SetItemString(dict, "shutter_speed", PyFloat_FromDouble(metadata.shutter_speed));
+    PyDict_SetItemString(dict, "shutter_speed_str", PyUnicode_FromString(metadata.shutter_speed_str.c_str()));
+    PyDict_SetItemString(dict, "aperture", PyFloat_FromDouble(metadata.aperture));
+    PyDict_SetItemString(dict, "focal_length", PyFloat_FromDouble(metadata.focal_length));
+    PyDict_SetItemString(dict, "white_balance_multipliers", wb);
+    PyDict_SetItemString(dict, "black_level", PyLong_FromLong(metadata.black_level));
+    PyDict_SetItemString(dict, "white_level", PyLong_FromLong(metadata.white_level));
+    PyDict_SetItemString(dict, "image_height", PyLong_FromLong(metadata.image_height));
+    PyDict_SetItemString(dict, "image_width", PyLong_FromLong(metadata.image_width));
+    PyDict_SetItemString(dict, "raw_height", PyLong_FromLong(metadata.raw_height));
+    PyDict_SetItemString(dict, "raw_width", PyLong_FromLong(metadata.raw_width));
+    PyDict_SetItemString(dict, "metadata_json", PyUnicode_FromString(metadata.metadata_json.c_str()));
+    Py_DECREF(wb);
+    return dict;
+}
+
 PyObject* engine_metadata_to_dict(const dfee::NativeEngineMetadata& metadata) {
     PyObject* dict = PyDict_New();
     PyObject* status = cuda_status_to_dict(metadata.cuda_status);
     PyObject* timings = timings_to_list(metadata.timings);
     PyDict_SetItemString(dict, "engine_version", PyUnicode_FromString(metadata.engine_version.c_str()));
+    PyDict_SetItemString(dict, "libraw_enabled", metadata.libraw_enabled ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "libraw_version", PyUnicode_FromString(metadata.libraw_version.c_str()));
     PyDict_SetItemString(dict, "cuda_status", status);
     PyDict_SetItemString(dict, "timings", timings);
     PyDict_SetItemString(dict, "metadata_json", PyUnicode_FromString(metadata.metadata_json.c_str()));
@@ -227,12 +256,48 @@ PyObject* py_select_file(PyObject*, PyObject* args) {
     }
 }
 
+PyObject* py_read_raw_metadata(PyObject*, PyObject* args) {
+    PyObject* capsule = nullptr;
+    const char* filename = nullptr;
+    if (!PyArg_ParseTuple(args, "Os", &capsule, &filename)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->read_raw_metadata({.filename = filename});
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
+        PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
+        PyObject* metadata = raw_metadata_to_dict(result.metadata);
+        PyDict_SetItemString(dict, "metadata", metadata);
+        Py_DECREF(metadata);
+        if (!result.error.empty()) {
+            PyObject* error = native_error_to_dict(result.error);
+            PyDict_SetItemString(dict, "error", error);
+            Py_DECREF(error);
+        }
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyMethodDef kMethods[] = {
     {"engine_version", py_engine_version, METH_NOARGS, "Return the native engine version."},
     {"cuda_status", py_cuda_status, METH_NOARGS, "Return CUDA build/runtime status."},
     {"create_session", py_create_session, METH_VARARGS, "Create a native DFEE engine session."},
     {"list_profiles", py_list_profiles, METH_VARARGS, "List stock and print profiles visible to a native session."},
     {"select_file", py_select_file, METH_VARARGS, "Select a RAW file for a native session."},
+    {"read_raw_metadata", py_read_raw_metadata, METH_VARARGS, "Read RAW metadata through the native session."},
     {nullptr, nullptr, 0, nullptr},
 };
 

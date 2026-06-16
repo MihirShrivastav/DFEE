@@ -18,6 +18,8 @@ struct NativeStageTiming {
 struct NativeEngineMetadata {
     std::string engine_version;
     CudaStatus cuda_status;
+    bool libraw_enabled = false;
+    std::string libraw_version;
     std::vector<NativeStageTiming> timings;
     std::string metadata_json;
 };
@@ -57,6 +59,38 @@ struct NativeSelectResponse {
 struct NativeRawPreviewRequest {
     std::string filename;
     int max_edge = 1024;
+};
+
+struct NativeRawMetadata {
+    std::string camera_make;
+    std::string camera_model;
+    std::string lens_model;
+    int iso = 100;
+    double shutter_speed = 1.0 / 125.0;
+    std::string shutter_speed_str;
+    double aperture = 4.0;
+    double focal_length = 0.0;
+    std::vector<double> white_balance_multipliers{1.0, 1.0, 1.0, 1.0};
+    int black_level = 0;
+    int white_level = 0;
+    int image_height = 0;
+    int image_width = 0;
+    int raw_height = 0;
+    int raw_width = 0;
+    std::string metadata_json;
+};
+
+struct NativeRawMetadataRequest {
+    std::string filename;
+};
+
+struct NativeRawMetadataResponse {
+    bool ok = false;
+    std::string filename;
+    std::string status;
+    NativeRawMetadata metadata;
+    NativeError error;
+    NativeEngineMetadata engine;
 };
 
 struct NativeRawPreviewResponse {

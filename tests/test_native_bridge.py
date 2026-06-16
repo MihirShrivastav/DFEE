@@ -29,6 +29,7 @@ class TestNativeBridge(unittest.TestCase):
         self.assertGreater(len(profiles.stocks), 0)
         self.assertGreater(len(profiles.print_stocks), 0)
         self.assertTrue(profiles.engine.engine_version)
+        self.assertIsInstance(profiles.engine.libraw_enabled, bool)
         self.assertGreater(len(profiles.engine.timings), 0)
         self.assertIn("list_profiles_total", profiles.engine.metadata_json)
 
@@ -58,6 +59,22 @@ class TestNativeBridge(unittest.TestCase):
             dfee_native_bridge.create_session(invalid_root)
         self.assertEqual(ctx.exception.code, "PROJECT_ROOT_NOT_FOUND")
         self.assertIn("project root", ctx.exception.user_message.lower())
+
+    def test_read_raw_metadata(self):
+        raw_filename = next(
+            entry.name
+            for entry in (BASE_DIR / "raw_files").iterdir()
+            if entry.is_file() and entry.suffix.lower() == ".arw"
+        )
+        if self.session.list_profiles().engine.libraw_enabled:
+            metadata = self.session.read_raw_metadata(raw_filename)
+            self.assertGreater(metadata.image_width, 0)
+            self.assertGreater(metadata.image_height, 0)
+            self.assertTrue(metadata.camera_make or metadata.camera_model)
+        else:
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.read_raw_metadata(raw_filename)
+            self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
 
 
 if __name__ == "__main__":

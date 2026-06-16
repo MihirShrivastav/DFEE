@@ -76,6 +76,17 @@ void test_profile_loading() {
     assert(selected.ok);
     assert(!selected.engine.timings.empty());
     assert(selected.engine.metadata_json.find("select_file_total") != std::string::npos);
+
+    const auto metadata = session.read_raw_metadata({.filename = "DSC00246.ARW"});
+#if DFEE_HAS_LIBRAW
+    assert(metadata.ok);
+    assert(metadata.metadata.image_width > 0);
+    assert(metadata.metadata.raw_width > 0);
+    assert(!metadata.metadata.metadata_json.empty());
+#else
+    assert(!metadata.ok);
+    assert(metadata.error.code == "LIBRAW_UNAVAILABLE");
+#endif
 }
 
 }  // namespace

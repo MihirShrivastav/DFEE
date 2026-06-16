@@ -66,6 +66,8 @@ std::string serialize_native_engine_metadata_json(const NativeEngineMetadata& me
     out << std::fixed << std::setprecision(3);
     out << "{"
         << "\"engine_version\":\"" << escape_json(metadata.engine_version) << "\","
+        << "\"libraw_enabled\":" << (metadata.libraw_enabled ? "true" : "false") << ","
+        << "\"libraw_version\":\"" << escape_json(metadata.libraw_version) << "\","
         << "\"cuda_status\":{"
         << "\"mode\":\"" << escape_json(metadata.cuda_status.mode) << "\","
         << "\"compiled\":" << (metadata.cuda_status.compiled ? "true" : "false") << ","
@@ -88,6 +90,38 @@ std::string serialize_native_engine_metadata_json(const NativeEngineMetadata& me
     }
 
     out << "]"
+        << "}";
+    return out.str();
+}
+
+std::string serialize_native_raw_metadata_json(const NativeRawMetadata& metadata) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(6);
+    out << "{"
+        << "\"camera_make\":\"" << escape_json(metadata.camera_make) << "\","
+        << "\"camera_model\":\"" << escape_json(metadata.camera_model) << "\","
+        << "\"lens_model\":\"" << escape_json(metadata.lens_model) << "\","
+        << "\"iso\":" << metadata.iso << ","
+        << "\"shutter_speed\":" << metadata.shutter_speed << ","
+        << "\"shutter_speed_str\":\"" << escape_json(metadata.shutter_speed_str) << "\","
+        << "\"aperture\":" << metadata.aperture << ","
+        << "\"focal_length\":" << metadata.focal_length << ","
+        << "\"white_balance_multipliers\":[";
+
+    for (size_t i = 0; i < metadata.white_balance_multipliers.size(); ++i) {
+        if (i > 0) {
+            out << ",";
+        }
+        out << metadata.white_balance_multipliers[i];
+    }
+
+    out << "],"
+        << "\"black_level\":" << metadata.black_level << ","
+        << "\"white_level\":" << metadata.white_level << ","
+        << "\"image_height\":" << metadata.image_height << ","
+        << "\"image_width\":" << metadata.image_width << ","
+        << "\"raw_height\":" << metadata.raw_height << ","
+        << "\"raw_width\":" << metadata.raw_width
         << "}";
     return out.str();
 }

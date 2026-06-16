@@ -23,5 +23,6 @@ private:
 
 [[nodiscard]] std::string serialize_native_error_json(const NativeError& error);
 [[nodiscard]] std::string serialize_native_engine_metadata_json(const NativeEngineMetadata& metadata);
+[[nodiscard]] std::string serialize_native_raw_metadata_json(const NativeRawMetadata& metadata);
 
 }  // namespace dfee

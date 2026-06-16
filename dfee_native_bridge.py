@@ -24,6 +24,8 @@ class NativeCudaStatus:
 @dataclass(frozen=True)
 class NativeEngineInfo:
     engine_version: str
+    libraw_enabled: bool
+    libraw_version: str
     cuda_status: NativeCudaStatus
     timings: list["NativeStageTiming"]
     metadata_json: str
@@ -72,6 +74,26 @@ class NativeSelectResult:
 
 
 @dataclass(frozen=True)
+class NativeRawMetadata:
+    camera_make: str
+    camera_model: str
+    lens_model: str
+    iso: int
+    shutter_speed: float
+    shutter_speed_str: str
+    aperture: float
+    focal_length: float
+    white_balance_multipliers: list[float]
+    black_level: int
+    white_level: int
+    image_height: int
+    image_width: int
+    raw_height: int
+    raw_width: int
+    metadata_json: str
+
+
+@dataclass(frozen=True)
 class NativeErrorInfo:
     code: str
     user_message: str
@@ -115,8 +137,31 @@ def _parse_engine_info(payload: dict[str, Any]) -> NativeEngineInfo:
     ]
     return NativeEngineInfo(
         engine_version=str(payload.get("engine_version", "")),
+        libraw_enabled=bool(payload.get("libraw_enabled", False)),
+        libraw_version=str(payload.get("libraw_version", "")),
         cuda_status=_parse_cuda_status(dict(payload.get("cuda_status", {}))),
         timings=timings,
+        metadata_json=str(payload.get("metadata_json", "")),
+    )
+
+
+def _parse_raw_metadata(payload: dict[str, Any]) -> NativeRawMetadata:
+    return NativeRawMetadata(
+        camera_make=str(payload.get("camera_make", "")),
+        camera_model=str(payload.get("camera_model", "")),
+        lens_model=str(payload.get("lens_model", "")),
+        iso=int(payload.get("iso", 100)),
+        shutter_speed=float(payload.get("shutter_speed", 1.0 / 125.0)),
+        shutter_speed_str=str(payload.get("shutter_speed_str", "")),
+        aperture=float(payload.get("aperture", 4.0)),
+        focal_length=float(payload.get("focal_length", 0.0)),
+        white_balance_multipliers=[float(v) for v in payload.get("white_balance_multipliers", [1.0, 1.0, 1.0, 1.0])],
+        black_level=int(payload.get("black_level", 0)),
+        white_level=int(payload.get("white_level", 0)),
+        image_height=int(payload.get("image_height", 0)),
+        image_width=int(payload.get("image_width", 0)),
+        raw_height=int(payload.get("raw_height", 0)),
+        raw_width=int(payload.get("raw_width", 0)),
         metadata_json=str(payload.get("metadata_json", "")),
     )
 
@@ -192,6 +237,23 @@ class NativeEngineSession:
                 status=result.status,
             )
         return result
+
+    def read_raw_metadata(self, filename: str) -> NativeRawMetadata:
+        try:
+            payload = dict(self._native_module.read_raw_metadata(self._handle, filename))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        if "error" in payload:
+            error = _parse_error_info(dict(payload["error"]))
+            raise NativeOperationError(
+                error.code,
+                error.user_message,
+                error.detail,
+                filename=str(payload.get("filename", "")),
+                status=str(payload.get("status", "")),
+            )
+        return _parse_raw_metadata(dict(payload.get("metadata", {})))
 
     def _raise_bridge_error(self, exc: Exception) -> None:
         code = str(getattr(exc, "code", "") or "NATIVE_BRIDGE_ERROR")

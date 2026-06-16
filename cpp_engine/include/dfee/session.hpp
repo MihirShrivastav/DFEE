@@ -6,6 +6,7 @@
 #include "dfee/bridge_types.hpp"
 #include "dfee/cuda_runtime.hpp"
 #include "dfee/profile.hpp"
+#include "dfee/raw_metadata.hpp"
 
 namespace dfee {
 
@@ -16,6 +17,7 @@ public:
     [[nodiscard]] const std::filesystem::path& project_root() const noexcept;
     [[nodiscard]] NativeProfilesResponse list_profiles() const;
     [[nodiscard]] NativeSelectResponse select_file(const NativeSelectRequest& request);
+    [[nodiscard]] NativeRawMetadataResponse read_raw_metadata(const NativeRawMetadataRequest& request) const;
     [[nodiscard]] CudaStatus cuda_status() const noexcept;
 
 private:

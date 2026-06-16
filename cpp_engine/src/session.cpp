@@ -2,6 +2,7 @@
 
 #include "dfee/bridge_utils.hpp"
 #include "dfee/native_error.hpp"
+#include "dfee/raw_metadata.hpp"
 #include "dfee/version.hpp"
 
 #include <filesystem>
@@ -13,6 +14,12 @@ NativeEngineMetadata build_engine_metadata() {
     NativeEngineMetadata metadata;
     metadata.engine_version = kEngineVersion;
     metadata.cuda_status = query_cuda_status();
+#if DFEE_HAS_LIBRAW
+    metadata.libraw_enabled = true;
+    metadata.libraw_version = "enabled";
+#else
+    metadata.libraw_enabled = false;
+#endif
     return metadata;
 }
 
@@ -119,6 +126,29 @@ NativeSelectResponse EngineSession::select_file(const NativeSelectRequest& reque
     result.message = "Native session selected the RAW file; LibRaw decode is scheduled for the next migration slice.";
     finalize_engine_metadata(result.engine);
     return result;
+}
+
+NativeRawMetadataResponse EngineSession::read_raw_metadata(const NativeRawMetadataRequest& request) const {
+    NativeRawMetadataResponse response;
+    response.filename = request.filename;
+    response.engine = build_engine_metadata();
+
+    {
+        ScopedStageTimer total(response.engine, "read_raw_metadata_total");
+        {
+            ScopedStageTimer stage(response.engine, "read_raw_metadata_file");
+            const auto file_response = read_raw_metadata_from_file({
+                .filename = (raw_dir_ / request.filename).string(),
+            });
+            response.ok = file_response.ok;
+            response.status = file_response.status;
+            response.metadata = file_response.metadata;
+            response.error = file_response.error;
+        }
+    }
+
+    finalize_engine_metadata(response.engine);
+    return response;
 }
 
 CudaStatus EngineSession::cuda_status() const noexcept {

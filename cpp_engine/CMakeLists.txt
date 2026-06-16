@@ -23,6 +23,7 @@ add_library(dfee_core STATIC
     src/cuda_runtime.cpp
     src/image.cpp
     src/profile.cpp
+    src/raw_metadata.cpp
     src/session.cpp
 )
 

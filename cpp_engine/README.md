@@ -71,7 +71,10 @@ Stable Python wrapper:
 - `cuda_status() -> NativeCudaStatus`
 - `NativeEngineSession.list_profiles() -> NativeProfiles`
 - `NativeEngineSession.select_file(request_or_filename) -> NativeSelectResult`
+- `NativeEngineSession.read_raw_metadata(filename) -> NativeRawMetadata`
 
 `dfee_native_bridge.py` is the intended Python-side integration surface for future FastAPI delegation. It hides the raw CPython capsule handle and normalizes native responses into typed Python objects.
 
 `select_file` currently validates and records the RAW file path only. LibRaw decode and native preview/export bytes are intentionally not claimed as complete in this milestone.
+
+`read_raw_metadata` is implemented behind LibRaw-aware build wiring. In scaffold-only builds without LibRaw discovery, it raises a structured native operation error with code `LIBRAW_UNAVAILABLE`.

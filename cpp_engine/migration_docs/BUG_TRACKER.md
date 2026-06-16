@@ -27,6 +27,7 @@ Status values:
 | BUG-006 | medium | open | CUDA | M5-001 | CUDA status is build-time/fallback plumbing, not real runtime detection. | `dfee_cli --cuda-status` reports CPU with CUDA disabled; CUDA target only contains stub kernel. | Add CUDA runtime probing and actual kernel dispatch after CPU parity. |
 | BUG-007 | medium | watch | Repository hygiene | S-004 | `raw_files/` appears untracked and contains large local fixtures/outputs. | `git status --short` shows `?? raw_files/`. | Decide whether fixtures should be ignored, moved to a test fixture subset, or tracked via another storage mechanism. |
 | BUG-010 | low | watch | Dependency setup | M2-001 | LibRaw is wired in CMake, but this machine does not currently have `VCPKG_ROOT` configured. | `cmake --preset windows-msvc` warns that LibRaw was not found; `DFEE_REQUIRE_LIBRAW=ON` fails with the new actionable configure error. | Set `VCPKG_ROOT`, install manifest dependencies, and use `windows-msvc-vcpkg` before starting native decode work. |
+| BUG-011 | low | watch | Metadata parity | M2-002 | The native RAW metadata path is implemented, but fixture-level parity against current `rawpy` output is not yet validated on this machine. | Native tests and wrapper tests pass, but the current environment still builds without LibRaw. | Re-run metadata extraction against real fixtures after configuring `windows-msvc-vcpkg` and compare fields with Python `RawIngestor`. |
 
 ## Fixed Bugs
 
