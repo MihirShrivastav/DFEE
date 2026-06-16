@@ -451,6 +451,52 @@ class TestNativeBridge(unittest.TestCase):
             1e-5,
         )
 
+    def test_python_print_finish_reference_fixture(self):
+        rgb = np.zeros((8, 8, 3), dtype=np.float32)
+        for y in range(8):
+            for x in range(8):
+                rgb[y, x, 0] = 0.12 + 0.08 * (x / 7.0)
+                rgb[y, x, 1] = 0.10 + 0.55 * (y / 7.0)
+                rgb[y, x, 2] = 0.18 + 0.70 * ((x + y) / 14.0)
+        rgb[7, 7, :] = [0.92, 0.88, 0.84]
+
+        pf = {
+            "strength": 0.9,
+            "print_c": 2.0,
+            "print_m": -1.0,
+            "print_y": 3.0,
+            "print_contrast": 10.0,
+            "print_black_point": -2.0,
+            "shadow_lift": 0.03,
+            "contrast_boost": 1.15,
+            "highlight_rolloff": 0.78,
+            "highlight_rolloff_rate": 2.0,
+            "shadow_bias_lab": [0.0, 0.8, 1.2],
+            "midtone_bias_lab": [0.0, 0.3, 0.2],
+            "highlight_bias_lab": [0.0, -0.4, -0.6],
+            "red_boost": 0.2,
+            "blue_suppression": 0.1,
+            "green_shift": 0.05,
+            "saturation_scale": 1.08,
+            "grain_strength": 0.10,
+            "grain_size": 0.35,
+        }
+
+        adjusted = FilmRenderer()._apply_print_finish(rgb.copy(), pf)
+        src_shadow = float(0.2126 * rgb[0, 0, 0] + 0.7152 * rgb[0, 0, 1] + 0.0722 * rgb[0, 0, 2])
+        dst_shadow = float(0.2126 * adjusted[0, 0, 0] + 0.7152 * adjusted[0, 0, 1] + 0.0722 * adjusted[0, 0, 2])
+        src_oklab = rgb_to_oklab(rgb)
+        dst_oklab = rgb_to_oklab(adjusted)
+        src_mid_spread = float(np.max(rgb[4, 4]) - np.min(rgb[4, 4]))
+        dst_mid_spread = float(np.max(adjusted[4, 4]) - np.min(adjusted[4, 4]))
+
+        self.assertGreater(dst_shadow, src_shadow)
+        self.assertGreater(abs(float(dst_oklab[2, 2, 1] - src_oklab[2, 2, 1])), 1e-4)
+        self.assertLess(dst_mid_spread, src_mid_spread)
+        self.assertGreater(float(np.mean(np.abs(adjusted - rgb))), 1e-4)
+        self.assertTrue(np.all(adjusted >= 0.0))
+        self.assertTrue(np.all(adjusted <= 1.0))
+
     def test_select_file(self):
         raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)

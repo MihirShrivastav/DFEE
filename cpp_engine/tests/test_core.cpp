@@ -636,6 +636,65 @@ void test_film_grain_determinism() {
     assert(channel_difference_found);
 }
 
+void test_print_finish() {
+    dfee::Image rgb(8, 8, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.12F + 0.08F * static_cast<float>(x) / 7.0F;
+            rgb.at(x, y, 1) = 0.10F + 0.55F * static_cast<float>(y) / 7.0F;
+            rgb.at(x, y, 2) = 0.18F + 0.70F * static_cast<float>(x + y) / 14.0F;
+        }
+    }
+    rgb.at(7, 7, 0) = 0.92F;
+    rgb.at(7, 7, 1) = 0.88F;
+    rgb.at(7, 7, 2) = 0.84F;
+
+    dfee::PrintFinishPlan pf;
+    pf.strength = 0.9F;
+    pf.print_c = 2.0F;
+    pf.print_m = -1.0F;
+    pf.print_y = 3.0F;
+    pf.print_contrast = 10.0F;
+    pf.print_black_point = -2.0F;
+    pf.shadow_lift = 0.03F;
+    pf.contrast_boost = 1.15F;
+    pf.highlight_rolloff = 0.78F;
+    pf.highlight_rolloff_rate = 2.0F;
+    pf.shadow_bias_lab = {0.0F, 0.8F, 1.2F};
+    pf.midtone_bias_lab = {0.0F, 0.3F, 0.2F};
+    pf.highlight_bias_lab = {0.0F, -0.4F, -0.6F};
+    pf.red_boost = 0.2F;
+    pf.blue_suppression = 0.1F;
+    pf.green_shift = 0.05F;
+    pf.saturation_scale = 1.08F;
+    pf.grain_strength = 0.10F;
+    pf.grain_size = 0.35F;
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_print_finish(rgb, pf);
+
+    const float src_shadow = 0.2126F * rgb.at(0, 0, 0) + 0.7152F * rgb.at(0, 0, 1) + 0.0722F * rgb.at(0, 0, 2);
+    const float dst_shadow = 0.2126F * adjusted.at(0, 0, 0) + 0.7152F * adjusted.at(0, 0, 1) + 0.0722F * adjusted.at(0, 0, 2);
+    assert(dst_shadow > src_shadow);
+
+    const auto src_oklab = dfee::rgb_to_oklab(rgb);
+    const auto dst_oklab = dfee::rgb_to_oklab(adjusted);
+    assert(std::fabs(dst_oklab.at(2, 2, 1) - src_oklab.at(2, 2, 1)) > 1.0e-4F);
+    const float src_mid_spread = std::max({rgb.at(4, 4, 0), rgb.at(4, 4, 1), rgb.at(4, 4, 2)}) -
+        std::min({rgb.at(4, 4, 0), rgb.at(4, 4, 1), rgb.at(4, 4, 2)});
+    const float dst_mid_spread = std::max({adjusted.at(4, 4, 0), adjusted.at(4, 4, 1), adjusted.at(4, 4, 2)}) -
+        std::min({adjusted.at(4, 4, 0), adjusted.at(4, 4, 1), adjusted.at(4, 4, 2)});
+    assert(dst_mid_spread < src_mid_spread);
+
+    double mean_abs_delta = 0.0;
+    for (std::size_t i = 0; i < rgb.value_count(); ++i) {
+        mean_abs_delta += std::fabs(adjusted.pixels[i] - rgb.pixels[i]);
+        assert(adjusted.pixels[i] >= 0.0F && adjusted.pixels[i] <= 1.0F);
+    }
+    mean_abs_delta /= static_cast<double>(rgb.value_count());
+    assert(mean_abs_delta > 1.0e-4);
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -840,6 +899,7 @@ int main() {
         test_dehaze();
         test_halation_bloom();
         test_film_grain_determinism();
+        test_print_finish();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";

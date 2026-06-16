@@ -263,6 +263,11 @@ struct OklchPixel {
     return out;
 }
 
+[[nodiscard]] cv::Mat make_standard_normal_mat_fixed_seed(const int height, const int width, const std::uint64_t seed) {
+    std::mt19937_64 rng(seed);
+    return make_standard_normal_mat(height, width, rng);
+}
+
 void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     cv::Scalar mean;
     cv::Scalar stddev;
@@ -981,6 +986,138 @@ Image FilmRenderer::apply_film_grain(
     }
 
     return out;
+}
+
+Image FilmRenderer::apply_print_finish(
+    const Image& rgb_linear,
+    const PrintFinishPlan& print_finish) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_print_finish expects a 3-channel RGB image");
+    }
+    const float strength = print_finish.strength;
+    if (strength <= 0.0F) {
+        return rgb_linear;
+    }
+
+    Image rgb = rgb_linear;
+    const float print_c = print_finish.print_c / 100.0F;
+    const float print_m = print_finish.print_m / 100.0F;
+    const float print_y = print_finish.print_y / 100.0F;
+
+    for (std::size_t i = 0; i < rgb.pixel_count(); ++i) {
+        if (print_c != 0.0F) {
+            rgb.pixels[i * 3 + 0] = clamp01(rgb.pixels[i * 3 + 0] * (1.0F - print_c * 0.5F));
+        }
+        if (print_m != 0.0F) {
+            rgb.pixels[i * 3 + 1] = clamp01(rgb.pixels[i * 3 + 1] * (1.0F - print_m * 0.5F));
+        }
+        if (print_y != 0.0F) {
+            rgb.pixels[i * 3 + 2] = clamp01(rgb.pixels[i * 3 + 2] * (1.0F - print_y * 0.5F));
+        }
+    }
+
+    const float print_bp = print_finish.print_black_point / 100.0F;
+    const float shadow_lift = clampf(print_finish.shadow_lift * strength + print_bp * 0.05F, 0.0F, 0.2F);
+    for (float& value : rgb.pixels) {
+        value = clamp01(value + shadow_lift * (1.0F - value));
+    }
+
+    const float contrast_boost = print_finish.contrast_boost + (print_finish.print_contrast / 100.0F) * 0.5F;
+    const float cb = ((contrast_boost - 1.0F) * strength) + 1.0F;
+    if (std::fabs(cb - 1.0F) > 0.005F) {
+        const float k = clampf((cb - 1.0F) * 3.0F, -2.5F, 2.5F);
+        const float denom = std::tanh(k * 0.5F);
+        if (std::fabs(denom) > 1.0e-6F) {
+            for (float& value : rgb.pixels) {
+                value = clamp01(0.5F + std::tanh(k * (value - 0.5F)) / (2.0F * denom));
+            }
+        }
+    }
+
+    const auto luminance = compute_luminance(rgb);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            const float y_value = luminance.at(x, y);
+            if (y_value > print_finish.highlight_rolloff) {
+                const float above = clampf(
+                    (y_value - print_finish.highlight_rolloff) / (1.0F - print_finish.highlight_rolloff + 1.0e-6F),
+                    0.0F,
+                    1.0F);
+                const float rolloff = clampf(
+                    1.0F - std::pow(above, print_finish.highlight_rolloff_rate) *
+                    (1.0F - print_finish.highlight_rolloff) * strength,
+                    print_finish.highlight_rolloff,
+                    1.0F);
+                const float scale = rolloff / std::max(y_value, 1.0e-6F);
+                for (int channel = 0; channel < 3; ++channel) {
+                    rgb.at(x, y, channel) = clamp01(rgb.at(x, y, channel) * scale);
+                }
+            }
+        }
+    }
+
+    Image oklab = rgb_to_oklab(rgb);
+    for (int y = 0; y < oklab.height; ++y) {
+        for (int x = 0; x < oklab.width; ++x) {
+            const float l = oklab.at(x, y, 0);
+            const float w_shadow = std::pow(clampf(1.0F - l / 0.35F, 0.0F, 1.0F), 1.5F);
+            const float w_highlight = std::pow(clampf((l - 0.60F) / 0.40F, 0.0F, 1.0F), 1.5F);
+            const float w_midtone = clampf(1.0F - w_shadow - w_highlight, 0.0F, 1.0F);
+            const float bias_scale = strength * 0.01F;
+            for (int channel = 0; channel < 3; ++channel) {
+                const float delta = bias_scale * (
+                    print_finish.shadow_bias_lab[static_cast<std::size_t>(channel)] * w_shadow +
+                    print_finish.midtone_bias_lab[static_cast<std::size_t>(channel)] * w_midtone +
+                    print_finish.highlight_bias_lab[static_cast<std::size_t>(channel)] * w_highlight);
+                oklab.at(x, y, channel) += delta;
+            }
+        }
+    }
+
+    Image rgb2 = oklab_to_rgb(oklab);
+    const float red_boost = print_finish.red_boost * strength;
+    const float blue_suppression = print_finish.blue_suppression * strength;
+    const float green_shift = print_finish.green_shift * strength;
+    for (std::size_t i = 0; i < rgb2.pixel_count(); ++i) {
+        rgb2.pixels[i * 3 + 0] = clamp01(rgb2.pixels[i * 3 + 0] * (1.0F + red_boost * 0.3F));
+        rgb2.pixels[i * 3 + 2] = clamp01(rgb2.pixels[i * 3 + 2] * (1.0F - blue_suppression * 0.3F));
+        rgb2.pixels[i * 3 + 1] = clamp01(rgb2.pixels[i * 3 + 1] * (1.0F + green_shift * 0.15F));
+    }
+
+    if (std::fabs(print_finish.saturation_scale - 1.0F) > 0.005F) {
+        Image oklab2 = rgb_to_oklab(rgb2);
+        const float effective_sat = 1.0F + (print_finish.saturation_scale - 1.0F) * strength;
+        for (std::size_t i = 0; i < oklab2.pixel_count(); ++i) {
+            oklab2.pixels[i * 3 + 1] *= effective_sat;
+            oklab2.pixels[i * 3 + 2] *= effective_sat;
+        }
+        rgb2 = oklab_to_rgb(oklab2);
+    }
+
+    const float grain_strength = print_finish.grain_strength * strength;
+    if (grain_strength > 0.005F) {
+        const int h = rgb2.height;
+        const int w = rgb2.width;
+        const int downsample_divisor = std::max(1, static_cast<int>(1.0F / (print_finish.grain_size + 0.01F)));
+        const int small_h = std::max(h / downsample_divisor, 1);
+        const int small_w = std::max(w / downsample_divisor, 1);
+        cv::Mat noise_small = make_standard_normal_mat_fixed_seed(small_h, small_w, 42U);
+        cv::Mat noise;
+        cv::resize(noise_small, noise, cv::Size(w, h), 0.0, 0.0, cv::INTER_LINEAR);
+
+        const auto y2 = compute_luminance(rgb2);
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const float grain_mask = 4.0F * y2.at(x, y) * (1.0F - y2.at(x, y));
+                const float delta = noise.at<float>(y, x) * grain_mask * grain_strength * 0.04F;
+                for (int channel = 0; channel < 3; ++channel) {
+                    rgb2.at(x, y, channel) = clamp01(rgb2.at(x, y, channel) + delta);
+                }
+            }
+        }
+    }
+
+    return rgb2;
 }
 
 }  // namespace dfee
