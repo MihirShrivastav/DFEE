@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 
 from dfee.analyzer import ImageStateAnalyzer
+from dfee.bias import CameraBiasEstimator
 from dfee.ingest import RawIngestor
 
 
@@ -140,6 +141,28 @@ class TestNativeBridge(unittest.TestCase):
         self.assertEqual(masks["halation_receiver_mask"].shape, Y.shape)
         self.assertGreater(float(masks["halation_source_mask"][16, 16]), 0.0)
         self.assertGreater(float(masks["halation_receiver_mask"][15, 15]), 0.0)
+
+    def test_python_camera_bias_reference_fixture(self):
+        rgb = np.full((12, 12, 3), [0.38, 0.40, 0.44], dtype=np.float32)
+        rgb[:4, :4, :] = [0.08, 0.11, 0.20]
+        rgb[8:, 8:, :] = [0.82, 0.83, 0.86]
+        Y = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]).astype(np.float32)
+        clipping_masks = {
+            "R": np.zeros((12, 12), dtype=bool),
+            "G": np.zeros((12, 12), dtype=bool),
+            "B": np.zeros((12, 12), dtype=bool),
+        }
+
+        analyzer = ImageStateAnalyzer()
+        tonal = analyzer._analyze_tonal(Y, {"R": 0.0, "G": 0.0, "B": 0.0})
+        zone_masks = analyzer._generate_zone_masks(Y, tonal["midtone_anchor"])
+        bias = CameraBiasEstimator().estimate_bias(rgb, Y, clipping_masks, zone_masks)
+
+        self.assertGreater(bias["neutral_confidence"], 0.0)
+        self.assertGreater(bias["global_cast_lab"][0], 0.0)
+        self.assertGreaterEqual(bias["blue_excess_index"], 0.0)
+        self.assertLess(bias["warm_cool_bias"], 0.0)
+        self.assertLess(bias["shadow_cast_lab"][2], 0.0)
 
     def test_select_file(self):
         raw_filename = self._raw_filename()

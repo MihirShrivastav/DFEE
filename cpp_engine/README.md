@@ -12,7 +12,7 @@ The current native scaffold builds:
 - `dfee_tests`: native unit/parity foundation tests.
 - `dfee_cuda`: optional CUDA target when configured with `DFEE_ENABLE_CUDA=ON`.
 
-The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
+The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
 
 ## Build
 
@@ -95,3 +95,5 @@ Profile discovery now uses `yaml-cpp` instead of the temporary indentation parse
 The native color analyzer now computes the same high-level color metrics the Python solver expects, including zonal saturation summaries, hue entropy, dominant hue bins, warm/cool balance, and neon-risk style saturation pressure. The implementation is intentionally single-pass over pixels plus a fixed-size hue histogram so it avoids building full-frame temporary OKLab/OKLCH buffers.
 
 The native spatial analyzer now computes texture density, smooth-area ratio, edge density, digital sharpness score, specular/large-highlight ratios, and the grain-receptivity and halation source/receiver masks. It keeps the heavy variance and edge statistics on a downsampled luminance view when images are large, then reconstructs only the full-resolution masks needed by later rendering stages.
+
+The native camera bias estimator now mirrors the Python engine's neutral-axis and cast analysis. It computes neutral-pixel confidence, global and zone-weighted OKLab casts, plus the blue-excess, green-magenta, and warm-cool indices the solver uses for adaptation decisions.

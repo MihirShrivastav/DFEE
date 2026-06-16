@@ -1,4 +1,5 @@
 #include "dfee/analyzer.hpp"
+#include "dfee/bias.hpp"
 #include "dfee/color_spaces.hpp"
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
@@ -110,6 +111,48 @@ void test_spatial_analysis() {
     assert(masks.grain_receptivity_mask.height == luminance.height);
     assert(masks.halation_source_mask.at(16, 16) > 0.0F);
     assert(masks.halation_receiver_mask.at(15, 15) > 0.0F);
+}
+
+void test_camera_bias_estimator() {
+    dfee::Image rgb(12, 12, 3);
+    dfee::DecodedRawChannelMasks clipping_masks;
+    clipping_masks.red.assign(rgb.pixel_count(), 0);
+    clipping_masks.green.assign(rgb.pixel_count(), 0);
+    clipping_masks.blue.assign(rgb.pixel_count(), 0);
+
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.38F;
+            rgb.at(x, y, 1) = 0.40F;
+            rgb.at(x, y, 2) = 0.44F;
+        }
+    }
+    for (int y = 0; y < 4; ++y) {
+        for (int x = 0; x < 4; ++x) {
+            rgb.at(x, y, 0) = 0.08F;
+            rgb.at(x, y, 1) = 0.11F;
+            rgb.at(x, y, 2) = 0.20F;
+        }
+    }
+    for (int y = 8; y < 12; ++y) {
+        for (int x = 8; x < 12; ++x) {
+            rgb.at(x, y, 0) = 0.82F;
+            rgb.at(x, y, 1) = 0.83F;
+            rgb.at(x, y, 2) = 0.86F;
+        }
+    }
+
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+    const dfee::CameraBiasEstimator estimator;
+    const auto bias = estimator.estimate_bias(rgb, clipping_masks, zones);
+
+    assert(bias.neutral_confidence > 0.0F);
+    assert(bias.global_cast_lab[0] > 0.0F);
+    assert(bias.blue_excess_index >= 0.0F);
+    assert(bias.warm_cool_bias < 0.0F);
+    assert(bias.shadow_cast_lab[2] < 0.0F);
 }
 
 void test_profile_loading() {
@@ -303,6 +346,7 @@ int main() {
         test_tonal_analysis();
         test_color_analysis();
         test_spatial_analysis();
+        test_camera_bias_estimator();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
