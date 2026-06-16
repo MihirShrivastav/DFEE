@@ -71,6 +71,27 @@ class TestNativeBridge(unittest.TestCase):
         self.assertGreater(len(profiles.engine.timings), 0)
         self.assertIn("list_profiles_total", profiles.engine.metadata_json)
 
+    def test_list_profiles_skips_invalid_yaml(self):
+        invalid_stock = BASE_DIR / "profiles" / "stocks" / "native_invalid_bridge_stock.yaml"
+        invalid_print = BASE_DIR / "profiles" / "print_stocks" / "native_invalid_bridge_print.yaml"
+        invalid_stock.write_text(
+            "stock_id: native_invalid_bridge_stock\n"
+            "stock_name: Native Invalid Bridge Stock\n"
+            "stock_type: invalid_kind\n",
+            encoding="utf-8",
+        )
+        invalid_print.write_text(
+            "print_stock_id: native_invalid_bridge_print\n"
+            "print_stock_name: Native Invalid Bridge Print\n"
+            "tone: []\n",
+            encoding="utf-8",
+        )
+        self._temp_files.extend([invalid_stock, invalid_print])
+
+        profiles = self.session.list_profiles()
+        self.assertNotIn("native_invalid_bridge_stock", {stock.stock_id for stock in profiles.stocks})
+        self.assertNotIn("native_invalid_bridge_print", {stock.print_stock_id for stock in profiles.print_stocks})
+
     def test_select_file(self):
         raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)

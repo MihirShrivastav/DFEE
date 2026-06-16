@@ -80,6 +80,19 @@ else()
     target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENCV=0)
 endif()
 
+find_package(yaml-cpp CONFIG QUIET)
+if(yaml-cpp_FOUND)
+    target_link_libraries(dfee_core PUBLIC yaml-cpp::yaml-cpp)
+    message(STATUS "DFEE: yaml-cpp enabled")
+else()
+    message(FATAL_ERROR
+        "DFEE: yaml-cpp is required for native profile loading.\n"
+        "Install dependencies with vcpkg and configure with the vcpkg toolchain.\n"
+        "Expected steps on Windows:\n"
+        "  1. Set VCPKG_ROOT to your vcpkg checkout.\n"
+        "  2. Run: cmake --preset windows-msvc-vcpkg")
+endif()
+
 target_include_directories(dfee_core
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include

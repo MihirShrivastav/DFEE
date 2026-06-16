@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -72,6 +73,56 @@ void test_profile_loading() {
     assert(listing.engine.engine_version == dfee::kEngineVersion);
     assert(!listing.engine.timings.empty());
     assert(listing.engine.metadata_json.find("list_profiles_total") != std::string::npos);
+
+    const auto invalid_stock_path = repo_root / "profiles" / "stocks" / "native_invalid_stock.yaml";
+    const auto invalid_print_path = repo_root / "profiles" / "print_stocks" / "native_invalid_print.yaml";
+    struct CleanupGuard {
+        std::filesystem::path stock_path;
+        std::filesystem::path print_path;
+        ~CleanupGuard() {
+            std::filesystem::remove(stock_path);
+            std::filesystem::remove(print_path);
+        }
+    } cleanup_guard{invalid_stock_path, invalid_print_path};
+
+    {
+        std::ofstream out(invalid_stock_path, std::ios::binary);
+        out << "stock_id: native_invalid_stock\n";
+        out << "stock_name: Native Invalid Stock\n";
+        out << "stock_type: invalid_kind\n";
+        out << "adaptation: 1\n";
+    }
+    {
+        std::ofstream out(invalid_print_path, std::ios::binary);
+        out << "print_stock_id: native_invalid_print\n";
+        out << "print_stock_name: Native Invalid Print\n";
+        out << "tone: [1, 2, 3]\n";
+    }
+
+    bool invalid_stock_threw = false;
+    try {
+        (void)dfee::load_film_stock_profile(invalid_stock_path);
+    } catch (const std::exception&) {
+        invalid_stock_threw = true;
+    }
+    assert(invalid_stock_threw);
+
+    bool invalid_print_threw = false;
+    try {
+        (void)dfee::load_print_stock_profile(invalid_print_path);
+    } catch (const std::exception&) {
+        invalid_print_threw = true;
+    }
+    assert(invalid_print_threw);
+
+    const auto listed_stocks = dfee::list_film_stock_profiles(repo_root / "profiles" / "stocks");
+    for (const auto& listed_stock : listed_stocks) {
+        assert(listed_stock.stock_id != "native_invalid_stock");
+    }
+    const auto listed_print_stocks = dfee::list_print_stock_profiles(repo_root / "profiles" / "print_stocks");
+    for (const auto& listed_print : listed_print_stocks) {
+        assert(listed_print.print_stock_id != "native_invalid_print");
+    }
 
     const auto selected = session.select_file({.filename = "DSC00246.ARW"});
     assert(selected.ok);

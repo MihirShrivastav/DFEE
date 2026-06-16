@@ -12,7 +12,7 @@ The current native scaffold builds:
 - `dfee_tests`: native unit/parity foundation tests.
 - `dfee_cuda`: optional CUDA target when configured with `DFEE_ENABLE_CUDA=ON`.
 
-The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, YAML stock and print-profile discovery, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Full preview render, full export, and FastAPI route delegation are the next migration slices.
+The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Full preview render, full export, and FastAPI route delegation are the next migration slices.
 
 ## Build
 
@@ -34,7 +34,7 @@ cmake --preset windows-msvc-vcpkg
 cmake --build --preset windows-msvc-vcpkg --config Debug
 ```
 
-If LibRaw is not discoverable, the plain `windows-msvc` preset still builds the scaffold but prints a configure warning and leaves native RAW decode disabled.
+If LibRaw is not discoverable, the plain `windows-msvc` preset still builds the scaffold but prints a configure warning and leaves native RAW decode disabled. `yaml-cpp` is now required for native profile loading, so native builds should use the vcpkg-backed preset on this machine.
 
 ## Smoke Checks
 
@@ -89,3 +89,5 @@ Stable Python wrapper:
 `raw_preview` returns cached JPEG bytes for the preview-scale RAW image. In the vcpkg-backed build it uses OpenCV for area downsampling and JPEG encoding so the native preview path matches the current Python `/api/raw-image` behavior closely.
 
 Unsupported or corrupt RAW inputs are covered in both native and FastAPI-side tests. Native decode and preview paths now fail with structured errors and leave no stale preview/decode caches behind.
+
+Profile discovery now uses `yaml-cpp` instead of the temporary indentation parser. Direct profile loads fail on missing required sections or invalid `stock_type` values, while directory listing skips invalid YAML files so profile enumeration stays resilient.
