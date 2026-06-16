@@ -97,6 +97,7 @@ void test_profile_loading() {
     const auto draft_cache = session.cache_state();
     assert(draft_cache.cache.draft_decode_cached);
     assert(draft_cache.cache.preview_cached);
+    assert(!draft_cache.cache.raw_preview_jpeg_cached);
     assert(draft_cache.cache.draft_width == draft_decode.summary.image_width);
     assert(draft_cache.cache.draft_height == draft_decode.summary.image_height);
     assert(draft_cache.cache.preview_width <= draft_cache.cache.draft_width);
@@ -108,10 +109,21 @@ void test_profile_loading() {
 
     const auto full_decode = session.decode_raw({.filename = "DSC00246.ARW", .draft_mode = false});
     assert(full_decode.ok);
+    const auto raw_preview = session.raw_preview({.filename = "DSC00246.ARW", .max_edge = 1024});
+    assert(raw_preview.ok);
+    assert(raw_preview.content_type == "image/jpeg");
+    assert(!raw_preview.jpeg_bytes.empty());
     const auto full_cache = session.cache_state();
+    assert(full_cache.cache.raw_preview_jpeg_cached);
+    assert(full_cache.cache.raw_preview_jpeg_bytes == raw_preview.jpeg_bytes.size());
     assert(full_cache.cache.full_decode_cached);
     assert(full_cache.cache.full_width == full_decode.summary.image_width);
     assert(full_cache.cache.full_height == full_decode.summary.image_height);
+
+    const auto cached_raw_preview = session.raw_preview({.filename = "DSC00246.ARW", .max_edge = 1024});
+    assert(cached_raw_preview.ok);
+    assert(cached_raw_preview.status == "cached");
+    assert(cached_raw_preview.jpeg_bytes == raw_preview.jpeg_bytes);
 #else
     assert(!metadata.ok);
     assert(metadata.error.code == "LIBRAW_UNAVAILABLE");

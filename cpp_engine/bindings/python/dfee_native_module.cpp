@@ -160,6 +160,8 @@ PyObject* cache_state_to_dict(const dfee::NativeSessionCacheState& cache) {
     PyDict_SetItemString(dict, "preview_cached", cache.preview_cached ? Py_True : Py_False);
     PyDict_SetItemString(dict, "preview_width", PyLong_FromLong(cache.preview_width));
     PyDict_SetItemString(dict, "preview_height", PyLong_FromLong(cache.preview_height));
+    PyDict_SetItemString(dict, "raw_preview_jpeg_cached", cache.raw_preview_jpeg_cached ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "raw_preview_jpeg_bytes", PyLong_FromSize_t(cache.raw_preview_jpeg_bytes));
     PyDict_SetItemString(dict, "full_decode_cached", cache.full_decode_cached ? Py_True : Py_False);
     PyDict_SetItemString(dict, "full_width", PyLong_FromLong(cache.full_width));
     PyDict_SetItemString(dict, "full_height", PyLong_FromLong(cache.full_height));
@@ -391,6 +393,49 @@ PyObject* py_cache_state(PyObject*, PyObject* args) {
     }
 }
 
+PyObject* py_raw_preview(PyObject*, PyObject* args, PyObject* kwargs) {
+    PyObject* capsule = nullptr;
+    const char* filename = "";
+    int max_edge = 1024;
+    static const char* const keywords[] = {"session", "filename", "max_edge", nullptr};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|si", const_cast<char**>(keywords), &capsule, &filename, &max_edge)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->raw_preview({
+            .filename = filename != nullptr ? filename : "",
+            .max_edge = max_edge,
+        });
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
+        PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
+        PyDict_SetItemString(dict, "content_type", PyUnicode_FromString(result.content_type.c_str()));
+        PyObject* jpeg_bytes = PyBytes_FromStringAndSize(
+            reinterpret_cast<const char*>(result.jpeg_bytes.data()),
+            static_cast<Py_ssize_t>(result.jpeg_bytes.size()));
+        PyDict_SetItemString(dict, "jpeg_bytes", jpeg_bytes);
+        Py_DECREF(jpeg_bytes);
+        if (!result.error.empty()) {
+            PyObject* error = native_error_to_dict(result.error);
+            PyDict_SetItemString(dict, "error", error);
+            Py_DECREF(error);
+        }
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyMethodDef kMethods[] = {
     {"engine_version", py_engine_version, METH_NOARGS, "Return the native engine version."},
     {"cuda_status", py_cuda_status, METH_NOARGS, "Return CUDA build/runtime status."},
@@ -400,6 +445,7 @@ PyMethodDef kMethods[] = {
     {"read_raw_metadata", py_read_raw_metadata, METH_VARARGS, "Read RAW metadata through the native session."},
     {"decode_raw", reinterpret_cast<PyCFunction>(py_decode_raw), METH_VARARGS | METH_KEYWORDS, "Decode a RAW file through the native session."},
     {"cache_state", py_cache_state, METH_VARARGS, "Inspect native session cache ownership state."},
+    {"raw_preview", reinterpret_cast<PyCFunction>(py_raw_preview), METH_VARARGS | METH_KEYWORDS, "Return cached native RAW preview JPEG bytes."},
     {nullptr, nullptr, 0, nullptr},
 };
 

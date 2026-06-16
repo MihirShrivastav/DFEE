@@ -116,9 +116,20 @@ class NativeSessionCacheState:
     preview_cached: bool
     preview_width: int
     preview_height: int
+    raw_preview_jpeg_cached: bool
+    raw_preview_jpeg_bytes: int
     full_decode_cached: bool
     full_width: int
     full_height: int
+
+
+@dataclass(frozen=True)
+class NativeRawPreview:
+    filename: str
+    status: str
+    content_type: str
+    jpeg_bytes: bytes
+    engine: NativeEngineInfo
 
 
 @dataclass(frozen=True)
@@ -218,6 +229,8 @@ def _parse_session_cache_state(payload: dict[str, Any]) -> NativeSessionCacheSta
         preview_cached=bool(payload.get("preview_cached", False)),
         preview_width=int(payload.get("preview_width", 0)),
         preview_height=int(payload.get("preview_height", 0)),
+        raw_preview_jpeg_cached=bool(payload.get("raw_preview_jpeg_cached", False)),
+        raw_preview_jpeg_bytes=int(payload.get("raw_preview_jpeg_bytes", 0)),
         full_decode_cached=bool(payload.get("full_decode_cached", False)),
         full_width=int(payload.get("full_width", 0)),
         full_height=int(payload.get("full_height", 0)),
@@ -340,6 +353,30 @@ class NativeEngineSession:
             self._raise_bridge_error(exc)
 
         return _parse_session_cache_state(dict(payload.get("cache", {})))
+
+    def raw_preview(self, filename: str = "", *, max_edge: int = 1024) -> NativeRawPreview:
+        try:
+            payload = dict(self._native_module.raw_preview(self._handle, filename, max_edge))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        if "error" in payload:
+            error = _parse_error_info(dict(payload["error"]))
+            raise NativeOperationError(
+                error.code,
+                error.user_message,
+                error.detail,
+                filename=str(payload.get("filename", "")),
+                status=str(payload.get("status", "")),
+            )
+
+        return NativeRawPreview(
+            filename=str(payload.get("filename", "")),
+            status=str(payload.get("status", "")),
+            content_type=str(payload.get("content_type", "image/jpeg")),
+            jpeg_bytes=bytes(payload.get("jpeg_bytes", b"")),
+            engine=_parse_engine_info(dict(payload.get("engine", {}))),
+        )
 
     def _raise_bridge_error(self, exc: Exception) -> None:
         code = str(getattr(exc, "code", "") or "NATIVE_BRIDGE_ERROR")

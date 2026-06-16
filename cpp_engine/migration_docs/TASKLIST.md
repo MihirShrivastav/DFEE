@@ -42,7 +42,7 @@ Status values:
 | M2-002 | done | Implement native RAW metadata extraction | `ctest --preset windows-msvc` and `pytest tests/test_native_bridge.py -q` | Native metadata structs/session/wrapper are implemented. Full LibRaw-vs-`rawpy` fixture parity on this machine still depends on a vcpkg-backed LibRaw install. |
 | M2-003 | done | Implement scene-linear RGB decode matching current `rawpy` settings | `pytest tests/test_native_bridge.py -q` against `windows-msvc-vcpkg` | Native decode now uses LibRaw with camera WB, no auto bright, `gamma=(1,1)`, `sRGB`, `output_bps=16`, and draft/full mode support. Current parity test checks decoded draft dimensions and clipping ratios against Python `RawIngestor`. |
 | M2-004 | done | Add session-owned full-res and preview caches | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | `EngineSession` now owns draft decode, preview-scale, and full-res decode caches, exposes cache-state inspection for tests, preserves caches on same-file reselect, and clears them on file changes. |
-| M2-005 | planned | Implement native cached RAW preview JPEG for `/api/raw-image` | FastAPI integration test | Preserve current response bytes/content type behavior. |
+| M2-005 | done | Implement native cached RAW preview JPEG for `/api/raw-image` | `pytest tests/test_native_bridge.py -q` and `ctest --preset windows-msvc-vcpkg` | Native session now caches preview JPEG bytes behind `raw_preview(...)`, using OpenCV-backed area resize and JPEG encode to match the current Python preview path closely. |
 | M2-006 | planned | Add failure coverage for unsupported/corrupt RAW files | Native and FastAPI tests | Must not crash server process. |
 
 ## Milestone M3 - CPU Pipeline Parity

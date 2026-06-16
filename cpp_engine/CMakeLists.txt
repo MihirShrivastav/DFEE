@@ -11,6 +11,7 @@ option(DFEE_BUILD_PYTHON "Build Python extension module for FastAPI integration"
 option(DFEE_ENABLE_CUDA "Build optional CUDA acceleration target when CUDA is available" OFF)
 option(DFEE_ENABLE_LIBRAW "Enable LibRaw integration when the library is discoverable" ON)
 option(DFEE_REQUIRE_LIBRAW "Fail configure if LibRaw is not discoverable" OFF)
+option(DFEE_ENABLE_OPENCV "Enable OpenCV integration when the library is discoverable" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -60,6 +61,23 @@ if(DFEE_ENABLE_LIBRAW)
     endif()
 else()
     target_compile_definitions(dfee_core PUBLIC DFEE_HAS_LIBRAW=0)
+endif()
+
+if(DFEE_ENABLE_OPENCV)
+    find_package(OpenCV CONFIG QUIET COMPONENTS core imgcodecs imgproc)
+    if(OpenCV_FOUND)
+        target_link_libraries(dfee_core PUBLIC opencv_core opencv_imgcodecs opencv_imgproc)
+        target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENCV=1)
+        message(STATUS "DFEE: OpenCV enabled")
+    else()
+        target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENCV=0)
+        message(WARNING
+            "DFEE: OpenCV was not found. Native JPEG preview encoding remains disabled.\n"
+            "To enable it, install dependencies through vcpkg and configure with the vcpkg toolchain.\n"
+            "Suggested preset after setting VCPKG_ROOT: cmake --preset windows-msvc-vcpkg")
+    endif()
+else()
+    target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENCV=0)
 endif()
 
 target_include_directories(dfee_core

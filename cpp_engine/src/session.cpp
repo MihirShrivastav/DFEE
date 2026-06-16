@@ -6,7 +6,13 @@
 #include "dfee/version.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
+
+#if DFEE_HAS_OPENCV
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+#endif
 
 namespace dfee {
 namespace {
@@ -41,8 +47,31 @@ Image resize_image_to_max_edge(const Image& source, const int max_edge) {
     const float scale = static_cast<float>(max_edge) / static_cast<float>(current_max);
     const int target_width = std::max(1, static_cast<int>(source.width * scale));
     const int target_height = std::max(1, static_cast<int>(source.height * scale));
-    Image resized(target_width, target_height, source.channels);
+#if DFEE_HAS_OPENCV
+    cv::Mat source_mat(source.height, source.width, CV_32FC3);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            auto& pixel = source_mat.at<cv::Vec3f>(y, x);
+            pixel[0] = source.at(x, y, 0);
+            pixel[1] = source.at(x, y, 1);
+            pixel[2] = source.at(x, y, 2);
+        }
+    }
 
+    cv::Mat resized_mat;
+    cv::resize(source_mat, resized_mat, cv::Size(target_width, target_height), 0.0, 0.0, cv::INTER_AREA);
+    Image resized(target_width, target_height, source.channels);
+    for (int y = 0; y < target_height; ++y) {
+        for (int x = 0; x < target_width; ++x) {
+            const auto& pixel = resized_mat.at<cv::Vec3f>(y, x);
+            resized.at(x, y, 0) = pixel[0];
+            resized.at(x, y, 1) = pixel[1];
+            resized.at(x, y, 2) = pixel[2];
+        }
+    }
+    return resized;
+#else
+    Image resized(target_width, target_height, source.channels);
     for (int y = 0; y < target_height; ++y) {
         const int source_y = std::min(source.height - 1, static_cast<int>(static_cast<float>(y) / scale));
         for (int x = 0; x < target_width; ++x) {
@@ -52,8 +81,16 @@ Image resize_image_to_max_edge(const Image& source, const int max_edge) {
             }
         }
     }
-
     return resized;
+#endif
+}
+
+float linear_to_srgb_channel(const float value) {
+    const float clamped = clamp01(value);
+    if (clamped <= 0.0031308F) {
+        return 12.92F * clamped;
+    }
+    return 1.055F * std::pow(clamped, 1.0F / 2.4F) - 0.055F;
 }
 
 }  // namespace
@@ -234,6 +271,7 @@ NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& 
                 };
                 if (request.draft_mode) {
                     draft_decode_cache_ = std::move(cache_entry);
+                    raw_preview_jpeg_cache_.reset();
                 } else {
                     full_decode_cache_ = std::move(cache_entry);
                 }
@@ -243,6 +281,60 @@ NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& 
             ScopedStageTimer stage(response.engine, "decode_raw_refresh_preview_cache");
             if (response.ok && request.draft_mode) {
                 refresh_preview_cache_from_draft();
+            }
+        }
+    }
+
+    finalize_engine_metadata(response.engine);
+    return response;
+}
+
+NativeRawPreviewResponse EngineSession::raw_preview(const NativeRawPreviewRequest& request) {
+    NativeRawPreviewResponse response;
+    response.filename = resolve_filename(request.filename);
+    response.engine = build_engine_metadata();
+
+    {
+        ScopedStageTimer total(response.engine, "raw_preview_total");
+        {
+            ScopedStageTimer stage(response.engine, "raw_preview_resolve_session");
+            if (response.filename.empty()) {
+                response.status = "error";
+                response.error = {
+                    .code = "RAW_FILENAME_MISSING",
+                    .user_message = "Select a RAW file before continuing.",
+                    .detail = "raw_preview received an empty filename and no session file is currently selected.",
+                };
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+        }
+        {
+            ScopedStageTimer stage(response.engine, "raw_preview_cache_lookup");
+            if (raw_preview_jpeg_cache_.has_value() &&
+                raw_preview_jpeg_cache_->filename == response.filename &&
+                raw_preview_jpeg_cache_->max_edge == request.max_edge) {
+                response.ok = true;
+                response.status = "cached";
+                response.jpeg_bytes = raw_preview_jpeg_cache_->jpeg_bytes;
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+        }
+        {
+            ScopedStageTimer stage(response.engine, "raw_preview_build");
+            const auto encoded = encode_raw_preview(response.filename, request.max_edge);
+            response.ok = encoded.ok;
+            response.status = encoded.status;
+            response.content_type = encoded.content_type;
+            response.jpeg_bytes = encoded.jpeg_bytes;
+            response.error = encoded.error;
+            if (encoded.ok) {
+                raw_preview_jpeg_cache_ = CachedRawPreviewJpeg{
+                    .filename = response.filename,
+                    .max_edge = request.max_edge,
+                    .jpeg_bytes = response.jpeg_bytes,
+                };
             }
         }
     }
@@ -265,6 +357,10 @@ NativeSessionCacheStateResponse EngineSession::cache_state() const {
         response.cache.preview_cached = true;
         response.cache.preview_width = preview_cache_->rgb_linear.width;
         response.cache.preview_height = preview_cache_->rgb_linear.height;
+    }
+    if (raw_preview_jpeg_cache_.has_value()) {
+        response.cache.raw_preview_jpeg_cached = true;
+        response.cache.raw_preview_jpeg_bytes = raw_preview_jpeg_cache_->jpeg_bytes.size();
     }
     if (full_decode_cache_.has_value()) {
         response.cache.full_decode_cached = true;
@@ -290,11 +386,13 @@ void EngineSession::clear_decode_caches() {
     draft_decode_cache_.reset();
     full_decode_cache_.reset();
     preview_cache_.reset();
+    raw_preview_jpeg_cache_.reset();
 }
 
 void EngineSession::refresh_preview_cache_from_draft() {
     if (!draft_decode_cache_.has_value()) {
         preview_cache_.reset();
+        raw_preview_jpeg_cache_.reset();
         return;
     }
 
@@ -303,6 +401,65 @@ void EngineSession::refresh_preview_cache_from_draft() {
     preview.rgb_linear = resize_image_to_max_edge(draft_decode_cache_->decoded.rgb_linear, 1024);
     preview.luminance = compute_luminance(preview.rgb_linear);
     preview_cache_ = std::move(preview);
+    raw_preview_jpeg_cache_.reset();
+}
+
+NativeRawPreviewResponse EngineSession::encode_raw_preview(const std::string& filename, const int max_edge) const {
+    NativeRawPreviewResponse response;
+    response.filename = filename;
+
+#if !DFEE_HAS_OPENCV
+    response.status = "unavailable";
+    response.error = {
+        .code = "OPENCV_UNAVAILABLE",
+        .user_message = "Native RAW preview encoding is not available in this build.",
+        .detail = "DFEE was built without OpenCV discovery; configure with the windows-msvc-vcpkg preset.",
+    };
+    return response;
+#else
+    if (!preview_cache_.has_value() || preview_cache_->filename != filename) {
+        response.status = "error";
+        response.error = {
+            .code = "RAW_PREVIEW_NOT_CACHED",
+            .user_message = "A draft RAW decode is required before serving the native RAW preview.",
+            .detail = "No preview cache was present for filename: " + filename,
+        };
+        return response;
+    }
+
+    const Image preview_rgb = (max_edge > 0 && std::max(preview_cache_->rgb_linear.width, preview_cache_->rgb_linear.height) > max_edge)
+        ? resize_image_to_max_edge(preview_cache_->rgb_linear, max_edge)
+        : preview_cache_->rgb_linear;
+
+    cv::Mat rgb_u8(preview_rgb.height, preview_rgb.width, CV_8UC3);
+    for (int y = 0; y < preview_rgb.height; ++y) {
+        for (int x = 0; x < preview_rgb.width; ++x) {
+            const float r = linear_to_srgb_channel(preview_rgb.at(x, y, 0));
+            const float g = linear_to_srgb_channel(preview_rgb.at(x, y, 1));
+            const float b = linear_to_srgb_channel(preview_rgb.at(x, y, 2));
+            auto& pixel = rgb_u8.at<cv::Vec3b>(y, x);
+            pixel[0] = static_cast<std::uint8_t>(std::clamp(b * 255.0F, 0.0F, 255.0F));
+            pixel[1] = static_cast<std::uint8_t>(std::clamp(g * 255.0F, 0.0F, 255.0F));
+            pixel[2] = static_cast<std::uint8_t>(std::clamp(r * 255.0F, 0.0F, 255.0F));
+        }
+    }
+
+    std::vector<std::uint8_t> jpeg_bytes;
+    if (!cv::imencode(".jpg", rgb_u8, jpeg_bytes)) {
+        response.status = "error";
+        response.error = {
+            .code = "RAW_PREVIEW_ENCODE_FAILED",
+            .user_message = "The native RAW preview could not be encoded as JPEG.",
+            .detail = "cv::imencode returned false for filename: " + filename,
+        };
+        return response;
+    }
+
+    response.ok = true;
+    response.status = "loaded";
+    response.jpeg_bytes = std::move(jpeg_bytes);
+    return response;
+#endif
 }
 
 }  // namespace dfee

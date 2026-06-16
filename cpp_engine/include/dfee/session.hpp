@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "dfee/bridge_types.hpp"
 #include "dfee/cuda_runtime.hpp"
@@ -21,6 +23,7 @@ public:
     [[nodiscard]] NativeSelectResponse select_file(const NativeSelectRequest& request);
     [[nodiscard]] NativeRawMetadataResponse read_raw_metadata(const NativeRawMetadataRequest& request) const;
     [[nodiscard]] NativeRawDecodeResponse decode_raw(const NativeRawDecodeRequest& request);
+    [[nodiscard]] NativeRawPreviewResponse raw_preview(const NativeRawPreviewRequest& request);
     [[nodiscard]] NativeSessionCacheStateResponse cache_state() const;
     [[nodiscard]] CudaStatus cuda_status() const noexcept;
 
@@ -37,9 +40,16 @@ private:
         LuminanceImage luminance;
     };
 
+    struct CachedRawPreviewJpeg {
+        std::string filename;
+        int max_edge = 1024;
+        std::vector<std::uint8_t> jpeg_bytes;
+    };
+
     [[nodiscard]] std::string resolve_filename(const std::string& filename) const;
     void clear_decode_caches();
     void refresh_preview_cache_from_draft();
+    [[nodiscard]] NativeRawPreviewResponse encode_raw_preview(const std::string& filename, int max_edge) const;
 
     std::filesystem::path project_root_;
     std::filesystem::path raw_dir_;
@@ -49,6 +59,7 @@ private:
     std::optional<CachedDecode> draft_decode_cache_;
     std::optional<CachedDecode> full_decode_cache_;
     std::optional<CachedPreview> preview_cache_;
+    std::optional<CachedRawPreviewJpeg> raw_preview_jpeg_cache_;
 };
 
 }  // namespace dfee

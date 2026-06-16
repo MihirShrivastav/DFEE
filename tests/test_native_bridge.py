@@ -4,6 +4,9 @@ import unittest
 from pathlib import Path
 import math
 
+import cv2
+import numpy as np
+
 from dfee.ingest import RawIngestor
 
 
@@ -29,6 +32,15 @@ class TestNativeBridge(unittest.TestCase):
             for entry in (BASE_DIR / "raw_files").iterdir()
             if entry.is_file() and entry.suffix.lower() == ".arw"
         )
+
+    @staticmethod
+    def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
+        linear = np.clip(linear, 0.0, 1.0)
+        return np.where(
+            linear <= 0.0031308,
+            12.92 * linear,
+            1.055 * (linear ** (1.0 / 2.4)) - 0.055,
+        ).astype(np.float32)
 
     def test_engine_status(self):
         version = dfee_native_bridge.engine_version()
@@ -115,6 +127,7 @@ class TestNativeBridge(unittest.TestCase):
             after_draft = self.session.cache_state()
             self.assertTrue(after_draft.draft_decode_cached)
             self.assertTrue(after_draft.preview_cached)
+            self.assertFalse(after_draft.raw_preview_jpeg_cached)
             self.assertFalse(after_draft.full_decode_cached)
             self.assertEqual(after_draft.draft_width, draft_summary.image_width)
             self.assertEqual(after_draft.draft_height, draft_summary.image_height)
@@ -137,7 +150,53 @@ class TestNativeBridge(unittest.TestCase):
             after_failed_decode = self.session.cache_state()
             self.assertFalse(after_failed_decode.draft_decode_cached)
             self.assertFalse(after_failed_decode.preview_cached)
+            self.assertFalse(after_failed_decode.raw_preview_jpeg_cached)
             self.assertFalse(after_failed_decode.full_decode_cached)
+
+    def test_raw_preview(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            self.session.decode_raw(raw_filename, draft_mode=True)
+            preview = self.session.raw_preview(raw_filename, max_edge=1024)
+            self.assertEqual(preview.content_type, "image/jpeg")
+            self.assertGreater(len(preview.jpeg_bytes), 0)
+
+            state_after_preview = self.session.cache_state()
+            self.assertTrue(state_after_preview.raw_preview_jpeg_cached)
+            self.assertGreater(state_after_preview.raw_preview_jpeg_bytes, 0)
+
+            cached_preview = self.session.raw_preview(raw_filename, max_edge=1024)
+            self.assertEqual(cached_preview.status, "cached")
+            self.assertEqual(cached_preview.jpeg_bytes, preview.jpeg_bytes)
+
+            rgb, _, _, _, _ = RawIngestor(str((BASE_DIR / "raw_files" / raw_filename))).ingest(draft_mode=True)
+            max_edge = 1024
+            h, w = rgb.shape[:2]
+            if max(h, w) > max_edge:
+                scale = max_edge / max(h, w)
+                expected_rgb = cv2.resize(rgb, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            else:
+                expected_rgb = rgb.copy()
+            expected_srgb = self._linear_to_srgb(expected_rgb)
+            expected_u8 = (expected_srgb * 255.0).astype(np.uint8)
+            _, expected_jpeg = cv2.imencode(".jpg", cv2.cvtColor(expected_u8, cv2.COLOR_RGB2BGR))
+
+            decoded_bgr = cv2.imdecode(np.frombuffer(preview.jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+            self.assertIsNotNone(decoded_bgr)
+            decoded_rgb = cv2.cvtColor(decoded_bgr, cv2.COLOR_BGR2RGB)
+            expected_decoded_bgr = cv2.imdecode(expected_jpeg, cv2.IMREAD_COLOR)
+            self.assertIsNotNone(expected_decoded_bgr)
+            expected_decoded_rgb = cv2.cvtColor(expected_decoded_bgr, cv2.COLOR_BGR2RGB)
+            self.assertEqual(decoded_rgb.shape[1], expected_u8.shape[1])
+            self.assertEqual(decoded_rgb.shape[0], expected_u8.shape[0])
+            mean_abs_error = float(np.mean(np.abs(decoded_rgb.astype(np.int16) - expected_decoded_rgb.astype(np.int16))))
+            self.assertLess(mean_abs_error, 1.0)
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.raw_preview(raw_filename, max_edge=1024)
+            self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE", "RAW_PREVIEW_NOT_CACHED"})
 
 
 if __name__ == "__main__":

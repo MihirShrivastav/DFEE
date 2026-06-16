@@ -129,6 +129,8 @@ struct NativeSessionCacheState {
     bool preview_cached = false;
     int preview_width = 0;
     int preview_height = 0;
+    bool raw_preview_jpeg_cached = false;
+    std::size_t raw_preview_jpeg_bytes = 0;
     bool full_decode_cached = false;
     int full_width = 0;
     int full_height = 0;

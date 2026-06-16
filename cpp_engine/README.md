@@ -74,6 +74,7 @@ Stable Python wrapper:
 - `NativeEngineSession.read_raw_metadata(filename) -> NativeRawMetadata`
 - `NativeEngineSession.decode_raw(filename, draft_mode=True) -> (NativeRawDecodeSummary, NativeRawMetadata)`
 - `NativeEngineSession.cache_state() -> NativeSessionCacheState`
+- `NativeEngineSession.raw_preview(filename="", max_edge=1024) -> NativeRawPreview`
 
 `dfee_native_bridge.py` is the intended Python-side integration surface for future FastAPI delegation. It hides the raw CPython capsule handle and normalizes native responses into typed Python objects.
 
@@ -84,3 +85,5 @@ Stable Python wrapper:
 `decode_raw` uses the current native LibRaw path with the same core decode knobs as the Python ingest path: camera white balance, no auto bright, scene-linear gamma, sRGB output primaries, 16-bit output, and optional half-size draft mode.
 
 `EngineSession` now owns draft decode, preview-scale, and full-resolution cache state internally. Re-selecting the same file preserves those caches; selecting a different file invalidates them.
+
+`raw_preview` returns cached JPEG bytes for the preview-scale RAW image. In the vcpkg-backed build it uses OpenCV for area downsampling and JPEG encoding so the native preview path matches the current Python `/api/raw-image` behavior closely.
