@@ -158,6 +158,16 @@ struct OklchPixel {
     return luminance;
 }
 
+[[nodiscard]] cv::Mat luminance_image_to_mat(const LuminanceImage& image) {
+    cv::Mat out(image.height, image.width, CV_32F);
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            out.at<float>(y, x) = image.at(x, y);
+        }
+    }
+    return out;
+}
+
 [[nodiscard]] int odd_kernel_size(const int candidate, const int min_size, const int max_extent) {
     int size = std::max(min_size, candidate);
     const int max_odd = (max_extent % 2 == 0) ? std::max(3, max_extent - 1) : max_extent;
@@ -166,6 +176,36 @@ struct OklchPixel {
         size = std::max(min_size, size - 1);
     }
     return std::max(3, size);
+}
+
+[[nodiscard]] cv::Mat gaussian_blur_downsampled_rgb(
+    const cv::Mat& source,
+    const int kernel_size,
+    const int max_working_edge) {
+    const int current_max = std::max(source.cols, source.rows);
+    if (current_max <= max_working_edge) {
+        cv::Mat blurred;
+        cv::GaussianBlur(source, blurred, cv::Size(kernel_size, kernel_size), 0.0);
+        return blurred;
+    }
+
+    const float scale = static_cast<float>(max_working_edge) / static_cast<float>(current_max);
+    const int target_width = std::max(1, static_cast<int>(std::lround(source.cols * scale)));
+    const int target_height = std::max(1, static_cast<int>(std::lround(source.rows * scale)));
+
+    cv::Mat reduced;
+    cv::resize(source, reduced, cv::Size(target_width, target_height), 0.0, 0.0, cv::INTER_AREA);
+
+    const int scaled_kernel = odd_kernel_size(
+        std::max(3, static_cast<int>(std::lround(kernel_size * scale))),
+        3,
+        std::min(target_width, target_height));
+    cv::Mat reduced_blur;
+    cv::GaussianBlur(reduced, reduced_blur, cv::Size(scaled_kernel, scaled_kernel), 0.0);
+
+    cv::Mat restored;
+    cv::resize(reduced_blur, restored, cv::Size(source.cols, source.rows), 0.0, 0.0, cv::INTER_LINEAR);
+    return restored;
 }
 
 [[nodiscard]] Image apply_gamma_local_contrast(
@@ -664,6 +704,66 @@ Image FilmRenderer::apply_dehaze(
     }
 
     return gamma_decode_mat(result);
+}
+
+Image FilmRenderer::apply_halation_bloom(
+    const Image& rgb_linear,
+    const ZoneMasks& zone_masks,
+    const SpatialMasks& spatial_masks,
+    const MaterialEffectsPlan& effects) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_halation_bloom expects a 3-channel RGB image");
+    }
+    for (const auto& zone : zone_masks.zones) {
+        if (zone.width != rgb_linear.width || zone.height != rgb_linear.height) {
+            throw std::invalid_argument("apply_halation_bloom expects zone masks to match the RGB image dimensions");
+        }
+    }
+    if (spatial_masks.halation_source_mask.width != rgb_linear.width ||
+        spatial_masks.halation_source_mask.height != rgb_linear.height ||
+        spatial_masks.halation_receiver_mask.width != rgb_linear.width ||
+        spatial_masks.halation_receiver_mask.height != rgb_linear.height) {
+        throw std::invalid_argument("apply_halation_bloom expects spatial masks to match the RGB image dimensions");
+    }
+
+    cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);
+
+    if (effects.halation_strength > 0.0F) {
+        cv::Mat source = luminance_image_to_mat(spatial_masks.halation_source_mask);
+        cv::Mat receiver = luminance_image_to_mat(spatial_masks.halation_receiver_mask);
+        const int halation_kernel = odd_kernel_size(21, 5, std::min(rgb_linear.width, rgb_linear.height));
+        cv::Mat halation_blur;
+        cv::GaussianBlur(source, halation_blur, cv::Size(halation_kernel, halation_kernel), 0.0);
+
+        for (int y = 0; y < rgb.rows; ++y) {
+            for (int x = 0; x < rgb.cols; ++x) {
+                const float bleed = halation_blur.at<float>(y, x) * receiver.at<float>(y, x) * effects.halation_strength;
+                auto& pixel = rgb.at<cv::Vec3f>(y, x);
+                pixel[0] += bleed * 1.00F;
+                pixel[1] += bleed * 0.22F;
+                pixel[2] += bleed * 0.08F;
+            }
+        }
+    }
+
+    if (effects.bloom_strength > 0.0F) {
+        const int bloom_kernel = odd_kernel_size(51, 15, std::min(rgb_linear.width, rgb_linear.height));
+        cv::Mat bloom_blur = gaussian_blur_downsampled_rgb(rgb, bloom_kernel, 512);
+        cv::Mat z5 = luminance_image_to_mat(zone_masks.zones[5]);
+        const float bloom_mix = effects.bloom_strength * 0.12F;
+        for (int y = 0; y < rgb.rows; ++y) {
+            for (int x = 0; x < rgb.cols; ++x) {
+                const float weight = bloom_mix * z5.at<float>(y, x);
+                auto& pixel = rgb.at<cv::Vec3f>(y, x);
+                const auto& blur = bloom_blur.at<cv::Vec3f>(y, x);
+                pixel[0] = (1.0F - weight) * pixel[0] + weight * blur[0];
+                pixel[1] = (1.0F - weight) * pixel[1] + weight * blur[1];
+                pixel[2] = (1.0F - weight) * pixel[2] + weight * blur[2];
+            }
+        }
+    }
+
+    return mat_to_rgb_image(rgb);
 }
 
 }  // namespace dfee

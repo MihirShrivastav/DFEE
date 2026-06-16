@@ -46,6 +46,12 @@ public:
     [[nodiscard]] Image apply_dehaze(
         const Image& rgb_linear,
         float amount) const;
+
+    [[nodiscard]] Image apply_halation_bloom(
+        const Image& rgb_linear,
+        const ZoneMasks& zone_masks,
+        const SpatialMasks& spatial_masks,
+        const MaterialEffectsPlan& effects) const;
 };
 
 }  // namespace dfee

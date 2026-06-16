@@ -399,6 +399,30 @@ class TestNativeBridge(unittest.TestCase):
         self.assertGreater(float(np.std(dst_luma)), float(np.std(src_luma)))
         self.assertLess(float(np.mean(dst_luma[10:22, 10:22])), float(np.mean(src_luma[10:22, 10:22])))
 
+    def test_python_halation_bloom_reference_fixture(self):
+        rgb = np.full((64, 64, 3), 0.08, dtype=np.float32)
+        rgb[24:40, 24:40, :] = [0.92, 0.88, 0.82]
+        rgb[28:36, 28:36, :] = [1.0, 0.98, 0.92]
+        Y = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]).astype(np.float32)
+
+        zone_masks = {f"Z{i}": np.zeros_like(Y) for i in range(7)}
+        zone_masks["Z5"] = np.clip((Y - 0.6) / 0.4, 0.0, 1.0).astype(np.float32)
+        masks = {
+            "halation_source_mask": np.pad(np.ones((4, 4), dtype=np.float32), ((30, 30), (30, 30))),
+            "halation_receiver_mask": np.zeros_like(Y),
+            "luminance_zone_masks": zone_masks,
+        }
+        masks["halation_receiver_mask"][20:44, 20:44] = 1.0 - Y[20:44, 20:44]
+
+        effects = {"halation_strength": 0.35, "bloom_strength": 0.22}
+        adjusted = FilmRenderer()._apply_halation_bloom(rgb.copy(), masks, effects)
+
+        mean_abs_delta = float(np.mean(np.abs(adjusted - rgb)))
+        max_abs_delta = float(np.max(np.abs(adjusted - rgb)))
+        self.assertGreater(mean_abs_delta, 1e-5)
+        self.assertGreater(max_abs_delta, 1e-3)
+        self.assertGreaterEqual(float(adjusted[30, 30, 0]), float(adjusted[30, 30, 2]))
+
     def test_select_file(self):
         raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)

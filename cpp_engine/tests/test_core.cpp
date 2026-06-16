@@ -522,6 +522,71 @@ void test_dehaze() {
     assert(gamma_luminance_stddev(adjusted) > gamma_luminance_stddev(rgb));
 }
 
+void test_halation_bloom() {
+    dfee::Image rgb(64, 64, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.08F;
+            rgb.at(x, y, 1) = 0.08F;
+            rgb.at(x, y, 2) = 0.08F;
+        }
+    }
+    for (int y = 24; y < 40; ++y) {
+        for (int x = 24; x < 40; ++x) {
+            rgb.at(x, y, 0) = 0.92F;
+            rgb.at(x, y, 1) = 0.88F;
+            rgb.at(x, y, 2) = 0.82F;
+        }
+    }
+    for (int y = 28; y < 36; ++y) {
+        for (int x = 28; x < 36; ++x) {
+            rgb.at(x, y, 0) = 1.0F;
+            rgb.at(x, y, 1) = 0.98F;
+            rgb.at(x, y, 2) = 0.92F;
+        }
+    }
+
+    dfee::ZoneMasks zone_masks;
+    for (auto& zone : zone_masks.zones) {
+        zone = dfee::LuminanceImage(rgb.width, rgb.height);
+    }
+    dfee::SpatialMasks spatial_masks;
+    spatial_masks.halation_source_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    spatial_masks.halation_receiver_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    const auto luminance = dfee::compute_luminance(rgb);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            if (x >= 30 && x < 34 && y >= 30 && y < 34) {
+                spatial_masks.halation_source_mask.at(x, y) = 1.0F;
+            }
+            if (x >= 20 && x < 44 && y >= 20 && y < 44) {
+                spatial_masks.halation_receiver_mask.at(x, y) = 1.0F - luminance.at(x, y);
+            }
+            zone_masks.zones[5].at(x, y) = dfee::clamp01((luminance.at(x, y) - 0.6F) / 0.4F);
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.halation_strength = 0.35F;
+    effects.bloom_strength = 0.22F;
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_halation_bloom(rgb, zone_masks, spatial_masks, effects);
+
+    double mean_abs_delta = 0.0;
+    float max_abs_delta = 0.0F;
+    for (std::size_t i = 0; i < rgb.value_count(); ++i) {
+        const float delta = std::fabs(adjusted.pixels[i] - rgb.pixels[i]);
+        mean_abs_delta += delta;
+        max_abs_delta = std::max(max_abs_delta, delta);
+    }
+    mean_abs_delta /= static_cast<double>(rgb.value_count());
+
+    assert(mean_abs_delta > 1.0e-5);
+    assert(max_abs_delta > 1.0e-3F);
+    assert(adjusted.at(30, 30, 0) >= adjusted.at(30, 30, 2));
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -724,6 +789,7 @@ int main() {
         test_clarity();
         test_texture();
         test_dehaze();
+        test_halation_bloom();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
