@@ -1,0 +1,99 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 26,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows MSVC",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/windows-msvc",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "DFEE_BUILD_TESTS": "ON",
+        "DFEE_BUILD_PYTHON": "ON",
+        "DFEE_ENABLE_CUDA": "OFF"
+      }
+    },
+    {
+      "name": "windows-msvc-vcpkg",
+      "displayName": "Windows MSVC + vcpkg",
+      "inherits": "windows-msvc",
+      "binaryDir": "${sourceDir}/out/build/windows-msvc-vcpkg",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "DFEE_ENABLE_LIBRAW": "ON",
+        "DFEE_REQUIRE_LIBRAW": "ON"
+      }
+    },
+    {
+      "name": "windows-msvc-cuda",
+      "displayName": "Windows MSVC + CUDA",
+      "inherits": "windows-msvc",
+      "binaryDir": "${sourceDir}/out/build/windows-msvc-cuda",
+      "cacheVariables": {
+        "DFEE_ENABLE_CUDA": "ON"
+      }
+    },
+    {
+      "name": "ninja-dev",
+      "displayName": "Ninja Developer Build",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "DFEE_BUILD_TESTS": "ON",
+        "DFEE_BUILD_PYTHON": "ON",
+        "DFEE_ENABLE_CUDA": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc"
+    },
+    {
+      "name": "windows-msvc-vcpkg",
+      "configurePreset": "windows-msvc-vcpkg"
+    },
+    {
+      "name": "windows-msvc-cuda",
+      "configurePreset": "windows-msvc-cuda"
+    },
+    {
+      "name": "ninja-dev",
+      "configurePreset": "ninja-dev"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "windows-msvc",
+      "configurePreset": "windows-msvc",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "windows-msvc-vcpkg",
+      "configurePreset": "windows-msvc-vcpkg",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "ninja-dev",
+      "configurePreset": "ninja-dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

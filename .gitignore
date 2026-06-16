@@ -6,6 +6,10 @@ __pycache__/
 
 # C extensions
 *.so
+*.pyd
+
+# Native build outputs
+cpp_engine/out/
 
 # Distribution / packaging
 build/

@@ -1,0 +1,14 @@
+{
+  "name": "dfee-native-engine",
+  "version-string": "0.1.0",
+  "description": "Native C++ engine for DFEE with optional CUDA acceleration.",
+  "dependencies": [
+    "libraw",
+    "opencv",
+    "yaml-cpp",
+    "nlohmann-json",
+    "tiff",
+    "libpng",
+    "libjpeg-turbo"
+  ]
+}
