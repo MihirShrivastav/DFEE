@@ -1,0 +1,74 @@
+stock_id: colorplus_200
+stock_name: Kodak ColorPlus 200
+stock_type: color_negative
+
+adaptation:
+  base_iso: 200
+  default_strength: 1.00
+  camera_cast_compensation_sensitivity: 0.60
+  highlight_stress_sensitivity: 0.70
+  shadow_noise_sensitivity: 0.65
+
+tone_response:
+  toe_strength: 0.52         # Budget film: steeper toe, shadows block up quicker
+  toe_length: 0.26           # Shorter toe transition
+  midtone_contrast: 1.04     # Punchy consumer contrast
+  shoulder_strength: 0.50    # More abrupt highlight clipping than professional stocks
+  highlight_rolloff_start: 0.68  # Earlier rolloff start
+  black_density_floor: 0.016  # Higher D-min from consumer film base fog
+  channel_toe_mult:      [0.95, 1.00, 1.18]
+  channel_shoulder_mult: [0.90, 0.98, 1.25]
+  channel_midtone_mult:  [1.06, 1.00, 0.92]  # Warm color bias (yellow-red highlights)
+
+color_response:
+  shadow_bias_lab: [1.0, 0.5, 0.5]      # Warm brownish-yellow shadows
+  midtone_bias_lab: [0.0, 1.5, 3.5]     # Strong golden warm-orange midtones
+  highlight_bias_lab: [0.0, 1.0, 4.0]    # Distinctly warm/yellow highlights
+  blue_cast_suppression: 0.55            # Strongly suppress blue casts for warm rendering
+  green_magenta_stabilization: 0.20
+
+hue_saturation_response:
+  saturation_boost: 1.15          # Vibrant consumer saturation
+  red_orange_midtone_compression: 0.25   # Minimal compression, yielding warmer skin tones
+  yellow_green_muting: 0.20              # Greens are warm, slightly olive/brown
+  cyan_blue_highlight_compression: 0.55   # Restrict sky blue hues for retro feel
+  neon_compression: 0.65
+  highlight_desaturation: 0.45           # Preserve the warm yellow highlights
+
+grain:
+  size: 0.50                 # Coarser budget halide structure
+  strength: 0.42             # Prominent, visible grain
+  chroma_strength: 0.14      # Higher chroma noise component in budget scanner simulation
+  peak_zone: midtones_heavy
+  texture_masking: 0.65
+
+halation:
+  trigger: specular_only
+  strength: 0.22             # Standard consumer negative halation
+  radius_inner: 5
+  radius_outer: 20
+  warm_core: [1.0, 0.55, 0.25]
+  red_fringe: [1.0, 0.15, 0.02]
+
+scanner:
+  style: frontier_soft
+  contrast: 1.04
+  warmth: 0.22               # Strongly warm scan profile
+  output_sharpening: 0.12
+
+chroma_coupling:
+  hi_rolloff_start: 0.68
+  hi_rolloff_rate:  1.8
+  hi_compression:   0.55
+  sh_rolloff_start: 0.20
+  sh_compression:   0.50
+  hi_hue_conv_rad:  0.22
+  hi_hue_conv_str:  0.15
+
+dye_contamination:
+  r_to_g: 0.040
+  g_to_r: 0.022
+  b_to_g: 0.018
+  b_to_r: 0.010
+  r_to_b: 0.002
+  g_to_b: 0.010

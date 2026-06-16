@@ -58,6 +58,11 @@ class FilmRenderer:
         # 10. Scanner / Print Finish
         rgb_final = self._apply_scanner_finish(rgb_proc, finish)
 
+        # 11. Theatrical Print Stock (optional second-stage emulsion)
+        print_finish = render_plan.get("print_finish")
+        if print_finish:
+            rgb_final = self._apply_print_finish(rgb_final, print_finish)
+
         return rgb_final
 
     # ─── Pre-Film Normalization ───────────────────────────────────────────────
@@ -589,8 +594,8 @@ class FilmRenderer:
         # Avoids repeating expensive CPU random allocations and blurs per channel.
         rng = np.random.default_rng(content_hash)
         
-        # Master sparse points (density of ~20% is optimal for clumping without saturation)
-        sparse_master = (rng.random((h, w)) < 0.20).astype(np.float32)
+        # Master sparse points (density of ~8% is optimal for clumping without massive blobs)
+        sparse_master = (rng.random((h, w)) < 0.08).astype(np.float32)
 
         # Master high-frequency pixel grit
         grit_master = rng.standard_normal((h, w)).astype(np.float32)
@@ -615,8 +620,9 @@ class FilmRenderer:
             binary_disk = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (N, N)).astype(np.float32)
             binary_disk /= np.sum(binary_disk) + 1e-8
 
-            # Softened Gaussian disk (tight sigma ensures we take the edge off without blurring the particle)
-            gaussian_disk = cv2.GaussianBlur(binary_disk, (N, N), 0.35 + ch_g_sz * 0.2)
+            # Softened Gaussian disk (tight clamp on sigma ensures we take the edge off without blurring the particle at high res)
+            blur_sigma = 0.35 + min(ch_g_sz * 0.15, 0.25)
+            gaussian_disk = cv2.GaussianBlur(binary_disk, (N, N), blur_sigma)
             gaussian_disk /= np.sum(gaussian_disk) + 1e-8
 
             # Interpolate structuring element between sharp binary and soft Gaussian based on roughness
@@ -633,7 +639,7 @@ class FilmRenderer:
                 noise = (noise - noise_mean) / noise_std
 
             # Apply a steep tanh contrast function after convolution to restore razor-sharp particle boundaries
-            contrast_factor = 4.0 + g_rough * 6.0
+            contrast_factor = 6.0 + g_rough * 8.0
             noise = np.tanh(noise * contrast_factor)
 
             # Re-normalize clumps to unit variance
@@ -642,7 +648,7 @@ class FilmRenderer:
                 noise = noise / std_clumps
 
             # Blend macro clumps and micro high-frequency grit based on roughness
-            grit_blend = 0.05 + g_rough * 0.20
+            grit_blend = 0.10 + g_rough * 0.25
             noise = (1.0 - grit_blend) * noise + grit_blend * grit_in
 
             # Tactile edge sharpening using a Laplacian kernel
@@ -756,3 +762,126 @@ class FilmRenderer:
         rgb_scan = bp + (wp - bp) * rgb_scan
 
         return np.clip(rgb_scan, 0.0, 1.0)
+
+    # ─── Theatrical Print Stock Finish ───────────────────────────────────────────
+
+    def _apply_print_finish(self, rgb_in, pf):
+        """
+        Simulates the photochemical print stock stage — the second emulsion in the
+        real pipeline (camera negative → optical printer → print stock → projector).
+
+        This models:
+          1. Shadow lift    — D-min base density of the print film
+          2. Print S-curve  — the print stock's own contrast characteristic (stacked on negative)
+          3. Colour bias    — zone-specific LAB shifts (warm for Kodak, teal for Fuji)
+          4. Dye gamut      — saturation scaling to match each stock's dye primaries
+          5. Print grain    — a very subtle secondary grain overlay from the print emulsion
+        """
+        strength = float(pf.get("strength", 1.0))  # 0–2 user slider, 1.0 = stock default
+        if strength <= 0.0:
+            return rgb_in
+
+        # ── 1. CMY Color Head (Subtractive Printer Lights) ───────────────────────
+        # Analog colorists use Cyan, Magenta, Yellow to balance prints.
+        # Adding Cyan subtracts Red; Magenta subtracts Green; Yellow subtracts Blue.
+        # Range of sliders is -100 to +100.
+        print_c = float(pf.get("print_c", 0.0)) / 100.0
+        print_m = float(pf.get("print_m", 0.0)) / 100.0
+        print_y = float(pf.get("print_y", 0.0)) / 100.0
+        
+        rgb = rgb_in.copy()
+        if print_c != 0.0:
+            rgb[:, :, 0] = np.clip(rgb[:, :, 0] * (1.0 - print_c * 0.5), 0.0, 1.0)
+        if print_m != 0.0:
+            rgb[:, :, 1] = np.clip(rgb[:, :, 1] * (1.0 - print_m * 0.5), 0.0, 1.0)
+        if print_y != 0.0:
+            rgb[:, :, 2] = np.clip(rgb[:, :, 2] * (1.0 - print_y * 0.5), 0.0, 1.0)
+
+        # ── 2. Shadow lift (D-min base density of print film + user Black Point) ─
+        print_bp = float(pf.get("print_black_point", 0.0)) / 100.0
+        base_lift = float(pf["shadow_lift"]) * strength
+        # Positive print_bp adds more lift (faded), negative crushes
+        shadow_lift = np.clip(base_lift + (print_bp * 0.05), 0.0, 0.2)
+        rgb = np.clip(rgb + shadow_lift * (1.0 - rgb), 0.0, 1.0)
+
+        # ── 3. Print contrast S-curve (stacked on top of negative curve) ────────
+        print_contrast_slider = float(pf.get("print_contrast", 0.0)) / 100.0
+        contrast_boost = float(pf["contrast_boost"]) + (print_contrast_slider * 0.5)
+        cb = ((contrast_boost - 1.0) * strength) + 1.0  # scale boost by strength
+        if abs(cb - 1.0) > 0.005:
+            k = np.clip((cb - 1.0) * 3.0, -2.5, 2.5)
+            denom = float(np.tanh(k * 0.5))
+            if abs(denom) > 1e-6:
+                rgb = np.clip(0.5 + np.tanh(k * (rgb - 0.5)) / (2.0 * denom), 0.0, 1.0)
+
+        # ── 3. Highlight rolloff (print shoulder) ────────────────────────────────
+        hi_start = float(pf["highlight_rolloff"])
+        hi_rate  = float(pf["highlight_rolloff_rate"])
+        # Per-pixel luminance
+        Y = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2])
+        # Soft rolloff above hi_start: compress towards 1.0
+        above = np.clip((Y - hi_start) / (1.0 - hi_start + 1e-6), 0.0, 1.0)
+        rolloff = np.clip(1.0 - np.power(above, hi_rate) * (1.0 - hi_start) * strength, hi_start, 1.0)
+        scale = np.where(Y > hi_start, rolloff / np.maximum(Y, 1e-6), 1.0)
+        rgb = np.clip(rgb * scale[:, :, np.newaxis], 0.0, 1.0)
+
+        # ── 4. Zone-specific colour bias (shadow / midtone / highlight LAB shifts) ──
+        oklab = rgb_to_oklab(rgb)
+        L = oklab[:, :, 0]
+
+        sh_bias = pf.get("shadow_bias_lab", [0.0, 0.0, 0.0])
+        mt_bias = pf.get("midtone_bias_lab", [0.0, 0.0, 0.0])
+        hi_bias = pf.get("highlight_bias_lab", [0.0, 0.0, 0.0])
+
+        # Zone weights
+        w_shadow    = np.clip(1.0 - L / 0.35, 0.0, 1.0) ** 1.5
+        w_highlight = np.clip((L - 0.60) / 0.40, 0.0, 1.0) ** 1.5
+        w_midtone   = np.clip(1.0 - w_shadow - w_highlight, 0.0, 1.0)
+
+        bias_scale = strength * 0.01   # keep LAB shifts subtle
+        for i, (sh, mt, hi) in enumerate(zip(sh_bias, mt_bias, hi_bias)):
+            if i == 0:  # L channel
+                oklab[:, :, 0] += bias_scale * (sh * w_shadow + mt * w_midtone + hi * w_highlight)
+            elif i == 1:  # a channel
+                oklab[:, :, 1] += bias_scale * (sh * w_shadow + mt * w_midtone + hi * w_highlight)
+            elif i == 2:  # b channel
+                oklab[:, :, 2] += bias_scale * (sh * w_shadow + mt * w_midtone + hi * w_highlight)
+
+        # ── 5. Per-channel dye bias (red boost / blue suppression / green shift) ─
+        red_boost    = float(pf.get("red_boost",    0.0)) * strength
+        blue_supp    = float(pf.get("blue_suppression", 0.0)) * strength
+        green_shift  = float(pf.get("green_shift",  0.0)) * strength
+
+        rgb2 = oklab_to_rgb(oklab)
+        rgb2[:, :, 0] = np.clip(rgb2[:, :, 0] * (1.0 + red_boost * 0.3), 0.0, 1.0)
+        rgb2[:, :, 2] = np.clip(rgb2[:, :, 2] * (1.0 - blue_supp * 0.3), 0.0, 1.0)
+        rgb2[:, :, 1] = np.clip(rgb2[:, :, 1] * (1.0 + green_shift * 0.15), 0.0, 1.0)
+
+        # ── 6. Print dye saturation scale ───────────────────────────────────────
+        sat_scale = float(pf.get("saturation_scale", 1.0))
+        if abs(sat_scale - 1.0) > 0.005:
+            # Scale chroma in OKLab
+            oklab2 = rgb_to_oklab(rgb2)
+            effective_sat = 1.0 + (sat_scale - 1.0) * strength
+            oklab2[:, :, 1] *= effective_sat
+            oklab2[:, :, 2] *= effective_sat
+            rgb2 = oklab_to_rgb(oklab2)
+
+        # ── 7. Subtle print grain overlay ────────────────────────────────────────
+        g_str  = float(pf.get("grain_strength", 0.0)) * strength
+        g_size = float(pf.get("grain_size",     0.3))
+        if g_str > 0.005:
+            h, w = rgb2.shape[:2]
+            rng = np.random.default_rng(seed=42)
+            # Raw noise at half resolution then upscale for a softer grain
+            small_h = max(h // max(1, int(1.0 / (g_size + 0.01))), 1)
+            small_w = max(w // max(1, int(1.0 / (g_size + 0.01))), 1)
+            noise_small = rng.standard_normal((small_h, small_w)).astype(np.float32)
+            noise = cv2.resize(noise_small, (w, h), interpolation=cv2.INTER_LINEAR)
+            noise = noise[:, :, np.newaxis]
+            # Luminance-weighted: grain most visible in midtones
+            Y2 = (0.2126 * rgb2[:, :, 0] + 0.7152 * rgb2[:, :, 1] + 0.0722 * rgb2[:, :, 2])
+            grain_mask = (4.0 * Y2 * (1.0 - Y2))[:, :, np.newaxis]
+            rgb2 = np.clip(rgb2 + noise * grain_mask * g_str * 0.04, 0.0, 1.0)
+
+        return np.clip(rgb2.astype(np.float32), 0.0, 1.0)

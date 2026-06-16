@@ -14,7 +14,7 @@ from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
 from dfee.solver import RenderPlanSolver
 from dfee.renderer import FilmRenderer
-from dfee.profile import FilmStockProfile, ScanPrintProfile
+from dfee.profile import FilmStockProfile, ScanPrintProfile, PrintStockProfile
 from dfee.report import RenderReporter
 
 app = FastAPI(title="Deterministic Film Emulation Engine (DFEE) Server")
@@ -33,6 +33,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_DIR = os.path.join(BASE_DIR, "raw_files")
 STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "stocks")
 SCANNERS_DIR = os.path.join(BASE_DIR, "profiles", "scanners")
+PRINT_STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "print_stocks")
 
 # Ensure directories exist
 os.makedirs(RAW_DIR, exist_ok=True)
@@ -129,6 +130,8 @@ class PreviewRequest(BaseModel):
     clarity: float = 0.0    # -100 to +100
     texture: float = 0.0    # -100 to +100
     dehaze: float = 0.0     # -100 to +100
+    sharpness: float = 0.0
+    sharpness_mask: float = 0.5
     # Film effects
     bloom: float = 0.0      # 0 to 100
     adaptation: float = 1.0
@@ -137,6 +140,14 @@ class PreviewRequest(BaseModel):
     grain_size: float = -1.0
     grain_roughness: float = -1.0
     halation: str = "Auto"
+    film_color: float = 100.0   # 0-200, scales film color personality
+    print_stock: str = "none"   # print stock id or "none"
+    print_strength: float = 1.0  # 0.0-2.0
+    print_c: float = 0.0         # -100 to +100
+    print_m: float = 0.0         # -100 to +100
+    print_y: float = 0.0         # -100 to +100
+    print_contrast: float = 0.0  # -100 to +100
+    print_black_point: float = 0.0 # -100 to +100
     export_format: str = "tiff"   # "tiff" | "png16" | "png8"
 
 
@@ -152,6 +163,15 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
     # 1. Exposure - linear multiplication (must stay pre-gamma)
     plan["pre_film_normalization"]["exposure_compensation_stops"] += exposure
 
+    # Retrieve solver-solved compensations
+    pre_film = plan["pre_film_normalization"]
+    contrast_val = contrast + pre_film.get("contrast_compensation", 0.0)
+    highlights_val = highlights + pre_film.get("highlights_compensation", 0.0)
+    shadows_val = shadows + pre_film.get("shadows_compensation", 0.0)
+    whites_val = whites + pre_film.get("whites_compensation", 0.0)
+    blacks_val = blacks + pre_film.get("blacks_compensation", 0.0)
+    midtones_val = midtones + pre_film.get("midtones_compensation", 0.0)
+
     # Convert to gamma-2.2 perceptual space for all tonal ops
     rgb_safe = np.clip(rgb_input, 0.0, None)
     rgb_g = np.power(rgb_safe, 1.0 / 2.2).astype(np.float32)
@@ -164,8 +184,8 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
     # 2. Contrast - tanh S-curve centred at 0.5 in gamma space
     # Positive = steeper (more contrast), negative = flatter.
     # tanh naturally prevents clipping and keeps 0 and 1 anchored.
-    if contrast != 0.0:
-        k = np.clip(contrast / 100.0, -1.0, 1.0) * 2.5
+    if contrast_val != 0.0:
+        k = np.clip(contrast_val / 100.0, -1.0, 1.0) * 2.5
         if abs(k) > 0.02:
             denom = float(np.tanh(k * 0.5))
             if abs(denom) > 1e-6:
@@ -179,8 +199,8 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
 
     # 3. Highlights - additive boost/crush above mid-brightness
     # Weight peaks at Y=1 (pure white), fades to 0 at Y=0.3
-    if highlights != 0.0:
-        amount = np.clip(highlights / 100.0, -1.0, 1.0) * 0.45
+    if highlights_val != 0.0:
+        amount = np.clip(highlights_val / 100.0, -1.0, 1.0) * 0.45
         w = np.clip((Y - 0.30) / 0.70, 0.0, 1.0) ** 1.5
         rgb_g = np.clip(rgb_g + amount * w[:, :, np.newaxis], 0.0, 1.0)
         Y = (0.2126 * rgb_g[:, :, 0]
@@ -189,8 +209,8 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
 
     # 4. Shadows - additive lift/crush in the lower tonal range
     # Weight peaks at Y=0 (pure black), fades to 0 at Y=0.65
-    if shadows != 0.0:
-        amount = np.clip(shadows / 100.0, -1.0, 1.0) * 0.50
+    if shadows_val != 0.0:
+        amount = np.clip(shadows_val / 100.0, -1.0, 1.0) * 0.50
         w = np.clip((0.65 - Y) / 0.65, 0.0, 1.0) ** 1.5
         rgb_g = np.clip(rgb_g + amount * w[:, :, np.newaxis], 0.0, 1.0)
         Y = (0.2126 * rgb_g[:, :, 0]
@@ -198,8 +218,8 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
            + 0.0722 * rgb_g[:, :, 2])
 
     # 5. Whites - tighten/expand the very top of the range (Y > 0.60)
-    if whites != 0.0:
-        amount = np.clip(whites / 100.0, -1.0, 1.0) * 0.30
+    if whites_val != 0.0:
+        amount = np.clip(whites_val / 100.0, -1.0, 1.0) * 0.30
         w = np.clip((Y - 0.60) / 0.40, 0.0, 1.0) ** 2.0
         rgb_g = np.clip(rgb_g + amount * w[:, :, np.newaxis], 0.0, 1.0)
         Y = (0.2126 * rgb_g[:, :, 0]
@@ -207,8 +227,8 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
            + 0.0722 * rgb_g[:, :, 2])
 
     # 6. Blacks - crush/lift strictly the darkest zone (Y < 0.35)
-    if blacks != 0.0:
-        amount = np.clip(blacks / 100.0, -1.0, 1.0) * 0.25
+    if blacks_val != 0.0:
+        amount = np.clip(blacks_val / 100.0, -1.0, 1.0) * 0.25
         w = np.clip((0.35 - Y) / 0.35, 0.0, 1.0) ** 2.0
         rgb_g = np.clip(rgb_g + amount * w[:, :, np.newaxis], 0.0, 1.0)
         Y = (0.2126 * rgb_g[:, :, 0]
@@ -216,8 +236,8 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
            + 0.0722 * rgb_g[:, :, 2])
 
     # 7. Midtones - zone-masked gamma bend, bell centred at Y=0.5
-    if midtones != 0.0:
-        gamma = float(np.clip(1.0 / (1.0 + midtones * 0.01), 0.2, 5.0))
+    if midtones_val != 0.0:
+        gamma = float(np.clip(1.0 / (1.0 + midtones_val * 0.01), 0.2, 5.0))
         w = np.clip(1.0 - (2.0 * Y - 1.0) ** 2, 0.0, 1.0)
         rgb_bent = np.clip(rgb_g, 1e-8, 1.0) ** gamma
         rgb_g = np.clip(
@@ -281,7 +301,20 @@ def list_profiles():
         except:
             pass
             
-    return {"stocks": stocks, "scanners": scanners}
+    # List print stocks
+    print_stocks_files = glob.glob(os.path.join(PRINT_STOCKS_DIR, "*.yaml"))
+    print_stocks = [{"id": "none", "name": "No print finish"}]
+    for f in sorted(print_stocks_files):
+        try:
+            p = PrintStockProfile(f)
+            print_stocks.append({
+                "id": p.print_stock_id,
+                "name": p.print_stock_name,
+            })
+        except:
+            pass
+
+    return {"stocks": stocks, "scanners": scanners, "print_stocks": print_stocks}
 
 
 def _apply_post_film_color(rendered, saturation, vibrance):
@@ -525,13 +558,23 @@ def get_preview(
     clarity: float = 0.0,
     texture: float = 0.0,
     dehaze: float = 0.0,
+    sharpness: float = 0.0,
+    sharpness_mask: float = 0.5,
     bloom: float = 0.0,
     adaptation: float = 1.0,
     grain: str = "Auto",
     grain_strength: float = -1.0,
     grain_size: float = -1.0,
     grain_roughness: float = -1.0,
-    halation: str = "Auto"
+    halation: str = "Auto",
+    film_color: float = 100.0,
+    print_stock: str = "none",
+    print_strength: float = 1.0,
+    print_c: float = 0.0,
+    print_m: float = 0.0,
+    print_y: float = 0.0,
+    print_contrast: float = 0.0,
+    print_black_point: float = 0.0
 ):
     if session.filename != filename:
         raise HTTPException(status_code=400, detail=f"Session mismatch: server has '{session.filename}', requested '{filename}'. Select the file first.")
@@ -544,7 +587,7 @@ def get_preview(
 
     # Scanner passthrough
     if scanner == "none":
-        scan_path = os.path.join(SCANNERS_DIR, "frontier_soft.yaml")
+        scan_path = os.path.join(SCANNERS_DIR, "neutral.yaml")
     else:
         scan_path = os.path.join(SCANNERS_DIR, f"{scanner}.yaml")
 
@@ -561,7 +604,17 @@ def get_preview(
             "grain_strength": grain_strength,
             "grain_size": grain_size,
             "grain_roughness": grain_roughness,
-            "halation_amount": halation
+            "halation_amount": halation,
+            "sharpness": sharpness,
+            "sharpness_mask": sharpness_mask,
+            "film_color": film_color,
+            "print_stock": PrintStockProfile(os.path.join(PRINT_STOCKS_DIR, f"{print_stock}.yaml")) if print_stock and print_stock != "none" else None,
+            "print_strength": print_strength,
+            "print_c": print_c,
+            "print_m": print_m,
+            "print_y": print_y,
+            "print_contrast": print_contrast,
+            "print_black_point": print_black_point,
         }
         plan = solver.solve(session.feature_dict, stock_profile, scan_profile, user_overrides)
 
@@ -618,7 +671,7 @@ def export_file(req: PreviewRequest):
     try:
         stock_path = os.path.join(STOCKS_DIR, f"{req.stock}.yaml")
         if req.scanner == "none":
-            scan_path = os.path.join(SCANNERS_DIR, "frontier_soft.yaml")
+            scan_path = os.path.join(SCANNERS_DIR, "neutral.yaml")
         else:
             scan_path = os.path.join(SCANNERS_DIR, f"{req.scanner}.yaml")
 
@@ -676,7 +729,17 @@ def export_file(req: PreviewRequest):
             "grain_strength": req.grain_strength,
             "grain_size": req.grain_size,
             "grain_roughness": req.grain_roughness,
-            "halation_amount": req.halation
+            "halation_amount": req.halation,
+            "sharpness": req.sharpness,
+            "sharpness_mask": req.sharpness_mask,
+            "film_color": req.film_color,
+            "print_stock": PrintStockProfile(os.path.join(PRINT_STOCKS_DIR, f"{req.print_stock}.yaml")) if req.print_stock and req.print_stock != "none" else None,
+            "print_strength": req.print_strength,
+            "print_c": req.print_c,
+            "print_m": req.print_m,
+            "print_y": req.print_y,
+            "print_contrast": req.print_contrast,
+            "print_black_point": req.print_black_point,
         }
         plan = solver.solve(feature_dict, stock_profile, scan_profile, user_overrides)
 

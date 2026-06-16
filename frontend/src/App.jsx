@@ -52,6 +52,13 @@ const DEFAULT_PARAMS = {
   sharpness: 0.0,
   sharpness_mask: 0.5,
   film_color: 100,
+  print_stock: 'none',
+  print_strength: 1.0,
+  print_c: 0.0,
+  print_m: 0.0,
+  print_y: 0.0,
+  print_contrast: 0.0,
+  print_black_point: 0.0,
 };
 
 const HSL_RANGES_KEYS = ['red','orange','yellow','green','aqua','blue','purple','magenta'];
@@ -100,7 +107,7 @@ const BUILTIN_PRESETS = [
 
 export default function App() {
   const [files, setFiles] = useState([]);
-  const [profiles, setProfiles] = useState({ stocks: [], scanners: [] });
+  const [profiles, setProfiles] = useState({ stocks: [], scanners: [], print_stocks: [] });
   const [selectedFile, setSelectedFile] = useState(null);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [selectLoading, setSelectLoading] = useState(false);
@@ -511,6 +518,13 @@ export default function App() {
         + `&sharpness=${params.sharpness}`
         + `&sharpness_mask=${params.sharpness_mask}`
         + `&film_color=${params.film_color}`
+        + `&print_stock=${params.print_stock}`
+        + `&print_strength=${params.print_strength}`
+        + `&print_c=${params.print_c}`
+        + `&print_m=${params.print_m}`
+        + `&print_y=${params.print_y}`
+        + `&print_contrast=${params.print_contrast}`
+        + `&print_black_point=${params.print_black_point}`
         + `&t=${Date.now()}`;
 
       setPreviewLoading(true);
@@ -542,6 +556,9 @@ export default function App() {
     params.clarity, params.texture, params.dehaze, params.bloom,
     params.adaptation, params.grain, params.grain_strength, params.grain_size, params.grain_roughness, params.halation,
     params.sharpness, params.sharpness_mask, params.film_color,
+    params.print_stock, params.print_strength,
+    params.print_c, params.print_m, params.print_y,
+    params.print_contrast, params.print_black_point,
     curves, hsl,
   ]);
 
@@ -697,6 +714,13 @@ export default function App() {
           sharpness: params.sharpness,
           sharpness_mask: params.sharpness_mask,
           film_color: params.film_color,
+          print_stock: params.print_stock,
+          print_strength: params.print_strength,
+          print_c: params.print_c,
+          print_m: params.print_m,
+          print_y: params.print_y,
+          print_contrast: params.print_contrast,
+          print_black_point: params.print_black_point,
           export_format: exportFormat,
         }),
       });
@@ -1143,6 +1167,96 @@ export default function App() {
                       ))}
                     </select>
                   </div>
+                  <div className="field">
+                    <label className="field-label" title="Applies a theatrical positive print stock emulation on top of the camera negative, adding characteristic shadow lift and contrast.">
+                      Print Finish
+                    </label>
+                    <select className="select" value={params.print_stock} onChange={set('print_stock')}>
+                      {profiles.print_stocks.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {params.print_stock !== 'none' && (
+                    <div style={{ marginTop: 8, padding: '12px 10px', backgroundColor: '#181818', borderRadius: 6, border: '1px solid #282828' }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: '#888', textTransform: 'uppercase', marginBottom: 12, letterSpacing: 0.5 }}>
+                        Print Controls
+                      </div>
+                      <div className="field" style={{ marginBottom: 16 }}>
+                        <div className="slider-header" style={{ marginBottom: 4 }}>
+                          <span className="slider-label">Print Strength</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {params.print_strength !== DEFAULT_PARAMS.print_strength && (
+                              <button
+                                className="revert-btn"
+                                onClick={() => setParams(p => ({ ...p, print_strength: DEFAULT_PARAMS.print_strength }))}
+                              >↺</button>
+                            )}
+                            <span className={`slider-value${params.print_strength !== DEFAULT_PARAMS.print_strength ? ' slider-value--dirty' : ''}`}>
+                              {Math.round(params.print_strength * 100)}%
+                            </span>
+                          </div>
+                        </div>
+                        <input type="range" min="0" max="2" step="0.05"
+                          value={params.print_strength} onChange={set('print_strength')}
+                          className={`slider slider-print-strength${params.print_strength !== DEFAULT_PARAMS.print_strength ? ' slider--dirty' : ''}`}
+                        />
+                      </div>
+                      
+                      <div className="field" style={{ marginBottom: 16 }}>
+                        <div className="slider-header" style={{ marginBottom: 4 }}>
+                          <span className="slider-label" title="Subtractive Cyan (-Red)">Color Head: Cyan</span>
+                          <span className="slider-value">{params.print_c}</span>
+                        </div>
+                        <input type="range" min="-100" max="100"
+                          value={params.print_c} onChange={set('print_c')}
+                          className="slider slider-cyan"
+                        />
+                      </div>
+                      <div className="field" style={{ marginBottom: 16 }}>
+                        <div className="slider-header" style={{ marginBottom: 4 }}>
+                          <span className="slider-label" title="Subtractive Magenta (-Green)">Color Head: Magenta</span>
+                          <span className="slider-value">{params.print_m}</span>
+                        </div>
+                        <input type="range" min="-100" max="100"
+                          value={params.print_m} onChange={set('print_m')}
+                          className="slider slider-magenta"
+                        />
+                      </div>
+                      <div className="field" style={{ marginBottom: 16 }}>
+                        <div className="slider-header" style={{ marginBottom: 4 }}>
+                          <span className="slider-label" title="Subtractive Yellow (-Blue)">Color Head: Yellow</span>
+                          <span className="slider-value">{params.print_y}</span>
+                        </div>
+                        <input type="range" min="-100" max="100"
+                          value={params.print_y} onChange={set('print_y')}
+                          className="slider slider-yellow"
+                        />
+                      </div>
+
+                      <div className="field" style={{ marginBottom: 16 }}>
+                        <div className="slider-header" style={{ marginBottom: 4 }}>
+                          <span className="slider-label" title="Modulates the print S-curve steepness">Print Contrast</span>
+                          <span className="slider-value">{params.print_contrast}</span>
+                        </div>
+                        <input type="range" min="-100" max="100"
+                          value={params.print_contrast} onChange={set('print_contrast')}
+                          className="slider"
+                        />
+                      </div>
+
+                      <div className="field" style={{ marginBottom: 4 }}>
+                        <div className="slider-header" style={{ marginBottom: 4 }}>
+                          <span className="slider-label" title="Modulates the print base D-Min density">Black Point (Lift)</span>
+                          <span className="slider-value">{params.print_black_point}</span>
+                        </div>
+                        <input type="range" min="-100" max="100"
+                          value={params.print_black_point} onChange={set('print_black_point')}
+                          className="slider"
+                        />
+                      </div>
+                    </div>
+                  )}
                   <div className="field" style={{ marginTop: 14 }}>
                     <div className="slider-header" style={{ marginBottom: 4 }}>
                       <span className="slider-label">Auto-Compensation (Adaptation)</span>

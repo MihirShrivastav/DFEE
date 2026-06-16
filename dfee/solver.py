@@ -33,6 +33,13 @@ class RenderPlanSolver:
             "sharpness": 0.0,
             "sharpness_mask": 0.5,
             "film_color": 100.0,
+            "print_stock": None,      # PrintStockProfile or None
+            "print_strength": 1.0,    # 0.0–2.0 user slider
+            "print_c": 0.0,
+            "print_m": 0.0,
+            "print_y": 0.0,
+            "print_contrast": 0.0,
+            "print_black_point": 0.0,
         }
         if user_controls:
             controls.update(user_controls)
@@ -80,10 +87,10 @@ class RenderPlanSolver:
         # 1. Base Stock Bias (mimicking how photographers expose these stocks in the field)
         stock_bias = 0.0
         if stock_type == "color_negative":
-            if stock_id in ["portra_400", "portra_160", "pro_400h"]:
+            if stock_id in ["portra_400", "portra_160", "portra_800", "pro_400h", "cinestill_50d", "vision3_500t", "vision3_250d", "fuji_eterna_250d"]:
                 # Professional high-latitude negatives are shot overexposed for soft, pastel tones
                 stock_bias = 0.65
-            elif stock_id in ["ektar_100", "gold_200", "ultramax_400", "superia_400"]:
+            elif stock_id in ["ektar_100", "gold_200", "ultramax_400", "superia_400", "colorplus_200"]:
                 # Consumer negatives get a minor lift to open up shadows slightly
                 stock_bias = 0.35
             else:
@@ -391,6 +398,37 @@ class RenderPlanSolver:
             "color_separation": float(scan_profile.color_separation)
         }
         
+        # Print stock finish — optional second-stage theatrical emulsion
+        print_finish = None
+        print_stock_profile = controls.get("print_stock")
+        if print_stock_profile is not None:
+            pt = print_stock_profile.tone
+            pc = print_stock_profile.color
+            pg = print_stock_profile.grain
+            print_strength = float(controls.get("print_strength", 1.0))
+            print_finish = {
+                "strength":            print_strength,
+                "print_c":             float(controls.get("print_c", 0.0)),
+                "print_m":             float(controls.get("print_m", 0.0)),
+                "print_y":             float(controls.get("print_y", 0.0)),
+                "print_contrast":      float(controls.get("print_contrast", 0.0)),
+                "print_black_point":   float(controls.get("print_black_point", 0.0)),
+                "shadow_lift":         float(pt.get("shadow_lift",         0.02)),
+                "contrast_boost":      float(pt.get("contrast_boost",      1.10)),
+                "highlight_rolloff":   float(pt.get("highlight_rolloff",    0.78)),
+                "highlight_rolloff_rate": float(pt.get("highlight_rolloff_rate", 2.0)),
+                "toe_depth":           float(pt.get("toe_depth",           0.85)),
+                "shadow_bias_lab":     pc.get("shadow_bias_lab",    [0.0, 0.0, 0.0]),
+                "midtone_bias_lab":    pc.get("midtone_bias_lab",   [0.0, 0.0, 0.0]),
+                "highlight_bias_lab":  pc.get("highlight_bias_lab", [0.0, 0.0, 0.0]),
+                "blue_suppression":    float(pc.get("blue_suppression",   0.0)),
+                "red_boost":           float(pc.get("red_boost",          0.0)),
+                "green_shift":         float(pc.get("green_shift",        0.0)),
+                "saturation_scale":    float(pc.get("saturation_scale",   1.0)),
+                "grain_strength":      float(pg.get("strength",           0.0)),
+                "grain_size":          float(pg.get("size",               0.3)),
+            }
+
         # Package and return Render Plan
         render_plan = {
             "stock_type":             stock_profile.stock_type,
@@ -399,6 +437,7 @@ class RenderPlanSolver:
             "film_response":          film_response,
             "material_effects":       material_effects,
             "scanner_finish":         scanner_finish,
+            "print_finish":           print_finish,
             "warnings":               warnings
         }
         

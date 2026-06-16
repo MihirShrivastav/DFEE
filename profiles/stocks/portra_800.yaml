@@ -1,0 +1,74 @@
+stock_id: portra_800
+stock_name: Kodak Portra 800
+stock_type: color_negative
+
+adaptation:
+  base_iso: 800
+  default_strength: 1.00
+  camera_cast_compensation_sensitivity: 0.85
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.80
+
+tone_response:
+  toe_strength: 0.40         # Slightly firmer toe than Portra 400 — a bit more punch
+  toe_length: 0.32           # Faster transition to deep shadows
+  midtone_contrast: 1.05     # Punchier midtones than 400 for added pop
+  shoulder_strength: 0.60    # Smooth highlight rolloff, though slightly less latitude than 400
+  highlight_rolloff_start: 0.72
+  black_density_floor: 0.015 # Slightly higher base fog due to high-speed emulsion
+  channel_toe_mult:      [0.90, 0.95, 1.15]
+  channel_shoulder_mult: [0.85, 0.95, 1.15]
+  channel_midtone_mult:  [1.05, 1.00, 0.95]
+
+color_response:
+  shadow_bias_lab: [0.0, -0.5, -2.0]     # Cool shadows, typical of high speed neg
+  midtone_bias_lab: [0.0, 1.0, 1.8]      # Warmer skin tones than 400
+  highlight_bias_lab: [0.0, 0.8, 2.0]    # Golden creamy highlights
+  blue_cast_suppression: 0.35
+  green_magenta_stabilization: 0.30
+
+hue_saturation_response:
+  saturation_boost: 1.28          # Noticeably more vibrant than Portra 400
+  red_orange_midtone_compression: 0.35
+  yellow_green_muting: 0.30
+  cyan_blue_highlight_compression: 0.40
+  neon_compression: 0.70
+  highlight_desaturation: 0.65
+
+grain:
+  size: 0.60                 # Larger, more pronounced grain than 400
+  strength: 0.52             # Visibly grittier
+  chroma_strength: 0.15      # More color noise inherent to high-speed film
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.75
+
+halation:
+  trigger: specular_only
+  strength: 0.30             # Halation more visible due to larger grain scattering
+  radius_inner: 8
+  radius_outer: 28
+  warm_core: [1.0, 0.55, 0.25]
+  red_fringe: [1.0, 0.15, 0.05]
+
+scanner:
+  style: frontier_soft
+  contrast: 1.05
+  warmth: 0.20
+  output_sharpening: 0.15
+
+chroma_coupling:
+  hi_rolloff_start: 0.72
+  hi_rolloff_rate:  1.6
+  hi_compression:   0.50
+  sh_rolloff_start: 0.22
+  sh_compression:   0.48
+  hi_hue_conv_rad:  0.35
+  hi_hue_conv_str:  0.25
+
+dye_contamination:
+  r_to_g: 0.035
+  g_to_r: 0.018
+  b_to_g: 0.015
+  b_to_r: 0.008
+  r_to_b: 0.002
+  g_to_b: 0.008

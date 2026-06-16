@@ -130,3 +130,48 @@ class ScanPrintProfile:
     @property
     def color_separation(self):
         return self.data.get('color_separation', 0.0)
+
+
+class PrintStockProfile:
+    """
+    Profiles for theatrical print film stocks (Kodak 2383, 2393, Fuji 3510, Eastman 2302).
+    These are applied as a final stage AFTER the camera negative emulation — mirroring the
+    real photochemical pipeline where a negative is contact-printed onto a separate positive
+    print stock for projection.
+    """
+    def __init__(self, filepath):
+        self.filepath = filepath
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Print stock profile not found: {filepath}")
+        with open(filepath, 'r', encoding='utf-8') as f:
+            try:
+                self.data = yaml.safe_load(f)
+            except Exception as e:
+                raise ValueError(f"Failed to parse YAML file {filepath}: {e}")
+        self._validate()
+
+    def _validate(self):
+        required = ['print_stock_id', 'print_stock_name', 'tone', 'color', 'grain']
+        for key in required:
+            if key not in self.data:
+                raise ValueError(f"Print stock profile {self.filepath} missing section: '{key}'")
+
+    @property
+    def print_stock_id(self):
+        return self.data['print_stock_id']
+
+    @property
+    def print_stock_name(self):
+        return self.data['print_stock_name']
+
+    @property
+    def tone(self):
+        return self.data['tone']
+
+    @property
+    def color(self):
+        return self.data['color']
+
+    @property
+    def grain(self):
+        return self.data['grain']
