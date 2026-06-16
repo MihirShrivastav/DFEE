@@ -121,6 +121,25 @@ struct NativeRawDecodeResponse {
     NativeEngineMetadata engine;
 };
 
+struct NativeSessionCacheState {
+    std::string selected_filename;
+    bool draft_decode_cached = false;
+    int draft_width = 0;
+    int draft_height = 0;
+    bool preview_cached = false;
+    int preview_width = 0;
+    int preview_height = 0;
+    bool full_decode_cached = false;
+    int full_width = 0;
+    int full_height = 0;
+};
+
+struct NativeSessionCacheStateResponse {
+    bool ok = false;
+    NativeSessionCacheState cache;
+    NativeEngineMetadata engine;
+};
+
 struct NativeRawPreviewResponse {
     bool ok = false;
     std::string filename;

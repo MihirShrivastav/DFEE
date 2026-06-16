@@ -108,6 +108,20 @@ class NativeRawDecodeSummary:
 
 
 @dataclass(frozen=True)
+class NativeSessionCacheState:
+    selected_filename: str
+    draft_decode_cached: bool
+    draft_width: int
+    draft_height: int
+    preview_cached: bool
+    preview_width: int
+    preview_height: int
+    full_decode_cached: bool
+    full_width: int
+    full_height: int
+
+
+@dataclass(frozen=True)
 class NativeErrorInfo:
     code: str
     user_message: str
@@ -192,6 +206,21 @@ def _parse_raw_decode_summary(payload: dict[str, Any]) -> NativeRawDecodeSummary
         clipping_ratio_b=float(payload.get("clipping_ratio_b", 0.0)),
         raw_clipping_ratio=float(payload.get("raw_clipping_ratio", 0.0)),
         summary_json=str(payload.get("summary_json", "")),
+    )
+
+
+def _parse_session_cache_state(payload: dict[str, Any]) -> NativeSessionCacheState:
+    return NativeSessionCacheState(
+        selected_filename=str(payload.get("selected_filename", "")),
+        draft_decode_cached=bool(payload.get("draft_decode_cached", False)),
+        draft_width=int(payload.get("draft_width", 0)),
+        draft_height=int(payload.get("draft_height", 0)),
+        preview_cached=bool(payload.get("preview_cached", False)),
+        preview_width=int(payload.get("preview_width", 0)),
+        preview_height=int(payload.get("preview_height", 0)),
+        full_decode_cached=bool(payload.get("full_decode_cached", False)),
+        full_width=int(payload.get("full_width", 0)),
+        full_height=int(payload.get("full_height", 0)),
     )
 
 
@@ -303,6 +332,14 @@ class NativeEngineSession:
         summary = _parse_raw_decode_summary(dict(payload.get("summary", {})))
         metadata = _parse_raw_metadata(dict(payload.get("metadata", {})))
         return summary, metadata
+
+    def cache_state(self) -> NativeSessionCacheState:
+        try:
+            payload = dict(self._native_module.cache_state(self._handle))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        return _parse_session_cache_state(dict(payload.get("cache", {})))
 
     def _raise_bridge_error(self, exc: Exception) -> None:
         code = str(getattr(exc, "code", "") or "NATIVE_BRIDGE_ERROR")

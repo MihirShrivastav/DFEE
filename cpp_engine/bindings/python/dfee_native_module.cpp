@@ -151,6 +151,21 @@ PyObject* raw_decode_summary_to_dict(const dfee::NativeRawDecodeSummary& summary
     return dict;
 }
 
+PyObject* cache_state_to_dict(const dfee::NativeSessionCacheState& cache) {
+    PyObject* dict = PyDict_New();
+    PyDict_SetItemString(dict, "selected_filename", PyUnicode_FromString(cache.selected_filename.c_str()));
+    PyDict_SetItemString(dict, "draft_decode_cached", cache.draft_decode_cached ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "draft_width", PyLong_FromLong(cache.draft_width));
+    PyDict_SetItemString(dict, "draft_height", PyLong_FromLong(cache.draft_height));
+    PyDict_SetItemString(dict, "preview_cached", cache.preview_cached ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "preview_width", PyLong_FromLong(cache.preview_width));
+    PyDict_SetItemString(dict, "preview_height", PyLong_FromLong(cache.preview_height));
+    PyDict_SetItemString(dict, "full_decode_cached", cache.full_decode_cached ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "full_width", PyLong_FromLong(cache.full_width));
+    PyDict_SetItemString(dict, "full_height", PyLong_FromLong(cache.full_height));
+    return dict;
+}
+
 PyObject* engine_metadata_to_dict(const dfee::NativeEngineMetadata& metadata) {
     PyObject* dict = PyDict_New();
     PyObject* status = cuda_status_to_dict(metadata.cuda_status);
@@ -349,6 +364,33 @@ PyObject* py_decode_raw(PyObject*, PyObject* args, PyObject* kwargs) {
     }
 }
 
+PyObject* py_cache_state(PyObject*, PyObject* args) {
+    PyObject* capsule = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &capsule)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->cache_state();
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyObject* cache = cache_state_to_dict(result.cache);
+        PyDict_SetItemString(dict, "cache", cache);
+        Py_DECREF(cache);
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyMethodDef kMethods[] = {
     {"engine_version", py_engine_version, METH_NOARGS, "Return the native engine version."},
     {"cuda_status", py_cuda_status, METH_NOARGS, "Return CUDA build/runtime status."},
@@ -357,6 +399,7 @@ PyMethodDef kMethods[] = {
     {"select_file", py_select_file, METH_VARARGS, "Select a RAW file for a native session."},
     {"read_raw_metadata", py_read_raw_metadata, METH_VARARGS, "Read RAW metadata through the native session."},
     {"decode_raw", reinterpret_cast<PyCFunction>(py_decode_raw), METH_VARARGS | METH_KEYWORDS, "Decode a RAW file through the native session."},
+    {"cache_state", py_cache_state, METH_VARARGS, "Inspect native session cache ownership state."},
     {nullptr, nullptr, 0, nullptr},
 };
 

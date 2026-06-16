@@ -23,6 +23,13 @@ class TestNativeBridge(unittest.TestCase):
     def setUp(self):
         self.session = dfee_native_bridge.create_session(BASE_DIR)
 
+    def _raw_filename(self) -> str:
+        return next(
+            entry.name
+            for entry in (BASE_DIR / "raw_files").iterdir()
+            if entry.is_file() and entry.suffix.lower() == ".arw"
+        )
+
     def test_engine_status(self):
         version = dfee_native_bridge.engine_version()
         status = dfee_native_bridge.cuda_status()
@@ -39,11 +46,7 @@ class TestNativeBridge(unittest.TestCase):
         self.assertIn("list_profiles_total", profiles.engine.metadata_json)
 
     def test_select_file(self):
-        raw_filename = next(
-            entry.name
-            for entry in (BASE_DIR / "raw_files").iterdir()
-            if entry.is_file() and entry.suffix.lower() == ".arw"
-        )
+        raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)
         self.assertTrue(result.ok)
         self.assertEqual(result.filename, raw_filename)
@@ -66,11 +69,7 @@ class TestNativeBridge(unittest.TestCase):
         self.assertIn("project root", ctx.exception.user_message.lower())
 
     def test_read_raw_metadata(self):
-        raw_filename = next(
-            entry.name
-            for entry in (BASE_DIR / "raw_files").iterdir()
-            if entry.is_file() and entry.suffix.lower() == ".arw"
-        )
+        raw_filename = self._raw_filename()
         if self.session.list_profiles().engine.libraw_enabled:
             metadata = self.session.read_raw_metadata(raw_filename)
             self.assertGreater(metadata.image_width, 0)
@@ -82,11 +81,7 @@ class TestNativeBridge(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
 
     def test_decode_raw(self):
-        raw_filename = next(
-            entry.name
-            for entry in (BASE_DIR / "raw_files").iterdir()
-            if entry.is_file() and entry.suffix.lower() == ".arw"
-        )
+        raw_filename = self._raw_filename()
         if self.session.list_profiles().engine.libraw_enabled:
             summary, metadata = self.session.decode_raw(raw_filename, draft_mode=True)
             rgb, _, _, clipping_ratios, py_metadata = RawIngestor(str((BASE_DIR / "raw_files" / raw_filename))).ingest(draft_mode=True)
@@ -105,6 +100,44 @@ class TestNativeBridge(unittest.TestCase):
             with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
                 self.session.decode_raw(raw_filename, draft_mode=True)
             self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
+
+    def test_cache_state_tracks_preview_and_fullres_ownership(self):
+        raw_filename = self._raw_filename()
+        self.session.select_file(raw_filename)
+        initial_state = self.session.cache_state()
+        self.assertEqual(initial_state.selected_filename, raw_filename)
+        self.assertFalse(initial_state.draft_decode_cached)
+        self.assertFalse(initial_state.preview_cached)
+        self.assertFalse(initial_state.full_decode_cached)
+
+        if self.session.list_profiles().engine.libraw_enabled:
+            draft_summary, _ = self.session.decode_raw(raw_filename, draft_mode=True)
+            after_draft = self.session.cache_state()
+            self.assertTrue(after_draft.draft_decode_cached)
+            self.assertTrue(after_draft.preview_cached)
+            self.assertFalse(after_draft.full_decode_cached)
+            self.assertEqual(after_draft.draft_width, draft_summary.image_width)
+            self.assertEqual(after_draft.draft_height, draft_summary.image_height)
+            self.assertLessEqual(after_draft.preview_width, after_draft.draft_width)
+            self.assertLessEqual(after_draft.preview_height, after_draft.draft_height)
+
+            self.session.select_file(raw_filename)
+            after_reselect = self.session.cache_state()
+            self.assertTrue(after_reselect.draft_decode_cached)
+            self.assertTrue(after_reselect.preview_cached)
+
+            full_summary, _ = self.session.decode_raw(raw_filename, draft_mode=False)
+            after_full = self.session.cache_state()
+            self.assertTrue(after_full.full_decode_cached)
+            self.assertEqual(after_full.full_width, full_summary.image_width)
+            self.assertEqual(after_full.full_height, full_summary.image_height)
+        else:
+            with self.assertRaises(dfee_native_bridge.NativeOperationError):
+                self.session.decode_raw(raw_filename, draft_mode=True)
+            after_failed_decode = self.session.cache_state()
+            self.assertFalse(after_failed_decode.draft_decode_cached)
+            self.assertFalse(after_failed_decode.preview_cached)
+            self.assertFalse(after_failed_decode.full_decode_cached)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@
 #include "dfee/raw_metadata.hpp"
 #include "dfee/version.hpp"
 
+#include <algorithm>
 #include <filesystem>
 
 namespace dfee {
@@ -25,6 +26,34 @@ NativeEngineMetadata build_engine_metadata() {
 
 void finalize_engine_metadata(NativeEngineMetadata& metadata) {
     metadata.metadata_json = serialize_native_engine_metadata_json(metadata);
+}
+
+Image resize_image_to_max_edge(const Image& source, const int max_edge) {
+    if (source.empty() || max_edge <= 0) {
+        return source;
+    }
+
+    const int current_max = std::max(source.width, source.height);
+    if (current_max <= max_edge) {
+        return source;
+    }
+
+    const float scale = static_cast<float>(max_edge) / static_cast<float>(current_max);
+    const int target_width = std::max(1, static_cast<int>(source.width * scale));
+    const int target_height = std::max(1, static_cast<int>(source.height * scale));
+    Image resized(target_width, target_height, source.channels);
+
+    for (int y = 0; y < target_height; ++y) {
+        const int source_y = std::min(source.height - 1, static_cast<int>(static_cast<float>(y) / scale));
+        for (int x = 0; x < target_width; ++x) {
+            const int source_x = std::min(source.width - 1, static_cast<int>(static_cast<float>(x) / scale));
+            for (int channel = 0; channel < source.channels; ++channel) {
+                resized.at(x, y, channel) = source.at(source_x, source_y, channel);
+            }
+        }
+    }
+
+    return resized;
 }
 
 }  // namespace
@@ -117,13 +146,16 @@ NativeSelectResponse EngineSession::select_file(const NativeSelectRequest& reque
         }
         {
             ScopedStageTimer stage(result.engine, "select_cache_session_state");
+            if (selected_filename_ != request.filename) {
+                clear_decode_caches();
+            }
             selected_filename_ = request.filename;
         }
     }
 
     result.ok = true;
     result.status = "selected";
-    result.message = "Native session selected the RAW file; LibRaw decode is scheduled for the next migration slice.";
+    result.message = "Native session selected the RAW file and reset any stale decode caches.";
     finalize_engine_metadata(result.engine);
     return result;
 }
@@ -151,24 +183,67 @@ NativeRawMetadataResponse EngineSession::read_raw_metadata(const NativeRawMetada
     return response;
 }
 
-NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& request) const {
+NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& request) {
     NativeRawDecodeResponse response;
-    response.filename = request.filename;
+    response.filename = resolve_filename(request.filename);
     response.engine = build_engine_metadata();
 
     {
         ScopedStageTimer total(response.engine, request.draft_mode ? "decode_raw_draft_total" : "decode_raw_full_total");
         {
+            ScopedStageTimer stage(response.engine, "decode_raw_resolve_session");
+            if (response.filename.empty()) {
+                response.status = "error";
+                response.error = {
+                    .code = "RAW_FILENAME_MISSING",
+                    .user_message = "Select a RAW file before continuing.",
+                    .detail = "decode_raw received an empty filename and no session file is currently selected.",
+                };
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+        }
+        {
+            ScopedStageTimer stage(response.engine, "decode_raw_cache_lookup");
+            const auto& cache = request.draft_mode ? draft_decode_cache_ : full_decode_cache_;
+            if (cache.has_value() && cache->filename == response.filename) {
+                response.ok = true;
+                response.status = "cached";
+                response.summary = cache->decoded.summary;
+                response.metadata = cache->decoded.metadata;
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+        }
+        {
             ScopedStageTimer stage(response.engine, "decode_raw_file");
-            const auto file_response = decode_raw_from_file({
-                .filename = (raw_dir_ / request.filename).string(),
+            const auto file_response = decode_raw_image_from_file({
+                .filename = (raw_dir_ / response.filename).string(),
                 .draft_mode = request.draft_mode,
             });
             response.ok = file_response.ok;
             response.status = file_response.status;
-            response.summary = file_response.summary;
-            response.metadata = file_response.metadata;
+            response.summary = file_response.decoded.summary;
+            response.metadata = file_response.decoded.metadata;
             response.error = file_response.error;
+            if (file_response.ok) {
+                CachedDecode cache_entry{
+                    .filename = response.filename,
+                    .draft_mode = request.draft_mode,
+                    .decoded = file_response.decoded,
+                };
+                if (request.draft_mode) {
+                    draft_decode_cache_ = std::move(cache_entry);
+                } else {
+                    full_decode_cache_ = std::move(cache_entry);
+                }
+            }
+        }
+        {
+            ScopedStageTimer stage(response.engine, "decode_raw_refresh_preview_cache");
+            if (response.ok && request.draft_mode) {
+                refresh_preview_cache_from_draft();
+            }
         }
     }
 
@@ -176,8 +251,58 @@ NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& 
     return response;
 }
 
+NativeSessionCacheStateResponse EngineSession::cache_state() const {
+    NativeSessionCacheStateResponse response;
+    response.ok = true;
+    response.engine = build_engine_metadata();
+    response.cache.selected_filename = selected_filename_;
+    if (draft_decode_cache_.has_value()) {
+        response.cache.draft_decode_cached = true;
+        response.cache.draft_width = draft_decode_cache_->decoded.summary.image_width;
+        response.cache.draft_height = draft_decode_cache_->decoded.summary.image_height;
+    }
+    if (preview_cache_.has_value()) {
+        response.cache.preview_cached = true;
+        response.cache.preview_width = preview_cache_->rgb_linear.width;
+        response.cache.preview_height = preview_cache_->rgb_linear.height;
+    }
+    if (full_decode_cache_.has_value()) {
+        response.cache.full_decode_cached = true;
+        response.cache.full_width = full_decode_cache_->decoded.summary.image_width;
+        response.cache.full_height = full_decode_cache_->decoded.summary.image_height;
+    }
+    finalize_engine_metadata(response.engine);
+    return response;
+}
+
 CudaStatus EngineSession::cuda_status() const noexcept {
     return query_cuda_status();
+}
+
+std::string EngineSession::resolve_filename(const std::string& filename) const {
+    if (!filename.empty()) {
+        return filename;
+    }
+    return selected_filename_;
+}
+
+void EngineSession::clear_decode_caches() {
+    draft_decode_cache_.reset();
+    full_decode_cache_.reset();
+    preview_cache_.reset();
+}
+
+void EngineSession::refresh_preview_cache_from_draft() {
+    if (!draft_decode_cache_.has_value()) {
+        preview_cache_.reset();
+        return;
+    }
+
+    CachedPreview preview;
+    preview.filename = draft_decode_cache_->filename;
+    preview.rgb_linear = resize_image_to_max_edge(draft_decode_cache_->decoded.rgb_linear, 1024);
+    preview.luminance = compute_luminance(preview.rgb_linear);
+    preview_cache_ = std::move(preview);
 }
 
 }  // namespace dfee

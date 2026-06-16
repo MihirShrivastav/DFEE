@@ -73,6 +73,7 @@ Stable Python wrapper:
 - `NativeEngineSession.select_file(request_or_filename) -> NativeSelectResult`
 - `NativeEngineSession.read_raw_metadata(filename) -> NativeRawMetadata`
 - `NativeEngineSession.decode_raw(filename, draft_mode=True) -> (NativeRawDecodeSummary, NativeRawMetadata)`
+- `NativeEngineSession.cache_state() -> NativeSessionCacheState`
 
 `dfee_native_bridge.py` is the intended Python-side integration surface for future FastAPI delegation. It hides the raw CPython capsule handle and normalizes native responses into typed Python objects.
 
@@ -81,3 +82,5 @@ Stable Python wrapper:
 `read_raw_metadata` is implemented behind LibRaw-aware build wiring. In scaffold-only builds without LibRaw discovery, it raises a structured native operation error with code `LIBRAW_UNAVAILABLE`.
 
 `decode_raw` uses the current native LibRaw path with the same core decode knobs as the Python ingest path: camera white balance, no auto bright, scene-linear gamma, sRGB output primaries, 16-bit output, and optional half-size draft mode.
+
+`EngineSession` now owns draft decode, preview-scale, and full-resolution cache state internally. Re-selecting the same file preserves those caches; selecting a different file invalidates them.

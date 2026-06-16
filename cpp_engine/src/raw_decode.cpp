@@ -1,12 +1,13 @@
 #include "dfee/raw_decode.hpp"
 
 #include "dfee/bridge_utils.hpp"
-#include "dfee/raw_metadata.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <sstream>
 #include <string>
 
 #if DFEE_HAS_LIBRAW
@@ -20,15 +21,76 @@
 namespace dfee {
 namespace {
 
-void fill_summary_from_float_rgb(
-    NativeRawDecodeSummary& summary,
+[[nodiscard]] std::string format_shutter_speed(const double shutter_speed) {
+    if (shutter_speed <= 0.0) {
+        return {};
+    }
+    if (shutter_speed < 1.0) {
+        const auto denominator = static_cast<int>(std::round(1.0 / shutter_speed));
+        if (denominator > 0) {
+            return "1/" + std::to_string(denominator);
+        }
+    }
+
+    std::ostringstream out;
+    out.setf(std::ios::fixed);
+    out.precision(shutter_speed < 10.0 ? 3 : 2);
+    out << shutter_speed << "s";
+    return out.str();
+}
+
+[[nodiscard]] std::string safe_cstr(const char* value) {
+    return (value != nullptr && value[0] != '\0') ? std::string(value) : std::string{};
+}
+
+#if DFEE_HAS_LIBRAW
+void fill_metadata_from_raw_processor(NativeRawMetadata& metadata, const LibRaw& raw_processor) {
+    const auto& idata = raw_processor.imgdata.idata;
+    const auto& lens = raw_processor.imgdata.lens;
+    const auto& other = raw_processor.imgdata.other;
+    const auto& color = raw_processor.imgdata.color;
+    const auto& sizes = raw_processor.imgdata.sizes;
+
+    metadata.camera_make = safe_cstr(idata.make);
+    metadata.camera_model = safe_cstr(idata.model);
+    metadata.lens_model = safe_cstr(lens.Lens);
+    metadata.iso = other.iso_speed > 0.0F ? static_cast<int>(std::lround(other.iso_speed)) : 100;
+    metadata.shutter_speed = other.shutter > 0.0F ? other.shutter : (1.0 / 125.0);
+    metadata.shutter_speed_str = format_shutter_speed(metadata.shutter_speed);
+    metadata.aperture = other.aperture > 0.0F ? other.aperture : 4.0;
+    metadata.focal_length = other.focal_len > 0.0F ? other.focal_len : 0.0;
+    metadata.white_balance_multipliers = {
+        static_cast<double>(color.cam_mul[0] > 0.0F ? color.cam_mul[0] : 1.0F),
+        static_cast<double>(color.cam_mul[1] > 0.0F ? color.cam_mul[1] : 1.0F),
+        static_cast<double>(color.cam_mul[2] > 0.0F ? color.cam_mul[2] : 1.0F),
+        static_cast<double>(color.cam_mul[3] > 0.0F ? color.cam_mul[3] : 1.0F),
+    };
+    metadata.black_level = color.cblack[0] > 0 ? static_cast<int>(color.cblack[0]) : static_cast<int>(color.black);
+    metadata.white_level = static_cast<int>(color.maximum);
+    metadata.image_height = static_cast<int>(sizes.height);
+    metadata.image_width = static_cast<int>(sizes.width);
+    metadata.raw_height = static_cast<int>(sizes.raw_height);
+    metadata.raw_width = static_cast<int>(sizes.raw_width);
+    metadata.metadata_json = serialize_native_raw_metadata_json(metadata);
+}
+#endif
+
+void fill_decoded_image_from_float_rgb(
+    DecodedRawImage& decoded,
     const std::vector<float>& pixels,
     const int width,
     const int height,
     const int channels) {
-    summary.image_width = width;
-    summary.image_height = height;
-    summary.channels = channels;
+    decoded.rgb_linear = Image(width, height, channels);
+    decoded.rgb_linear.pixels = pixels;
+    decoded.luminance = compute_luminance(decoded.rgb_linear);
+    decoded.clipping_masks.red.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
+    decoded.clipping_masks.green.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
+    decoded.clipping_masks.blue.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
+
+    decoded.summary.image_width = width;
+    decoded.summary.image_height = height;
+    decoded.summary.channels = channels;
 
     float min_value = std::numeric_limits<float>::max();
     float max_value = std::numeric_limits<float>::lowest();
@@ -43,24 +105,34 @@ void fill_summary_from_float_rgb(
         const float b = pixels[i * 3 + 2];
         min_value = std::min({min_value, r, g, b});
         max_value = std::max({max_value, r, g, b});
-        clip_r += r >= 0.99F ? 1 : 0;
-        clip_g += g >= 0.99F ? 1 : 0;
-        clip_b += b >= 0.99F ? 1 : 0;
+        const std::uint8_t is_clip_r = r >= 0.99F ? 1 : 0;
+        const std::uint8_t is_clip_g = g >= 0.99F ? 1 : 0;
+        const std::uint8_t is_clip_b = b >= 0.99F ? 1 : 0;
+        decoded.clipping_masks.red[i] = is_clip_r;
+        decoded.clipping_masks.green[i] = is_clip_g;
+        decoded.clipping_masks.blue[i] = is_clip_b;
+        clip_r += is_clip_r;
+        clip_g += is_clip_g;
+        clip_b += is_clip_b;
     }
 
-    summary.min_value = std::isfinite(min_value) ? min_value : 0.0F;
-    summary.max_value = std::isfinite(max_value) ? max_value : 0.0F;
-    summary.clipping_ratio_r = pixel_count > 0 ? static_cast<float>(clip_r) / static_cast<float>(pixel_count) : 0.0F;
-    summary.clipping_ratio_g = pixel_count > 0 ? static_cast<float>(clip_g) / static_cast<float>(pixel_count) : 0.0F;
-    summary.clipping_ratio_b = pixel_count > 0 ? static_cast<float>(clip_b) / static_cast<float>(pixel_count) : 0.0F;
-    summary.raw_clipping_ratio = std::max({summary.clipping_ratio_r, summary.clipping_ratio_g, summary.clipping_ratio_b});
-    summary.summary_json = serialize_native_raw_decode_summary_json(summary);
+    decoded.summary.min_value = std::isfinite(min_value) ? min_value : 0.0F;
+    decoded.summary.max_value = std::isfinite(max_value) ? max_value : 0.0F;
+    decoded.summary.clipping_ratio_r = pixel_count > 0 ? static_cast<float>(clip_r) / static_cast<float>(pixel_count) : 0.0F;
+    decoded.summary.clipping_ratio_g = pixel_count > 0 ? static_cast<float>(clip_g) / static_cast<float>(pixel_count) : 0.0F;
+    decoded.summary.clipping_ratio_b = pixel_count > 0 ? static_cast<float>(clip_b) / static_cast<float>(pixel_count) : 0.0F;
+    decoded.summary.raw_clipping_ratio = std::max({
+        decoded.summary.clipping_ratio_r,
+        decoded.summary.clipping_ratio_g,
+        decoded.summary.clipping_ratio_b,
+    });
+    decoded.summary.summary_json = serialize_native_raw_decode_summary_json(decoded.summary);
 }
 
 }  // namespace
 
-NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& request) {
-    NativeRawDecodeResponse response;
+DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest& request) {
+    DecodedRawImageResponse response;
     response.filename = request.filename;
 
     if (request.filename.empty()) {
@@ -95,6 +167,7 @@ NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& reque
         };
         return response;
     }
+    fill_metadata_from_raw_processor(response.decoded.metadata, raw_processor);
 
     auto* params = raw_processor.output_params_ptr();
     params->half_size = request.draft_mode ? 1 : 0;
@@ -169,8 +242,7 @@ NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& reque
 
     response.ok = true;
     response.status = "loaded";
-    response.metadata = read_raw_metadata_from_file({.filename = request.filename}).metadata;
-    fill_summary_from_float_rgb(response.summary, pixels, width, height, channels);
+    fill_decoded_image_from_float_rgb(response.decoded, pixels, width, height, channels);
     LibRaw::dcraw_clear_mem(image);
     return response;
 #else
@@ -182,6 +254,18 @@ NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& reque
     };
     return response;
 #endif
+}
+
+NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& request) {
+    const auto decoded_response = decode_raw_image_from_file(request);
+    NativeRawDecodeResponse response;
+    response.ok = decoded_response.ok;
+    response.filename = decoded_response.filename;
+    response.status = decoded_response.status;
+    response.summary = decoded_response.decoded.summary;
+    response.metadata = decoded_response.decoded.metadata;
+    response.error = decoded_response.error;
+    return response;
 }
 
 }  // namespace dfee
