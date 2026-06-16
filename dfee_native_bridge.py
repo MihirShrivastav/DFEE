@@ -133,6 +133,77 @@ class NativeRawPreview:
 
 
 @dataclass(frozen=True)
+class NativePreviewRenderRequest:
+    filename: str
+    stock: str
+    exposure: float = 0.0
+    highlights: float = 0.0
+    shadows: float = 0.0
+    blacks: float = 0.0
+    whites: float = 0.0
+    midtones: float = 0.0
+    contrast: float = 0.0
+    temp: float = 0.0
+    tint: float = 0.0
+    saturation: float = 0.0
+    vibrance: float = 0.0
+    curves: str = "[[0,0],[1,1]]"
+    hsl_red_h: float = 0.0
+    hsl_red_s: float = 0.0
+    hsl_red_l: float = 0.0
+    hsl_orange_h: float = 0.0
+    hsl_orange_s: float = 0.0
+    hsl_orange_l: float = 0.0
+    hsl_yellow_h: float = 0.0
+    hsl_yellow_s: float = 0.0
+    hsl_yellow_l: float = 0.0
+    hsl_green_h: float = 0.0
+    hsl_green_s: float = 0.0
+    hsl_green_l: float = 0.0
+    hsl_aqua_h: float = 0.0
+    hsl_aqua_s: float = 0.0
+    hsl_aqua_l: float = 0.0
+    hsl_blue_h: float = 0.0
+    hsl_blue_s: float = 0.0
+    hsl_blue_l: float = 0.0
+    hsl_purple_h: float = 0.0
+    hsl_purple_s: float = 0.0
+    hsl_purple_l: float = 0.0
+    hsl_magenta_h: float = 0.0
+    hsl_magenta_s: float = 0.0
+    hsl_magenta_l: float = 0.0
+    clarity: float = 0.0
+    texture: float = 0.0
+    dehaze: float = 0.0
+    sharpness: float = 0.0
+    sharpness_mask: float = 0.5
+    bloom: float = 0.0
+    adaptation: float = 1.0
+    grain: str = "Auto"
+    grain_strength: float = -1.0
+    grain_size: float = -1.0
+    grain_roughness: float = -1.0
+    halation: str = "Auto"
+    film_color: float = 100.0
+    print_stock: str = "none"
+    print_strength: float = 1.0
+    print_c: float = 0.0
+    print_m: float = 0.0
+    print_y: float = 0.0
+    print_contrast: float = 0.0
+    print_black_point: float = 0.0
+
+
+@dataclass(frozen=True)
+class NativeRenderedPreview:
+    filename: str
+    status: str
+    content_type: str
+    jpeg_bytes: bytes
+    engine: NativeEngineInfo
+
+
+@dataclass(frozen=True)
 class NativeErrorInfo:
     code: str
     user_message: str
@@ -371,6 +442,30 @@ class NativeEngineSession:
             )
 
         return NativeRawPreview(
+            filename=str(payload.get("filename", "")),
+            status=str(payload.get("status", "")),
+            content_type=str(payload.get("content_type", "image/jpeg")),
+            jpeg_bytes=bytes(payload.get("jpeg_bytes", b"")),
+            engine=_parse_engine_info(dict(payload.get("engine", {}))),
+        )
+
+    def render_preview(self, request: NativePreviewRenderRequest) -> NativeRenderedPreview:
+        try:
+            payload = dict(self._native_module.render_preview(self._handle, request.__dict__))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        if "error" in payload:
+            error = _parse_error_info(dict(payload["error"]))
+            raise NativeOperationError(
+                error.code,
+                error.user_message,
+                error.detail,
+                filename=str(payload.get("filename", "")),
+                status=str(payload.get("status", "")),
+            )
+
+        return NativeRenderedPreview(
             filename=str(payload.get("filename", "")),
             status=str(payload.get("status", "")),
             content_type=str(payload.get("content_type", "image/jpeg")),

@@ -183,6 +183,92 @@ PyObject* engine_metadata_to_dict(const dfee::NativeEngineMetadata& metadata) {
     return dict;
 }
 
+std::string dict_string(PyObject* dict, const char* key, const char* fallback = "") {
+    if (dict == nullptr || !PyDict_Check(dict)) {
+        return fallback;
+    }
+    PyObject* value = PyDict_GetItemString(dict, key);
+    if (value == nullptr || value == Py_None) {
+        return fallback;
+    }
+    const char* utf8 = PyUnicode_Check(value) ? PyUnicode_AsUTF8(value) : nullptr;
+    return utf8 != nullptr ? utf8 : fallback;
+}
+
+float dict_float(PyObject* dict, const char* key, const float fallback = 0.0F) {
+    if (dict == nullptr || !PyDict_Check(dict)) {
+        return fallback;
+    }
+    PyObject* value = PyDict_GetItemString(dict, key);
+    if (value == nullptr || value == Py_None) {
+        return fallback;
+    }
+    return static_cast<float>(PyFloat_AsDouble(value));
+}
+
+dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
+    dfee::NativePreviewRenderRequest request;
+    request.filename = dict_string(dict, "filename");
+    request.stock = dict_string(dict, "stock");
+    request.exposure = dict_float(dict, "exposure");
+    request.highlights = dict_float(dict, "highlights");
+    request.shadows = dict_float(dict, "shadows");
+    request.blacks = dict_float(dict, "blacks");
+    request.whites = dict_float(dict, "whites");
+    request.midtones = dict_float(dict, "midtones");
+    request.contrast = dict_float(dict, "contrast");
+    request.temp = dict_float(dict, "temp");
+    request.tint = dict_float(dict, "tint");
+    request.saturation = dict_float(dict, "saturation");
+    request.vibrance = dict_float(dict, "vibrance");
+    request.curves = dict_string(dict, "curves", "[[0,0],[1,1]]");
+    request.hsl_red_h = dict_float(dict, "hsl_red_h");
+    request.hsl_red_s = dict_float(dict, "hsl_red_s");
+    request.hsl_red_l = dict_float(dict, "hsl_red_l");
+    request.hsl_orange_h = dict_float(dict, "hsl_orange_h");
+    request.hsl_orange_s = dict_float(dict, "hsl_orange_s");
+    request.hsl_orange_l = dict_float(dict, "hsl_orange_l");
+    request.hsl_yellow_h = dict_float(dict, "hsl_yellow_h");
+    request.hsl_yellow_s = dict_float(dict, "hsl_yellow_s");
+    request.hsl_yellow_l = dict_float(dict, "hsl_yellow_l");
+    request.hsl_green_h = dict_float(dict, "hsl_green_h");
+    request.hsl_green_s = dict_float(dict, "hsl_green_s");
+    request.hsl_green_l = dict_float(dict, "hsl_green_l");
+    request.hsl_aqua_h = dict_float(dict, "hsl_aqua_h");
+    request.hsl_aqua_s = dict_float(dict, "hsl_aqua_s");
+    request.hsl_aqua_l = dict_float(dict, "hsl_aqua_l");
+    request.hsl_blue_h = dict_float(dict, "hsl_blue_h");
+    request.hsl_blue_s = dict_float(dict, "hsl_blue_s");
+    request.hsl_blue_l = dict_float(dict, "hsl_blue_l");
+    request.hsl_purple_h = dict_float(dict, "hsl_purple_h");
+    request.hsl_purple_s = dict_float(dict, "hsl_purple_s");
+    request.hsl_purple_l = dict_float(dict, "hsl_purple_l");
+    request.hsl_magenta_h = dict_float(dict, "hsl_magenta_h");
+    request.hsl_magenta_s = dict_float(dict, "hsl_magenta_s");
+    request.hsl_magenta_l = dict_float(dict, "hsl_magenta_l");
+    request.clarity = dict_float(dict, "clarity");
+    request.texture = dict_float(dict, "texture");
+    request.dehaze = dict_float(dict, "dehaze");
+    request.sharpness = dict_float(dict, "sharpness");
+    request.sharpness_mask = dict_float(dict, "sharpness_mask", 0.5F);
+    request.bloom = dict_float(dict, "bloom");
+    request.adaptation = dict_float(dict, "adaptation", 1.0F);
+    request.grain = dict_string(dict, "grain", "Auto");
+    request.grain_strength = dict_float(dict, "grain_strength", -1.0F);
+    request.grain_size = dict_float(dict, "grain_size", -1.0F);
+    request.grain_roughness = dict_float(dict, "grain_roughness", -1.0F);
+    request.halation = dict_string(dict, "halation", "Auto");
+    request.film_color = dict_float(dict, "film_color", 100.0F);
+    request.print_stock = dict_string(dict, "print_stock", "none");
+    request.print_strength = dict_float(dict, "print_strength", 1.0F);
+    request.print_c = dict_float(dict, "print_c");
+    request.print_m = dict_float(dict, "print_m");
+    request.print_y = dict_float(dict, "print_y");
+    request.print_contrast = dict_float(dict, "print_contrast");
+    request.print_black_point = dict_float(dict, "print_black_point");
+    return request;
+}
+
 PyObject* py_cuda_status(PyObject*, PyObject*) {
     return cuda_status_to_dict(dfee::query_cuda_status());
 }
@@ -436,6 +522,44 @@ PyObject* py_raw_preview(PyObject*, PyObject* args, PyObject* kwargs) {
     }
 }
 
+PyObject* py_render_preview(PyObject*, PyObject* args) {
+    PyObject* capsule = nullptr;
+    PyObject* request_dict = nullptr;
+    if (!PyArg_ParseTuple(args, "OO!", &capsule, &PyDict_Type, &request_dict)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->render_preview(preview_request_from_dict(request_dict));
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
+        PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
+        PyDict_SetItemString(dict, "content_type", PyUnicode_FromString(result.content_type.c_str()));
+        PyObject* jpeg_bytes = PyBytes_FromStringAndSize(
+            reinterpret_cast<const char*>(result.jpeg_bytes.data()),
+            static_cast<Py_ssize_t>(result.jpeg_bytes.size()));
+        PyDict_SetItemString(dict, "jpeg_bytes", jpeg_bytes);
+        Py_DECREF(jpeg_bytes);
+        if (!result.error.empty()) {
+            PyObject* error = native_error_to_dict(result.error);
+            PyDict_SetItemString(dict, "error", error);
+            Py_DECREF(error);
+        }
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyMethodDef kMethods[] = {
     {"engine_version", py_engine_version, METH_NOARGS, "Return the native engine version."},
     {"cuda_status", py_cuda_status, METH_NOARGS, "Return CUDA build/runtime status."},
@@ -446,6 +570,7 @@ PyMethodDef kMethods[] = {
     {"decode_raw", reinterpret_cast<PyCFunction>(py_decode_raw), METH_VARARGS | METH_KEYWORDS, "Decode a RAW file through the native session."},
     {"cache_state", py_cache_state, METH_VARARGS, "Inspect native session cache ownership state."},
     {"raw_preview", reinterpret_cast<PyCFunction>(py_raw_preview), METH_VARARGS | METH_KEYWORDS, "Return cached native RAW preview JPEG bytes."},
+    {"render_preview", py_render_preview, METH_VARARGS, "Render a native JPEG preview through the film pipeline."},
     {nullptr, nullptr, 0, nullptr},
 };
 

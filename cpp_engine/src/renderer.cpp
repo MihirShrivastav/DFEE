@@ -389,7 +389,74 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     return values[index];
 }
 
+[[nodiscard]] Image apply_dye_contamination(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_dye_contamination expects a 3-channel RGB image");
+    }
+
+    const auto get_value = [&](const char* key) -> float {
+        const auto it = response.dye_contamination.find(key);
+        return it != response.dye_contamination.end() ? it->second : 0.0F;
+    };
+
+    const float film_color_scale = clampf(response.film_color / 100.0F, 0.0F, 2.0F);
+    const float r_to_g = get_value("r_to_g") * film_color_scale;
+    const float g_to_r = get_value("g_to_r") * film_color_scale;
+    const float b_to_g = get_value("b_to_g") * film_color_scale;
+    const float b_to_r = get_value("b_to_r") * film_color_scale;
+    const float r_to_b = get_value("r_to_b") * film_color_scale;
+    const float g_to_b = get_value("g_to_b") * film_color_scale;
+
+    if (r_to_g == 0.0F && g_to_r == 0.0F &&
+        b_to_g == 0.0F && b_to_r == 0.0F &&
+        r_to_b == 0.0F && g_to_b == 0.0F) {
+        return rgb_linear;
+    }
+
+    Image contaminated(rgb_linear.width, rgb_linear.height, 3);
+    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+        const float r = rgb_linear.pixels[i * 3 + 0];
+        const float g = rgb_linear.pixels[i * 3 + 1];
+        const float b = rgb_linear.pixels[i * 3 + 2];
+
+        contaminated.pixels[i * 3 + 0] = clamp01(r + g * g_to_r + b * b_to_r);
+        contaminated.pixels[i * 3 + 1] = clamp01(g + r * r_to_g + b * b_to_g);
+        contaminated.pixels[i * 3 + 2] = clamp01(b + r * r_to_b + g * g_to_b);
+    }
+    return contaminated;
+}
+
 }  // namespace
+
+Image FilmRenderer::render(
+    const Image& rgb_linear,
+    const ZoneMasks& zone_masks,
+    const SpatialMasks& spatial_masks,
+    const RenderPlan& render_plan) const {
+    Image rendered = apply_pre_film_normalization(rgb_linear, zone_masks, render_plan.pre_film_normalization);
+    if (render_plan.stock_type == "monochrome") {
+        rendered = apply_panchromatic_conversion(rendered, render_plan.film_response);
+    }
+
+    rendered = apply_film_tone_response(rendered, render_plan.film_response);
+    rendered = apply_dye_contamination(rendered, render_plan.film_response);
+
+    if (render_plan.stock_type != "monochrome") {
+        rendered = apply_color_response(rendered, zone_masks, render_plan.film_response);
+        rendered = apply_luminance_chroma_coupling(rendered, render_plan.film_response);
+    }
+
+    rendered = apply_acutance_shaping(rendered, render_plan.material_effects);
+    rendered = apply_halation_bloom(rendered, zone_masks, spatial_masks, render_plan.material_effects);
+    rendered = apply_film_grain(rendered, spatial_masks, render_plan.material_effects);
+
+    if (render_plan.print_finish.has_value()) {
+        rendered = apply_print_finish(rendered, *render_plan.print_finish);
+    }
+    return rendered;
+}
 
 Image FilmRenderer::apply_pre_film_normalization(
     const Image& rgb_linear,

@@ -638,6 +638,45 @@ class TestNativeBridge(unittest.TestCase):
                 self.session.raw_preview(raw_filename, max_edge=1024)
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE", "RAW_PREVIEW_NOT_CACHED"})
 
+    def test_render_preview(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            preview = self.session.render_preview(
+                dfee_native_bridge.NativePreviewRenderRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    print_stock="kodak_2383",
+                    exposure=0.15,
+                    saturation=8.0,
+                    vibrance=10.0,
+                    clarity=5.0,
+                    texture=4.0,
+                    dehaze=3.0,
+                    bloom=8.0,
+                    film_color=108.0,
+                )
+            )
+
+            self.assertEqual(preview.content_type, "image/jpeg")
+            self.assertGreater(len(preview.jpeg_bytes), 0)
+            self.assertTrue(any(t.stage == "render_preview_total" for t in preview.engine.timings))
+
+            decoded_bgr = cv2.imdecode(np.frombuffer(preview.jpeg_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+            self.assertIsNotNone(decoded_bgr)
+            self.assertGreater(decoded_bgr.shape[0], 0)
+            self.assertGreater(decoded_bgr.shape[1], 0)
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.render_preview(
+                    dfee_native_bridge.NativePreviewRenderRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                    )
+                )
+            self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
+
     def test_unsupported_and_corrupt_raw_failures(self):
         unsupported_filename = self._create_temp_raw_file(
             "native_test_unsupported.arw",

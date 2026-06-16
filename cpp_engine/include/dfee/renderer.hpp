@@ -9,6 +9,12 @@ namespace dfee {
 
 class FilmRenderer {
 public:
+    [[nodiscard]] Image render(
+        const Image& rgb_linear,
+        const ZoneMasks& zone_masks,
+        const SpatialMasks& spatial_masks,
+        const RenderPlan& render_plan) const;
+
     [[nodiscard]] Image apply_pre_film_normalization(
         const Image& rgb_linear,
         const ZoneMasks& zone_masks,
