@@ -3,6 +3,7 @@
 #include "dfee/color_spaces.hpp"
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
+#include "dfee/renderer.hpp"
 #include "dfee/session.hpp"
 #include "dfee/solver.hpp"
 #include "dfee/version.hpp"
@@ -234,6 +235,46 @@ void test_render_plan_solver() {
     assert(plan.print_finish->grain_size > 0.0F);
 }
 
+void test_pre_film_normalization() {
+    dfee::Image rgb(4, 4, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.18F + 0.02F * static_cast<float>(x);
+            rgb.at(x, y, 1) = 0.16F + 0.01F * static_cast<float>(y);
+            rgb.at(x, y, 2) = 0.12F;
+        }
+    }
+    rgb.at(3, 3, 0) = 0.96F;
+    rgb.at(3, 3, 1) = 0.90F;
+    rgb.at(3, 3, 2) = 0.82F;
+
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    dfee::PreFilmNormalization pre_film;
+    pre_film.exposure_compensation_stops = 0.5F;
+    pre_film.shadow_blue_normalization = 0.035F;
+    pre_film.green_magenta_stabilization = 0.02F;
+
+    const dfee::FilmRenderer renderer;
+    const auto normalized = renderer.apply_pre_film_normalization(rgb, zones, pre_film);
+
+    const float src_mid_luma = 0.2126F * rgb.at(1, 1, 0) + 0.7152F * rgb.at(1, 1, 1) + 0.0722F * rgb.at(1, 1, 2);
+    const float dst_mid_luma = 0.2126F * normalized.at(1, 1, 0) + 0.7152F * normalized.at(1, 1, 1) + 0.0722F * normalized.at(1, 1, 2);
+    assert(dst_mid_luma > src_mid_luma);
+
+    const float src_high_spread = std::max({rgb.at(3, 3, 0), rgb.at(3, 3, 1), rgb.at(3, 3, 2)}) -
+        std::min({rgb.at(3, 3, 0), rgb.at(3, 3, 1), rgb.at(3, 3, 2)});
+    const float dst_high_spread = std::max({normalized.at(3, 3, 0), normalized.at(3, 3, 1), normalized.at(3, 3, 2)}) -
+        std::min({normalized.at(3, 3, 0), normalized.at(3, 3, 1), normalized.at(3, 3, 2)});
+    assert(dst_high_spread < src_high_spread);
+
+    const auto src_oklab = dfee::rgb_to_oklab(rgb);
+    const auto dst_oklab = dfee::rgb_to_oklab(normalized);
+    assert(dst_oklab.at(0, 0, 2) > src_oklab.at(0, 0, 2));
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -427,6 +468,7 @@ int main() {
         test_spatial_analysis();
         test_camera_bias_estimator();
         test_render_plan_solver();
+        test_pre_film_normalization();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";

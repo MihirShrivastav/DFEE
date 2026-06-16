@@ -27,6 +27,7 @@ add_library(dfee_core STATIC
     src/profile.cpp
     src/raw_decode.cpp
     src/raw_metadata.cpp
+    src/renderer.cpp
     src/session.cpp
     src/solver.cpp
 )

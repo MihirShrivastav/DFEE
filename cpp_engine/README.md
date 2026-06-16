@@ -12,7 +12,7 @@ The current native scaffold builds:
 - `dfee_tests`: native unit/parity foundation tests.
 - `dfee_cuda`: optional CUDA target when configured with `DFEE_ENABLE_CUDA=ON`.
 
-The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, render-plan solving, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
+The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, render-plan solving, pre-film normalization, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
 
 ## Build
 
@@ -99,3 +99,5 @@ The native spatial analyzer now computes texture density, smooth-area ratio, edg
 The native camera bias estimator now mirrors the Python engine's neutral-axis and cast analysis. It computes neutral-pixel confidence, global and zone-weighted OKLab casts, plus the blue-excess, green-magenta, and warm-cool indices the solver uses for adaptation decisions.
 
 The native solver now reproduces the current Python render-plan contract from the native feature structs and flattened profile model. It outputs the same high-level sections the later report/export surfaces expect: input diagnosis, pre-film normalization, film response, material effects, warnings, and optional print finish data.
+
+The native renderer now includes the first concrete image-processing stage after solver parity: pre-film normalization. That stage applies exposure compensation, neutral highlight repair near clipping, and zone-weighted shadow blue plus green-magenta cast correction directly in native code.

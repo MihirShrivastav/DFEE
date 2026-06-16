@@ -11,6 +11,7 @@ from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
 from dfee.ingest import RawIngestor
 from dfee.profile import FilmStockProfile, PrintStockProfile
+from dfee.renderer import FilmRenderer
 from dfee.solver import RenderPlanSolver
 
 
@@ -224,6 +225,34 @@ class TestNativeBridge(unittest.TestCase):
         self.assertGreater(plan["film_response"]["toe_length"], 0.0)
         self.assertGreater(plan["material_effects"]["grain_strength"], 0.0)
         self.assertIsNotNone(plan["print_finish"])
+
+    def test_python_pre_film_reference_fixture(self):
+        rgb = np.zeros((4, 4, 3), dtype=np.float32)
+        for y in range(4):
+            for x in range(4):
+                rgb[y, x, 0] = 0.18 + 0.02 * x
+                rgb[y, x, 1] = 0.16 + 0.01 * y
+                rgb[y, x, 2] = 0.12
+        rgb[3, 3] = [0.96, 0.90, 0.82]
+
+        Y = (0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]).astype(np.float32)
+        analyzer = ImageStateAnalyzer()
+        zone_masks = analyzer._generate_zone_masks(Y, 0.18)
+        masks = {"luminance_zone_masks": zone_masks}
+        pre_film = {
+            "exposure_compensation_stops": 0.5,
+            "shadow_blue_normalization": 0.035,
+            "green_magenta_stabilization": 0.02,
+        }
+
+        normalized = FilmRenderer()._apply_pre_film_normalization(rgb.copy(), masks, pre_film)
+        src_mid_luma = float(0.2126 * rgb[1, 1, 0] + 0.7152 * rgb[1, 1, 1] + 0.0722 * rgb[1, 1, 2])
+        dst_mid_luma = float(0.2126 * normalized[1, 1, 0] + 0.7152 * normalized[1, 1, 1] + 0.0722 * normalized[1, 1, 2])
+        self.assertGreater(dst_mid_luma, src_mid_luma)
+
+        src_high_spread = float(np.max(rgb[3, 3]) - np.min(rgb[3, 3]))
+        dst_high_spread = float(np.max(normalized[3, 3]) - np.min(normalized[3, 3]))
+        self.assertLess(dst_high_spread, src_high_spread)
 
     def test_select_file(self):
         raw_filename = self._raw_filename()
