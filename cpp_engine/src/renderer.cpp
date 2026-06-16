@@ -1,10 +1,14 @@
 #include "dfee/renderer.hpp"
+#include "dfee/color_spaces.hpp"
 
 #include <array>
 #include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <stdexcept>
+#include <vector>
+
+#include <opencv2/imgproc.hpp>
 
 namespace dfee {
 namespace {
@@ -87,6 +91,135 @@ struct OklchPixel {
         out += 2.0F * std::numbers::pi_v<float>;
     }
     return out;
+}
+
+[[nodiscard]] cv::Mat rgb_image_to_mat(const Image& image, const bool clamp_values = false) {
+    cv::Mat out(image.height, image.width, CV_32FC3);
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            auto& pixel = out.at<cv::Vec3f>(y, x);
+            pixel[0] = clamp_values ? clamp01(image.at(x, y, 0)) : image.at(x, y, 0);
+            pixel[1] = clamp_values ? clamp01(image.at(x, y, 1)) : image.at(x, y, 1);
+            pixel[2] = clamp_values ? clamp01(image.at(x, y, 2)) : image.at(x, y, 2);
+        }
+    }
+    return out;
+}
+
+[[nodiscard]] Image mat_to_rgb_image(const cv::Mat& mat) {
+    Image out(mat.cols, mat.rows, 3);
+    for (int y = 0; y < mat.rows; ++y) {
+        for (int x = 0; x < mat.cols; ++x) {
+            const auto& pixel = mat.at<cv::Vec3f>(y, x);
+            out.at(x, y, 0) = clamp01(pixel[0]);
+            out.at(x, y, 1) = clamp01(pixel[1]);
+            out.at(x, y, 2) = clamp01(pixel[2]);
+        }
+    }
+    return out;
+}
+
+[[nodiscard]] cv::Mat gamma_encode_mat(const Image& image) {
+    cv::Mat out(image.height, image.width, CV_32FC3);
+    constexpr float kGamma = 1.0F / 2.2F;
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            auto& pixel = out.at<cv::Vec3f>(y, x);
+            pixel[0] = std::pow(clamp01(image.at(x, y, 0)), kGamma);
+            pixel[1] = std::pow(clamp01(image.at(x, y, 1)), kGamma);
+            pixel[2] = std::pow(clamp01(image.at(x, y, 2)), kGamma);
+        }
+    }
+    return out;
+}
+
+[[nodiscard]] Image gamma_decode_mat(const cv::Mat& mat) {
+    Image out(mat.cols, mat.rows, 3);
+    constexpr float kGamma = 2.2F;
+    for (int y = 0; y < mat.rows; ++y) {
+        for (int x = 0; x < mat.cols; ++x) {
+            const auto& pixel = mat.at<cv::Vec3f>(y, x);
+            out.at(x, y, 0) = std::pow(clamp01(pixel[0]), kGamma);
+            out.at(x, y, 1) = std::pow(clamp01(pixel[1]), kGamma);
+            out.at(x, y, 2) = std::pow(clamp01(pixel[2]), kGamma);
+        }
+    }
+    return out;
+}
+
+[[nodiscard]] cv::Mat compute_luminance_mat(const cv::Mat& rgb) {
+    cv::Mat luminance(rgb.rows, rgb.cols, CV_32F);
+    for (int y = 0; y < rgb.rows; ++y) {
+        for (int x = 0; x < rgb.cols; ++x) {
+            const auto& pixel = rgb.at<cv::Vec3f>(y, x);
+            luminance.at<float>(y, x) = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
+        }
+    }
+    return luminance;
+}
+
+[[nodiscard]] int odd_kernel_size(const int candidate, const int min_size, const int max_extent) {
+    int size = std::max(min_size, candidate);
+    const int max_odd = (max_extent % 2 == 0) ? std::max(3, max_extent - 1) : max_extent;
+    size = std::min(size, max_odd);
+    if ((size % 2) == 0) {
+        size = std::max(min_size, size - 1);
+    }
+    return std::max(3, size);
+}
+
+[[nodiscard]] Image apply_gamma_local_contrast(
+    const Image& rgb_linear,
+    const float amount,
+    const int radius_divisor,
+    const int min_radius,
+    const float sigma_divisor,
+    const float detail_scale,
+    const bool midtone_mask) {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_gamma_local_contrast expects a 3-channel RGB image");
+    }
+    if (amount == 0.0F) {
+        return rgb_linear;
+    }
+
+    const int short_edge = std::min(rgb_linear.width, rgb_linear.height);
+    const int radius = odd_kernel_size(short_edge / radius_divisor, min_radius, short_edge);
+    const float strength = clampf(amount / 100.0F, -1.0F, 1.0F);
+
+    cv::Mat gamma = gamma_encode_mat(rgb_linear);
+    cv::Mat blurred;
+    cv::GaussianBlur(gamma, blurred, cv::Size(radius, radius), radius / sigma_divisor);
+    cv::Mat luminance = compute_luminance_mat(gamma);
+
+    cv::Mat result(gamma.rows, gamma.cols, CV_32FC3);
+    for (int y = 0; y < gamma.rows; ++y) {
+        for (int x = 0; x < gamma.cols; ++x) {
+            const auto& src = gamma.at<cv::Vec3f>(y, x);
+            const auto& blur = blurred.at<cv::Vec3f>(y, x);
+            const float luma = luminance.at<float>(y, x);
+            const float mask = midtone_mask
+                ? 4.0F * luma * (1.0F - luma)
+                : clamp01(luma * 5.0F) * clamp01((1.0F - luma) * 5.0F);
+            auto& dst = result.at<cv::Vec3f>(y, x);
+            for (int channel = 0; channel < 3; ++channel) {
+                const float detail = src[channel] - blur[channel];
+                dst[channel] = clamp01(src[channel] + detail * strength * detail_scale * mask);
+            }
+        }
+    }
+
+    return gamma_decode_mat(result);
+}
+
+[[nodiscard]] float percentile_approx(std::vector<float> values, const float fraction) {
+    if (values.empty()) {
+        return 0.0F;
+    }
+    const float clamped_fraction = clampf(fraction, 0.0F, 1.0F);
+    const std::size_t index = static_cast<std::size_t>(clamped_fraction * static_cast<float>(values.size() - 1));
+    std::nth_element(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(index), values.end());
+    return values[index];
 }
 
 }  // namespace
@@ -345,6 +478,192 @@ Image FilmRenderer::apply_luminance_chroma_coupling(
         out.pixels[i * 3 + 2] = rgb[2];
     }
     return out;
+}
+
+Image FilmRenderer::apply_acutance_shaping(
+    const Image& rgb_linear,
+    const MaterialEffectsPlan& effects) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_acutance_shaping expects a 3-channel RGB image");
+    }
+
+    Image oklab = rgb_to_oklab(rgb_linear);
+    cv::Mat lightness(oklab.height, oklab.width, CV_32F);
+    for (int y = 0; y < oklab.height; ++y) {
+        for (int x = 0; x < oklab.width; ++x) {
+            lightness.at<float>(y, x) = oklab.at(x, y, 0);
+        }
+    }
+
+    const int short_edge = std::min(oklab.width, oklab.height);
+    const int k_low = odd_kernel_size(19, 3, short_edge);
+    cv::Mat low_blur;
+    cv::GaussianBlur(lightness, low_blur, cv::Size(k_low, k_low), 0.0);
+
+    cv::Mat mid_blur;
+    cv::GaussianBlur(lightness, mid_blur, cv::Size(5, 5), 0.0);
+
+    cv::Mat processed(lightness.rows, lightness.cols, CV_32F);
+    for (int y = 0; y < lightness.rows; ++y) {
+        for (int x = 0; x < lightness.cols; ++x) {
+            const float l = lightness.at<float>(y, x);
+            const float l_low = low_blur.at<float>(y, x);
+            const float l_mid = mid_blur.at<float>(y, x) - l_low;
+            const float l_high = l - mid_blur.at<float>(y, x);
+            processed.at<float>(y, x) = clamp01(l_low + l_mid * 1.05F + l_high * (1.0F - effects.edge_softening));
+        }
+    }
+
+    if (effects.sharpness > 0.0F) {
+        cv::Mat padded;
+        cv::copyMakeBorder(processed, padded, 1, 1, 1, 1, cv::BORDER_REFLECT_101);
+
+        cv::Mat sharpened = processed.clone();
+        const float sharp_val = clampf(effects.sharpness, 0.0F, 1.0F);
+        const float peak = 8.0F - 3.0F * sharp_val;
+
+        for (int y = 0; y < processed.rows; ++y) {
+            for (int x = 0; x < processed.cols; ++x) {
+                const int py = y + 1;
+                const int px = x + 1;
+                const float a = padded.at<float>(py - 1, px - 1);
+                const float b = padded.at<float>(py - 1, px);
+                const float c = padded.at<float>(py - 1, px + 1);
+                const float d = padded.at<float>(py, px - 1);
+                const float e = padded.at<float>(py, px);
+                const float f = padded.at<float>(py, px + 1);
+                const float g = padded.at<float>(py + 1, px - 1);
+                const float h = padded.at<float>(py + 1, px);
+                const float i = padded.at<float>(py + 1, px + 1);
+
+                float mn = std::min({d, e, f, b, h});
+                const float mn2 = std::min(mn, std::min({a, c, g, i}));
+                mn += mn2;
+
+                float mx = std::max({d, e, f, b, h});
+                const float mx2 = std::max(mx, std::max({a, c, g, i}));
+                mx += mx2;
+
+                const float amp = std::sqrt(clampf(std::min(mn, 2.0F - mx) / std::max(mx, 1.0e-5F), 0.0F, 1.0F));
+                const float weight = -amp / peak;
+                const float rcp_weight = 1.0F / (1.0F + 4.0F * weight);
+                const float window = (b + d) + (f + h);
+                const float l_sharp = clamp01((window * weight + e) * rcp_weight);
+                const float luma_mask = 1.0F - effects.sharpness_mask *
+                    (1.0F - std::pow(std::sin(std::numbers::pi_v<float> * e), 2.0F));
+                sharpened.at<float>(y, x) = clamp01(e + (l_sharp - e) * luma_mask * effects.sharpness);
+            }
+        }
+        processed = std::move(sharpened);
+    }
+
+    for (int y = 0; y < oklab.height; ++y) {
+        for (int x = 0; x < oklab.width; ++x) {
+            oklab.at(x, y, 0) = processed.at<float>(y, x);
+        }
+    }
+    return oklab_to_rgb(oklab);
+}
+
+Image FilmRenderer::apply_clarity(
+    const Image& rgb_linear,
+    const float amount) const {
+    return apply_gamma_local_contrast(rgb_linear, amount, 16, 5, 3.0F, 0.65F, true);
+}
+
+Image FilmRenderer::apply_texture(
+    const Image& rgb_linear,
+    const float amount) const {
+    return apply_gamma_local_contrast(rgb_linear, amount, 64, 3, 2.0F, 0.55F, false);
+}
+
+Image FilmRenderer::apply_dehaze(
+    const Image& rgb_linear,
+    const float amount) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_dehaze expects a 3-channel RGB image");
+    }
+    if (amount == 0.0F) {
+        return rgb_linear;
+    }
+
+    const bool add_haze = amount < 0.0F;
+    const float strength = std::fabs(amount) / 100.0F;
+    const int scale = 4;
+
+    cv::Mat gamma = gamma_encode_mat(rgb_linear);
+    const int small_w = std::max(1, rgb_linear.width / scale);
+    const int small_h = std::max(1, rgb_linear.height / scale);
+    cv::Mat small;
+    cv::resize(gamma, small, cv::Size(small_w, small_h), 0.0, 0.0, cv::INTER_AREA);
+
+    cv::Mat dark_small(small.rows, small.cols, CV_32F);
+    for (int y = 0; y < small.rows; ++y) {
+        for (int x = 0; x < small.cols; ++x) {
+            const auto& pixel = small.at<cv::Vec3f>(y, x);
+            dark_small.at<float>(y, x) = std::min({pixel[0], pixel[1], pixel[2]});
+        }
+    }
+
+    int patch = std::max(3, 15 / scale);
+    if ((patch % 2) == 0) {
+        ++patch;
+    }
+    const cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(patch, patch));
+    cv::erode(dark_small, dark_small, kernel);
+
+    cv::Mat dark;
+    cv::resize(dark_small, dark, cv::Size(rgb_linear.width, rgb_linear.height), 0.0, 0.0, cv::INTER_LINEAR);
+    cv::GaussianBlur(dark, dark, cv::Size(0, 0), std::max(rgb_linear.width, rgb_linear.height) * 0.006);
+
+    std::vector<float> dark_values;
+    dark_values.reserve(static_cast<std::size_t>(dark.rows) * static_cast<std::size_t>(dark.cols));
+    for (int y = 0; y < dark.rows; ++y) {
+        for (int x = 0; x < dark.cols; ++x) {
+            dark_values.push_back(dark.at<float>(y, x));
+        }
+    }
+    const float threshold = percentile_approx(std::move(dark_values), 0.999F);
+
+    cv::Vec3f atmosphere(0.9F, 0.9F, 0.9F);
+    double accum_r = 0.0;
+    double accum_g = 0.0;
+    double accum_b = 0.0;
+    std::size_t atm_count = 0;
+    for (int y = 0; y < gamma.rows; ++y) {
+        for (int x = 0; x < gamma.cols; ++x) {
+            if (dark.at<float>(y, x) >= threshold) {
+                const auto& pixel = gamma.at<cv::Vec3f>(y, x);
+                accum_r += pixel[0];
+                accum_g += pixel[1];
+                accum_b += pixel[2];
+                ++atm_count;
+            }
+        }
+    }
+    if (atm_count > 0) {
+        atmosphere[0] = clampf(static_cast<float>(accum_r / static_cast<double>(atm_count)), 0.5F, 1.0F);
+        atmosphere[1] = clampf(static_cast<float>(accum_g / static_cast<double>(atm_count)), 0.5F, 1.0F);
+        atmosphere[2] = clampf(static_cast<float>(accum_b / static_cast<double>(atm_count)), 0.5F, 1.0F);
+    }
+
+    const float omega = 0.95F * strength;
+    const float a_max = std::max({atmosphere[0], atmosphere[1], atmosphere[2], 1.0e-8F});
+    cv::Mat result(gamma.rows, gamma.cols, CV_32FC3);
+    for (int y = 0; y < gamma.rows; ++y) {
+        for (int x = 0; x < gamma.cols; ++x) {
+            const auto& src = gamma.at<cv::Vec3f>(y, x);
+            const float transmission = clampf(1.0F - omega * dark.at<float>(y, x) / a_max, 0.1F, 1.0F);
+            auto& dst = result.at<cv::Vec3f>(y, x);
+            for (int channel = 0; channel < 3; ++channel) {
+                dst[channel] = add_haze
+                    ? clamp01(src[channel] * transmission + atmosphere[channel] * (1.0F - transmission))
+                    : clamp01((src[channel] - atmosphere[channel]) / transmission + atmosphere[channel]);
+            }
+        }
+    }
+
+    return gamma_decode_mat(result);
 }
 
 }  // namespace dfee

@@ -11,6 +11,7 @@ from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
 from dfee.color_spaces import oklab_to_oklch, rgb_to_oklab
 from dfee.ingest import RawIngestor
+from dfee.post_effects import apply_clarity, apply_dehaze, apply_texture
 from dfee.profile import FilmStockProfile, PrintStockProfile
 from dfee.renderer import FilmRenderer
 from dfee.solver import RenderPlanSolver
@@ -344,6 +345,59 @@ class TestNativeBridge(unittest.TestCase):
         self.assertLess(float(dst_lch[0, 0, 1]), float(src_lch[0, 0, 1]))
         self.assertLess(float(dst_lch[0, 2, 1]), float(src_lch[0, 2, 1]))
         self.assertGreater(abs(float(dst_lch[0, 2, 2] - src_lch[0, 2, 2])), 1e-4)
+
+    def test_python_acutance_reference_fixture(self):
+        rgb = np.zeros((8, 8, 3), dtype=np.float32)
+        rgb[:, :4, :] = 0.25
+        rgb[:, 4:, :] = 0.65
+        rgb[2:6, 2:6, :] += 0.03
+        effects = {"edge_softening": 0.12, "sharpness": 0.55, "sharpness_mask": 0.5}
+
+        adjusted = FilmRenderer()._apply_acutance_shaping(rgb.copy(), effects)
+        src_l = rgb_to_oklab(rgb)[:, :, 0]
+        dst_l = rgb_to_oklab(adjusted)[:, :, 0]
+
+        self.assertGreater(abs(float(dst_l[4, 4] - src_l[4, 4])), 1e-4)
+        self.assertGreater(abs(float((dst_l[4, 4] - dst_l[4, 3]) - (src_l[4, 4] - src_l[4, 3]))), 1e-4)
+
+    def test_python_clarity_reference_fixture(self):
+        rgb = np.full((32, 32, 3), 0.45, dtype=np.float32)
+        rgb[:, 16:, :] += 0.06
+        rgb[8:24, 8:24, :] += 0.03
+
+        adjusted = apply_clarity(rgb.copy(), 40)
+        src_gamma = np.clip(rgb, 0.0, 1.0) ** (1.0 / 2.2)
+        dst_gamma = np.clip(adjusted, 0.0, 1.0) ** (1.0 / 2.2)
+
+        self.assertGreater(float(np.std(dst_gamma[:, :, 0])), float(np.std(src_gamma[:, :, 0])))
+
+    def test_python_texture_reference_fixture(self):
+        checker = ((np.indices((32, 32)).sum(axis=0) % 2).astype(np.float32) * 0.04)
+        rgb = np.repeat((0.45 + checker)[:, :, None], 3, axis=2).astype(np.float32)
+
+        adjusted = apply_texture(rgb.copy(), 45)
+        src_gamma = np.clip(rgb, 0.0, 1.0) ** (1.0 / 2.2)
+        dst_gamma = np.clip(adjusted, 0.0, 1.0) ** (1.0 / 2.2)
+
+        self.assertGreater(float(np.std(dst_gamma[:, :, 0])), float(np.std(src_gamma[:, :, 0])))
+
+    def test_python_dehaze_reference_fixture(self):
+        rgb = np.zeros((32, 32, 3), dtype=np.float32)
+        for y in range(32):
+            for x in range(32):
+                base = 0.15 + 0.55 * (x / 31.0)
+                haze = 0.18
+                rgb[y, x, :] = base * (1.0 - haze) + haze * 0.9
+        rgb[10:22, 10:22, :] *= np.array([0.55, 0.60, 0.70], dtype=np.float32)
+
+        adjusted = apply_dehaze(rgb.copy(), 45)
+        src_gamma = np.clip(rgb, 0.0, 1.0) ** (1.0 / 2.2)
+        dst_gamma = np.clip(adjusted, 0.0, 1.0) ** (1.0 / 2.2)
+        src_luma = 0.2126 * src_gamma[:, :, 0] + 0.7152 * src_gamma[:, :, 1] + 0.0722 * src_gamma[:, :, 2]
+        dst_luma = 0.2126 * dst_gamma[:, :, 0] + 0.7152 * dst_gamma[:, :, 1] + 0.0722 * dst_gamma[:, :, 2]
+
+        self.assertGreater(float(np.std(dst_luma)), float(np.std(src_luma)))
+        self.assertLess(float(np.mean(dst_luma[10:22, 10:22])), float(np.mean(src_luma[10:22, 10:22])))
 
     def test_select_file(self):
         raw_filename = self._raw_filename()

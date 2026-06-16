@@ -30,6 +30,22 @@ public:
     [[nodiscard]] Image apply_luminance_chroma_coupling(
         const Image& rgb_linear,
         const FilmResponsePlan& response) const;
+
+    [[nodiscard]] Image apply_acutance_shaping(
+        const Image& rgb_linear,
+        const MaterialEffectsPlan& effects) const;
+
+    [[nodiscard]] Image apply_clarity(
+        const Image& rgb_linear,
+        float amount) const;
+
+    [[nodiscard]] Image apply_texture(
+        const Image& rgb_linear,
+        float amount) const;
+
+    [[nodiscard]] Image apply_dehaze(
+        const Image& rgb_linear,
+        float amount) const;
 };
 
 }  // namespace dfee

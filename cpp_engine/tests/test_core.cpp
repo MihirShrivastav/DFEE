@@ -22,6 +22,35 @@ void require_close(const float actual, const float expected, const float toleran
     assert(std::fabs(actual - expected) <= tolerance);
 }
 
+float channel_stddev_gamma(const dfee::Image& rgb, const int channel) {
+    double sum = 0.0;
+    double sum_sq = 0.0;
+    const std::size_t count = rgb.pixel_count();
+    for (std::size_t i = 0; i < count; ++i) {
+        const float gamma = std::pow(dfee::clamp01(rgb.pixels[i * 3 + static_cast<std::size_t>(channel)]), 1.0F / 2.2F);
+        sum += gamma;
+        sum_sq += gamma * gamma;
+    }
+    const double mean = sum / static_cast<double>(count);
+    return static_cast<float>(std::sqrt(std::max(0.0, sum_sq / static_cast<double>(count) - mean * mean)));
+}
+
+float gamma_luminance_stddev(const dfee::Image& rgb) {
+    double sum = 0.0;
+    double sum_sq = 0.0;
+    const std::size_t count = rgb.pixel_count();
+    for (std::size_t i = 0; i < count; ++i) {
+        const float r = std::pow(dfee::clamp01(rgb.pixels[i * 3 + 0]), 1.0F / 2.2F);
+        const float g = std::pow(dfee::clamp01(rgb.pixels[i * 3 + 1]), 1.0F / 2.2F);
+        const float b = std::pow(dfee::clamp01(rgb.pixels[i * 3 + 2]), 1.0F / 2.2F);
+        const float y = 0.2126F * r + 0.7152F * g + 0.0722F * b;
+        sum += y;
+        sum_sq += y * y;
+    }
+    const double mean = sum / static_cast<double>(count);
+    return static_cast<float>(std::sqrt(std::max(0.0, sum_sq / static_cast<double>(count) - mean * mean)));
+}
+
 void test_oklab_roundtrip() {
     dfee::Image rgb(1, 1, 3);
     rgb.pixels = {0.42F, 0.18F, 0.72F};
@@ -405,6 +434,94 @@ void test_luminance_chroma_coupling() {
     assert(std::fabs(dst_lch.at(2, 0, 2) - src_lch.at(2, 0, 2)) > 1.0e-4F);
 }
 
+void test_acutance_shaping() {
+    dfee::Image rgb(8, 8, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            const float base = x < 4 ? 0.25F : 0.65F;
+            const float lift = (x >= 2 && x < 6 && y >= 2 && y < 6) ? 0.03F : 0.0F;
+            for (int channel = 0; channel < 3; ++channel) {
+                rgb.at(x, y, channel) = base + lift;
+            }
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.edge_softening = 0.12F;
+    effects.sharpness = 0.55F;
+    effects.sharpness_mask = 0.5F;
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_acutance_shaping(rgb, effects);
+    const auto src_l = dfee::rgb_to_oklab(rgb);
+    const auto dst_l = dfee::rgb_to_oklab(adjusted);
+
+    assert(std::fabs(dst_l.at(4, 4, 0) - src_l.at(4, 4, 0)) > 1.0e-4F);
+    assert(std::fabs((dst_l.at(4, 4, 0) - dst_l.at(3, 4, 0)) - (src_l.at(4, 4, 0) - src_l.at(3, 4, 0))) > 1.0e-4F);
+}
+
+void test_clarity() {
+    dfee::Image rgb(32, 32, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            float value = 0.45F;
+            if (x >= 16) {
+                value += 0.06F;
+            }
+            if (x >= 8 && x < 24 && y >= 8 && y < 24) {
+                value += 0.03F;
+            }
+            for (int channel = 0; channel < 3; ++channel) {
+                rgb.at(x, y, channel) = value;
+            }
+        }
+    }
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_clarity(rgb, 40.0F);
+    assert(channel_stddev_gamma(adjusted, 0) > channel_stddev_gamma(rgb, 0));
+}
+
+void test_texture() {
+    dfee::Image rgb(32, 32, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            const float value = 0.45F + (((x + y) % 2) == 0 ? 0.0F : 0.04F);
+            for (int channel = 0; channel < 3; ++channel) {
+                rgb.at(x, y, channel) = value;
+            }
+        }
+    }
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_texture(rgb, 45.0F);
+    assert(channel_stddev_gamma(adjusted, 0) > channel_stddev_gamma(rgb, 0));
+}
+
+void test_dehaze() {
+    dfee::Image rgb(32, 32, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            const float base = 0.15F + 0.55F * static_cast<float>(x) / 31.0F;
+            const float value = base * (1.0F - 0.18F) + 0.18F * 0.9F;
+            rgb.at(x, y, 0) = value;
+            rgb.at(x, y, 1) = value;
+            rgb.at(x, y, 2) = value;
+        }
+    }
+    for (int y = 10; y < 22; ++y) {
+        for (int x = 10; x < 22; ++x) {
+            rgb.at(x, y, 0) *= 0.55F;
+            rgb.at(x, y, 1) *= 0.60F;
+            rgb.at(x, y, 2) *= 0.70F;
+        }
+    }
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_dehaze(rgb, 45.0F);
+    assert(gamma_luminance_stddev(adjusted) > gamma_luminance_stddev(rgb));
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -603,6 +720,10 @@ int main() {
         test_film_tone_response();
         test_color_response();
         test_luminance_chroma_coupling();
+        test_acutance_shaping();
+        test_clarity();
+        test_texture();
+        test_dehaze();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
