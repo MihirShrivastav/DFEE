@@ -20,8 +20,8 @@ def main():
         help="Film stock profile name (e.g., kodachrome_64, portra_400, superia_400, tri_x_400) or path to custom stock YAML file."
     )
     parser.add_argument(
-        "--scanner", "-c", default="frontier_soft",
-        help="Scanner profile name (e.g., frontier_soft, noritsu_smooth, darkroom_print) or path to custom scanner YAML file."
+        "--print-stock", "-p", default="none",
+        help="Optional print stock profile name (e.g., kodak_2383, fuji_3510) or path to custom print stock YAML file."
     )
     parser.add_argument(
         "--adaptation", "-a", type=float, default=1.0,
@@ -69,17 +69,19 @@ def main():
             else:
                 parser.error(f"Stock profile '{args.stock}' not found locally or in default profile path.")
                 
-    # Resolve Scanner Profile Path
-    if os.path.exists(args.scanner):
-        scanner_path = args.scanner
-    else:
-        scanner_path = os.path.join(base_dir, "profiles", "scanners", f"{args.scanner}.yaml")
-        if not os.path.exists(scanner_path):
-            scanner_path_alt = os.path.join(base_dir, "profiles", "scanners", args.scanner)
-            if os.path.exists(scanner_path_alt):
-                scanner_path = scanner_path_alt
-            else:
-                parser.error(f"Scanner profile '{args.scanner}' not found locally or in default profile path.")
+    # Resolve Optional Print Stock Profile Path
+    print_stock_path = None
+    if args.print_stock != "none":
+        if os.path.exists(args.print_stock):
+            print_stock_path = args.print_stock
+        else:
+            print_stock_path = os.path.join(base_dir, "profiles", "print_stocks", f"{args.print_stock}.yaml")
+            if not os.path.exists(print_stock_path):
+                print_stock_path_alt = os.path.join(base_dir, "profiles", "print_stocks", args.print_stock)
+                if os.path.exists(print_stock_path_alt):
+                    print_stock_path = print_stock_path_alt
+                else:
+                    parser.error(f"Print stock '{args.print_stock}' not found locally or in default profile path.")
                 
     # Package overrides
     overrides = {
@@ -101,7 +103,7 @@ def main():
             locks = [l.strip() for l in args.consistency.split(",") if l.strip()]
             
         processor = BatchProcessor(
-            stock_path, scanner_path, 
+            stock_path, print_stock_path,
             adaptation_strength=args.adaptation, 
             output_bit_depth=16
         )
@@ -115,7 +117,7 @@ def main():
         print(f"Processing single file: {args.input}")
         
         engine = DFEEEngine(
-            stock_path, scanner_path,
+            stock_path, print_stock_path,
             adaptation_strength=args.adaptation,
             output_bit_depth=16
         )

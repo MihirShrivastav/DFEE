@@ -6,7 +6,7 @@ from .bias import CameraBiasEstimator
 from .solver import RenderPlanSolver
 from .renderer import FilmRenderer
 from .report import RenderReporter
-from .profile import FilmStockProfile, ScanPrintProfile
+from .profile import FilmStockProfile, PrintStockProfile
 
 __version__ = "1.0.0"
 __all__ = [
@@ -20,5 +20,5 @@ __all__ = [
     "FilmRenderer",
     "RenderReporter",
     "FilmStockProfile",
-    "ScanPrintProfile",
+    "PrintStockProfile",
 ]

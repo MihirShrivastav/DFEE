@@ -5,10 +5,10 @@ import csv
 from .engine import DFEEEngine
 
 class BatchProcessor:
-    def __init__(self, stock_profile_path, scan_profile_path, 
+    def __init__(self, stock_profile_path, print_profile_path=None,
                  adaptation_strength=1.0, output_bit_depth=16):
         self.engine = DFEEEngine(
-            stock_profile_path, scan_profile_path, 
+            stock_profile_path, print_profile_path,
             adaptation_strength=adaptation_strength, 
             output_bit_depth=output_bit_depth
         )
@@ -40,7 +40,7 @@ class BatchProcessor:
         # Track locked parameter values for consistency
         locked_overrides = {}
         if consistency_lock:
-            # consistency_lock can contain keys like 'exposure_compensation_stops' or 'scan_contrast'
+            # consistency_lock can contain keys like 'exposure_compensation_stops'
             pass
 
         for i, filepath in enumerate(raw_files):

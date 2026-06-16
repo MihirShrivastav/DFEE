@@ -16,6 +16,9 @@ class FilmStockProfile:
         self._validate()
 
     def _validate(self):
+        if not isinstance(self.data, dict):
+            raise ValueError(f"Profile {self.filepath} must contain a YAML mapping at the top level")
+
         required_keys = ['stock_id', 'stock_name', 'stock_type', 'adaptation', 
                          'tone_response', 'color_response', 'hue_saturation_response', 
                          'grain', 'halation']
@@ -95,6 +98,9 @@ class PrintStockProfile:
         self._validate()
 
     def _validate(self):
+        if not isinstance(self.data, dict):
+            raise ValueError(f"Print stock profile {self.filepath} must contain a YAML mapping at the top level")
+
         required = ['print_stock_id', 'print_stock_name', 'tone', 'color', 'grain']
         for key in required:
             if key not in self.data:

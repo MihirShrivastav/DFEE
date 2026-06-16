@@ -14,7 +14,7 @@ class FilmRenderer:
           Pre-film normalization  → Film emulsion response (with per-channel curves)
           → Dye contamination     → Color response
           → Luminance-chroma coupling → Acutance shaping
-          → Material effects      → Scanner finish
+          → Material effects      → Print finish
         """
         pre_film  = render_plan["pre_film_normalization"]
         response  = render_plan["film_response"]

@@ -21,7 +21,7 @@ Copy your Sony `.ARW` raw photos into the `raw_files/` directory located at the 
 If starting on a fresh environment, run:
 ```powershell
 # Install Python packages
-pip install rawpy numpy scipy opencv-python PyYAML fastapi uvicorn pillow
+pip install rawpy numpy scipy opencv-python PyYAML fastapi uvicorn pillow tifffile exifread pytest
 
 # Install Frontend dependencies
 cd frontend

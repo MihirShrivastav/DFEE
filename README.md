@@ -1,63 +1,59 @@
 # Deterministic Film Emulation Engine (DFEE)
 
-DFEE is a high-fidelity, scene-adaptive film stock emulation engine. Instead of relying on neural networks or generic lookup tables (LUTs), DFEE parses raw sensor data, extracts statistical exposure and spatial metrics, and applies a deterministic 14-stage chemical and optical emulation pipeline in the perceptually uniform **OKLab** color space.
-
----
+DFEE is a high-fidelity, scene-adaptive film stock emulation engine. Instead of relying on neural networks or generic lookup tables (LUTs), DFEE parses RAW sensor data, extracts statistical exposure and spatial metrics, and applies a deterministic chemical and optical emulation pipeline in the perceptually uniform **OKLab** color space.
 
 ## Key Features
 
-1. **Scene-Adaptive Solver**: Dynamically scales tone curves, highlight desaturation, organic grain density, and halation width based on the image's dynamic range and clipping characteristics.
-2. **7-Zone Exposure Weight System**: Partitions image exposures into continuous zones ($Z0$ to $Z6$) using a softmax-gaussian partition of unity to apply region-specific film chemistry response.
-3. **Neutral-Axis Estimation**: Auto-detects input color cast using low-chroma, unclipped midtone pixels to compute correction vectors weighted by a confidence score.
-4. **Organic Grain & Halation Emulation**: Simulates physical silver halide grain sizes across density layers and specular highlight light-leak red/orange halos (halation).
-5. **Real-Time Web UI (FastAPI + React)**: A polished, macOS Neo-Brutalist dashboard featuring an interactive before/after split slider, Lightroom-style tuning, and a 16-bit linear TIFF exporter.
-
----
+1. **Scene-Adaptive Solver**: Dynamically scales tone curves, highlight desaturation, grain density, and halation width from the image's dynamic range and clipping characteristics.
+2. **7-Zone Exposure Weight System**: Partitions exposures into continuous zones (`Z0` to `Z6`) using a softmax-gaussian partition of unity to drive region-specific film behavior.
+3. **Neutral-Axis Estimation**: Detects input color cast from low-chroma, unclipped midtone pixels and computes correction vectors weighted by confidence.
+4. **Organic Grain and Halation Emulation**: Simulates silver halide grain structure and specular highlight red/orange halos.
+5. **Real-Time Web UI (FastAPI + React)**: Provides interactive before/after previewing, Lightroom-style controls, optional print-stock finishing, and 16-bit export.
 
 ## Directory Layout
 
-```
+```text
 DFEE/
-├── dfee/                   # Core Python Library
-│   ├── __init__.py
-│   ├── analyzer.py         # 7-Zone masks & spatial texture metrics
-│   ├── bias.py             # Neutral-axis color cast detection
-│   ├── color_spaces.py     # Linear RGB <-> OKLab <-> OKLCH transforms
-│   ├── engine.py           # Single-image orchestrator
-│   ├── ingest.py           # LibRaw/rawpy 32-bit linear ingestion
-│   ├── profile.py          # YAML schema validation
-│   ├── renderer.py         # 14 ordered emulation modules
-│   ├── report.py           # Sidecar JSON reporter
-│   └── solver.py           # Adaptively solves render plans
-├── profiles/               # Emulation Profiles
-│   ├── stocks/             # Kodachrome 64, Portra 400, Tri-X, Superia
-│   └── scanners/           # Noritsu, Frontier, Darkroom Print
-├── raw_files/              # RAW input (.ARW) and Export directory
-├── frontend/               # Vite + React UI source code
-├── tests/                  # Pytest Unit Test Suite
-├── server.py               # FastAPI backend & React hosting server
-├── cli.py                  # Command-Line Interface
-├── README.md               # Main documentation
-├── STARTUP.md              # Startup instructions
-└── start.bat               # Double-click startup script (Windows)
+|-- dfee/                   # Core Python library
+|   |-- __init__.py
+|   |-- analyzer.py         # 7-zone masks and spatial texture metrics
+|   |-- bias.py             # Neutral-axis color cast detection
+|   |-- color_spaces.py     # Linear RGB <-> OKLab <-> OKLCH transforms
+|   |-- engine.py           # Single-image orchestrator
+|   |-- ingest.py           # rawpy-based scene-linear ingestion
+|   |-- profile.py          # YAML schema validation
+|   |-- renderer.py         # Ordered emulation modules
+|   |-- report.py           # Sidecar JSON reporter
+|   `-- solver.py           # Adaptive render-plan solver
+|-- profiles/
+|   |-- stocks/             # Film stock profiles
+|   `-- print_stocks/       # Optional print-finish profiles
+|-- raw_files/              # RAW inputs and exported files
+|-- frontend/               # Vite + React UI
+|-- tests/                  # Pytest suite
+|-- server.py               # FastAPI backend and React host
+|-- cli.py                  # Command-line interface
+|-- README.md
+|-- STARTUP.md
+`-- start.bat
 ```
 
----
-
-## Technical Specifications
+## Technical Notes
 
 ### Color Conversions
-We perform rendering in the **OKLab** and **OKLCH** color spaces to isolate lightness ($L$), chroma/saturation ($C$), and hue ($h$). This prevents unwanted color shifts when modifying density curves and exposure.
+Rendering happens in **OKLab** and **OKLCH** so DFEE can manipulate lightness, chroma, and hue with fewer unwanted color shifts.
 
 ### Continuous Zone Softmax
-Exposure zone masks sum exactly to $1.0$ (partition of unity) across the image:
-$$w_i(EV) = \frac{\exp(-(EV - c_i)^2 / 2\sigma^2)}{\sum_j \exp(-(EV - c_j)^2 / 2\sigma^2)}$$
-*   **$Z0$ (Deep Shadow)** and **$Z6$ (Specular Highlight)** use one-sided flat boundary envelopes to support infinite exposure scales without sum divergence.
+Exposure zone masks sum exactly to `1.0` across the image:
 
----
+```text
+w_i(EV) = exp(-(EV - c_i)^2 / 2sigma^2) / sum_j exp(-(EV - c_j)^2 / 2sigma^2)
+```
 
-## Development & Testing
-To run the python test suite:
+`Z0` and `Z6` use boundary envelopes so the weighting remains stable at extreme exposures.
+
+## Development and Testing
+
 ```powershell
 $env:PYTHONPATH="."
 pytest tests/test_dfee.py

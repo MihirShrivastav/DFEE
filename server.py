@@ -1,11 +1,13 @@
 import os
 import glob
 import io
+import logging
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
 
@@ -14,8 +16,11 @@ from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
 from dfee.solver import RenderPlanSolver
 from dfee.renderer import FilmRenderer
-from dfee.profile import FilmStockProfile, ScanPrintProfile, PrintStockProfile
+from dfee.profile import FilmStockProfile, PrintStockProfile
 from dfee.report import RenderReporter
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("dfee.server")
 
 app = FastAPI(title="Deterministic Film Emulation Engine (DFEE) Server")
 
@@ -73,6 +78,14 @@ class ActiveSession:
         self.raw_preview_bytes = None
 
 session = ActiveSession()
+
+def _load_stock_profile(stock_id):
+    return FilmStockProfile(os.path.join(STOCKS_DIR, f"{stock_id}.yaml"))
+
+def _load_print_stock_profile(print_stock_id):
+    if not print_stock_id or print_stock_id == "none":
+        return None
+    return PrintStockProfile(os.path.join(PRINT_STOCKS_DIR, f"{print_stock_id}.yaml"))
 
 def linear_to_srgb(linear):
     """
@@ -257,6 +270,7 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
 
 @app.get("/api/files")
 def list_files():
+    logger.info("Listing RAW files from %s", RAW_DIR)
     # Scan raw files folder for .ARW
     files = glob.glob(os.path.join(RAW_DIR, "*.[aA][rR][wW]"))
     results = []
@@ -271,6 +285,7 @@ def list_files():
 
 @app.get("/api/profiles")
 def list_profiles():
+    logger.info("Listing available stock and print profiles")
     # List stocks — prepend a 'none' passthrough option
     stocks_files = glob.glob(os.path.join(STOCKS_DIR, "*.yaml"))
     stocks = [{"id": "none", "name": "No emulation (RAW)", "type": "passthrough"}]
@@ -283,8 +298,8 @@ def list_profiles():
                 "name": p.stock_name,   # use the human-readable name from YAML
                 "type": p.stock_type
             })
-        except:
-            pass
+        except Exception as exc:
+            logger.warning("Skipping invalid stock profile %s: %s", f, exc)
             
 
     # List print stocks
@@ -297,8 +312,8 @@ def list_profiles():
                 "id": p.print_stock_id,
                 "name": p.print_stock_name,
             })
-        except:
-            pass
+        except Exception as exc:
+            logger.warning("Skipping invalid print stock profile %s: %s", f, exc)
 
     return {"stocks": stocks, "print_stocks": print_stocks}
 
@@ -411,14 +426,16 @@ def _apply_post_film_effects(rendered, curves_json, hsl_dict,
 
 @app.post("/api/select")
 def select_file(req: SelectRequest):
+    logger.info("Selecting RAW file %s", req.filename)
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
+        logger.warning("Select failed, file not found: %s", req.filename)
         raise HTTPException(status_code=404, detail="File not found")
         
     try:
         # --- Analysis cache: skip expensive reprocessing if same file is already loaded ---
         if session.filename == req.filename and session.cached_diagnostics is not None:
-            print(f"[cache hit] Returning cached analysis for: {req.filename}")
+            logger.info("Returning cached analysis for %s", req.filename)
             return {
                 "status": "loaded",
                 "metadata": {k: str(v) for k, v in session.metadata.items()},
@@ -449,6 +466,7 @@ def select_file(req: SelectRequest):
         # Analyze using downscaled preview canvas
         analyzer = ImageStateAnalyzer()
         feature_dict, masks = analyzer.analyze(preview_rgb, preview_Y, preview_clip, clipping_ratios)
+        feature_dict["raw_metadata"] = metadata
         
         bias_estimator = CameraBiasEstimator()
         bias_info = bias_estimator.estimate_bias(preview_rgb, preview_Y, preview_clip, masks["luminance_zone_masks"])
@@ -506,13 +524,14 @@ def select_file(req: SelectRequest):
             "diagnostics": diagnostics
         }
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to ingest RAW file %s", req.filename)
         raise HTTPException(status_code=500, detail=f"Failed to ingest RAW file: {str(e)}")
 
 @app.get("/api/raw-image")
 def get_raw_image():
+    logger.info("Serving cached RAW preview for %s", session.filename)
     if not session.raw_preview_bytes:
+        logger.warning("RAW preview requested with no active session")
         raise HTTPException(status_code=400, detail="No active session loaded")
     return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 
@@ -561,20 +580,22 @@ def get_preview(
     print_contrast: float = 0.0,
     print_black_point: float = 0.0
 ):
+    logger.info("Rendering preview for file=%s stock=%s print_stock=%s", filename, stock, print_stock)
     if session.filename != filename:
+        logger.warning("Preview session mismatch: active=%s requested=%s", session.filename, filename)
         raise HTTPException(status_code=400, detail=f"Session mismatch: server has '{session.filename}', requested '{filename}'. Select the file first.")
 
     # Passthrough: no stock selected — return the cached raw preview directly
     if stock == "none":
         if not session.raw_preview_bytes:
+            logger.warning("RAW passthrough preview requested without active session")
             raise HTTPException(status_code=400, detail="No active session")
         return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 
 
 
     try:
-        stock_path   = os.path.join(STOCKS_DIR, f"{stock}.yaml")
-        stock_profile = FilmStockProfile(stock_path)
+        stock_profile = _load_stock_profile(stock)
 
         solver = RenderPlanSolver()
         user_overrides = {
@@ -588,7 +609,7 @@ def get_preview(
             "sharpness": sharpness,
             "sharpness_mask": sharpness_mask,
             "film_color": film_color,
-            "print_stock": PrintStockProfile(os.path.join(PRINT_STOCKS_DIR, f"{print_stock}.yaml")) if print_stock and print_stock != "none" else None,
+            "print_stock": _load_print_stock_profile(print_stock),
             "print_strength": print_strength,
             "print_c": print_c,
             "print_m": print_m,
@@ -596,7 +617,7 @@ def get_preview(
             "print_contrast": print_contrast,
             "print_black_point": print_black_point,
         }
-        render_plan, feature_metrics = solver.solve(session.feature_dict, stock_profile, user_overrides)
+        render_plan = solver.solve(session.feature_dict, stock_profile, user_overrides)
 
         # Apply all pre-film slider adjustments (corrected pipeline order)
         rgb_input = session.preview_rgb_linear.copy()
@@ -638,19 +659,23 @@ def get_preview(
 
         return StreamingResponse(io.BytesIO(jpeg_bytes.tobytes()), media_type="image/jpeg")
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to render preview for file=%s stock=%s", filename, stock)
         raise HTTPException(status_code=500, detail=f"Failed to render preview: {str(e)}")
 
 @app.post("/api/export")
 def export_file(req: PreviewRequest):
+    logger.info(
+        "Export requested for file=%s stock=%s print_stock=%s format=%s",
+        req.filename, req.stock, req.print_stock, req.export_format
+    )
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
+        logger.warning("Export failed, file not found: %s", req.filename)
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        stock_path = os.path.join(STOCKS_DIR, f"{req.stock}.yaml")
-        stock_profile = FilmStockProfile(stock_path)
+        stock_profile = _load_stock_profile(req.stock) if req.stock != "none" else None
+        print_stock_profile = _load_print_stock_profile(req.print_stock)
 
         basename    = os.path.splitext(req.filename)[0]
         report_path = os.path.join(RAW_DIR, f"{basename}_{req.stock}_report.json")
@@ -658,14 +683,14 @@ def export_file(req: PreviewRequest):
 
         # ── Use cached full-res data if available (avoids re-reading RAW from disk) ──
         if session.filename == req.filename and session.fullres_rgb_linear is not None:
-            print("[export] Using cached full-res RGB from session (skipping re-ingest)")
+            logger.info("Using cached full-resolution RGB for %s", req.filename)
             rgb_linear      = session.fullres_rgb_linear
             Y               = session.fullres_Y
             clipping_masks  = session.fullres_clipping_masks
             clipping_ratios = session.fullres_clipping_ratios
             metadata        = session.fullres_metadata
         else:
-            print("[export] Session miss — ingesting full-res RAW from disk...")
+            logger.info("Full-resolution cache miss for %s, ingesting from disk", req.filename)
             ingestor = RawIngestor(filepath)
             rgb_linear, Y, clipping_masks, clipping_ratios, metadata = ingestor.ingest(draft_mode=False)
             if session.filename == req.filename:
@@ -679,11 +704,11 @@ def export_file(req: PreviewRequest):
         if (session.filename == req.filename
                 and session.fullres_feature_dict is not None
                 and session.fullres_masks is not None):
-            print("[export] Using cached full-res analysis")
+            logger.info("Using cached full-resolution analysis for %s", req.filename)
             feature_dict = session.fullres_feature_dict
             masks        = session.fullres_masks
         else:
-            print("[export] Running full-res analysis (will be cached for next export)...")
+            logger.info("Running full-resolution analysis for %s", req.filename)
             analyzer = ImageStateAnalyzer()
             feature_dict, masks = analyzer.analyze(rgb_linear, Y, clipping_masks, clipping_ratios)
             bias_estimator = CameraBiasEstimator()
@@ -695,60 +720,63 @@ def export_file(req: PreviewRequest):
                 session.fullres_feature_dict = feature_dict
                 session.fullres_masks        = masks
 
-        solver = RenderPlanSolver()
-        user_overrides = {
-            "adaptation_strength": req.adaptation,
-            "exposure_intent": "Preserve",
-            "grain_amount": req.grain,
-            "grain_strength": req.grain_strength,
-            "grain_size": req.grain_size,
-            "grain_roughness": req.grain_roughness,
-            "halation_amount": req.halation,
-            "sharpness": req.sharpness,
-            "sharpness_mask": req.sharpness_mask,
-            "film_color": req.film_color,
-            "print_stock": PrintStockProfile(os.path.join(PRINT_STOCKS_DIR, f"{req.print_stock}.yaml")) if req.print_stock and req.print_stock != "none" else None,
-            "print_strength": req.print_strength,
-            "print_c": req.print_c,
-            "print_m": req.print_m,
-            "print_y": req.print_y,
-            "print_contrast": req.print_contrast,
-            "print_black_point": req.print_black_point,
-        }
-        render_plan, _ = solver.solve(feature_dict, stock_profile, user_overrides)
+        render_plan = None
+        rendered = np.clip(rgb_linear.copy(), 0.0, 1.0)
 
-        # Apply all pre-film slider adjustments (same corrected pipeline as preview)
-        print("Rendering full resolution image...")
-        rgb_input = rgb_linear.copy()
-        rgb_input = _apply_pre_film_sliders(
-            rgb_input, masks,
-            req.exposure, req.highlights, req.shadows,
-            req.blacks, req.whites, req.midtones,
-            req.contrast, req.temp, req.tint, plan
-        )
+        if stock_profile is not None:
+            solver = RenderPlanSolver()
+            user_overrides = {
+                "adaptation_strength": req.adaptation,
+                "exposure_intent": "Preserve",
+                "grain_amount": req.grain,
+                "grain_strength": req.grain_strength,
+                "grain_size": req.grain_size,
+                "grain_roughness": req.grain_roughness,
+                "halation_amount": req.halation,
+                "sharpness": req.sharpness,
+                "sharpness_mask": req.sharpness_mask,
+                "film_color": req.film_color,
+                "print_stock": print_stock_profile,
+                "print_strength": req.print_strength,
+                "print_c": req.print_c,
+                "print_m": req.print_m,
+                "print_y": req.print_y,
+                "print_contrast": req.print_contrast,
+                "print_black_point": req.print_black_point,
+            }
+            render_plan = solver.solve(feature_dict, stock_profile, user_overrides)
 
-        renderer = FilmRenderer()
-        rendered  = renderer.render(rgb_input, masks, plan)
-        rendered  = np.clip(rendered, 0.0, 1.0)
+            logger.info("Rendering full-resolution emulation for %s", req.filename)
+            rgb_input = _apply_pre_film_sliders(
+                rgb_linear.copy(), masks,
+                req.exposure, req.highlights, req.shadows,
+                req.blacks, req.whites, req.midtones,
+                req.contrast, req.temp, req.tint, render_plan
+            )
 
-        # Post-film saturation / vibrance
-        rendered = _apply_post_film_color(rendered, req.saturation, req.vibrance)
-        rendered = np.clip(rendered, 0.0, 1.0)
+            renderer = FilmRenderer()
+            rendered  = renderer.render(rgb_input, masks, render_plan)
+            rendered  = np.clip(rendered, 0.0, 1.0)
 
-        # Post-film creative effects
-        hsl_dict_exp = {
-            'red_h': req.hsl_red_h, 'red_s': req.hsl_red_s, 'red_l': req.hsl_red_l,
-            'orange_h': req.hsl_orange_h, 'orange_s': req.hsl_orange_s, 'orange_l': req.hsl_orange_l,
-            'yellow_h': req.hsl_yellow_h, 'yellow_s': req.hsl_yellow_s, 'yellow_l': req.hsl_yellow_l,
-            'green_h': req.hsl_green_h, 'green_s': req.hsl_green_s, 'green_l': req.hsl_green_l,
-            'aqua_h': req.hsl_aqua_h, 'aqua_s': req.hsl_aqua_s, 'aqua_l': req.hsl_aqua_l,
-            'blue_h': req.hsl_blue_h, 'blue_s': req.hsl_blue_s, 'blue_l': req.hsl_blue_l,
-            'purple_h': req.hsl_purple_h, 'purple_s': req.hsl_purple_s, 'purple_l': req.hsl_purple_l,
-            'magenta_h': req.hsl_magenta_h, 'magenta_s': req.hsl_magenta_s, 'magenta_l': req.hsl_magenta_l,
-        }
-        rendered = _apply_post_film_effects(rendered, req.curves, hsl_dict_exp,
-                                            req.clarity, req.texture, req.dehaze, req.bloom)
-        rendered = np.clip(rendered, 0.0, 1.0)
+            rendered = _apply_post_film_color(rendered, req.saturation, req.vibrance)
+            rendered = np.clip(rendered, 0.0, 1.0)
+
+            hsl_dict_exp = {
+                'red_h': req.hsl_red_h, 'red_s': req.hsl_red_s, 'red_l': req.hsl_red_l,
+                'orange_h': req.hsl_orange_h, 'orange_s': req.hsl_orange_s, 'orange_l': req.hsl_orange_l,
+                'yellow_h': req.hsl_yellow_h, 'yellow_s': req.hsl_yellow_s, 'yellow_l': req.hsl_yellow_l,
+                'green_h': req.hsl_green_h, 'green_s': req.hsl_green_s, 'green_l': req.hsl_green_l,
+                'aqua_h': req.hsl_aqua_h, 'aqua_s': req.hsl_aqua_s, 'aqua_l': req.hsl_aqua_l,
+                'blue_h': req.hsl_blue_h, 'blue_s': req.hsl_blue_s, 'blue_l': req.hsl_blue_l,
+                'purple_h': req.hsl_purple_h, 'purple_s': req.hsl_purple_s, 'purple_l': req.hsl_purple_l,
+                'magenta_h': req.hsl_magenta_h, 'magenta_s': req.hsl_magenta_s, 'magenta_l': req.hsl_magenta_l,
+            }
+            rendered = _apply_post_film_effects(rendered, req.curves, hsl_dict_exp,
+                                                req.clarity, req.texture, req.dehaze, req.bloom)
+            rendered = np.clip(rendered, 0.0, 1.0)
+        else:
+            logger.info("Exporting RAW passthrough image for %s", req.filename)
+            report_path = None
 
         # ── Determine output format ────────────────────────────────────────
         fmt = (req.export_format or "tiff").lower().strip()
@@ -761,7 +789,7 @@ def export_file(req: PreviewRequest):
         if fmt == "tiff":
             output_filename = f"{basename}_{req.stock}_dfee.tif"
             output_path     = os.path.join(RAW_DIR, output_filename)
-            print(f"Saving 16-bit sRGB TIFF to: {output_path}")
+            logger.info("Saving 16-bit TIFF to %s", output_path)
             uint16_data = (srgb_data * 65535.0).astype(np.uint16)
             uint16_data = np.ascontiguousarray(uint16_data)
             import tifffile
@@ -771,7 +799,7 @@ def export_file(req: PreviewRequest):
         elif fmt == "png16":
             output_filename = f"{basename}_{req.stock}_dfee_16.png"
             output_path     = os.path.join(RAW_DIR, output_filename)
-            print(f"Saving 16-bit sRGB PNG to: {output_path}")
+            logger.info("Saving 16-bit PNG to %s", output_path)
             uint16_data = (srgb_data * 65535.0).astype(np.uint16)
             uint16_data = np.ascontiguousarray(uint16_data)
             import tifffile
@@ -782,17 +810,18 @@ def export_file(req: PreviewRequest):
         else:  # png8
             output_filename = f"{basename}_{req.stock}_dfee.png"
             output_path     = os.path.join(RAW_DIR, output_filename)
-            print(f"Saving 8-bit sRGB PNG to: {output_path}")
+            logger.info("Saving 8-bit PNG to %s", output_path)
             uint8_data = (srgb_data * 255.0).astype(np.uint8)
             img = Image.fromarray(uint8_data, mode="RGB")
             img.save(output_path, format="PNG", optimize=False, compress_level=1)
             format_label = "8-bit PNG"
 
-        reporter = RenderReporter()
-        reporter.write_report(
-            filepath, output_path, stock_profile, scan_profile,
-            feature_dict, plan, report_path
-        )
+        if render_plan is not None and report_path is not None:
+            reporter = RenderReporter()
+            reporter.write_report(
+                filepath, output_path, stock_profile, print_stock_profile,
+                feature_dict, render_plan, report_path
+            )
 
         return {
             "status": "success",
@@ -801,13 +830,8 @@ def export_file(req: PreviewRequest):
             "format": format_label,
         }
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to export image for %s", req.filename)
         raise HTTPException(status_code=500, detail=f"Failed to export image: {str(e)}")
-
-# Mount static React frontend when compiled
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
 
 ASSETS_DIR = os.path.join(BASE_DIR, "frontend", "dist", "assets")
 if os.path.exists(ASSETS_DIR):
@@ -815,6 +839,7 @@ if os.path.exists(ASSETS_DIR):
 
 @app.get("/")
 def serve_index():
+    logger.info("Serving frontend index")
     index_path = os.path.join(BASE_DIR, "frontend", "dist", "index.html")
     if os.path.exists(index_path):
         with open(index_path, "r", encoding="utf-8") as f:

@@ -366,8 +366,9 @@ class RenderPlanSolver:
             halation_strength *= 0.3
             bloom_strength *= 1.2  # Increase soft bloom instead
             
-        # Edge softening (acutance)
-        edge_softening = float(stock_profile.scanner.get("output_sharpening", 0.15)) * 0.5
+        # With print finishing now optional, keep acutance shaping tied to the
+        # analyzed scene texture plus a conservative baseline.
+        edge_softening = float(np.clip(spatial.get("edge_softening", 0.15), 0.05, 0.35)) * 0.5
         
         material_effects = {
             "grain_strength": grain_strength,

@@ -5,7 +5,7 @@ class RenderReporter:
     def __init__(self, engine_version="1.0.0"):
         self.engine_version = engine_version
 
-    def write_report(self, input_file, output_file, stock_profile, scan_profile, 
+    def write_report(self, input_file, output_file, stock_profile, print_profile,
                      feature_dict, render_plan, report_path):
         """
         Generates and saves the sidecar JSON report containing diagnostic features
@@ -52,14 +52,14 @@ class RenderReporter:
             "input_file": os.path.basename(input_file),
             "output_file": os.path.basename(output_file),
             "stock_profile": stock_profile.stock_id,
-            "scan_profile": scan_profile.scanner_id,
+            "print_stock": print_profile.print_stock_id if print_profile else "none",
             "image_diagnosis": render_plan["input_diagnosis"],
             "feature_summary": clean_features,
             "render_plan": {
                 "pre_film_normalization": render_plan["pre_film_normalization"],
                 "film_response": render_plan["film_response"],
                 "material_effects": render_plan["material_effects"],
-                "scanner_finish": render_plan["scanner_finish"]
+                "print_finish": render_plan["print_finish"]
             },
             "warnings": render_plan["warnings"]
         }

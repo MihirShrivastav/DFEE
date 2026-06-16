@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from dfee.color_spaces import rgb_to_oklab, oklab_to_rgb, oklab_to_oklch, oklch_to_oklab
-from dfee.profile import FilmStockProfile, ScanPrintProfile
+from dfee.profile import FilmStockProfile, PrintStockProfile
 from dfee.analyzer import ImageStateAnalyzer
 from dfee.solver import RenderPlanSolver
 from dfee.renderer import FilmRenderer
@@ -34,7 +34,7 @@ class TestDFEEProfiles(unittest.TestCase):
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     def test_load_stock_profiles(self):
-        stocks = ["kodachrome_64", "portra_400", "superia_400", "tri_x_400"]
+        stocks = ["astia_100", "kodachrome_64", "portra_400", "superia_400", "tri_x_400"]
         for stock in stocks:
             path = os.path.join(self.base_dir, "profiles", "stocks", f"{stock}.yaml")
             self.assertTrue(os.path.exists(path), f"Stock profile {stock} path does not exist")
@@ -43,14 +43,14 @@ class TestDFEEProfiles(unittest.TestCase):
             self.assertEqual(profile.stock_id, stock)
             self.assertIn(profile.stock_type, ["color_negative", "color_reversal", "monochrome"])
 
-    def test_load_scanner_profiles(self):
-        scanners = ["frontier_soft", "noritsu_smooth", "darkroom_print"]
-        for scanner in scanners:
-            path = os.path.join(self.base_dir, "profiles", "scanners", f"{scanner}.yaml")
-            self.assertTrue(os.path.exists(path), f"Scanner profile {scanner} path does not exist")
-            
-            profile = ScanPrintProfile(path)
-            self.assertEqual(profile.scanner_id, scanner)
+    def test_load_print_stock_profiles(self):
+        print_stocks = ["kodak_2383", "kodak_2393", "fuji_3510"]
+        for print_stock in print_stocks:
+            path = os.path.join(self.base_dir, "profiles", "print_stocks", f"{print_stock}.yaml")
+            self.assertTrue(os.path.exists(path), f"Print stock profile {print_stock} path does not exist")
+
+            profile = PrintStockProfile(path)
+            self.assertEqual(profile.print_stock_id, print_stock)
 
 
 class TestDFEEAnalyzer(unittest.TestCase):
@@ -79,10 +79,10 @@ class TestDFEESolverAndRenderer(unittest.TestCase):
     def setUp(self):
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         stock_path = os.path.join(self.base_dir, "profiles", "stocks", "kodachrome_64.yaml")
-        scan_path = os.path.join(self.base_dir, "profiles", "scanners", "frontier_soft.yaml")
+        print_stock_path = os.path.join(self.base_dir, "profiles", "print_stocks", "kodak_2383.yaml")
         
         self.stock_profile = FilmStockProfile(stock_path)
-        self.scan_profile = ScanPrintProfile(scan_path)
+        self.print_stock_profile = PrintStockProfile(print_stock_path)
         self.analyzer = ImageStateAnalyzer()
         self.solver = RenderPlanSolver()
         self.renderer = FilmRenderer()
@@ -97,6 +97,7 @@ class TestDFEESolverAndRenderer(unittest.TestCase):
                 "midtone_anchor": 0.18,
                 "highlight_headroom": 0.25,
                 "shadow_depth": 0.05,
+                "luma_p95": 0.72,
                 "contrast_index": 0.35,
                 "black_point_actual": 0.01,
                 "white_point_actual": 0.95
@@ -125,13 +126,17 @@ class TestDFEESolverAndRenderer(unittest.TestCase):
             }
         }
         
-        plan = self.solver.solve(feature_dict, self.stock_profile, self.scan_profile)
+        plan = self.solver.solve(
+            feature_dict,
+            self.stock_profile,
+            {"print_stock": self.print_stock_profile}
+        )
         
         # Verify plan layout
         self.assertIn("pre_film_normalization", plan)
         self.assertIn("film_response", plan)
         self.assertIn("material_effects", plan)
-        self.assertIn("scanner_finish", plan)
+        self.assertIn("print_finish", plan)
         
         # Verify warnings are list
         self.assertIsInstance(plan["warnings"], list)
@@ -149,7 +154,11 @@ class TestDFEESolverAndRenderer(unittest.TestCase):
         feature_dict, masks = self.analyzer.analyze(rgb_linear, Y, clipping_masks, clipping_ratios)
         
         # Solve
-        plan = self.solver.solve(feature_dict, self.stock_profile, self.scan_profile)
+        plan = self.solver.solve(
+            feature_dict,
+            self.stock_profile,
+            {"print_stock": self.print_stock_profile}
+        )
         
         # Render
         rendered = self.renderer.render(rgb_linear, masks, plan)

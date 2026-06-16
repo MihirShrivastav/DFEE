@@ -2,7 +2,7 @@ import os
 from PIL import Image
 import numpy as np
 
-from .profile import FilmStockProfile, ScanPrintProfile
+from .profile import FilmStockProfile, PrintStockProfile
 from .ingest import RawIngestor
 from .analyzer import ImageStateAnalyzer
 from .bias import CameraBiasEstimator
@@ -11,12 +11,15 @@ from .renderer import FilmRenderer
 from .report import RenderReporter
 
 class DFEEEngine:
-    def __init__(self, stock_profile_path, scan_profile_path, 
+    def __init__(self, stock_profile_path, print_profile_path=None,
                  adaptation_strength=1.0, output_color_space="sRGB", 
                  output_bit_depth=16):
         
         self.stock_profile = FilmStockProfile(stock_profile_path)
-        self.scan_profile = ScanPrintProfile(scan_profile_path)
+        self.print_profile = (
+            PrintStockProfile(print_profile_path)
+            if print_profile_path else None
+        )
         
         self.adaptation_strength = adaptation_strength
         self.output_color_space = output_color_space
@@ -46,13 +49,14 @@ class DFEEEngine:
         feature_dict["camera_input_bias"] = bias_info
         
         # Step 4: Solve render parameters
-        solver_controls = {"adaptation_strength": self.adaptation_strength}
+        solver_controls = {
+            "adaptation_strength": self.adaptation_strength,
+            "print_stock": self.print_profile,
+        }
         if user_overrides:
             solver_controls.update(user_overrides)
             
-        render_plan = self.solver.solve(
-            feature_dict, self.stock_profile, self.scan_profile, solver_controls
-        )
+        render_plan = self.solver.solve(feature_dict, self.stock_profile, solver_controls)
         
         # Step 5: Render pixel data
         rgb_rendered = self.renderer.render(rgb_linear, masks, render_plan)
@@ -63,7 +67,7 @@ class DFEEEngine:
         # Step 7: Write sidecar report if requested
         if report_path:
             self.reporter.write_report(
-                input_path, output_path, self.stock_profile, self.scan_profile,
+                input_path, output_path, self.stock_profile, self.print_profile,
                 feature_dict, render_plan, report_path
             )
             
