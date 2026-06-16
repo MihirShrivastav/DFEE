@@ -423,6 +423,34 @@ class TestNativeBridge(unittest.TestCase):
         self.assertGreater(max_abs_delta, 1e-3)
         self.assertGreaterEqual(float(adjusted[30, 30, 0]), float(adjusted[30, 30, 2]))
 
+    def test_python_film_grain_reference_fixture(self):
+        rgb = np.zeros((32, 32, 3), dtype=np.float32)
+        for y in range(32):
+            for x in range(32):
+                rgb[y, x, 0] = 0.20 + 0.40 * (x / 31.0)
+                rgb[y, x, 1] = 0.18 + 0.45 * (y / 31.0)
+                rgb[y, x, 2] = 0.16 + 0.35 * ((x + y) / 62.0)
+
+        masks = {
+            "grain_receptivity_mask": np.full((32, 32), 0.85, dtype=np.float32),
+        }
+        effects = {
+            "grain_strength": 0.65,
+            "grain_size": 0.55,
+            "grain_roughness": 0.45,
+            "grain_chroma_strength": 0.12,
+        }
+
+        first = FilmRenderer()._apply_film_grain(rgb.copy(), masks, effects)
+        second = FilmRenderer()._apply_film_grain(rgb.copy(), masks, effects)
+
+        np.testing.assert_array_equal(first, second)
+        self.assertGreater(float(np.mean(np.abs(first - rgb))), 1e-5)
+        self.assertGreater(
+            float(np.max(np.abs(first[:, :, 0] - first[:, :, 1])) + np.max(np.abs(first[:, :, 1] - first[:, :, 2]))),
+            1e-5,
+        )
+
     def test_select_file(self):
         raw_filename = self._raw_filename()
         result = self.session.select_file(raw_filename)

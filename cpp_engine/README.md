@@ -12,7 +12,7 @@ The current native scaffold builds:
 - `dfee_tests`: native unit/parity foundation tests.
 - `dfee_cuda`: optional CUDA target when configured with `DFEE_ENABLE_CUDA=ON`.
 
-The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, render-plan solving, pre-film normalization, monochrome panchromatic conversion, film tone response, post-tone color response, luminance-chroma coupling, local acutance shaping, clarity/texture/dehaze post effects, halation/bloom baseline rendering, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
+The first implemented surface covers core image containers, OKLab/OKLCH transforms, tonal/zone analysis, color analysis, spatial analysis, camera bias estimation, render-plan solving, pre-film normalization, monochrome panchromatic conversion, film tone response, post-tone color response, luminance-chroma coupling, local acutance shaping, clarity/texture/dehaze post effects, halation/bloom baseline rendering, deterministic film grain baseline, yaml-cpp-backed stock and print-profile discovery with schema validation, native session setup, native RAW decode, native cached RAW preview JPEG generation, and CUDA status reporting. Preview render, full export, and FastAPI route delegation are the next migration slices.
 
 ## Build
 
@@ -109,3 +109,5 @@ The native renderer now also includes the current stock color-response stages: z
 The native renderer now also includes the current local-contrast and atmosphere helpers used later in the Python pipeline: acutance shaping, clarity, texture, and dehaze. The acutance path stays on OKLab lightness to match the current renderer, while clarity and texture intentionally share one gamma-space local-contrast helper so the parity baseline avoids duplicated blur and masking work before later performance redesign.
 
 The native renderer now also includes the current film halation and bloom stage. The red-orange halation bleed model stays close to the Python baseline, while the large bloom blur is implemented with a resolution-aware downsample/blur/upsample path so previews are not forced through a literal full-resolution `51x51` Gaussian on large images.
+
+The native renderer now also includes the current deterministic grain baseline. It keeps the existing content-derived seeding idea for parity, generates shared sparse/grit master fields once per render call, synthesizes channel-specific boolean-model grain from those masters, and applies the result in gamma space behind the grain-receptivity mask so identical inputs produce identical grain.

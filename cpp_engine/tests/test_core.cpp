@@ -587,6 +587,55 @@ void test_halation_bloom() {
     assert(adjusted.at(30, 30, 0) >= adjusted.at(30, 30, 2));
 }
 
+void test_film_grain_determinism() {
+    dfee::Image rgb(32, 32, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.20F + 0.40F * static_cast<float>(x) / 31.0F;
+            rgb.at(x, y, 1) = 0.18F + 0.45F * static_cast<float>(y) / 31.0F;
+            rgb.at(x, y, 2) = 0.16F + 0.35F * static_cast<float>(x + y) / 62.0F;
+        }
+    }
+
+    dfee::SpatialMasks spatial_masks;
+    spatial_masks.grain_receptivity_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            spatial_masks.grain_receptivity_mask.at(x, y) = 0.85F;
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.grain_strength = 0.65F;
+    effects.grain_size = 0.55F;
+    effects.grain_roughness = 0.45F;
+    effects.grain_chroma_strength = 0.12F;
+
+    const dfee::FilmRenderer renderer;
+    const auto first = renderer.apply_film_grain(rgb, spatial_masks, effects);
+    const auto second = renderer.apply_film_grain(rgb, spatial_masks, effects);
+
+    assert(first.pixels == second.pixels);
+
+    double mean_abs_delta = 0.0;
+    for (std::size_t i = 0; i < rgb.value_count(); ++i) {
+        mean_abs_delta += std::fabs(first.pixels[i] - rgb.pixels[i]);
+    }
+    mean_abs_delta /= static_cast<double>(rgb.value_count());
+    assert(mean_abs_delta > 1.0e-5);
+
+    bool channel_difference_found = false;
+    for (std::size_t i = 0; i < first.pixel_count(); ++i) {
+        const float rg = std::fabs(first.pixels[i * 3 + 0] - first.pixels[i * 3 + 1]);
+        const float gb = std::fabs(first.pixels[i * 3 + 1] - first.pixels[i * 3 + 2]);
+        if (rg > 1.0e-5F || gb > 1.0e-5F) {
+            channel_difference_found = true;
+            break;
+        }
+    }
+    assert(channel_difference_found);
+}
+
 void test_profile_loading() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -790,6 +839,7 @@ int main() {
         test_texture();
         test_dehaze();
         test_halation_bloom();
+        test_film_grain_determinism();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
