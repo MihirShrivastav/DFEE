@@ -28,6 +28,7 @@ add_library(dfee_core STATIC
     src/raw_decode.cpp
     src/raw_metadata.cpp
     src/session.cpp
+    src/solver.cpp
 )
 
 if(DFEE_ENABLE_LIBRAW)

@@ -10,6 +10,8 @@ import numpy as np
 from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
 from dfee.ingest import RawIngestor
+from dfee.profile import FilmStockProfile, PrintStockProfile
+from dfee.solver import RenderPlanSolver
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -163,6 +165,65 @@ class TestNativeBridge(unittest.TestCase):
         self.assertGreaterEqual(bias["blue_excess_index"], 0.0)
         self.assertLess(bias["warm_cool_bias"], 0.0)
         self.assertLess(bias["shadow_cast_lab"][2], 0.0)
+
+    def test_python_solver_reference_fixture(self):
+        stock = FilmStockProfile(str(BASE_DIR / "profiles" / "stocks" / "portra_400.yaml"))
+        print_stock = PrintStockProfile(str(BASE_DIR / "profiles" / "print_stocks" / "kodak_2383.yaml"))
+        solver = RenderPlanSolver()
+
+        feature_dict = {
+            "tonal_distribution": {
+                "tonal_skew": "highlight_stressed",
+                "dynamic_range_stops": 12.2,
+                "midtone_anchor": 0.11,
+                "highlight_headroom": 0.08,
+                "shadow_depth": 0.01,
+                "luma_p95": 0.86,
+            },
+            "hue_saturation_state": {
+                "neon_risk": 0.07,
+            },
+            "spatial_frequency": {
+                "specular_point_ratio": 0.03,
+                "large_highlight_area_ratio": 0.15,
+            },
+            "channel_behavior": {
+                "clipping_ratios": {"R": 0.04, "G": 0.01, "B": 0.0},
+            },
+            "camera_input_bias": {
+                "neutral_confidence": 0.2,
+                "blue_excess_index": 0.04,
+                "green_magenta_bias": 0.02,
+                "warm_cool_bias": -0.03,
+            },
+            "raw_metadata": {
+                "iso": 1600,
+            },
+        }
+        controls = {
+            "adaptation_strength": 1.0,
+            "color_cast_handling": "Auto",
+            "grain_amount": "Auto",
+            "halation_amount": "High",
+            "film_color": 110.0,
+            "print_stock": print_stock,
+            "print_strength": 0.9,
+            "print_c": 0.02,
+            "print_m": -0.01,
+            "print_y": 0.03,
+            "print_contrast": 0.1,
+            "print_black_point": -0.02,
+        }
+
+        plan = solver.solve(feature_dict, stock, controls)
+        self.assertEqual(plan["stock_type"], "color_negative")
+        self.assertEqual(plan["input_diagnosis"]["tonal_state"], "highlight_stressed")
+        self.assertIn("HIGH_CHANNEL_CLIPPING", plan["warnings"])
+        self.assertIn("LOW_NEUTRAL_CONFIDENCE", plan["warnings"])
+        self.assertGreater(plan["pre_film_normalization"]["highlight_channel_recovery"], 0.0)
+        self.assertGreater(plan["film_response"]["toe_length"], 0.0)
+        self.assertGreater(plan["material_effects"]["grain_strength"], 0.0)
+        self.assertIsNotNone(plan["print_finish"])
 
     def test_select_file(self):
         raw_filename = self._raw_filename()

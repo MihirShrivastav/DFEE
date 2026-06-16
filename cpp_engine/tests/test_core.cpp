@@ -4,6 +4,7 @@
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
 #include "dfee/session.hpp"
+#include "dfee/solver.hpp"
 #include "dfee/version.hpp"
 
 #include <cassert>
@@ -153,6 +154,84 @@ void test_camera_bias_estimator() {
     assert(bias.blue_excess_index >= 0.0F);
     assert(bias.warm_cool_bias < 0.0F);
     assert(bias.shadow_cast_lab[2] < 0.0F);
+}
+
+void test_render_plan_solver() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const auto print_stock = dfee::load_print_stock_profile(repo_root / "profiles" / "print_stocks" / "kodak_2383.yaml");
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "highlight_stressed";
+    input.tonal_distribution.dynamic_range_stops = 12.2F;
+    input.tonal_distribution.midtone_anchor = 0.11F;
+    input.tonal_distribution.highlight_headroom = 0.08F;
+    input.tonal_distribution.shadow_depth = 0.01F;
+    input.tonal_distribution.luma_p95 = 0.86F;
+    input.hue_saturation_state.neon_risk = 0.07F;
+    input.spatial_frequency.specular_point_ratio = 0.03F;
+    input.spatial_frequency.large_highlight_area_ratio = 0.15F;
+    input.clipping_ratios = {{"R", 0.04F}, {"G", 0.01F}, {"B", 0.0F}};
+    input.camera_input_bias = dfee::CameraBiasAnalysis{
+        .neutral_confidence = 0.2F,
+        .global_cast_lab = {0.5F, 0.0F, 0.0F},
+        .shadow_cast_lab = {0.3F, -0.01F, -0.04F},
+        .midtone_cast_lab = {0.5F, 0.02F, -0.03F},
+        .highlight_cast_lab = {0.8F, 0.01F, 0.01F},
+        .blue_excess_index = 0.04F,
+        .green_magenta_bias = 0.02F,
+        .warm_cool_bias = -0.03F,
+    };
+    input.raw_iso = 1600;
+
+    dfee::SolverControls controls;
+    controls.adaptation_strength = 1.0F;
+    controls.color_cast_handling = "Auto";
+    controls.grain_amount = "Auto";
+    controls.halation_amount = "High";
+    controls.film_color = 110.0F;
+    controls.print_strength = 0.9F;
+    controls.print_c = 0.02F;
+    controls.print_m = -0.01F;
+    controls.print_y = 0.03F;
+    controls.print_contrast = 0.1F;
+    controls.print_black_point = -0.02F;
+
+    const dfee::RenderPlanSolver solver;
+    const auto plan = solver.solve(input, stock, controls, &print_stock);
+
+    assert(plan.stock_type == "color_negative");
+    assert(plan.input_diagnosis.tonal_state == "highlight_stressed");
+    assert(plan.input_diagnosis.shadow_cast == "normal");
+    assert(!plan.warnings.empty());
+    assert(std::ranges::find(plan.warnings, "HIGH_CHANNEL_CLIPPING") != plan.warnings.end());
+    assert(std::ranges::find(plan.warnings, "SHADOW_NOISE_RISK") != plan.warnings.end());
+    assert(std::ranges::find(plan.warnings, "NEON_CHROMA_RISK") != plan.warnings.end());
+    assert(std::ranges::find(plan.warnings, "LOW_NEUTRAL_CONFIDENCE") != plan.warnings.end());
+    assert(std::ranges::find(plan.warnings, "DIFFUSE_HIGHLIGHT_SUPPRESSION") != plan.warnings.end());
+
+    assert(plan.pre_film_normalization.exposure_compensation_stops > 0.0F);
+    assert(plan.pre_film_normalization.highlight_channel_recovery >= 0.1F);
+    assert(plan.pre_film_normalization.shadow_blue_normalization > 0.0F);
+
+    assert(plan.film_response.toe_length > 0.0F);
+    assert(plan.film_response.shoulder_strength > 0.0F);
+    assert(plan.film_response.highlight_desaturation >= 0.6F);
+    assert(plan.film_response.channel_toe_mult[0] > 0.0F);
+    assert(plan.film_response.chroma_coupling.contains("hi_rolloff_start"));
+    assert(plan.film_response.dye_contamination.contains("r_to_g"));
+    assert(plan.film_response.film_color == 110.0F);
+
+    assert(plan.material_effects.grain_strength > 0.0F);
+    assert(plan.material_effects.grain_size > 0.45F);
+    assert(plan.material_effects.halation_strength > 0.0F);
+    assert(plan.material_effects.bloom_strength > 0.0F);
+    assert(plan.material_effects.edge_softening > 0.0F);
+
+    assert(plan.print_finish.has_value());
+    assert(plan.print_finish->contrast_boost > 1.0F);
+    assert(plan.print_finish->saturation_scale > 1.0F);
+    assert(plan.print_finish->grain_size > 0.0F);
 }
 
 void test_profile_loading() {
@@ -347,6 +426,7 @@ int main() {
         test_color_analysis();
         test_spatial_analysis();
         test_camera_bias_estimator();
+        test_render_plan_solver();
         test_profile_loading();
         test_raw_failure_paths();
         std::cout << "dfee_tests passed\n";
