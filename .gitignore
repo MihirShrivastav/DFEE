@@ -10,6 +10,7 @@ __pycache__/
 
 # Native build outputs
 cpp_engine/out/
+cpp_engine/vcpkg_installed/
 
 # Distribution / packaging
 build/

@@ -136,6 +136,21 @@ PyObject* raw_metadata_to_dict(const dfee::NativeRawMetadata& metadata) {
     return dict;
 }
 
+PyObject* raw_decode_summary_to_dict(const dfee::NativeRawDecodeSummary& summary) {
+    PyObject* dict = PyDict_New();
+    PyDict_SetItemString(dict, "image_width", PyLong_FromLong(summary.image_width));
+    PyDict_SetItemString(dict, "image_height", PyLong_FromLong(summary.image_height));
+    PyDict_SetItemString(dict, "channels", PyLong_FromLong(summary.channels));
+    PyDict_SetItemString(dict, "min_value", PyFloat_FromDouble(summary.min_value));
+    PyDict_SetItemString(dict, "max_value", PyFloat_FromDouble(summary.max_value));
+    PyDict_SetItemString(dict, "clipping_ratio_r", PyFloat_FromDouble(summary.clipping_ratio_r));
+    PyDict_SetItemString(dict, "clipping_ratio_g", PyFloat_FromDouble(summary.clipping_ratio_g));
+    PyDict_SetItemString(dict, "clipping_ratio_b", PyFloat_FromDouble(summary.clipping_ratio_b));
+    PyDict_SetItemString(dict, "raw_clipping_ratio", PyFloat_FromDouble(summary.raw_clipping_ratio));
+    PyDict_SetItemString(dict, "summary_json", PyUnicode_FromString(summary.summary_json.c_str()));
+    return dict;
+}
+
 PyObject* engine_metadata_to_dict(const dfee::NativeEngineMetadata& metadata) {
     PyObject* dict = PyDict_New();
     PyObject* status = cuda_status_to_dict(metadata.cuda_status);
@@ -291,6 +306,49 @@ PyObject* py_read_raw_metadata(PyObject*, PyObject* args) {
     }
 }
 
+PyObject* py_decode_raw(PyObject*, PyObject* args, PyObject* kwargs) {
+    PyObject* capsule = nullptr;
+    const char* filename = nullptr;
+    int draft_mode = 1;
+    static const char* const keywords[] = {"session", "filename", "draft_mode", nullptr};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "Os|p", const_cast<char**>(keywords), &capsule, &filename, &draft_mode)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->decode_raw({
+            .filename = filename,
+            .draft_mode = draft_mode != 0,
+        });
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
+        PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
+        PyObject* summary = raw_decode_summary_to_dict(result.summary);
+        PyObject* metadata = raw_metadata_to_dict(result.metadata);
+        PyDict_SetItemString(dict, "summary", summary);
+        PyDict_SetItemString(dict, "metadata", metadata);
+        Py_DECREF(summary);
+        Py_DECREF(metadata);
+        if (!result.error.empty()) {
+            PyObject* error = native_error_to_dict(result.error);
+            PyDict_SetItemString(dict, "error", error);
+            Py_DECREF(error);
+        }
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyMethodDef kMethods[] = {
     {"engine_version", py_engine_version, METH_NOARGS, "Return the native engine version."},
     {"cuda_status", py_cuda_status, METH_NOARGS, "Return CUDA build/runtime status."},
@@ -298,6 +356,7 @@ PyMethodDef kMethods[] = {
     {"list_profiles", py_list_profiles, METH_VARARGS, "List stock and print profiles visible to a native session."},
     {"select_file", py_select_file, METH_VARARGS, "Select a RAW file for a native session."},
     {"read_raw_metadata", py_read_raw_metadata, METH_VARARGS, "Read RAW metadata through the native session."},
+    {"decode_raw", reinterpret_cast<PyCFunction>(py_decode_raw), METH_VARARGS | METH_KEYWORDS, "Decode a RAW file through the native session."},
     {nullptr, nullptr, 0, nullptr},
 };
 

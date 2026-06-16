@@ -92,10 +92,19 @@ void test_profile_loading() {
 }  // namespace
 
 int main() {
-    test_oklab_roundtrip();
-    test_zone_partition();
-    test_tonal_analysis();
-    test_profile_loading();
-    std::cout << "dfee_tests passed\n";
-    return 0;
+    try {
+        std::cout << "test_oklab_roundtrip\n";
+        test_oklab_roundtrip();
+        std::cout << "test_zone_partition\n";
+        test_zone_partition();
+        std::cout << "test_tonal_analysis\n";
+        test_tonal_analysis();
+        std::cout << "test_profile_loading\n";
+        test_profile_loading();
+        std::cout << "dfee_tests passed\n";
+        return 0;
+    } catch (const std::exception& ex) {
+        std::cerr << "dfee_tests exception: " << ex.what() << "\n";
+        return 1;
+    }
 }

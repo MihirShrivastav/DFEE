@@ -94,6 +94,20 @@ class NativeRawMetadata:
 
 
 @dataclass(frozen=True)
+class NativeRawDecodeSummary:
+    image_width: int
+    image_height: int
+    channels: int
+    min_value: float
+    max_value: float
+    clipping_ratio_r: float
+    clipping_ratio_g: float
+    clipping_ratio_b: float
+    raw_clipping_ratio: float
+    summary_json: str
+
+
+@dataclass(frozen=True)
 class NativeErrorInfo:
     code: str
     user_message: str
@@ -163,6 +177,21 @@ def _parse_raw_metadata(payload: dict[str, Any]) -> NativeRawMetadata:
         raw_height=int(payload.get("raw_height", 0)),
         raw_width=int(payload.get("raw_width", 0)),
         metadata_json=str(payload.get("metadata_json", "")),
+    )
+
+
+def _parse_raw_decode_summary(payload: dict[str, Any]) -> NativeRawDecodeSummary:
+    return NativeRawDecodeSummary(
+        image_width=int(payload.get("image_width", 0)),
+        image_height=int(payload.get("image_height", 0)),
+        channels=int(payload.get("channels", 3)),
+        min_value=float(payload.get("min_value", 0.0)),
+        max_value=float(payload.get("max_value", 0.0)),
+        clipping_ratio_r=float(payload.get("clipping_ratio_r", 0.0)),
+        clipping_ratio_g=float(payload.get("clipping_ratio_g", 0.0)),
+        clipping_ratio_b=float(payload.get("clipping_ratio_b", 0.0)),
+        raw_clipping_ratio=float(payload.get("raw_clipping_ratio", 0.0)),
+        summary_json=str(payload.get("summary_json", "")),
     )
 
 
@@ -254,6 +283,26 @@ class NativeEngineSession:
                 status=str(payload.get("status", "")),
             )
         return _parse_raw_metadata(dict(payload.get("metadata", {})))
+
+    def decode_raw(self, filename: str, *, draft_mode: bool = True) -> tuple[NativeRawDecodeSummary, NativeRawMetadata]:
+        try:
+            payload = dict(self._native_module.decode_raw(self._handle, filename, draft_mode))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        if "error" in payload:
+            error = _parse_error_info(dict(payload["error"]))
+            raise NativeOperationError(
+                error.code,
+                error.user_message,
+                error.detail,
+                filename=str(payload.get("filename", "")),
+                status=str(payload.get("status", "")),
+            )
+
+        summary = _parse_raw_decode_summary(dict(payload.get("summary", {})))
+        metadata = _parse_raw_metadata(dict(payload.get("metadata", {})))
+        return summary, metadata
 
     def _raise_bridge_error(self, exc: Exception) -> None:
         code = str(getattr(exc, "code", "") or "NATIVE_BRIDGE_ERROR")

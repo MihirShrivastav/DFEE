@@ -28,6 +28,7 @@ Status values:
 | BUG-007 | medium | watch | Repository hygiene | S-004 | `raw_files/` appears untracked and contains large local fixtures/outputs. | `git status --short` shows `?? raw_files/`. | Decide whether fixtures should be ignored, moved to a test fixture subset, or tracked via another storage mechanism. |
 | BUG-010 | low | watch | Dependency setup | M2-001 | LibRaw is wired in CMake, but this machine does not currently have `VCPKG_ROOT` configured. | `cmake --preset windows-msvc` warns that LibRaw was not found; `DFEE_REQUIRE_LIBRAW=ON` fails with the new actionable configure error. | Set `VCPKG_ROOT`, install manifest dependencies, and use `windows-msvc-vcpkg` before starting native decode work. |
 | BUG-011 | low | watch | Metadata parity | M2-002 | The native RAW metadata path is implemented, but fixture-level parity against current `rawpy` output is not yet validated on this machine. | Native tests and wrapper tests pass, but the current environment still builds without LibRaw. | Re-run metadata extraction against real fixtures after configuring `windows-msvc-vcpkg` and compare fields with Python `RawIngestor`. |
+| BUG-012 | low | fixed | Test runtime | M2-003 | The `windows-msvc-vcpkg` CTest run initially failed with missing runtime DLL resolution. | Added the vcpkg runtime `bin` directory to the `windows-msvc-vcpkg` test preset `PATH`. | `ctest --preset windows-msvc-vcpkg` now has the required runtime search path. |
 
 ## Fixed Bugs
 

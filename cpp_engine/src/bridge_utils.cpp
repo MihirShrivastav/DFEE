@@ -126,4 +126,21 @@ std::string serialize_native_raw_metadata_json(const NativeRawMetadata& metadata
     return out.str();
 }
 
+std::string serialize_native_raw_decode_summary_json(const NativeRawDecodeSummary& summary) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(6);
+    out << "{"
+        << "\"image_width\":" << summary.image_width << ","
+        << "\"image_height\":" << summary.image_height << ","
+        << "\"channels\":" << summary.channels << ","
+        << "\"min_value\":" << summary.min_value << ","
+        << "\"max_value\":" << summary.max_value << ","
+        << "\"clipping_ratio_r\":" << summary.clipping_ratio_r << ","
+        << "\"clipping_ratio_g\":" << summary.clipping_ratio_g << ","
+        << "\"clipping_ratio_b\":" << summary.clipping_ratio_b << ","
+        << "\"raw_clipping_ratio\":" << summary.raw_clipping_ratio
+        << "}";
+    return out.str();
+}
+
 }  // namespace dfee

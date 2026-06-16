@@ -93,6 +93,34 @@ struct NativeRawMetadataResponse {
     NativeEngineMetadata engine;
 };
 
+struct NativeRawDecodeRequest {
+    std::string filename;
+    bool draft_mode = true;
+};
+
+struct NativeRawDecodeSummary {
+    int image_width = 0;
+    int image_height = 0;
+    int channels = 3;
+    float min_value = 0.0F;
+    float max_value = 0.0F;
+    float clipping_ratio_r = 0.0F;
+    float clipping_ratio_g = 0.0F;
+    float clipping_ratio_b = 0.0F;
+    float raw_clipping_ratio = 0.0F;
+    std::string summary_json;
+};
+
+struct NativeRawDecodeResponse {
+    bool ok = false;
+    std::string filename;
+    std::string status;
+    NativeRawDecodeSummary summary;
+    NativeRawMetadata metadata;
+    NativeError error;
+    NativeEngineMetadata engine;
+};
+
 struct NativeRawPreviewResponse {
     bool ok = false;
     std::string filename;

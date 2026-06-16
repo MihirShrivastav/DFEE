@@ -26,6 +26,7 @@
       "binaryDir": "${sourceDir}/out/build/windows-msvc-vcpkg",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_INSTALLED_DIR": "${sourceDir}/out/build/windows-msvc-vcpkg/vcpkg_installed",
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "DFEE_ENABLE_LIBRAW": "ON",
         "DFEE_REQUIRE_LIBRAW": "ON"
@@ -84,6 +85,9 @@
       "name": "windows-msvc-vcpkg",
       "configurePreset": "windows-msvc-vcpkg",
       "configuration": "Debug",
+      "environment": {
+        "PATH": "${sourceDir}/out/build/windows-msvc-vcpkg/vcpkg_installed/x64-windows/bin;$penv{PATH}"
+      },
       "output": {
         "outputOnFailure": true
       }

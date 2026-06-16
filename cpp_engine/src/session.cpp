@@ -151,6 +151,31 @@ NativeRawMetadataResponse EngineSession::read_raw_metadata(const NativeRawMetada
     return response;
 }
 
+NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& request) const {
+    NativeRawDecodeResponse response;
+    response.filename = request.filename;
+    response.engine = build_engine_metadata();
+
+    {
+        ScopedStageTimer total(response.engine, request.draft_mode ? "decode_raw_draft_total" : "decode_raw_full_total");
+        {
+            ScopedStageTimer stage(response.engine, "decode_raw_file");
+            const auto file_response = decode_raw_from_file({
+                .filename = (raw_dir_ / request.filename).string(),
+                .draft_mode = request.draft_mode,
+            });
+            response.ok = file_response.ok;
+            response.status = file_response.status;
+            response.summary = file_response.summary;
+            response.metadata = file_response.metadata;
+            response.error = file_response.error;
+        }
+    }
+
+    finalize_engine_metadata(response.engine);
+    return response;
+}
+
 CudaStatus EngineSession::cuda_status() const noexcept {
     return query_cuda_status();
 }

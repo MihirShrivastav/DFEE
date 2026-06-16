@@ -40,7 +40,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | M2-001 | done | Add LibRaw dependency wiring through vcpkg/CMake | `cmake --preset windows-msvc` and `cmake -S . -B out/build/libraw-required-check -DDFEE_REQUIRE_LIBRAW=ON` | Plain builds now warn clearly when LibRaw is absent, and `windows-msvc-vcpkg` / `DFEE_REQUIRE_LIBRAW=ON` provide an actionable required path. |
 | M2-002 | done | Implement native RAW metadata extraction | `ctest --preset windows-msvc` and `pytest tests/test_native_bridge.py -q` | Native metadata structs/session/wrapper are implemented. Full LibRaw-vs-`rawpy` fixture parity on this machine still depends on a vcpkg-backed LibRaw install. |
-| M2-003 | next | Implement scene-linear RGB decode matching current `rawpy` settings | RAW fixture parity test | Camera WB, no auto bright, deterministic output. |
+| M2-003 | done | Implement scene-linear RGB decode matching current `rawpy` settings | `pytest tests/test_native_bridge.py -q` against `windows-msvc-vcpkg` | Native decode now uses LibRaw with camera WB, no auto bright, `gamma=(1,1)`, `sRGB`, `output_bps=16`, and draft/full mode support. Current parity test checks decoded draft dimensions and clipping ratios against Python `RawIngestor`. |
 | M2-004 | planned | Add session-owned full-res and preview caches | Memory/reselect tests | Avoid Python global image buffers for migrated paths. |
 | M2-005 | planned | Implement native cached RAW preview JPEG for `/api/raw-image` | FastAPI integration test | Preserve current response bytes/content type behavior. |
 | M2-006 | planned | Add failure coverage for unsupported/corrupt RAW files | Native and FastAPI tests | Must not crash server process. |

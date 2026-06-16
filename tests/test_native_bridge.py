@@ -2,10 +2,15 @@ import os
 import sys
 import unittest
 from pathlib import Path
+import math
+
+from dfee.ingest import RawIngestor
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-NATIVE_BUILD_DIR = BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc" / "Debug"
+NATIVE_BUILD_DIR = BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc-vcpkg" / "Debug"
+if not NATIVE_BUILD_DIR.exists():
+    NATIVE_BUILD_DIR = BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc" / "Debug"
 
 if NATIVE_BUILD_DIR.exists():
     sys.path.insert(0, str(NATIVE_BUILD_DIR))
@@ -74,6 +79,31 @@ class TestNativeBridge(unittest.TestCase):
         else:
             with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
                 self.session.read_raw_metadata(raw_filename)
+            self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
+
+    def test_decode_raw(self):
+        raw_filename = next(
+            entry.name
+            for entry in (BASE_DIR / "raw_files").iterdir()
+            if entry.is_file() and entry.suffix.lower() == ".arw"
+        )
+        if self.session.list_profiles().engine.libraw_enabled:
+            summary, metadata = self.session.decode_raw(raw_filename, draft_mode=True)
+            rgb, _, _, clipping_ratios, py_metadata = RawIngestor(str((BASE_DIR / "raw_files" / raw_filename))).ingest(draft_mode=True)
+
+            self.assertEqual(summary.image_width, rgb.shape[1])
+            self.assertEqual(summary.image_height, rgb.shape[0])
+            self.assertEqual(summary.channels, rgb.shape[2])
+            self.assertTrue(0.0 <= summary.min_value <= 1.0)
+            self.assertTrue(0.0 <= summary.max_value <= 1.0)
+            self.assertTrue(math.isclose(summary.clipping_ratio_r, clipping_ratios["R"], rel_tol=0.0, abs_tol=0.02))
+            self.assertTrue(math.isclose(summary.clipping_ratio_g, clipping_ratios["G"], rel_tol=0.0, abs_tol=0.02))
+            self.assertTrue(math.isclose(summary.clipping_ratio_b, clipping_ratios["B"], rel_tol=0.0, abs_tol=0.02))
+            self.assertEqual(metadata.image_width, py_metadata["image_width"])
+            self.assertEqual(metadata.image_height, py_metadata["image_height"])
+        else:
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.decode_raw(raw_filename, draft_mode=True)
             self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
 
 
