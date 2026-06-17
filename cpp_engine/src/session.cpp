@@ -520,6 +520,27 @@ struct NativeRenderWorkResult {
     RenderPlan render_plan;
 };
 
+SolverControls build_solver_controls(const NativePreviewRenderRequest& request) {
+    SolverControls controls;
+    controls.adaptation_strength = request.adaptation;
+    controls.exposure_intent = "Preserve";
+    controls.grain_amount = request.grain;
+    controls.grain_strength = request.grain_strength;
+    controls.grain_size = request.grain_size;
+    controls.grain_roughness = request.grain_roughness;
+    controls.halation_amount = request.halation;
+    controls.sharpness = request.sharpness;
+    controls.sharpness_mask = request.sharpness_mask;
+    controls.film_color = request.film_color;
+    controls.print_strength = request.print_strength;
+    controls.print_c = request.print_c;
+    controls.print_m = request.print_m;
+    controls.print_y = request.print_y;
+    controls.print_contrast = request.print_contrast;
+    controls.print_black_point = request.print_black_point;
+    return controls;
+}
+
 std::string escape_json_string(const std::string& value) {
     std::string out;
     out.reserve(value.size() + 8U);
@@ -1119,23 +1140,7 @@ NativeRenderWorkResult render_native_image(
     }
     append_export_trace(project_root, "render_native_image:analyze:done");
 
-    SolverControls controls;
-    controls.adaptation_strength = request.adaptation;
-    controls.exposure_intent = "Preserve";
-    controls.grain_amount = request.grain;
-    controls.grain_strength = request.grain_strength;
-    controls.grain_size = request.grain_size;
-    controls.grain_roughness = request.grain_roughness;
-    controls.halation_amount = request.halation;
-    controls.sharpness = request.sharpness;
-    controls.sharpness_mask = request.sharpness_mask;
-    controls.film_color = request.film_color;
-    controls.print_strength = request.print_strength;
-    controls.print_c = request.print_c;
-    controls.print_m = request.print_m;
-    controls.print_y = request.print_y;
-    controls.print_contrast = request.print_contrast;
-    controls.print_black_point = request.print_black_point;
+    const SolverControls controls = build_solver_controls(request);
 
     append_export_trace(project_root, "render_native_image:solve:start");
     result.render_plan = RenderPlanSolver().solve(result.solver_input, stock_profile, controls, print_stock);
@@ -1794,22 +1799,51 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     {"B", decoded.summary.clipping_ratio_b},
                     {"RAW", decoded.summary.raw_clipping_ratio},
                 };
-                NativeRenderWorkResult work;
+                ZoneMasks working_zone_masks;
+                SpatialMasks working_spatial_masks;
+                bool used_cached_analysis = false;
                 {
-                    ScopedStageTimer substage(response.engine, "export_image_render_working_analysis");
-                    work = render_native_image(
-                        project_root_,
-                        analysis_rgb,
-                        analysis_luminance,
-                        analysis_clipping_masks,
-                        decoded.metadata,
-                        clipping_ratio_map,
-                        request,
+                    ScopedStageTimer cache_lookup(response.engine, "export_image_render_working_analysis_cache_lookup");
+                    if (export_analysis_cache_.has_value() && export_analysis_cache_->filename == response.filename) {
+                        solver_input = export_analysis_cache_->solver_input;
+                        working_zone_masks = export_analysis_cache_->zone_masks;
+                        working_spatial_masks = export_analysis_cache_->spatial_masks;
+                        used_cached_analysis = true;
+                    }
+                }
+                if (!used_cached_analysis) {
+                    NativeRenderWorkResult work;
+                    {
+                        ScopedStageTimer substage(response.engine, "export_image_render_working_analysis");
+                        work = render_native_image(
+                            project_root_,
+                            analysis_rgb,
+                            analysis_luminance,
+                            analysis_clipping_masks,
+                            decoded.metadata,
+                            clipping_ratio_map,
+                            request,
+                            *stock_profile,
+                            print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+                    }
+                    solver_input = work.solver_input;
+                    working_zone_masks = std::move(work.zone_masks);
+                    working_spatial_masks = std::move(work.spatial_masks);
+                    export_analysis_cache_ = CachedExportAnalysis{
+                        .filename = response.filename,
+                        .solver_input = *solver_input,
+                        .zone_masks = working_zone_masks,
+                        .spatial_masks = working_spatial_masks,
+                    };
+                }
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_solve_plan");
+                    render_plan = RenderPlanSolver().solve(
+                        *solver_input,
                         *stock_profile,
+                        build_solver_controls(request),
                         print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
                 }
-                solver_input = std::move(work.solver_input);
-                render_plan = std::move(work.render_plan);
                 render_plan->material_effects.grain_seed = compute_stable_grain_seed(
                     response.filename,
                     request.stock,
@@ -1821,8 +1855,8 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 SpatialMasks fullres_spatial_masks;
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_resize_masks");
-                    fullres_zone_masks = resize_zone_masks(work.zone_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
-                    fullres_spatial_masks = resize_spatial_masks(work.spatial_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
+                    fullres_zone_masks = resize_zone_masks(working_zone_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
+                    fullres_spatial_masks = resize_spatial_masks(working_spatial_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
                 }
                 append_export_trace(project_root_, "export_image:resize_masks_for_fullres:done");
 
@@ -2030,6 +2064,7 @@ void EngineSession::clear_decode_caches() {
     preview_cache_.reset();
     raw_preview_jpeg_cache_.reset();
     preview_analysis_cache_.reset();
+    export_analysis_cache_.reset();
 }
 
 void EngineSession::refresh_preview_cache_from_draft() {

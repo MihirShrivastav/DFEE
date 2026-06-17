@@ -56,6 +56,13 @@ private:
         SpatialMasks spatial_masks;
     };
 
+    struct CachedExportAnalysis {
+        std::string filename;
+        SolverInput solver_input;
+        ZoneMasks zone_masks;
+        SpatialMasks spatial_masks;
+    };
+
     [[nodiscard]] std::string resolve_filename(const std::string& filename) const;
     void clear_decode_caches();
     void refresh_preview_cache_from_draft();
@@ -71,6 +78,7 @@ private:
     std::optional<CachedPreview> preview_cache_;
     std::optional<CachedRawPreviewJpeg> raw_preview_jpeg_cache_;
     std::optional<CachedPreviewAnalysis> preview_analysis_cache_;
+    std::optional<CachedExportAnalysis> export_analysis_cache_;
 };
 
 }  // namespace dfee
