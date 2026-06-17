@@ -1444,30 +1444,51 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         SpatialMasks spatial_masks;
         {
             ScopedStageTimer stage(response.engine, "render_preview_analyze");
-            ImageStateAnalyzer analyzer;
-            solver_input.clipping_ratios = {
-                {"R", draft.decoded.summary.clipping_ratio_r},
-                {"G", draft.decoded.summary.clipping_ratio_g},
-                {"B", draft.decoded.summary.clipping_ratio_b},
-                {"RAW", draft.decoded.summary.raw_clipping_ratio},
-            };
-            solver_input.tonal_distribution = analyzer.analyze_tonal(preview.luminance, solver_input.clipping_ratios);
-            zone_masks = analyzer.generate_zone_masks(preview.luminance, solver_input.tonal_distribution.midtone_anchor);
-            solver_input.hue_saturation_state = analyzer.analyze_color(preview.rgb_linear, zone_masks);
-            auto spatial_result = analyzer.analyze_spatial(preview.luminance);
-            solver_input.spatial_frequency = spatial_result.first;
-            spatial_masks = std::move(spatial_result.second);
+            bool used_cached_analysis = false;
+            {
+                ScopedStageTimer cache_lookup(response.engine, "render_preview_analyze_cache_lookup");
+                if (preview_analysis_cache_.has_value() && preview_analysis_cache_->filename == response.filename) {
+                    solver_input = preview_analysis_cache_->solver_input;
+                    zone_masks = preview_analysis_cache_->zone_masks;
+                    spatial_masks = preview_analysis_cache_->spatial_masks;
+                    used_cached_analysis = true;
+                }
+            }
 
-            const auto preview_masks = resize_clipping_masks(
-                draft.decoded.clipping_masks,
-                draft.decoded.rgb_linear.width,
-                draft.decoded.rgb_linear.height,
-                preview.rgb_linear.width,
-                preview.rgb_linear.height);
-            CameraBiasEstimator bias_estimator;
-            solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
-            if (draft.decoded.metadata.iso > 0) {
-                solver_input.raw_iso = draft.decoded.metadata.iso;
+            if (!used_cached_analysis) {
+                ScopedStageTimer compute_stage(response.engine, "render_preview_analyze_compute");
+                ImageStateAnalyzer analyzer;
+                solver_input.clipping_ratios = {
+                    {"R", draft.decoded.summary.clipping_ratio_r},
+                    {"G", draft.decoded.summary.clipping_ratio_g},
+                    {"B", draft.decoded.summary.clipping_ratio_b},
+                    {"RAW", draft.decoded.summary.raw_clipping_ratio},
+                };
+                solver_input.tonal_distribution = analyzer.analyze_tonal(preview.luminance, solver_input.clipping_ratios);
+                zone_masks = analyzer.generate_zone_masks(preview.luminance, solver_input.tonal_distribution.midtone_anchor);
+                solver_input.hue_saturation_state = analyzer.analyze_color(preview.rgb_linear, zone_masks);
+                auto spatial_result = analyzer.analyze_spatial(preview.luminance);
+                solver_input.spatial_frequency = spatial_result.first;
+                spatial_masks = std::move(spatial_result.second);
+
+                const auto preview_masks = resize_clipping_masks(
+                    draft.decoded.clipping_masks,
+                    draft.decoded.rgb_linear.width,
+                    draft.decoded.rgb_linear.height,
+                    preview.rgb_linear.width,
+                    preview.rgb_linear.height);
+                CameraBiasEstimator bias_estimator;
+                solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
+                if (draft.decoded.metadata.iso > 0) {
+                    solver_input.raw_iso = draft.decoded.metadata.iso;
+                }
+
+                preview_analysis_cache_ = CachedPreviewAnalysis{
+                    .filename = response.filename,
+                    .solver_input = solver_input,
+                    .zone_masks = zone_masks,
+                    .spatial_masks = spatial_masks,
+                };
             }
         }
 
@@ -1900,12 +1921,14 @@ void EngineSession::clear_decode_caches() {
     full_decode_cache_.reset();
     preview_cache_.reset();
     raw_preview_jpeg_cache_.reset();
+    preview_analysis_cache_.reset();
 }
 
 void EngineSession::refresh_preview_cache_from_draft() {
     if (!draft_decode_cache_.has_value()) {
         preview_cache_.reset();
         raw_preview_jpeg_cache_.reset();
+        preview_analysis_cache_.reset();
         return;
     }
 
@@ -1915,6 +1938,7 @@ void EngineSession::refresh_preview_cache_from_draft() {
     preview.luminance = compute_luminance(preview.rgb_linear);
     preview_cache_ = std::move(preview);
     raw_preview_jpeg_cache_.reset();
+    preview_analysis_cache_.reset();
 }
 
 NativeRawPreviewResponse EngineSession::encode_raw_preview(const std::string& filename, const int max_edge) const {

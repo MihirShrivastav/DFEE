@@ -11,6 +11,7 @@
 #include "dfee/raw_decode.hpp"
 #include "dfee/profile.hpp"
 #include "dfee/raw_metadata.hpp"
+#include "dfee/solver.hpp"
 
 namespace dfee {
 
@@ -48,6 +49,13 @@ private:
         std::vector<std::uint8_t> jpeg_bytes;
     };
 
+    struct CachedPreviewAnalysis {
+        std::string filename;
+        SolverInput solver_input;
+        ZoneMasks zone_masks;
+        SpatialMasks spatial_masks;
+    };
+
     [[nodiscard]] std::string resolve_filename(const std::string& filename) const;
     void clear_decode_caches();
     void refresh_preview_cache_from_draft();
@@ -62,6 +70,7 @@ private:
     std::optional<CachedDecode> full_decode_cache_;
     std::optional<CachedPreview> preview_cache_;
     std::optional<CachedRawPreviewJpeg> raw_preview_jpeg_cache_;
+    std::optional<CachedPreviewAnalysis> preview_analysis_cache_;
 };
 
 }  // namespace dfee
