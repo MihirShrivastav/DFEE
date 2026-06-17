@@ -597,45 +597,50 @@ Image apply_pre_film_preview_sliders(
         }
     }
 
-    const auto apply_additive_tonal = [&](const float slider_value, const float scale, const float pivot, const float range, const float power, const bool highlights_side) {
-        if (slider_value == 0.0F) {
-            return;
-        }
-        const float amount = std::clamp(slider_value / 100.0F, -1.0F, 1.0F) * scale;
+    const float highlights_amount = std::clamp(highlights_value / 100.0F, -1.0F, 1.0F) * 0.45F;
+    const float shadows_amount = std::clamp(shadows_value / 100.0F, -1.0F, 1.0F) * 0.50F;
+    const float whites_amount = std::clamp(whites_value / 100.0F, -1.0F, 1.0F) * 0.30F;
+    const float blacks_amount = std::clamp(blacks_value / 100.0F, -1.0F, 1.0F) * 0.25F;
+    const bool has_additive_tonal =
+        highlights_amount != 0.0F || shadows_amount != 0.0F || whites_amount != 0.0F || blacks_amount != 0.0F;
+    const bool has_midtones = midtones_value != 0.0F;
+    if (has_additive_tonal || has_midtones) {
+        const float midtone_gamma = has_midtones
+            ? std::clamp(1.0F / (1.0F + midtones_value * 0.01F), 0.2F, 5.0F)
+            : 1.0F;
         for (int y = 0; y < gamma_rgb.rows; ++y) {
             for (int x = 0; x < gamma_rgb.cols; ++x) {
-                float weight = 0.0F;
-                const float y_value = luminance.at<float>(y, x);
-                if (highlights_side) {
-                    weight = std::pow(std::clamp((y_value - pivot) / range, 0.0F, 1.0F), power);
-                } else {
-                    weight = std::pow(std::clamp((pivot - y_value) / range, 0.0F, 1.0F), power);
-                }
                 auto& pixel = gamma_rgb.at<cv::Vec3f>(y, x);
-                pixel[0] = clamp01(pixel[0] + amount * weight);
-                pixel[1] = clamp01(pixel[1] + amount * weight);
-                pixel[2] = clamp01(pixel[2] + amount * weight);
-                luminance.at<float>(y, x) = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
-            }
-        }
-    };
+                float y_value = luminance.at<float>(y, x);
 
-    apply_additive_tonal(highlights_value, 0.45F, 0.30F, 0.70F, 1.5F, true);
-    apply_additive_tonal(shadows_value, 0.50F, 0.65F, 0.65F, 1.5F, false);
-    apply_additive_tonal(whites_value, 0.30F, 0.60F, 0.40F, 2.0F, true);
-    apply_additive_tonal(blacks_value, 0.25F, 0.35F, 0.35F, 2.0F, false);
+                const auto apply_tonal_shift = [&](const float amount, const float pivot, const float range, const float power, const bool highlights_side) {
+                    if (amount == 0.0F) {
+                        return;
+                    }
+                    const float normalized = highlights_side
+                        ? std::clamp((y_value - pivot) / range, 0.0F, 1.0F)
+                        : std::clamp((pivot - y_value) / range, 0.0F, 1.0F);
+                    const float weight = std::pow(normalized, power);
+                    pixel[0] = clamp01(pixel[0] + amount * weight);
+                    pixel[1] = clamp01(pixel[1] + amount * weight);
+                    pixel[2] = clamp01(pixel[2] + amount * weight);
+                    y_value = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
+                };
 
-    if (midtones_value != 0.0F) {
-        const float gamma = std::clamp(1.0F / (1.0F + midtones_value * 0.01F), 0.2F, 5.0F);
-        for (int y = 0; y < gamma_rgb.rows; ++y) {
-            for (int x = 0; x < gamma_rgb.cols; ++x) {
-                const float y_value = luminance.at<float>(y, x);
-                const float weight = std::clamp(1.0F - std::pow(2.0F * y_value - 1.0F, 2.0F), 0.0F, 1.0F);
-                auto& pixel = gamma_rgb.at<cv::Vec3f>(y, x);
-                for (int c = 0; c < 3; ++c) {
-                    const float bent = std::pow(std::clamp(pixel[c], 1.0e-8F, 1.0F), gamma);
-                    pixel[c] = clamp01(pixel[c] * (1.0F - weight) + bent * weight);
+                apply_tonal_shift(highlights_amount, 0.30F, 0.70F, 1.5F, true);
+                apply_tonal_shift(shadows_amount, 0.65F, 0.65F, 1.5F, false);
+                apply_tonal_shift(whites_amount, 0.60F, 0.40F, 2.0F, true);
+                apply_tonal_shift(blacks_amount, 0.35F, 0.35F, 2.0F, false);
+
+                if (has_midtones) {
+                    const float weight = std::clamp(1.0F - std::pow(2.0F * y_value - 1.0F, 2.0F), 0.0F, 1.0F);
+                    for (int c = 0; c < 3; ++c) {
+                        const float bent = std::pow(std::clamp(pixel[c], 1.0e-8F, 1.0F), midtone_gamma);
+                        pixel[c] = clamp01(pixel[c] * (1.0F - weight) + bent * weight);
+                    }
+                    y_value = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
                 }
+                luminance.at<float>(y, x) = y_value;
             }
         }
     }
