@@ -70,6 +70,17 @@ python server.py
 With that flag enabled, `/api/profiles` uses the C++ bridge for stock and print
 profile listing and falls back to the Python loader if the native path fails.
 
+To route `/api/raw-image` through the native C++ preview path:
+
+```powershell
+$env:DFEE_USE_NATIVE_RAW_IMAGE="1"
+python server.py
+```
+
+With that flag enabled, `/api/raw-image` asks the native engine to build and
+serve the RAW preview JPEG and falls back to the Python cache if the native
+preview path fails.
+
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA
 fallback reason.

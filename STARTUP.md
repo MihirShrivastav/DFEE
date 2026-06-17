@@ -59,6 +59,13 @@ On startup, the backend log now prints the native engine capability snapshot,
 including engine version, LibRaw availability, CUDA mode, device details, and
 fallback reason if CUDA is unavailable.
 
+To route `/api/raw-image` through the native C++ preview path while keeping the
+rest of the backend on the Python pipeline:
+```powershell
+$env:DFEE_USE_NATIVE_RAW_IMAGE="1"
+python server.py
+```
+
 ---
 
 ## Using the Workspace Interface

@@ -100,6 +100,10 @@ def _native_profiles_enabled() -> bool:
     return _env_flag("DFEE_USE_NATIVE_PROFILES", default=False)
 
 
+def _native_raw_image_enabled() -> bool:
+    return _env_flag("DFEE_USE_NATIVE_RAW_IMAGE", default=False)
+
+
 @lru_cache(maxsize=1)
 def _get_native_bridge_module():
     import dfee_native_bridge
@@ -225,6 +229,14 @@ def _list_profiles_native():
             "cuda_mode": profiles.engine.cuda_status.mode,
         },
     }
+
+
+def _get_native_raw_preview(filename: str, *, max_edge: int = 1024) -> tuple[bytes, str]:
+    native_session = _get_native_engine_session()
+    native_session.select_file(filename)
+    native_session.decode_raw(filename, draft_mode=True)
+    preview = native_session.raw_preview(filename, max_edge=max_edge)
+    return preview.jpeg_bytes, preview.content_type
 
 # Pydantic schemas
 class SelectRequest(BaseModel):
@@ -667,9 +679,22 @@ def select_file(req: SelectRequest):
 
 @app.get("/api/raw-image")
 def get_raw_image():
-    logger.info("Serving cached RAW preview for %s", session.filename)
-    if not session.raw_preview_bytes:
+    use_native = _native_raw_image_enabled()
+    logger.info("Serving cached RAW preview for %s (native=%s)", session.filename, use_native)
+    if not session.filename and not session.raw_preview_bytes:
         logger.warning("RAW preview requested with no active session")
+        raise HTTPException(status_code=400, detail="No active session loaded")
+
+    if use_native and session.filename:
+        try:
+            jpeg_bytes, content_type = _get_native_raw_preview(session.filename, max_edge=1024)
+            logger.info("Served RAW preview via native engine for %s", session.filename)
+            return StreamingResponse(io.BytesIO(jpeg_bytes), media_type=content_type)
+        except Exception:
+            logger.exception("Native RAW preview failed for %s, falling back to Python cache", session.filename)
+
+    if not session.raw_preview_bytes:
+        logger.warning("RAW preview cache unavailable for active session %s", session.filename)
         raise HTTPException(status_code=400, detail="No active session loaded")
     return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 

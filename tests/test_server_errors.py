@@ -156,6 +156,42 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(warning_log.call_args.args[0], "Native engine startup probe unavailable: %s")
         self.assertEqual(str(warning_log.call_args.args[1]), "bridge missing")
 
+    def test_raw_image_can_use_native_preview_behind_flag(self):
+        native_preview = SimpleNamespace(
+            jpeg_bytes=b"native-jpeg-bytes",
+            content_type="image/jpeg",
+        )
+        fake_session = SimpleNamespace(
+            select_file=mock.Mock(),
+            decode_raw=mock.Mock(),
+            raw_preview=mock.Mock(return_value=native_preview),
+        )
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-jpeg-bytes"
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_RAW_IMAGE": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_engine_session", return_value=fake_session):
+                response = self.client.get("/api/raw-image")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"native-jpeg-bytes")
+        self.assertEqual(response.headers["content-type"], "image/jpeg")
+        fake_session.select_file.assert_called_once_with("example.ARW")
+        fake_session.decode_raw.assert_called_once_with("example.ARW", draft_mode=True)
+        fake_session.raw_preview.assert_called_once_with("example.ARW", max_edge=1024)
+
+    def test_raw_image_falls_back_to_python_cache_when_native_preview_fails(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-jpeg-bytes"
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_RAW_IMAGE": "true"}, clear=False):
+            with mock.patch.object(server, "_get_native_engine_session", side_effect=RuntimeError("native preview failed")):
+                response = self.client.get("/api/raw-image")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"python-jpeg-bytes")
+        self.assertEqual(response.headers["content-type"], "image/jpeg")
+
 
 if __name__ == "__main__":
     unittest.main()
