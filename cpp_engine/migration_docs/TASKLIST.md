@@ -97,7 +97,7 @@ Status values:
 | M6-002 | planned | Replace bloom/halation with separable or pyramid highlight diffusion | Visual QA plus performance benchmark | Only after baseline parity. |
 | M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Must preserve stock character. |
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |
-| M6-005 | planned | Add performance dashboard or benchmark script | Benchmark output artifact | Track select, preview, export, RAM, VRAM. |
+| M6-005 | next | Add performance dashboard or benchmark script | Benchmark output artifact | Track select, preview, export, RAM, VRAM. Follow `migration_docs/PERFORMANCE_METHOD.md` so all measurements use stable cold/warm probe rules. |
 
 ## Standing Engineering Tasks
 
@@ -108,3 +108,4 @@ Status values:
 | S-003 | active | Preserve Python-vs-C++ parity tests before redesigning effects | CI/local test evidence | Quality improvements are versioned after parity. |
 | S-004 | active | Keep generated build outputs ignored | `git status --short` | `cpp_engine/out/` must remain untracked. |
 | S-005 | active | Record significant migration decisions in APAM | APAM update after meaningful slices | Maintains project continuity across sessions. |
+| S-006 | active | Follow the documented native performance method for optimization work | Baseline/probe notes in same slice | Use `migration_docs/PERFORMANCE_METHOD.md` for stable probe discipline, warm-vs-cold interpretation, and accept/revert decisions. |

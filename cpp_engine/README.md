@@ -2,6 +2,11 @@
 
 This directory is the root CMake project for the native DFEE engine. It intentionally does not contain a nested `cpp_engine/` project.
 
+Performance work on the native engine follows a documented measurement protocol:
+[migration_docs/PERFORMANCE_METHOD.md](d:/Codebases/DFEE/cpp_engine/migration_docs/PERFORMANCE_METHOD.md).
+Use that document as the source of truth for benchmark discipline, warm-cache vs
+cold-cache interpretation, and optimization acceptance rules.
+
 ## Current Milestone
 
 The current native scaffold builds:
@@ -113,3 +118,15 @@ The native renderer now also includes the current film halation and bloom stage.
 The native renderer now also includes the current deterministic grain baseline. It keeps the existing content-derived seeding idea for parity, generates shared sparse/grit master fields once per render call, synthesizes channel-specific boolean-model grain from those masters, and applies the result in gamma space behind the grain-receptivity mask so identical inputs produce identical grain.
 
 The native renderer now also includes the current print-stock finish stage. It applies CMY printer-light shifts, print shadow lift and contrast shaping, highlight rolloff, zonal OKLab biasing, dye scaling, saturation scaling, and the subtle fixed-seed print grain overlay that the Python renderer currently uses before export/display encoding.
+
+## Performance Discipline
+
+Native performance work should not proceed by intuition alone. Use the method in
+[migration_docs/PERFORMANCE_METHOD.md](d:/Codebases/DFEE/cpp_engine/migration_docs/PERFORMANCE_METHOD.md)
+and keep these rules in mind:
+
+- compare against one stable probe scenario at a time
+- rebuild in `Release` before timing
+- separate cold-cache and warm-cache results
+- keep only changes that improve the target metric and preserve test/parity confidence
+- prefer removing redundant passes, conversions, and per-pixel repeated setup before attempting approximations
