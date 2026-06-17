@@ -43,6 +43,19 @@ class TestServerRawFailureHandling(unittest.TestCase):
             if entry.is_file() and entry.suffix.lower() == ".arw"
         )
 
+    @staticmethod
+    def _fake_select_ingest():
+        rgb = np.full((2, 2, 3), 0.25, dtype=np.float32)
+        Y = np.full((2, 2), 0.25, dtype=np.float32)
+        clipping_masks = {
+            "R": np.zeros((2, 2), dtype=bool),
+            "G": np.zeros((2, 2), dtype=bool),
+            "B": np.zeros((2, 2), dtype=bool),
+        }
+        clipping_ratios = {"R": 0.0, "G": 0.0, "B": 0.0}
+        metadata = {"image_width": 2, "image_height": 2, "camera_model": "Test Camera"}
+        return rgb, Y, clipping_masks, clipping_ratios, metadata
+
     def test_select_rejects_unsupported_raw_without_crashing(self):
         filename = self._create_temp_raw_file("server_test_unsupported.arw", b"not a real raw file\n")
 
@@ -364,6 +377,91 @@ class TestServerRawFailureHandling(unittest.TestCase):
         renderer_instance.render.assert_called_once()
         reporter_instance.write_report.assert_called_once()
         image_instance.save.assert_called_once()
+
+    def test_select_can_warm_native_session_behind_flag(self):
+        raw_filename = self._raw_filename()
+        fake_analyzer = mock.Mock(analyze=mock.Mock(return_value=(
+            {
+                "tonal_distribution": {
+                    "tonal_skew": "normal",
+                    "dynamic_range_stops": 11.2,
+                    "midtone_anchor": 0.18,
+                    "highlight_headroom": 0.24,
+                    "shadow_depth": 0.07,
+                },
+                "hue_saturation_state": {
+                    "neon_risk": 0.12,
+                    "dominant_hue_bins": ["Red", "Blue"],
+                    "hue_entropy": 1.5,
+                },
+                "spatial_frequency": {
+                    "specular_point_ratio": 0.004,
+                },
+            },
+            {"luminance_zone_masks": {}},
+        )))
+        fake_bias = {"neutral_confidence": 0.85}
+        fake_ingestor = mock.Mock(ingest=mock.Mock(return_value=self._fake_select_ingest()))
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_SELECT": "1"}, clear=False):
+            with mock.patch.object(server, "_warm_native_select") as native_mock:
+                with mock.patch.object(server, "RawIngestor", return_value=fake_ingestor):
+                    with mock.patch.object(server, "ImageStateAnalyzer", return_value=fake_analyzer):
+                        with mock.patch.object(server, "CameraBiasEstimator") as bias_cls:
+                            bias_cls.return_value.estimate_bias.return_value = fake_bias
+                            with mock.patch.object(server, "linear_to_srgb", return_value=np.full((2, 2, 3), 0.25, dtype=np.float32)):
+                                with mock.patch.object(server.cv2, "cvtColor", return_value=np.zeros((2, 2, 3), dtype=np.uint8)):
+                                    with mock.patch.object(server.cv2, "imencode", return_value=(True, np.array([1, 2, 3], dtype=np.uint8))):
+                                        response = self.client.post("/api/select", json={"filename": raw_filename})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "loaded")
+        self.assertIn("metadata", payload)
+        self.assertIn("diagnostics", payload)
+        native_mock.assert_called_once_with(raw_filename, max_edge=1024)
+
+    def test_select_falls_back_to_python_analysis_when_native_warmup_fails(self):
+        raw_filename = self._raw_filename()
+        fake_analyzer = mock.Mock(analyze=mock.Mock(return_value=(
+            {
+                "tonal_distribution": {
+                    "tonal_skew": "normal",
+                    "dynamic_range_stops": 11.2,
+                    "midtone_anchor": 0.18,
+                    "highlight_headroom": 0.24,
+                    "shadow_depth": 0.07,
+                },
+                "hue_saturation_state": {
+                    "neon_risk": 0.12,
+                    "dominant_hue_bins": ["Red", "Blue"],
+                    "hue_entropy": 1.5,
+                },
+                "spatial_frequency": {
+                    "specular_point_ratio": 0.004,
+                },
+            },
+            {"luminance_zone_masks": {}},
+        )))
+        fake_bias = {"neutral_confidence": 0.85}
+        fake_ingestor = mock.Mock(ingest=mock.Mock(return_value=self._fake_select_ingest()))
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_SELECT": "true"}, clear=False):
+            with mock.patch.object(server, "_warm_native_select", side_effect=RuntimeError("native select failed")):
+                with mock.patch.object(server, "RawIngestor", return_value=fake_ingestor):
+                    with mock.patch.object(server, "ImageStateAnalyzer", return_value=fake_analyzer):
+                        with mock.patch.object(server, "CameraBiasEstimator") as bias_cls:
+                            bias_cls.return_value.estimate_bias.return_value = fake_bias
+                            with mock.patch.object(server, "linear_to_srgb", return_value=np.full((2, 2, 3), 0.25, dtype=np.float32)):
+                                with mock.patch.object(server.cv2, "cvtColor", return_value=np.zeros((2, 2, 3), dtype=np.uint8)):
+                                    with mock.patch.object(server.cv2, "imencode", return_value=(True, np.array([1, 2, 3], dtype=np.uint8))):
+                                        response = self.client.post("/api/select", json={"filename": raw_filename})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "loaded")
+        self.assertIn("metadata", payload)
+        self.assertIn("diagnostics", payload)
 
 
 if __name__ == "__main__":

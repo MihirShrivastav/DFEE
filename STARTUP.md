@@ -80,6 +80,13 @@ $env:DFEE_USE_NATIVE_EXPORT="1"
 python server.py
 ```
 
+To warm the native session during `/api/select` while still returning the
+existing Python metadata and diagnostics payload:
+```powershell
+$env:DFEE_USE_NATIVE_SELECT="1"
+python server.py
+```
+
 ---
 
 ## Using the Workspace Interface

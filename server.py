@@ -112,6 +112,10 @@ def _native_export_enabled() -> bool:
     return _env_flag("DFEE_USE_NATIVE_EXPORT", default=False)
 
 
+def _native_select_enabled() -> bool:
+    return _env_flag("DFEE_USE_NATIVE_SELECT", default=False)
+
+
 @lru_cache(maxsize=1)
 def _get_native_bridge_module():
     import dfee_native_bridge
@@ -268,6 +272,13 @@ def _run_native_export(request_payload: dict) -> dict:
         "report_path": str(exported.report_path) if exported.report_path is not None else None,
         "format": exported.format_label,
     }
+
+
+def _warm_native_select(filename: str, *, max_edge: int = 1024) -> None:
+    native_session = _get_native_engine_session()
+    native_session.select_file(filename)
+    native_session.decode_raw(filename, draft_mode=True)
+    native_session.raw_preview(filename, max_edge=max_edge)
 
 # Pydantic schemas
 class SelectRequest(BaseModel):
@@ -607,7 +618,8 @@ def _apply_post_film_effects(rendered, curves_json, hsl_dict,
 
 @app.post("/api/select")
 def select_file(req: SelectRequest):
-    logger.info("Selecting RAW file %s", req.filename)
+    use_native = _native_select_enabled()
+    logger.info("Selecting RAW file %s (native=%s)", req.filename, use_native)
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
         logger.warning("Select failed, file not found: %s", req.filename)
@@ -622,6 +634,13 @@ def select_file(req: SelectRequest):
                 "metadata": {k: str(v) for k, v in session.metadata.items()},
                 "diagnostics": session.cached_diagnostics
             }
+
+        if use_native:
+            try:
+                _warm_native_select(req.filename, max_edge=1024)
+                logger.info("Warmed native select state for %s", req.filename)
+            except Exception:
+                logger.exception("Native select warmup failed for %s, continuing with Python analysis path", req.filename)
 
         # Ingest in draft mode (half_size) for quick loading
         ingestor = RawIngestor(filepath)
