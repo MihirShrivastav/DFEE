@@ -73,6 +73,13 @@ $env:DFEE_USE_NATIVE_PREVIEW="1"
 python server.py
 ```
 
+To route `/api/export` through the native C++ export path while keeping the
+rest of the backend on the Python pipeline:
+```powershell
+$env:DFEE_USE_NATIVE_EXPORT="1"
+python server.py
+```
+
 ---
 
 ## Using the Workspace Interface

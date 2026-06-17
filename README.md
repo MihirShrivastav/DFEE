@@ -92,6 +92,17 @@ With that flag enabled, `/api/preview` asks the native engine to render the
 current stock preview JPEG and falls back to the Python preview pipeline if the
 native render path fails.
 
+To route `/api/export` through the native C++ export path:
+
+```powershell
+$env:DFEE_USE_NATIVE_EXPORT="1"
+python server.py
+```
+
+With that flag enabled, `/api/export` asks the native engine to write the final
+image and report outputs and falls back to the Python export pipeline if the
+native export path fails.
+
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA
 fallback reason.

@@ -108,6 +108,10 @@ def _native_preview_enabled() -> bool:
     return _env_flag("DFEE_USE_NATIVE_PREVIEW", default=False)
 
 
+def _native_export_enabled() -> bool:
+    return _env_flag("DFEE_USE_NATIVE_EXPORT", default=False)
+
+
 @lru_cache(maxsize=1)
 def _get_native_bridge_module():
     import dfee_native_bridge
@@ -250,6 +254,20 @@ def _get_native_rendered_preview(request_payload: dict) -> tuple[bytes, str]:
     request = native_bridge.NativePreviewRenderRequest(**request_payload)
     preview = native_session.render_preview(request)
     return preview.jpeg_bytes, preview.content_type
+
+
+def _run_native_export(request_payload: dict) -> dict:
+    native_bridge = _get_native_bridge_module()
+    native_session = _get_native_engine_session()
+    native_session.select_file(request_payload["filename"])
+    request = native_bridge.NativeExportRequest(**request_payload)
+    exported = native_session.export_image(request)
+    return {
+        "status": exported.status,
+        "output_path": str(exported.output_path),
+        "report_path": str(exported.report_path) if exported.report_path is not None else None,
+        "format": exported.format_label,
+    }
 
 # Pydantic schemas
 class SelectRequest(BaseModel):
@@ -908,13 +926,21 @@ def get_preview(
 @app.post("/api/export")
 def export_file(req: PreviewRequest):
     logger.info(
-        "Export requested for file=%s stock=%s print_stock=%s format=%s",
-        req.filename, req.stock, req.print_stock, req.export_format
+        "Export requested for file=%s stock=%s print_stock=%s format=%s (native=%s)",
+        req.filename, req.stock, req.print_stock, req.export_format, _native_export_enabled()
     )
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
         logger.warning("Export failed, file not found: %s", req.filename)
         raise HTTPException(status_code=404, detail="File not found")
+
+    if _native_export_enabled():
+        try:
+            native_result = _run_native_export(req.model_dump())
+            logger.info("Export completed via native engine for %s", req.filename)
+            return native_result
+        except Exception:
+            logger.exception("Native export failed for %s, falling back to Python pipeline", req.filename)
 
     try:
         stock_profile = _load_stock_profile(req.stock) if req.stock != "none" else None
