@@ -52,7 +52,7 @@ struct OklchPixel {
     };
 }
 
-[[nodiscard]] std::array<float, 3> oklab_to_rgb_pixel(const OklabPixel& oklab) {
+[[nodiscard]] std::array<float, 3> oklab_to_rgb_pixel_unclamped(const OklabPixel& oklab) {
     const float lp = oklab.l + 0.3963377774F * oklab.a + 0.2158017574F * oklab.b;
     const float mp = oklab.l - 0.1055613458F * oklab.a - 0.0638541728F * oklab.b;
     const float sp = oklab.l - 0.0894841775F * oklab.a - 1.2914855480F * oklab.b;
@@ -62,10 +62,18 @@ struct OklchPixel {
     const float s = sp * sp * sp;
 
     return {
-        clamp01(4.0767416621F * l - 3.3077115913F * m + 0.2309699292F * s),
-        clamp01(-1.2684380046F * l + 2.6097574011F * m - 0.3413193965F * s),
-        clamp01(-0.0041960863F * l - 0.7034186147F * m + 1.7076147010F * s),
+        4.0767416621F * l - 3.3077115913F * m + 0.2309699292F * s,
+        -1.2684380046F * l + 2.6097574011F * m - 0.3413193965F * s,
+        -0.0041960863F * l - 0.7034186147F * m + 1.7076147010F * s,
     };
+}
+
+[[nodiscard]] std::array<float, 3> oklab_to_rgb_pixel(const OklabPixel& oklab) {
+    auto rgb = oklab_to_rgb_pixel_unclamped(oklab);
+    rgb[0] = clamp01(rgb[0]);
+    rgb[1] = clamp01(rgb[1]);
+    rgb[2] = clamp01(rgb[2]);
+    return rgb;
 }
 
 [[nodiscard]] OklchPixel oklab_to_oklch_pixel(const OklabPixel& oklab) {
@@ -721,13 +729,21 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         OklabPixel adjusted = oklch_to_oklab_pixel({base_oklab.l, std::max(c_final, 0.0F), hue});
         adjusted.a += a_bias;
         adjusted.b += b_bias;
-        const auto adjusted_rgb = oklab_to_rgb_pixel(adjusted);
+        const auto adjusted_rgb = oklab_to_rgb_pixel_unclamped(adjusted);
+        const bool needs_gamut_clamp =
+            adjusted_rgb[0] < 0.0F || adjusted_rgb[0] > 1.0F ||
+            adjusted_rgb[1] < 0.0F || adjusted_rgb[1] > 1.0F ||
+            adjusted_rgb[2] < 0.0F || adjusted_rgb[2] > 1.0F;
 
-        const OklabPixel coupled_oklab = rgb_to_oklab_pixel(
-            clamp01(adjusted_rgb[0]),
-            clamp01(adjusted_rgb[1]),
-            clamp01(adjusted_rgb[2]));
-        lch = oklab_to_oklch_pixel(coupled_oklab);
+        if (needs_gamut_clamp) {
+            const OklabPixel coupled_oklab = rgb_to_oklab_pixel(
+                clamp01(adjusted_rgb[0]),
+                clamp01(adjusted_rgb[1]),
+                clamp01(adjusted_rgb[2]));
+            lch = oklab_to_oklch_pixel(coupled_oklab);
+        } else {
+            lch = oklab_to_oklch_pixel(adjusted);
+        }
 
         const float t_hi = clampf((lch.l - hi_start) / std::max(1.0F - hi_start, 1.0e-6F), 0.0F, 1.0F);
         const float hi_mask = std::pow(t_hi, hi_rate);

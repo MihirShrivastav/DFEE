@@ -113,6 +113,40 @@ Current low-noise warm-cache export request shape:
 This probe is not artistically interesting. It is intentionally narrow so the
 engine hotspot is easier to isolate.
 
+## Current Preview Probe
+
+Use this probe for live-editing latency work on the native preview path:
+
+- stable local RAW fixture: `credit @ryanbreitkreutz _DSC0027.ARW`
+- `stock='ultramax_400'`
+- `print_stock='none'`
+- `grain='Auto'`
+- `halation='Auto'`
+- `bloom=0.0`
+- `clarity=0.0`
+- `texture=0.0`
+- `dehaze=0.0`
+- `film_color=100.0`
+
+Execution rules:
+
+- call `select_file(...)` once before timing
+- record one cold render plus at least three warm renders
+- extract timings from `NativeRenderedPreview.engine.timings`
+- compare warm averages, not just the fastest single run
+
+Current useful preview metrics:
+
+- `render_preview_total`
+- `render_preview_analyze`
+- `render_preview_film_pipeline`
+- `render_preview_film_stage_color_response`
+- `render_preview_film_stage_grain`
+- `render_preview_film_stage_halation_bloom`
+
+This probe is intentionally closer to a real editing pass than the export probe,
+so grain and halation remain enabled.
+
 ## Metrics To Record
 
 For native export work, record these timings from native metadata:
