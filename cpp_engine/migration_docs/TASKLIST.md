@@ -32,7 +32,7 @@ Status values:
 | M1-003 | done | Add structured native error type and Python exception mapping | `pytest tests/test_native_bridge.py -q` | Native errors now carry `code`, `user_message`, and `detail` through the C++ layer, `.pyd`, and Python wrapper exceptions. |
 | M1-004 | done | Add per-stage timing model and JSON serialization helpers | `ctest --preset windows-msvc` and `pytest tests/test_native_bridge.py -q` | Native metadata now carries stage timings plus serialized `metadata_json` through the `.pyd` and Python wrapper. |
 | M1-005 | done | Wire FastAPI `/api/profiles` to native profile listing behind a feature flag | `pytest tests/test_server_errors.py -q` | `DFEE_USE_NATIVE_PROFILES=1` switches `/api/profiles` onto the native bridge, preserves the existing response shape, and falls back to the Python loader if the native path fails. |
-| M1-006 | planned | Add native engine capability endpoint or internal startup log | Server startup log review | Should log engine version, mode, CUDA status, and fallback reason. |
+| M1-006 | done | Add native engine capability endpoint or internal startup log | `pytest tests/test_server_errors.py -q` | FastAPI startup now logs native engine version, LibRaw availability, CUDA mode, device details, and fallback reason through a lifespan startup probe without changing the HTTP API surface. |
 
 ## Milestone M2 - RAW Decode And Session Ownership
 

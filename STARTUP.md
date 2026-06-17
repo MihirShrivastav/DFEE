@@ -55,6 +55,10 @@ $env:DFEE_USE_NATIVE_PROFILES="1"
 python server.py
 ```
 
+On startup, the backend log now prints the native engine capability snapshot,
+including engine version, LibRaw availability, CUDA mode, device details, and
+fallback reason if CUDA is unavailable.
+
 ---
 
 ## Using the Workspace Interface

@@ -2,6 +2,7 @@ import os
 import glob
 import io
 import logging
+from contextlib import asynccontextmanager
 from functools import lru_cache
 import cv2
 import numpy as np
@@ -23,7 +24,14 @@ from dfee.report import RenderReporter
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dfee.server")
 
-app = FastAPI(title="Deterministic Film Emulation Engine (DFEE) Server")
+
+@asynccontextmanager
+async def _app_lifespan(_: FastAPI):
+    _log_native_engine_startup_status()
+    yield
+
+
+app = FastAPI(title="Deterministic Film Emulation Engine (DFEE) Server", lifespan=_app_lifespan)
 
 # Allow CORS for development
 app.add_middleware(
@@ -103,6 +111,27 @@ def _get_native_bridge_module():
 def _get_native_engine_session():
     native_bridge = _get_native_bridge_module()
     return native_bridge.create_session(BASE_DIR)
+
+def _log_native_engine_startup_status():
+    try:
+        native_session = _get_native_engine_session()
+        profiles = native_session.list_profiles()
+        engine = profiles.engine
+        cuda = engine.cuda_status
+        logger.info(
+            "Native engine startup status: version=%s libraw_enabled=%s cuda_mode=%s cuda_compiled=%s cuda_available=%s cuda_active=%s device_count=%s device_name=%s fallback_reason=%s",
+            engine.engine_version,
+            engine.libraw_enabled,
+            cuda.mode,
+            cuda.compiled,
+            cuda.available,
+            cuda.active,
+            cuda.device_count,
+            cuda.device_name or "n/a",
+            cuda.fallback_reason or "none",
+        )
+    except Exception as exc:
+        logger.warning("Native engine startup probe unavailable: %s", exc)
 
 def _load_stock_profile(stock_id):
     return FilmStockProfile(os.path.join(STOCKS_DIR, f"{stock_id}.yaml"))
