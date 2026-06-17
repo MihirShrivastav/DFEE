@@ -241,6 +241,35 @@ struct OklchPixel {
     return static_cast<std::uint32_t>(capped);
 }
 
+struct GrainNoiseCacheKey {
+    int width = 0;
+    int height = 0;
+    std::uint32_t seed = 0U;
+    std::int32_t grain_size_q = 0;
+    std::int32_t grain_roughness_q = 0;
+    std::int32_t grain_chroma_q = 0;
+
+    [[nodiscard]] bool matches(const GrainNoiseCacheKey& other) const noexcept {
+        return width == other.width &&
+            height == other.height &&
+            seed == other.seed &&
+            grain_size_q == other.grain_size_q &&
+            grain_roughness_q == other.grain_roughness_q &&
+            grain_chroma_q == other.grain_chroma_q;
+    }
+};
+
+struct GrainNoiseCacheEntry {
+    GrainNoiseCacheKey key;
+    cv::Mat noise_r;
+    cv::Mat noise_g;
+    cv::Mat noise_b;
+};
+
+[[nodiscard]] std::int32_t quantize_grain_param(const float value) {
+    return static_cast<std::int32_t>(std::lround(value * 1000.0F));
+}
+
 [[nodiscard]] cv::Mat make_sparse_master(const int height, const int width, std::mt19937_64& rng) {
     cv::Mat out(height, width, CV_32F);
     std::bernoulli_distribution keep(0.08);
@@ -896,6 +925,12 @@ Image FilmRenderer::apply_color_response(
     return apply_color_pipeline(rgb_linear, &zone_masks, response, true, false);
 }
 
+Image FilmRenderer::apply_dye_contamination(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) const {
+    return dfee::apply_dye_contamination(rgb_linear, response);
+}
+
 Image FilmRenderer::apply_color_response_and_coupling(
     const Image& rgb_linear,
     const ZoneMasks& zone_masks,
@@ -1176,51 +1211,74 @@ Image FilmRenderer::apply_film_grain(
     const int h = rgb_linear.height;
     const int w = rgb_linear.width;
     const float scale_factor = static_cast<float>(w) / 2048.0F;
-
-    std::mt19937_64 rng(compute_grain_seed(rgb_linear));
-    cv::Mat sparse_master = make_sparse_master(h, w, rng);
-    cv::Mat grit_master = make_standard_normal_mat(h, w, rng);
-    cv::Mat grit_blur;
-    cv::GaussianBlur(grit_master, grit_blur, cv::Size(3, 3), 0.5);
-    grit_master -= grit_blur;
-    normalize_zero_mean_unit_variance(grit_master);
-
     const bool is_mono = effects.grain_chroma_strength <= 0.0F;
+    const std::uint32_t grain_seed = effects.grain_seed != 0U ? effects.grain_seed : compute_grain_seed(rgb_linear);
+    const GrainNoiseCacheKey cache_key{
+        .width = w,
+        .height = h,
+        .seed = grain_seed,
+        .grain_size_q = quantize_grain_param(effects.grain_size),
+        .grain_roughness_q = quantize_grain_param(effects.grain_roughness),
+        .grain_chroma_q = quantize_grain_param(effects.grain_chroma_strength),
+    };
+    static thread_local std::optional<GrainNoiseCacheEntry> grain_noise_cache;
+
     cv::Mat noise_r;
     cv::Mat noise_g;
     cv::Mat noise_b;
 
-    if (is_mono) {
-        noise_g = generate_grain_noise_channel(
-            sparse_master,
-            grit_master,
-            effects.grain_size,
-            1.00F,
-            scale_factor,
-            effects.grain_roughness);
-        noise_r = noise_g;
-        noise_b = noise_g;
+    if (grain_noise_cache.has_value() && grain_noise_cache->key.matches(cache_key)) {
+        noise_r = grain_noise_cache->noise_r;
+        noise_g = grain_noise_cache->noise_g;
+        noise_b = grain_noise_cache->noise_b;
     } else {
-        const cv::Mat sparse_r = sparse_master;
-        const cv::Mat sparse_g = roll_mat(sparse_master, 13, 0);
-        const cv::Mat sparse_b = roll_mat(sparse_master, 0, 23);
-        const cv::Mat grit_r = grit_master;
-        const cv::Mat grit_g = roll_mat(grit_master, 13, 0);
-        const cv::Mat grit_b = roll_mat(grit_master, 0, 23);
+        std::mt19937_64 rng(grain_seed);
+        cv::Mat sparse_master = make_sparse_master(h, w, rng);
+        cv::Mat grit_master = make_standard_normal_mat(h, w, rng);
+        cv::Mat grit_blur;
+        cv::GaussianBlur(grit_master, grit_blur, cv::Size(3, 3), 0.5);
+        grit_master -= grit_blur;
+        normalize_zero_mean_unit_variance(grit_master);
 
-        const cv::Mat noise_r_ind = generate_grain_noise_channel(
-            sparse_r, grit_r, effects.grain_size, 0.80F, scale_factor, effects.grain_roughness);
-        noise_g = generate_grain_noise_channel(
-            sparse_g, grit_g, effects.grain_size, 1.00F, scale_factor, effects.grain_roughness);
-        const cv::Mat noise_b_ind = generate_grain_noise_channel(
-            sparse_b, grit_b, effects.grain_size, 1.25F, scale_factor, effects.grain_roughness);
+        if (is_mono) {
+            noise_g = generate_grain_noise_channel(
+                sparse_master,
+                grit_master,
+                effects.grain_size,
+                1.00F,
+                scale_factor,
+                effects.grain_roughness);
+            noise_r = noise_g;
+            noise_b = noise_g;
+        } else {
+            const cv::Mat sparse_r = sparse_master;
+            const cv::Mat sparse_g = roll_mat(sparse_master, 13, 0);
+            const cv::Mat sparse_b = roll_mat(sparse_master, 0, 23);
+            const cv::Mat grit_r = grit_master;
+            const cv::Mat grit_g = roll_mat(grit_master, 13, 0);
+            const cv::Mat grit_b = roll_mat(grit_master, 0, 23);
 
-        const float chroma_mix = clampf(effects.grain_chroma_strength * 4.0F, 0.0F, 1.0F);
-        noise_r = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_r_ind;
-        noise_b = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_b_ind;
-        normalize_zero_mean_unit_variance(noise_r);
-        normalize_zero_mean_unit_variance(noise_g);
-        normalize_zero_mean_unit_variance(noise_b);
+            const cv::Mat noise_r_ind = generate_grain_noise_channel(
+                sparse_r, grit_r, effects.grain_size, 0.80F, scale_factor, effects.grain_roughness);
+            noise_g = generate_grain_noise_channel(
+                sparse_g, grit_g, effects.grain_size, 1.00F, scale_factor, effects.grain_roughness);
+            const cv::Mat noise_b_ind = generate_grain_noise_channel(
+                sparse_b, grit_b, effects.grain_size, 1.25F, scale_factor, effects.grain_roughness);
+
+            const float chroma_mix = clampf(effects.grain_chroma_strength * 4.0F, 0.0F, 1.0F);
+            noise_r = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_r_ind;
+            noise_b = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_b_ind;
+            normalize_zero_mean_unit_variance(noise_r);
+            normalize_zero_mean_unit_variance(noise_g);
+            normalize_zero_mean_unit_variance(noise_b);
+        }
+
+        grain_noise_cache = GrainNoiseCacheEntry{
+            .key = cache_key,
+            .noise_r = noise_r,
+            .noise_g = noise_g,
+            .noise_b = noise_b,
+        };
     }
 
     cv::Mat grain_receptivity = luminance_image_to_mat(spatial_masks.grain_receptivity_mask);

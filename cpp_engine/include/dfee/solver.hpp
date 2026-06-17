@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -97,6 +98,7 @@ struct MaterialEffectsPlan {
     float grain_size = 0.0F;
     float grain_roughness = 0.0F;
     float grain_chroma_strength = 0.0F;
+    std::uint32_t grain_seed = 0U;
     float halation_strength = 0.0F;
     float bloom_strength = 0.0F;
     float edge_softening = 0.0F;

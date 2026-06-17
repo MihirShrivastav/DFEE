@@ -28,6 +28,10 @@ public:
         const Image& rgb_linear,
         const FilmResponsePlan& response) const;
 
+    [[nodiscard]] Image apply_dye_contamination(
+        const Image& rgb_linear,
+        const FilmResponsePlan& response) const;
+
     [[nodiscard]] Image apply_color_response(
         const Image& rgb_linear,
         const ZoneMasks& zone_masks,

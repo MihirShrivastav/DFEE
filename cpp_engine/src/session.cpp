@@ -50,6 +50,48 @@ void finalize_engine_metadata(NativeEngineMetadata& metadata) {
     metadata.metadata_json = serialize_native_engine_metadata_json(metadata);
 }
 
+std::uint32_t fnv1a_append_u32(std::uint32_t state, const std::uint32_t value) {
+    constexpr std::uint32_t kPrime = 16777619U;
+    state ^= (value & 0xFFU);
+    state *= kPrime;
+    state ^= ((value >> 8U) & 0xFFU);
+    state *= kPrime;
+    state ^= ((value >> 16U) & 0xFFU);
+    state *= kPrime;
+    state ^= ((value >> 24U) & 0xFFU);
+    state *= kPrime;
+    return state;
+}
+
+std::uint32_t fnv1a_append_string(std::uint32_t state, const std::string& value) {
+    constexpr std::uint32_t kPrime = 16777619U;
+    for (const unsigned char ch : value) {
+        state ^= static_cast<std::uint32_t>(ch);
+        state *= kPrime;
+    }
+    return state;
+}
+
+std::uint32_t quantize_hash_float(const float value) {
+    return static_cast<std::uint32_t>(std::lround(value * 1000.0F));
+}
+
+std::uint32_t compute_stable_grain_seed(
+    const std::string& filename,
+    const std::string& stock,
+    const std::string& print_stock,
+    const MaterialEffectsPlan& effects) {
+    std::uint32_t hash = 2166136261U;
+    hash = fnv1a_append_string(hash, filename);
+    hash = fnv1a_append_string(hash, stock);
+    hash = fnv1a_append_string(hash, print_stock);
+    hash = fnv1a_append_u32(hash, quantize_hash_float(effects.grain_size));
+    hash = fnv1a_append_u32(hash, quantize_hash_float(effects.grain_roughness));
+    hash = fnv1a_append_u32(hash, quantize_hash_float(effects.grain_chroma_strength));
+    hash = fnv1a_append_u32(hash, static_cast<std::uint32_t>(effects.grain_strength > 0.0F ? 1U : 0U));
+    return hash == 0U ? 1U : hash;
+}
+
 Image resize_image_to_max_edge(const Image& source, const int max_edge) {
     if (source.empty() || max_edge <= 0) {
         return source;
@@ -1519,17 +1561,67 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 stock_profile,
                 controls,
                 print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+            render_plan.material_effects.grain_seed = compute_stable_grain_seed(
+                response.filename,
+                request.stock,
+                request.print_stock,
+                render_plan.material_effects);
         }
 
         Image rendered = preview.rgb_linear;
+        FilmRenderer renderer;
         {
             ScopedStageTimer stage(response.engine, "render_preview_apply_pre_film_sliders");
             rendered = apply_pre_film_preview_sliders(preview.rgb_linear, request, render_plan);
         }
         {
             ScopedStageTimer stage(response.engine, "render_preview_film_pipeline");
-            FilmRenderer renderer;
-            rendered = renderer.render(rendered, zone_masks, spatial_masks, render_plan);
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_pre_film_normalization");
+                rendered = renderer.apply_pre_film_normalization(
+                    rendered,
+                    zone_masks,
+                    render_plan.pre_film_normalization);
+            }
+            if (render_plan.stock_type == "monochrome") {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_panchromatic");
+                rendered = renderer.apply_panchromatic_conversion(rendered, render_plan.film_response);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_tone_response");
+                rendered = renderer.apply_film_tone_response(rendered, render_plan.film_response);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_dye_contamination");
+                rendered = renderer.apply_dye_contamination(rendered, render_plan.film_response);
+            }
+            if (render_plan.stock_type != "monochrome") {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_color_response");
+                rendered = renderer.apply_color_response_and_coupling(
+                    rendered,
+                    zone_masks,
+                    render_plan.film_response);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_acutance");
+                rendered = renderer.apply_acutance_shaping(rendered, render_plan.material_effects);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_halation_bloom");
+                rendered = renderer.apply_halation_bloom(
+                    rendered,
+                    zone_masks,
+                    spatial_masks,
+                    render_plan.material_effects);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_grain");
+                rendered = renderer.apply_film_grain(rendered, spatial_masks, render_plan.material_effects);
+            }
+            if (render_plan.print_finish.has_value()) {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_print_finish");
+                rendered = renderer.apply_print_finish(rendered, *render_plan.print_finish);
+            }
         }
         {
             ScopedStageTimer stage(response.engine, "render_preview_post_color");
@@ -1539,11 +1631,22 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             ScopedStageTimer stage(response.engine, "render_preview_post_effects");
             rendered = apply_curves(rendered, request.curves);
             rendered = apply_hsl(rendered, request);
-            FilmRenderer renderer;
-            rendered = renderer.apply_clarity(rendered, request.clarity);
-            rendered = renderer.apply_texture(rendered, request.texture);
-            rendered = renderer.apply_dehaze(rendered, request.dehaze);
-            rendered = apply_post_bloom(rendered, request.bloom);
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_post_stage_clarity");
+                rendered = renderer.apply_clarity(rendered, request.clarity);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_post_stage_texture");
+                rendered = renderer.apply_texture(rendered, request.texture);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_post_stage_dehaze");
+                rendered = renderer.apply_dehaze(rendered, request.dehaze);
+            }
+            {
+                ScopedStageTimer substage(response.engine, "render_preview_post_stage_bloom");
+                rendered = apply_post_bloom(rendered, request.bloom);
+            }
         }
         {
             ScopedStageTimer stage(response.engine, "render_preview_encode_jpeg");
@@ -1707,6 +1810,11 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 }
                 solver_input = std::move(work.solver_input);
                 render_plan = std::move(work.render_plan);
+                render_plan->material_effects.grain_seed = compute_stable_grain_seed(
+                    response.filename,
+                    request.stock,
+                    request.print_stock,
+                    render_plan->material_effects);
 
                 append_export_trace(project_root_, "export_image:resize_masks_for_fullres:start");
                 ZoneMasks fullres_zone_masks;
