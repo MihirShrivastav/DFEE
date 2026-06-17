@@ -59,6 +59,23 @@ $env:PYTHONPATH="."
 pytest tests/test_dfee.py
 ```
 
+To enable the staged native backend across every migrated FastAPI route:
+
+```powershell
+$env:DFEE_USE_NATIVE_ENGINE="1"
+python server.py
+```
+
+That umbrella flag enables the current native-backed paths for:
+- `/api/profiles`
+- `/api/select` native warmup
+- `/api/raw-image`
+- `/api/preview`
+- `/api/export`
+
+Per-route flags still exist as debug overrides. If a per-route flag is set, it
+takes precedence over `DFEE_USE_NATIVE_ENGINE`.
+
 To exercise native profile discovery through the existing FastAPI route while
 keeping the response shape unchanged:
 

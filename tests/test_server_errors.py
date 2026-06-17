@@ -56,6 +56,31 @@ class TestServerRawFailureHandling(unittest.TestCase):
         metadata = {"image_width": 2, "image_height": 2, "camera_model": "Test Camera"}
         return rgb, Y, clipping_masks, clipping_ratios, metadata
 
+    def test_global_native_flag_enables_route_when_no_override_is_set(self):
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_ENGINE": "1"}, clear=True):
+            self.assertTrue(server._native_profiles_enabled())
+            self.assertTrue(server._native_raw_image_enabled())
+            self.assertTrue(server._native_preview_enabled())
+            self.assertTrue(server._native_export_enabled())
+            self.assertTrue(server._native_select_enabled())
+
+    def test_route_override_takes_precedence_over_global_native_flag(self):
+        with mock.patch.dict(
+            server.os.environ,
+            {
+                "DFEE_USE_NATIVE_ENGINE": "1",
+                "DFEE_USE_NATIVE_PREVIEW": "0",
+                "DFEE_USE_NATIVE_EXPORT": "false",
+                "DFEE_USE_NATIVE_SELECT": "no",
+            },
+            clear=True,
+        ):
+            self.assertTrue(server._native_profiles_enabled())
+            self.assertTrue(server._native_raw_image_enabled())
+            self.assertFalse(server._native_preview_enabled())
+            self.assertFalse(server._native_export_enabled())
+            self.assertFalse(server._native_select_enabled())
+
     def test_select_rejects_unsupported_raw_without_crashing(self):
         filename = self._create_temp_raw_file("server_test_unsupported.arw", b"not a real raw file\n")
 

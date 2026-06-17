@@ -96,24 +96,42 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_flag_override(name: str) -> bool | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _native_engine_enabled() -> bool:
+    return _env_flag("DFEE_USE_NATIVE_ENGINE", default=False)
+
+
+def _route_native_enabled(override_name: str) -> bool:
+    override = _env_flag_override(override_name)
+    if override is not None:
+        return override
+    return _native_engine_enabled()
+
+
 def _native_profiles_enabled() -> bool:
-    return _env_flag("DFEE_USE_NATIVE_PROFILES", default=False)
+    return _route_native_enabled("DFEE_USE_NATIVE_PROFILES")
 
 
 def _native_raw_image_enabled() -> bool:
-    return _env_flag("DFEE_USE_NATIVE_RAW_IMAGE", default=False)
+    return _route_native_enabled("DFEE_USE_NATIVE_RAW_IMAGE")
 
 
 def _native_preview_enabled() -> bool:
-    return _env_flag("DFEE_USE_NATIVE_PREVIEW", default=False)
+    return _route_native_enabled("DFEE_USE_NATIVE_PREVIEW")
 
 
 def _native_export_enabled() -> bool:
-    return _env_flag("DFEE_USE_NATIVE_EXPORT", default=False)
+    return _route_native_enabled("DFEE_USE_NATIVE_EXPORT")
 
 
 def _native_select_enabled() -> bool:
-    return _env_flag("DFEE_USE_NATIVE_SELECT", default=False)
+    return _route_native_enabled("DFEE_USE_NATIVE_SELECT")
 
 
 @lru_cache(maxsize=1)
