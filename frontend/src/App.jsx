@@ -240,7 +240,6 @@ export default function App() {
   const containerRef   = useRef(null);
   const viewerRef      = useRef(null);  // the .compare-wrap / zoom container
   const debounceRef    = useRef(null);
-  const inflightRef    = useRef(null);
   const rawAbortRef = useRef(null);
   const previewAbortRef = useRef(null);
   const selectTokenRef = useRef(0);

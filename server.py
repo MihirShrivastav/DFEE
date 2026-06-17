@@ -97,6 +97,22 @@ def _request_fingerprint(payload: dict) -> str:
     return hashlib.sha1(encoded.encode("utf-8")).hexdigest()[:10]
 
 
+def _stage_timings_dict(engine_info) -> dict[str, float]:
+    timings = getattr(engine_info, "timings", []) or []
+    return {
+        str(timing.stage): float(timing.milliseconds)
+        for timing in timings
+    }
+
+
+def _format_stage_timings(engine_info, *, top_n: int = 6) -> str:
+    stage_map = _stage_timings_dict(engine_info)
+    if not stage_map:
+        return "n/a"
+    ranked = sorted(stage_map.items(), key=lambda item: item[1], reverse=True)[:top_n]
+    return ", ".join(f"{stage}={milliseconds:.1f}ms" for stage, milliseconds in ranked)
+
+
 def _candidate_native_build_dirs() -> list[Path]:
     base_dir = Path(__file__).resolve().parent
     return [
@@ -374,21 +390,21 @@ def _list_profiles_native():
     }
 
 
-def _get_native_raw_preview(filename: str, *, max_edge: int = 1024) -> tuple[bytes, str]:
+def _get_native_raw_preview(filename: str, *, max_edge: int = 1024):
     native_session = _get_native_engine_session()
     native_session.select_file(filename)
     native_session.decode_raw(filename, draft_mode=True)
     preview = native_session.raw_preview(filename, max_edge=max_edge)
-    return preview.jpeg_bytes, preview.content_type
+    return preview
 
 
-def _get_native_rendered_preview(request_payload: dict) -> tuple[bytes, str]:
+def _get_native_rendered_preview(request_payload: dict):
     native_bridge = _get_native_bridge_module()
     native_session = _get_native_engine_session()
     native_session.select_file(request_payload["filename"])
     request = native_bridge.NativePreviewRenderRequest(**request_payload)
     preview = native_session.render_preview(request)
-    return preview.jpeg_bytes, preview.content_type
+    return preview
 
 
 def _run_native_export(request_payload: dict) -> dict:
@@ -402,6 +418,7 @@ def _run_native_export(request_payload: dict) -> dict:
         "output_path": str(exported.output_path),
         "report_path": str(exported.report_path) if exported.report_path is not None else None,
         "format": exported.format_label,
+        "engine": exported.engine,
     }
 
 
@@ -892,13 +909,16 @@ def get_raw_image():
 
     if use_native and session.filename:
         try:
-            jpeg_bytes, content_type = _get_native_raw_preview(session.filename, max_edge=1024)
+            preview = _get_native_raw_preview(session.filename, max_edge=1024)
+            jpeg_bytes = preview.jpeg_bytes
+            content_type = preview.content_type
             logger.info(
-                "Raw preview complete fp=%s file=%s backend=native elapsed_ms=%.1f bytes=%s",
+                "Raw preview complete fp=%s file=%s backend=native elapsed_ms=%.1f bytes=%s stages=%s",
                 request_fp,
                 session.filename,
                 _elapsed_ms(started_at),
                 len(jpeg_bytes),
+                _format_stage_timings(preview.engine, top_n=4),
             )
             return StreamingResponse(io.BytesIO(jpeg_bytes), media_type=content_type)
         except Exception:
@@ -1061,13 +1081,16 @@ def get_preview(
 
     if use_native:
         try:
-            jpeg_bytes, content_type = _get_native_rendered_preview(native_payload)
+            preview = _get_native_rendered_preview(native_payload)
+            jpeg_bytes = preview.jpeg_bytes
+            content_type = preview.content_type
             logger.info(
-                "Preview complete fp=%s file=%s backend=native elapsed_ms=%.1f bytes=%s",
+                "Preview complete fp=%s file=%s backend=native elapsed_ms=%.1f bytes=%s stages=%s",
                 request_fp,
                 filename,
                 _elapsed_ms(started_at),
                 len(jpeg_bytes),
+                _format_stage_timings(preview.engine, top_n=8),
             )
             return StreamingResponse(io.BytesIO(jpeg_bytes), media_type=content_type)
         except Exception:
@@ -1181,12 +1204,14 @@ def export_file(req: PreviewRequest):
         try:
             native_result = _run_native_export(req.model_dump())
             logger.info(
-                "Export complete fp=%s file=%s backend=native elapsed_ms=%.1f output=%s",
+                "Export complete fp=%s file=%s backend=native elapsed_ms=%.1f output=%s stages=%s",
                 request_fp,
                 req.filename,
                 _elapsed_ms(started_at),
                 native_result["output_path"],
+                _format_stage_timings(native_result["engine"], top_n=10),
             )
+            native_result.pop("engine", None)
             return native_result
         except Exception:
             logger.exception(

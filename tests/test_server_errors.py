@@ -57,6 +57,18 @@ class TestServerRawFailureHandling(unittest.TestCase):
         metadata = {"image_width": 2, "image_height": 2, "camera_model": "Test Camera"}
         return rgb, Y, clipping_masks, clipping_ratios, metadata
 
+    @staticmethod
+    def _fake_engine_info():
+        return SimpleNamespace(
+            engine_version="0.1.0",
+            libraw_enabled=True,
+            cuda_status=SimpleNamespace(mode="cpu"),
+            timings=[
+                SimpleNamespace(stage="render_preview_total", milliseconds=12.5),
+                SimpleNamespace(stage="render_preview_film_pipeline", milliseconds=8.25),
+            ],
+        )
+
     def test_global_native_flag_enables_route_when_no_override_is_set(self):
         with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_ENGINE": "1"}, clear=True):
             self.assertTrue(server._native_profiles_enabled())
@@ -227,6 +239,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         native_preview = SimpleNamespace(
             jpeg_bytes=b"native-jpeg-bytes",
             content_type="image/jpeg",
+            engine=self._fake_engine_info(),
         )
         fake_session = SimpleNamespace(
             select_file=mock.Mock(),
@@ -263,9 +276,13 @@ class TestServerRawFailureHandling(unittest.TestCase):
         server.session.filename = "example.ARW"
         server.session.raw_preview_bytes = b"python-raw-preview"
 
-        native_jpeg = b"native-preview-jpeg"
+        native_preview = SimpleNamespace(
+            jpeg_bytes=b"native-preview-jpeg",
+            content_type="image/jpeg",
+            engine=self._fake_engine_info(),
+        )
         with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
-            with mock.patch.object(server, "_get_native_rendered_preview", return_value=(native_jpeg, "image/jpeg")) as native_mock:
+            with mock.patch.object(server, "_get_native_rendered_preview", return_value=native_preview) as native_mock:
                 response = self.client.get(
                     "/api/preview",
                     params={
@@ -279,7 +296,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
                 )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, native_jpeg)
+        self.assertEqual(response.content, native_preview.jpeg_bytes)
         self.assertEqual(response.headers["content-type"], "image/jpeg")
         native_mock.assert_called_once()
         payload = native_mock.call_args.args[0]
@@ -342,6 +359,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
             "output_path": "D:/Codebases/DFEE/raw_files/example_portra_400_dfee.png",
             "report_path": "D:/Codebases/DFEE/raw_files/example_portra_400_report.json",
             "format": "8-bit PNG",
+            "engine": self._fake_engine_info(),
         }
 
         with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_EXPORT": "1"}, clear=False):
@@ -359,7 +377,12 @@ class TestServerRawFailureHandling(unittest.TestCase):
                 )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), native_result)
+        self.assertEqual(response.json(), {
+            "status": "success",
+            "output_path": "D:/Codebases/DFEE/raw_files/example_portra_400_dfee.png",
+            "report_path": "D:/Codebases/DFEE/raw_files/example_portra_400_report.json",
+            "format": "8-bit PNG",
+        })
         native_mock.assert_called_once()
         payload = native_mock.call_args.args[0]
         self.assertEqual(payload["stock"], "portra_400")
