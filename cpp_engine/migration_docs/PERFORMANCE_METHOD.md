@@ -79,6 +79,18 @@ By default it writes:
 cpp_engine/out/benchmarks/native_export_benchmark.json
 ```
 
+Useful options:
+
+- `--label <name>`: store a short scenario or revision label in the artifact
+- `--baseline <path>`: compare the current run against a previous artifact
+- `--cold-runs <n>` / `--warm-runs <n>`: control phase sample counts
+
+The artifact now stores:
+
+- per-run raw timings
+- per-phase summary statistics
+- optional baseline deltas when `--baseline` is provided
+
 The working export probe is:
 
 - select one stable local RAW fixture from `raw_files/`

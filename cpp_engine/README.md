@@ -75,6 +75,13 @@ The harness follows the rules in
 [migration_docs/PERFORMANCE_METHOD.md](d:/Codebases/DFEE/cpp_engine/migration_docs/PERFORMANCE_METHOD.md)
 and reports both cold and warm-cache runs for the stable native export probe.
 
+Example comparison run against a saved baseline artifact:
+
+```powershell
+cd d:\Codebases\DFEE
+python cpp_engine\tools\export_benchmark.py --label current --baseline cpp_engine\out\benchmarks\native_export_benchmark.json --output cpp_engine\out\benchmarks\native_export_benchmark_compare.json
+```
+
 ## Python Integration
 
 Low-level extension module:

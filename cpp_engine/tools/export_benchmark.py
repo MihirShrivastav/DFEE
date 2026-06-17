@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import statistics
 import sys
 import time
 from dataclasses import asdict
@@ -48,6 +49,17 @@ def parse_args() -> argparse.Namespace:
         "--keep-exports",
         action="store_true",
         help="Keep exported image/report artifacts instead of deleting them after each run.",
+    )
+    parser.add_argument(
+        "--label",
+        default="default",
+        help="Short label stored in the benchmark artifact for this scenario or revision.",
+    )
+    parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="Optional benchmark JSON artifact to compare against. Comparison deltas are written into the new artifact.",
     )
     return parser.parse_args()
 
@@ -138,6 +150,109 @@ def artifact_output_path(project_root: Path, requested_output: Path | None) -> P
     return (project_root / "cpp_engine" / "out" / "benchmarks" / "native_export_benchmark.json").resolve()
 
 
+def summarize_numeric_values(values: list[float]) -> dict[str, float]:
+    if not values:
+        return {}
+    return {
+        "count": float(len(values)),
+        "min": float(min(values)),
+        "max": float(max(values)),
+        "mean": float(statistics.fmean(values)),
+        "median": float(statistics.median(values)),
+    }
+
+
+def summarize_runs_by_phase(runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for run in runs:
+        grouped.setdefault(str(run["phase"]), []).append(run)
+
+    phase_summary: dict[str, dict[str, Any]] = {}
+    for phase, phase_runs in grouped.items():
+        wall_values = [float(run["wall_ms"]) for run in phase_runs]
+        metric_names: set[str] = set()
+        for run in phase_runs:
+            metric_names.update(run["summary_timings_ms"].keys())
+
+        metric_summary: dict[str, dict[str, float]] = {}
+        for metric_name in sorted(metric_names):
+            values = [
+                float(run["summary_timings_ms"][metric_name])
+                for run in phase_runs
+                if metric_name in run["summary_timings_ms"]
+            ]
+            if values:
+                metric_summary[metric_name] = summarize_numeric_values(values)
+
+        phase_summary[phase] = {
+            "run_count": len(phase_runs),
+            "wall_ms": summarize_numeric_values(wall_values),
+            "metrics_ms": metric_summary,
+        }
+    return phase_summary
+
+
+def compute_summary_delta(current: dict[str, float], baseline: dict[str, float]) -> dict[str, float]:
+    current_median = current.get("median")
+    baseline_median = baseline.get("median")
+    if current_median is None or baseline_median is None:
+        return {}
+    delta_ms = current_median - baseline_median
+    delta_pct = 0.0 if baseline_median == 0.0 else (delta_ms / baseline_median) * 100.0
+    return {
+        "current_median_ms": float(current_median),
+        "baseline_median_ms": float(baseline_median),
+        "delta_ms": float(delta_ms),
+        "delta_percent": float(delta_pct),
+    }
+
+
+def compare_against_baseline(
+    current_phase_summary: dict[str, dict[str, Any]],
+    baseline_phase_summary: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    comparison: dict[str, dict[str, Any]] = {}
+    for phase, current_summary in current_phase_summary.items():
+        baseline_summary = baseline_phase_summary.get(phase)
+        if baseline_summary is None:
+            continue
+
+        phase_comparison: dict[str, Any] = {}
+        wall_delta = compute_summary_delta(
+            current_summary.get("wall_ms", {}),
+            baseline_summary.get("wall_ms", {}),
+        )
+        if wall_delta:
+            phase_comparison["wall_ms"] = wall_delta
+
+        current_metrics = current_summary.get("metrics_ms", {})
+        baseline_metrics = baseline_summary.get("metrics_ms", {})
+        metric_comparison: dict[str, dict[str, float]] = {}
+        for metric_name, metric_summary in current_metrics.items():
+            baseline_metric_summary = baseline_metrics.get(metric_name)
+            if baseline_metric_summary is None:
+                continue
+            delta = compute_summary_delta(metric_summary, baseline_metric_summary)
+            if delta:
+                metric_comparison[metric_name] = delta
+        if metric_comparison:
+            phase_comparison["metrics_ms"] = metric_comparison
+
+        if phase_comparison:
+            comparison[phase] = phase_comparison
+    return comparison
+
+
+def phase_summary_from_payload(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    phase_summary = payload.get("phase_summary")
+    if isinstance(phase_summary, dict) and phase_summary:
+        return phase_summary
+    runs = payload.get("runs", [])
+    if isinstance(runs, list):
+        return summarize_runs_by_phase(runs)
+    return {}
+
+
 def run_export_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     project_root = args.project_root.resolve()
     build_dir = resolve_build_dir(project_root, args.build_dir)
@@ -180,8 +295,10 @@ def run_export_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             if result.report_path is not None:
                 result.report_path.unlink(missing_ok=True)
 
+    phase_summary = summarize_runs_by_phase(runs)
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "label": args.label,
         "project_root": str(project_root),
         "build_dir": str(build_dir),
         "raw_filename": raw_filename,
@@ -189,8 +306,20 @@ def run_export_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         "cold_runs": max(args.cold_runs, 0),
         "warm_runs": max(args.warm_runs, 0),
         "runs": runs,
+        "phase_summary": phase_summary,
         "method_reference": "cpp_engine/migration_docs/PERFORMANCE_METHOD.md",
     }
+
+    if args.baseline is not None:
+        baseline_path = args.baseline.resolve()
+        baseline_payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+        baseline_phase_summary = phase_summary_from_payload(baseline_payload)
+        payload["baseline_comparison"] = {
+            "baseline_path": str(baseline_path),
+            "baseline_label": str(baseline_payload.get("label", "")),
+            "phase_deltas": compare_against_baseline(phase_summary, baseline_phase_summary),
+        }
+
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     payload["artifact_path"] = str(output_path)
     return payload
@@ -205,6 +334,16 @@ def main() -> int:
         return 1
 
     print(f"wrote benchmark artifact: {payload['artifact_path']}")
+    for phase, summary in payload.get("phase_summary", {}).items():
+        wall_summary = summary.get("wall_ms", {})
+        median_wall = wall_summary.get("median", 0.0)
+        metrics = summary.get("metrics_ms", {})
+        total_median = metrics.get("export_image_total", {}).get("median", 0.0)
+        render_median = metrics.get("export_image_render", {}).get("median", 0.0)
+        print(
+            f"summary [{phase}] median_total={total_median:.3f}ms "
+            f"median_render={render_median:.3f}ms median_wall={median_wall:.3f}ms"
+        )
     for run in payload["runs"]:
         total_ms = run["summary_timings_ms"].get("export_image_total", run["wall_ms"])
         render_ms = run["summary_timings_ms"].get("export_image_render", 0.0)
@@ -212,6 +351,24 @@ def main() -> int:
             f"run {run['run_index']} [{run['phase']}] total={total_ms:.3f}ms "
             f"render={render_ms:.3f}ms wall={run['wall_ms']:.3f}ms"
         )
+    baseline_comparison = payload.get("baseline_comparison", {})
+    for phase, phase_delta in baseline_comparison.get("phase_deltas", {}).items():
+        total_delta = phase_delta.get("metrics_ms", {}).get("export_image_total")
+        render_delta = phase_delta.get("metrics_ms", {}).get("export_image_render")
+        if total_delta or render_delta:
+            total_text = ""
+            render_text = ""
+            if total_delta:
+                total_text = (
+                    f" total_delta={total_delta['delta_ms']:.3f}ms "
+                    f"({total_delta['delta_percent']:.2f}%)"
+                )
+            if render_delta:
+                render_text = (
+                    f" render_delta={render_delta['delta_ms']:.3f}ms "
+                    f"({render_delta['delta_percent']:.2f}%)"
+                )
+            print(f"baseline [{phase}]{total_text}{render_text}")
     return 0
 
 
