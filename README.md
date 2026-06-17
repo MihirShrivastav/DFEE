@@ -81,6 +81,17 @@ With that flag enabled, `/api/raw-image` asks the native engine to build and
 serve the RAW preview JPEG and falls back to the Python cache if the native
 preview path fails.
 
+To route `/api/preview` through the native C++ render path:
+
+```powershell
+$env:DFEE_USE_NATIVE_PREVIEW="1"
+python server.py
+```
+
+With that flag enabled, `/api/preview` asks the native engine to render the
+current stock preview JPEG and falls back to the Python preview pipeline if the
+native render path fails.
+
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA
 fallback reason.

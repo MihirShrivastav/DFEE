@@ -66,6 +66,13 @@ $env:DFEE_USE_NATIVE_RAW_IMAGE="1"
 python server.py
 ```
 
+To route `/api/preview` through the native C++ render path while keeping the
+rest of the backend on the Python pipeline:
+```powershell
+$env:DFEE_USE_NATIVE_PREVIEW="1"
+python server.py
+```
+
 ---
 
 ## Using the Workspace Interface

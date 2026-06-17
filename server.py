@@ -104,6 +104,10 @@ def _native_raw_image_enabled() -> bool:
     return _env_flag("DFEE_USE_NATIVE_RAW_IMAGE", default=False)
 
 
+def _native_preview_enabled() -> bool:
+    return _env_flag("DFEE_USE_NATIVE_PREVIEW", default=False)
+
+
 @lru_cache(maxsize=1)
 def _get_native_bridge_module():
     import dfee_native_bridge
@@ -236,6 +240,15 @@ def _get_native_raw_preview(filename: str, *, max_edge: int = 1024) -> tuple[byt
     native_session.select_file(filename)
     native_session.decode_raw(filename, draft_mode=True)
     preview = native_session.raw_preview(filename, max_edge=max_edge)
+    return preview.jpeg_bytes, preview.content_type
+
+
+def _get_native_rendered_preview(request_payload: dict) -> tuple[bytes, str]:
+    native_bridge = _get_native_bridge_module()
+    native_session = _get_native_engine_session()
+    native_session.select_file(request_payload["filename"])
+    request = native_bridge.NativePreviewRenderRequest(**request_payload)
+    preview = native_session.render_preview(request)
     return preview.jpeg_bytes, preview.content_type
 
 # Pydantic schemas
@@ -743,7 +756,8 @@ def get_preview(
     print_contrast: float = 0.0,
     print_black_point: float = 0.0
 ):
-    logger.info("Rendering preview for file=%s stock=%s print_stock=%s", filename, stock, print_stock)
+    use_native = _native_preview_enabled()
+    logger.info("Rendering preview for file=%s stock=%s print_stock=%s (native=%s)", filename, stock, print_stock, use_native)
     if session.filename != filename:
         logger.warning("Preview session mismatch: active=%s requested=%s", session.filename, filename)
         raise HTTPException(status_code=400, detail=f"Session mismatch: server has '{session.filename}', requested '{filename}'. Select the file first.")
@@ -755,7 +769,73 @@ def get_preview(
             raise HTTPException(status_code=400, detail="No active session")
         return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 
-
+    if use_native:
+        native_payload = {
+            "filename": filename,
+            "stock": stock,
+            "exposure": exposure,
+            "highlights": highlights,
+            "shadows": shadows,
+            "blacks": blacks,
+            "whites": whites,
+            "midtones": midtones,
+            "contrast": contrast,
+            "temp": temp,
+            "tint": tint,
+            "saturation": saturation,
+            "vibrance": vibrance,
+            "curves": curves,
+            "hsl_red_h": hsl_red_h,
+            "hsl_red_s": hsl_red_s,
+            "hsl_red_l": hsl_red_l,
+            "hsl_orange_h": hsl_orange_h,
+            "hsl_orange_s": hsl_orange_s,
+            "hsl_orange_l": hsl_orange_l,
+            "hsl_yellow_h": hsl_yellow_h,
+            "hsl_yellow_s": hsl_yellow_s,
+            "hsl_yellow_l": hsl_yellow_l,
+            "hsl_green_h": hsl_green_h,
+            "hsl_green_s": hsl_green_s,
+            "hsl_green_l": hsl_green_l,
+            "hsl_aqua_h": hsl_aqua_h,
+            "hsl_aqua_s": hsl_aqua_s,
+            "hsl_aqua_l": hsl_aqua_l,
+            "hsl_blue_h": hsl_blue_h,
+            "hsl_blue_s": hsl_blue_s,
+            "hsl_blue_l": hsl_blue_l,
+            "hsl_purple_h": hsl_purple_h,
+            "hsl_purple_s": hsl_purple_s,
+            "hsl_purple_l": hsl_purple_l,
+            "hsl_magenta_h": hsl_magenta_h,
+            "hsl_magenta_s": hsl_magenta_s,
+            "hsl_magenta_l": hsl_magenta_l,
+            "clarity": clarity,
+            "texture": texture,
+            "dehaze": dehaze,
+            "sharpness": sharpness,
+            "sharpness_mask": sharpness_mask,
+            "bloom": bloom,
+            "adaptation": adaptation,
+            "grain": grain,
+            "grain_strength": grain_strength,
+            "grain_size": grain_size,
+            "grain_roughness": grain_roughness,
+            "halation": halation,
+            "film_color": film_color,
+            "print_stock": print_stock,
+            "print_strength": print_strength,
+            "print_c": print_c,
+            "print_m": print_m,
+            "print_y": print_y,
+            "print_contrast": print_contrast,
+            "print_black_point": print_black_point,
+        }
+        try:
+            jpeg_bytes, content_type = _get_native_rendered_preview(native_payload)
+            logger.info("Served rendered preview via native engine for %s", filename)
+            return StreamingResponse(io.BytesIO(jpeg_bytes), media_type=content_type)
+        except Exception:
+            logger.exception("Native preview render failed for %s, falling back to Python pipeline", filename)
 
     try:
         stock_profile = _load_stock_profile(stock)

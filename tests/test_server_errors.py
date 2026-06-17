@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import numpy as np
 from fastapi.testclient import TestClient
 
 import server
@@ -191,6 +192,83 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"python-jpeg-bytes")
         self.assertEqual(response.headers["content-type"], "image/jpeg")
+
+    def test_preview_can_use_native_render_behind_flag(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        native_jpeg = b"native-preview-jpeg"
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview", return_value=(native_jpeg, "image/jpeg")) as native_mock:
+                response = self.client.get(
+                    "/api/preview",
+                    params={
+                        "filename": "example.ARW",
+                        "stock": "portra_400",
+                        "print_stock": "kodak_2383",
+                        "exposure": 0.15,
+                        "saturation": 10.0,
+                        "bloom": 5.0,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, native_jpeg)
+        self.assertEqual(response.headers["content-type"], "image/jpeg")
+        native_mock.assert_called_once()
+        payload = native_mock.call_args.args[0]
+        self.assertEqual(payload["filename"], "example.ARW")
+        self.assertEqual(payload["stock"], "portra_400")
+        self.assertEqual(payload["print_stock"], "kodak_2383")
+        self.assertEqual(payload["exposure"], 0.15)
+        self.assertEqual(payload["saturation"], 10.0)
+        self.assertEqual(payload["bloom"], 5.0)
+
+    def test_preview_falls_back_to_python_pipeline_when_native_render_fails(self):
+        server.session.filename = "example.ARW"
+        server.session.preview_rgb_linear = mock.Mock(copy=mock.Mock(return_value=np.zeros((2, 2, 3), dtype=np.float32)))
+        server.session.masks = {}
+        server.session.feature_dict = {}
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        stock_profile = object()
+        render_plan = {
+            "pre_film_normalization": {
+                "exposure_compensation_stops": 0.0,
+                "contrast_compensation": 0.0,
+                "highlights_compensation": 0.0,
+                "shadows_compensation": 0.0,
+                "whites_compensation": 0.0,
+                "blacks_compensation": 0.0,
+                "midtones_compensation": 0.0,
+            }
+        }
+        rendered_linear = np.full((2, 2, 3), 0.25, dtype=np.float32)
+        jpeg_bytes = np.array([1, 2, 3], dtype=np.uint8)
+
+        solver_instance = mock.Mock(solve=mock.Mock(return_value=render_plan))
+        renderer_instance = mock.Mock(render=mock.Mock(return_value=rendered_linear))
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "true"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview", side_effect=RuntimeError("native preview failed")):
+                with mock.patch.object(server, "_load_stock_profile", return_value=stock_profile):
+                    with mock.patch.object(server, "RenderPlanSolver", return_value=solver_instance):
+                        with mock.patch.object(server, "FilmRenderer", return_value=renderer_instance):
+                            with mock.patch.object(server, "_apply_pre_film_sliders", return_value=np.zeros((2, 2, 3), dtype=np.float32)):
+                                with mock.patch.object(server, "_apply_post_film_color", return_value=rendered_linear):
+                                    with mock.patch.object(server, "_apply_post_film_effects", return_value=rendered_linear):
+                                        with mock.patch.object(server, "linear_to_srgb", return_value=rendered_linear):
+                                            with mock.patch.object(server.cv2, "cvtColor", return_value=np.zeros((2, 2, 3), dtype=np.uint8)):
+                                                with mock.patch.object(server.cv2, "imencode", return_value=(True, jpeg_bytes)):
+                                                    response = self.client.get(
+                                                        "/api/preview",
+                                                        params={"filename": "example.ARW", "stock": "portra_400"},
+                                                    )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, bytes(jpeg_bytes.tolist()))
+        solver_instance.solve.assert_called_once()
+        renderer_instance.render.assert_called_once()
 
 
 if __name__ == "__main__":
