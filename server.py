@@ -2,8 +2,10 @@ import os
 import glob
 import io
 import logging
+import sys
 from contextlib import asynccontextmanager
 from functools import lru_cache
+from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -23,6 +25,42 @@ from dfee.report import RenderReporter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dfee.server")
+
+
+def _candidate_native_build_dirs() -> list[Path]:
+    base_dir = Path(__file__).resolve().parent
+    return [
+        base_dir / "cpp_engine" / "out" / "build" / "windows-msvc-vcpkg" / "Release",
+        base_dir / "cpp_engine" / "out" / "build" / "windows-msvc" / "Release",
+        base_dir / "cpp_engine" / "out" / "build" / "windows-msvc-vcpkg" / "Debug",
+        base_dir / "cpp_engine" / "out" / "build" / "windows-msvc" / "Debug",
+    ]
+
+
+def _configure_native_python_paths() -> Path | None:
+    repo_root = Path(__file__).resolve().parent
+    for build_dir in _candidate_native_build_dirs():
+        if not (build_dir / "dfee_native.pyd").exists():
+            continue
+
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+        if str(build_dir) not in sys.path:
+            sys.path.insert(0, str(build_dir))
+
+        if os.name == "nt" and hasattr(os, "add_dll_directory"):
+            os.add_dll_directory(str(build_dir))
+            vcpkg_bin = build_dir.parent / "vcpkg_installed" / "x64-windows" / "bin"
+            vcpkg_debug_bin = build_dir.parent / "vcpkg_installed" / "x64-windows" / "debug" / "bin"
+            if vcpkg_bin.exists():
+                os.add_dll_directory(str(vcpkg_bin))
+            if vcpkg_debug_bin.exists():
+                os.add_dll_directory(str(vcpkg_debug_bin))
+        return build_dir
+    return None
+
+
+NATIVE_BUILD_DIR = _configure_native_python_paths()
 
 
 @asynccontextmanager
@@ -153,7 +191,8 @@ def _log_native_engine_startup_status():
         engine = profiles.engine
         cuda = engine.cuda_status
         logger.info(
-            "Native engine startup status: version=%s libraw_enabled=%s cuda_mode=%s cuda_compiled=%s cuda_available=%s cuda_active=%s device_count=%s device_name=%s fallback_reason=%s",
+            "Native engine startup status: build_dir=%s version=%s libraw_enabled=%s cuda_mode=%s cuda_compiled=%s cuda_available=%s cuda_active=%s device_count=%s device_name=%s fallback_reason=%s",
+            str(NATIVE_BUILD_DIR) if NATIVE_BUILD_DIR is not None else "not_found",
             engine.engine_version,
             engine.libraw_enabled,
             cuda.mode,
@@ -165,7 +204,11 @@ def _log_native_engine_startup_status():
             cuda.fallback_reason or "none",
         )
     except Exception as exc:
-        logger.warning("Native engine startup probe unavailable: %s", exc)
+        logger.warning(
+            "Native engine startup probe unavailable: build_dir=%s error=%s",
+            str(NATIVE_BUILD_DIR) if NATIVE_BUILD_DIR is not None else "not_found",
+            exc,
+        )
 
 def _load_stock_profile(stock_id):
     return FilmStockProfile(os.path.join(STOCKS_DIR, f"{stock_id}.yaml"))

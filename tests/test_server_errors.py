@@ -169,12 +169,14 @@ class TestServerRawFailureHandling(unittest.TestCase):
         fake_session = SimpleNamespace(list_profiles=mock.Mock(return_value=fake_profiles))
 
         with mock.patch.object(server, "_get_native_engine_session", return_value=fake_session):
-            with mock.patch.object(server.logger, "info") as info_log:
-                server._log_native_engine_startup_status()
+            with mock.patch.object(server, "NATIVE_BUILD_DIR", Path("D:/Codebases/DFEE/cpp_engine/out/build/windows-msvc-vcpkg/Release")):
+                with mock.patch.object(server.logger, "info") as info_log:
+                    server._log_native_engine_startup_status()
 
         fake_session.list_profiles.assert_called_once_with()
         info_log.assert_any_call(
-            "Native engine startup status: version=%s libraw_enabled=%s cuda_mode=%s cuda_compiled=%s cuda_available=%s cuda_active=%s device_count=%s device_name=%s fallback_reason=%s",
+            "Native engine startup status: build_dir=%s version=%s libraw_enabled=%s cuda_mode=%s cuda_compiled=%s cuda_available=%s cuda_active=%s device_count=%s device_name=%s fallback_reason=%s",
+            "D:\\Codebases\\DFEE\\cpp_engine\\out\\build\\windows-msvc-vcpkg\\Release",
             "0.1.0",
             True,
             "cpu",
@@ -188,12 +190,14 @@ class TestServerRawFailureHandling(unittest.TestCase):
 
     def test_native_startup_log_degrades_to_warning_on_probe_failure(self):
         with mock.patch.object(server, "_get_native_engine_session", side_effect=RuntimeError("bridge missing")):
-            with mock.patch.object(server.logger, "warning") as warning_log:
-                server._log_native_engine_startup_status()
+            with mock.patch.object(server, "NATIVE_BUILD_DIR", None):
+                with mock.patch.object(server.logger, "warning") as warning_log:
+                    server._log_native_engine_startup_status()
 
         warning_log.assert_called_once()
-        self.assertEqual(warning_log.call_args.args[0], "Native engine startup probe unavailable: %s")
-        self.assertEqual(str(warning_log.call_args.args[1]), "bridge missing")
+        self.assertEqual(warning_log.call_args.args[0], "Native engine startup probe unavailable: build_dir=%s error=%s")
+        self.assertEqual(warning_log.call_args.args[1], "not_found")
+        self.assertEqual(str(warning_log.call_args.args[2]), "bridge missing")
 
     def test_raw_image_can_use_native_preview_behind_flag(self):
         native_preview = SimpleNamespace(
