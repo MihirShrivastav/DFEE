@@ -1,8 +1,11 @@
 import os
 import glob
 import io
+import json
+import hashlib
 import logging
 import sys
+import time
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -83,6 +86,15 @@ def _uvicorn_run_kwargs() -> dict:
 
 _configure_logging()
 logger = logging.getLogger("dfee.server")
+
+
+def _elapsed_ms(start_time: float) -> float:
+    return (time.perf_counter() - start_time) * 1000.0
+
+
+def _request_fingerprint(payload: dict) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha1(encoded.encode("utf-8")).hexdigest()[:10]
 
 
 def _candidate_native_build_dirs() -> list[Path]:
@@ -738,16 +750,23 @@ def _apply_post_film_effects(rendered, curves_json, hsl_dict,
 @app.post("/api/select")
 def select_file(req: SelectRequest):
     use_native = _native_select_enabled()
-    logger.info("Selecting RAW file %s (native=%s)", req.filename, use_native)
+    started_at = time.perf_counter()
+    request_fp = _request_fingerprint({"filename": req.filename})
+    logger.info("Select request fp=%s file=%s native=%s", request_fp, req.filename, use_native)
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
-        logger.warning("Select failed, file not found: %s", req.filename)
+        logger.warning("Select failed fp=%s file=%s reason=file_not_found", request_fp, req.filename)
         raise HTTPException(status_code=404, detail="File not found")
         
     try:
         # --- Analysis cache: skip expensive reprocessing if same file is already loaded ---
         if session.filename == req.filename and session.cached_diagnostics is not None:
-            logger.info("Returning cached analysis for %s", req.filename)
+            logger.info(
+                "Select complete fp=%s file=%s backend=python_cached elapsed_ms=%.1f",
+                request_fp,
+                req.filename,
+                _elapsed_ms(started_at),
+            )
             return {
                 "status": "loaded",
                 "metadata": {k: str(v) for k, v in session.metadata.items()},
@@ -757,9 +776,13 @@ def select_file(req: SelectRequest):
         if use_native:
             try:
                 _warm_native_select(req.filename, max_edge=1024)
-                logger.info("Warmed native select state for %s", req.filename)
+                logger.info("Select native warmup complete fp=%s file=%s", request_fp, req.filename)
             except Exception:
-                logger.exception("Native select warmup failed for %s, continuing with Python analysis path", req.filename)
+                logger.exception(
+                    "Select native warmup failed fp=%s file=%s, continuing with Python analysis path",
+                    request_fp,
+                    req.filename,
+                )
 
         # Ingest in draft mode (half_size) for quick loading
         ingestor = RawIngestor(filepath)
@@ -836,35 +859,65 @@ def select_file(req: SelectRequest):
             "neutral_confidence": round(bias_info["neutral_confidence"], 2)
         }
         session.cached_diagnostics = diagnostics
-        
+
+        logger.info(
+            "Select complete fp=%s file=%s backend=python elapsed_ms=%.1f",
+            request_fp,
+            req.filename,
+            _elapsed_ms(started_at),
+        )
         return {
             "status": "loaded",
             "metadata": {k: str(v) for k, v in metadata.items()},
             "diagnostics": diagnostics
         }
     except Exception as e:
-        logger.exception("Failed to ingest RAW file %s", req.filename)
+        logger.exception(
+            "Select failed fp=%s file=%s elapsed_ms=%.1f",
+            request_fp,
+            req.filename,
+            _elapsed_ms(started_at),
+        )
         raise HTTPException(status_code=500, detail=f"Failed to ingest RAW file: {str(e)}")
 
 @app.get("/api/raw-image")
 def get_raw_image():
     use_native = _native_raw_image_enabled()
-    logger.info("Serving cached RAW preview for %s (native=%s)", session.filename, use_native)
+    started_at = time.perf_counter()
+    request_fp = _request_fingerprint({"filename": session.filename, "max_edge": 1024})
+    logger.info("Raw preview request fp=%s file=%s native=%s", request_fp, session.filename, use_native)
     if not session.filename and not session.raw_preview_bytes:
-        logger.warning("RAW preview requested with no active session")
+        logger.warning("Raw preview failed fp=%s reason=no_active_session", request_fp)
         raise HTTPException(status_code=400, detail="No active session loaded")
 
     if use_native and session.filename:
         try:
             jpeg_bytes, content_type = _get_native_raw_preview(session.filename, max_edge=1024)
-            logger.info("Served RAW preview via native engine for %s", session.filename)
+            logger.info(
+                "Raw preview complete fp=%s file=%s backend=native elapsed_ms=%.1f bytes=%s",
+                request_fp,
+                session.filename,
+                _elapsed_ms(started_at),
+                len(jpeg_bytes),
+            )
             return StreamingResponse(io.BytesIO(jpeg_bytes), media_type=content_type)
         except Exception:
-            logger.exception("Native RAW preview failed for %s, falling back to Python cache", session.filename)
+            logger.exception(
+                "Raw preview native path failed fp=%s file=%s, falling back to Python cache",
+                request_fp,
+                session.filename,
+            )
 
     if not session.raw_preview_bytes:
-        logger.warning("RAW preview cache unavailable for active session %s", session.filename)
+        logger.warning("Raw preview failed fp=%s file=%s reason=python_cache_missing", request_fp, session.filename)
         raise HTTPException(status_code=400, detail="No active session loaded")
+    logger.info(
+        "Raw preview complete fp=%s file=%s backend=python_cache elapsed_ms=%.1f bytes=%s",
+        request_fp,
+        session.filename,
+        _elapsed_ms(started_at),
+        len(session.raw_preview_bytes),
+    )
     return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 
 @app.get("/api/preview")
@@ -913,85 +966,116 @@ def get_preview(
     print_black_point: float = 0.0
 ):
     use_native = _native_preview_enabled()
-    logger.info("Rendering preview for file=%s stock=%s print_stock=%s (native=%s)", filename, stock, print_stock, use_native)
+    started_at = time.perf_counter()
+    native_payload = {
+        "filename": filename,
+        "stock": stock,
+        "exposure": exposure,
+        "highlights": highlights,
+        "shadows": shadows,
+        "blacks": blacks,
+        "whites": whites,
+        "midtones": midtones,
+        "contrast": contrast,
+        "temp": temp,
+        "tint": tint,
+        "saturation": saturation,
+        "vibrance": vibrance,
+        "curves": curves,
+        "hsl_red_h": hsl_red_h,
+        "hsl_red_s": hsl_red_s,
+        "hsl_red_l": hsl_red_l,
+        "hsl_orange_h": hsl_orange_h,
+        "hsl_orange_s": hsl_orange_s,
+        "hsl_orange_l": hsl_orange_l,
+        "hsl_yellow_h": hsl_yellow_h,
+        "hsl_yellow_s": hsl_yellow_s,
+        "hsl_yellow_l": hsl_yellow_l,
+        "hsl_green_h": hsl_green_h,
+        "hsl_green_s": hsl_green_s,
+        "hsl_green_l": hsl_green_l,
+        "hsl_aqua_h": hsl_aqua_h,
+        "hsl_aqua_s": hsl_aqua_s,
+        "hsl_aqua_l": hsl_aqua_l,
+        "hsl_blue_h": hsl_blue_h,
+        "hsl_blue_s": hsl_blue_s,
+        "hsl_blue_l": hsl_blue_l,
+        "hsl_purple_h": hsl_purple_h,
+        "hsl_purple_s": hsl_purple_s,
+        "hsl_purple_l": hsl_purple_l,
+        "hsl_magenta_h": hsl_magenta_h,
+        "hsl_magenta_s": hsl_magenta_s,
+        "hsl_magenta_l": hsl_magenta_l,
+        "clarity": clarity,
+        "texture": texture,
+        "dehaze": dehaze,
+        "sharpness": sharpness,
+        "sharpness_mask": sharpness_mask,
+        "bloom": bloom,
+        "adaptation": adaptation,
+        "grain": grain,
+        "grain_strength": grain_strength,
+        "grain_size": grain_size,
+        "grain_roughness": grain_roughness,
+        "halation": halation,
+        "film_color": film_color,
+        "print_stock": print_stock,
+        "print_strength": print_strength,
+        "print_c": print_c,
+        "print_m": print_m,
+        "print_y": print_y,
+        "print_contrast": print_contrast,
+        "print_black_point": print_black_point,
+    }
+    request_fp = _request_fingerprint(native_payload)
+    logger.info(
+        "Preview request fp=%s file=%s stock=%s print_stock=%s native=%s",
+        request_fp,
+        filename,
+        stock,
+        print_stock,
+        use_native,
+    )
     if session.filename != filename:
-        logger.warning("Preview session mismatch: active=%s requested=%s", session.filename, filename)
+        logger.warning(
+            "Preview failed fp=%s reason=session_mismatch active=%s requested=%s",
+            request_fp,
+            session.filename,
+            filename,
+        )
         raise HTTPException(status_code=400, detail=f"Session mismatch: server has '{session.filename}', requested '{filename}'. Select the file first.")
 
     # Passthrough: no stock selected — return the cached raw preview directly
     if stock == "none":
         if not session.raw_preview_bytes:
-            logger.warning("RAW passthrough preview requested without active session")
+            logger.warning("Preview failed fp=%s reason=no_active_session_for_passthrough", request_fp)
             raise HTTPException(status_code=400, detail="No active session")
+        logger.info(
+            "Preview complete fp=%s file=%s backend=python_raw_passthrough elapsed_ms=%.1f bytes=%s",
+            request_fp,
+            filename,
+            _elapsed_ms(started_at),
+            len(session.raw_preview_bytes),
+        )
         return StreamingResponse(io.BytesIO(session.raw_preview_bytes), media_type="image/jpeg")
 
     if use_native:
-        native_payload = {
-            "filename": filename,
-            "stock": stock,
-            "exposure": exposure,
-            "highlights": highlights,
-            "shadows": shadows,
-            "blacks": blacks,
-            "whites": whites,
-            "midtones": midtones,
-            "contrast": contrast,
-            "temp": temp,
-            "tint": tint,
-            "saturation": saturation,
-            "vibrance": vibrance,
-            "curves": curves,
-            "hsl_red_h": hsl_red_h,
-            "hsl_red_s": hsl_red_s,
-            "hsl_red_l": hsl_red_l,
-            "hsl_orange_h": hsl_orange_h,
-            "hsl_orange_s": hsl_orange_s,
-            "hsl_orange_l": hsl_orange_l,
-            "hsl_yellow_h": hsl_yellow_h,
-            "hsl_yellow_s": hsl_yellow_s,
-            "hsl_yellow_l": hsl_yellow_l,
-            "hsl_green_h": hsl_green_h,
-            "hsl_green_s": hsl_green_s,
-            "hsl_green_l": hsl_green_l,
-            "hsl_aqua_h": hsl_aqua_h,
-            "hsl_aqua_s": hsl_aqua_s,
-            "hsl_aqua_l": hsl_aqua_l,
-            "hsl_blue_h": hsl_blue_h,
-            "hsl_blue_s": hsl_blue_s,
-            "hsl_blue_l": hsl_blue_l,
-            "hsl_purple_h": hsl_purple_h,
-            "hsl_purple_s": hsl_purple_s,
-            "hsl_purple_l": hsl_purple_l,
-            "hsl_magenta_h": hsl_magenta_h,
-            "hsl_magenta_s": hsl_magenta_s,
-            "hsl_magenta_l": hsl_magenta_l,
-            "clarity": clarity,
-            "texture": texture,
-            "dehaze": dehaze,
-            "sharpness": sharpness,
-            "sharpness_mask": sharpness_mask,
-            "bloom": bloom,
-            "adaptation": adaptation,
-            "grain": grain,
-            "grain_strength": grain_strength,
-            "grain_size": grain_size,
-            "grain_roughness": grain_roughness,
-            "halation": halation,
-            "film_color": film_color,
-            "print_stock": print_stock,
-            "print_strength": print_strength,
-            "print_c": print_c,
-            "print_m": print_m,
-            "print_y": print_y,
-            "print_contrast": print_contrast,
-            "print_black_point": print_black_point,
-        }
         try:
             jpeg_bytes, content_type = _get_native_rendered_preview(native_payload)
-            logger.info("Served rendered preview via native engine for %s", filename)
+            logger.info(
+                "Preview complete fp=%s file=%s backend=native elapsed_ms=%.1f bytes=%s",
+                request_fp,
+                filename,
+                _elapsed_ms(started_at),
+                len(jpeg_bytes),
+            )
             return StreamingResponse(io.BytesIO(jpeg_bytes), media_type=content_type)
         except Exception:
-            logger.exception("Native preview render failed for %s, falling back to Python pipeline", filename)
+            logger.exception(
+                "Preview native path failed fp=%s file=%s, falling back to Python pipeline",
+                request_fp,
+                filename,
+            )
 
     try:
         stock_profile = _load_stock_profile(stock)
@@ -1056,29 +1140,60 @@ def get_preview(
         rendered_uint8   = (rendered_display * 255.0).astype(np.uint8)
         _, jpeg_bytes    = cv2.imencode('.jpg', cv2.cvtColor(rendered_uint8, cv2.COLOR_RGB2BGR))
 
-        return StreamingResponse(io.BytesIO(jpeg_bytes.tobytes()), media_type="image/jpeg")
+        jpeg_payload = jpeg_bytes.tobytes()
+        logger.info(
+            "Preview complete fp=%s file=%s backend=python elapsed_ms=%.1f bytes=%s",
+            request_fp,
+            filename,
+            _elapsed_ms(started_at),
+            len(jpeg_payload),
+        )
+        return StreamingResponse(io.BytesIO(jpeg_payload), media_type="image/jpeg")
     except Exception as e:
-        logger.exception("Failed to render preview for file=%s stock=%s", filename, stock)
+        logger.exception(
+            "Preview failed fp=%s file=%s stock=%s elapsed_ms=%.1f",
+            request_fp,
+            filename,
+            stock,
+            _elapsed_ms(started_at),
+        )
         raise HTTPException(status_code=500, detail=f"Failed to render preview: {str(e)}")
 
 @app.post("/api/export")
 def export_file(req: PreviewRequest):
+    started_at = time.perf_counter()
+    request_fp = _request_fingerprint(req.model_dump())
     logger.info(
-        "Export requested for file=%s stock=%s print_stock=%s format=%s (native=%s)",
-        req.filename, req.stock, req.print_stock, req.export_format, _native_export_enabled()
+        "Export request fp=%s file=%s stock=%s print_stock=%s format=%s native=%s",
+        request_fp,
+        req.filename,
+        req.stock,
+        req.print_stock,
+        req.export_format,
+        _native_export_enabled(),
     )
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
-        logger.warning("Export failed, file not found: %s", req.filename)
+        logger.warning("Export failed fp=%s file=%s reason=file_not_found", request_fp, req.filename)
         raise HTTPException(status_code=404, detail="File not found")
 
     if _native_export_enabled():
         try:
             native_result = _run_native_export(req.model_dump())
-            logger.info("Export completed via native engine for %s", req.filename)
+            logger.info(
+                "Export complete fp=%s file=%s backend=native elapsed_ms=%.1f output=%s",
+                request_fp,
+                req.filename,
+                _elapsed_ms(started_at),
+                native_result["output_path"],
+            )
             return native_result
         except Exception:
-            logger.exception("Native export failed for %s, falling back to Python pipeline", req.filename)
+            logger.exception(
+                "Export native path failed fp=%s file=%s, falling back to Python pipeline",
+                request_fp,
+                req.filename,
+            )
 
     try:
         stock_profile = _load_stock_profile(req.stock) if req.stock != "none" else None
@@ -1230,14 +1345,27 @@ def export_file(req: PreviewRequest):
                 feature_dict, render_plan, report_path
             )
 
-        return {
+        response_payload = {
             "status": "success",
             "output_path": output_path,
             "report_path": report_path,
             "format": format_label,
         }
+        logger.info(
+            "Export complete fp=%s file=%s backend=python elapsed_ms=%.1f output=%s",
+            request_fp,
+            req.filename,
+            _elapsed_ms(started_at),
+            output_path,
+        )
+        return response_payload
     except Exception as e:
-        logger.exception("Failed to export image for %s", req.filename)
+        logger.exception(
+            "Export failed fp=%s file=%s elapsed_ms=%.1f",
+            request_fp,
+            req.filename,
+            _elapsed_ms(started_at),
+        )
         raise HTTPException(status_code=500, detail=f"Failed to export image: {str(e)}")
 
 ASSETS_DIR = os.path.join(BASE_DIR, "frontend", "dist", "assets")

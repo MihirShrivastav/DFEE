@@ -241,6 +241,13 @@ export default function App() {
   const viewerRef      = useRef(null);  // the .compare-wrap / zoom container
   const debounceRef    = useRef(null);
   const inflightRef    = useRef(null);
+  const rawAbortRef = useRef(null);
+  const previewAbortRef = useRef(null);
+  const selectTokenRef = useRef(0);
+  const previewRequestKeyRef = useRef('');
+  const loadedPreviewKeyRef = useRef('');
+  const rawObjectUrlRef = useRef('');
+  const previewObjectUrlRef = useRef('');
   const historyDebRef  = useRef(null);
   const lastPushedRef  = useRef(null);  // snapshot of last history entry pushed
   const histogramCanvasRef = useRef(null);
@@ -280,6 +287,21 @@ export default function App() {
   }, [zoom]);
 
   const resetZoom = useCallback(() => { setZoom(FIT); setPan({ x: 0, y: 0 }); }, []);
+
+  const revokeObjectUrl = useCallback((urlRef) => {
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = '';
+    }
+  }, []);
+
+  const replaceObjectUrl = useCallback((urlRef, blob, setUrl) => {
+    revokeObjectUrl(urlRef);
+    const nextUrl = URL.createObjectURL(blob);
+    urlRef.current = nextUrl;
+    setUrl(nextUrl);
+    return nextUrl;
+  }, [revokeObjectUrl]);
 
   // Mouse wheel zoom
   useEffect(() => {
@@ -332,6 +354,14 @@ export default function App() {
   const [history, setHistory]   = useState([]);
   const [histIdx, setHistIdx]   = useState(-1); // -1 = live (no revert active)
   const isRestoring = useRef(false);
+
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (rawAbortRef.current) rawAbortRef.current.abort();
+    if (previewAbortRef.current) previewAbortRef.current.abort();
+    revokeObjectUrl(rawObjectUrlRef);
+    revokeObjectUrl(previewObjectUrlRef);
+  }, [revokeObjectUrl]);
 
   // Label: describe what changed vs previous snapshot
   const makeLabel = (next, prev) => {
@@ -448,8 +478,27 @@ export default function App() {
   };
 
   const selectFile = async (filename) => {
+    const selectToken = selectTokenRef.current + 1;
+    selectTokenRef.current = selectToken;
     setSelectLoading(true);
     setPreviewReady(false);
+    setPreviewLoading(false);
+    setSelectedFile(null);
+    setPreviewUrl('');
+    setRawUrl('');
+    previewRequestKeyRef.current = '';
+    loadedPreviewKeyRef.current = '';
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (previewAbortRef.current) {
+      previewAbortRef.current.abort();
+      previewAbortRef.current = null;
+    }
+    if (rawAbortRef.current) {
+      rawAbortRef.current.abort();
+      rawAbortRef.current = null;
+    }
+    revokeObjectUrl(previewObjectUrlRef);
+    revokeObjectUrl(rawObjectUrlRef);
     try {
       const res = await fetch(`${API}/api/select`, {
         method: 'POST',
@@ -458,16 +507,30 @@ export default function App() {
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      if (selectTokenRef.current !== selectToken) return;
       setDiagnostics(data.diagnostics);
       setMetadata(data.metadata);
-      setRawUrl(`${API}/api/raw-image?t=${Date.now()}`);
+      const rawController = new AbortController();
+      rawAbortRef.current = rawController;
+      const rawResponse = await fetch(`${API}/api/raw-image`, {
+        signal: rawController.signal,
+        cache: 'no-store',
+      });
+      if (!rawResponse.ok) throw new Error(await rawResponse.text());
+      const rawBlob = await rawResponse.blob();
+      if (selectTokenRef.current !== selectToken || rawAbortRef.current !== rawController) return;
+      replaceObjectUrl(rawObjectUrlRef, rawBlob, setRawUrl);
+      rawAbortRef.current = null;
       // Set selectedFile AFTER server confirms session is ready
       // This prevents the preview useEffect from firing before the session exists
       setSelectedFile(filename);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       showToast(`Load failed: ${e.message}`, 'error');
     } finally {
-      setSelectLoading(false);
+      if (selectTokenRef.current === selectToken) {
+        setSelectLoading(false);
+      }
     }
   };
 
@@ -475,16 +538,111 @@ export default function App() {
   useEffect(() => {
     if (!selectedFile) return;
 
-    // When no stock is selected, show the raw image directly
     if (params.stock === 'none') {
+      if (previewAbortRef.current) {
+        previewAbortRef.current.abort();
+        previewAbortRef.current = null;
+      }
+      previewRequestKeyRef.current = '';
+      loadedPreviewKeyRef.current = '';
+      revokeObjectUrl(previewObjectUrlRef);
       setPreviewUrl(rawUrl);
       setPreviewReady(!!rawUrl);
+      setPreviewLoading(false);
       return;
     }
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
+      const requestKey = JSON.stringify({ filename: selectedFile, params, curves, hsl });
+      if (requestKey === loadedPreviewKeyRef.current && previewUrl) {
+        setPreviewReady(true);
+        setPreviewLoading(false);
+        return;
+      }
+      if (requestKey === previewRequestKeyRef.current) {
+        return;
+      }
+
+      const query = new URLSearchParams({
+        filename: selectedFile,
+        stock: params.stock,
+        exposure: String(params.exposure),
+        highlights: String(params.highlights),
+        shadows: String(params.shadows),
+        blacks: String(params.blacks),
+        whites: String(params.whites),
+        midtones: String(params.midtones),
+        contrast: String(params.contrast),
+        temp: String(params.temp),
+        tint: String(params.tint),
+        saturation: String(params.saturation),
+        vibrance: String(params.vibrance),
+        curves: JSON.stringify(curves),
+        clarity: String(params.clarity),
+        texture: String(params.texture),
+        dehaze: String(params.dehaze),
+        bloom: String(params.bloom),
+        adaptation: String(params.adaptation),
+        grain: params.grain,
+        grain_strength: String(params.grain_strength),
+        grain_size: String(params.grain_size),
+        grain_roughness: String(params.grain_roughness),
+        halation: params.halation,
+        sharpness: String(params.sharpness),
+        sharpness_mask: String(params.sharpness_mask),
+        film_color: String(params.film_color),
+        print_stock: params.print_stock,
+        print_strength: String(params.print_strength),
+        print_c: String(params.print_c),
+        print_m: String(params.print_m),
+        print_y: String(params.print_y),
+        print_contrast: String(params.print_contrast),
+        print_black_point: String(params.print_black_point),
+      });
+      Object.entries(hsl).forEach(([key, value]) => {
+        query.set(`hsl_${key}`, String(value));
+      });
+      const requestUrl = `${API}/api/preview?${query.toString()}`;
+
+      if (previewAbortRef.current) {
+        previewAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      previewAbortRef.current = controller;
+      previewRequestKeyRef.current = requestKey;
+      setPreviewLoading(true);
+
+      fetch(requestUrl, {
+        signal: controller.signal,
+        cache: 'no-store',
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(await res.text());
+          return res.blob();
+        })
+        .then((blob) => {
+          if (previewAbortRef.current !== controller) return;
+          replaceObjectUrl(previewObjectUrlRef, blob, setPreviewUrl);
+          loadedPreviewKeyRef.current = requestKey;
+          previewRequestKeyRef.current = '';
+          previewAbortRef.current = null;
+          setPreviewReady(true);
+          setPreviewLoading(false);
+        })
+        .catch((e) => {
+          if (e.name === 'AbortError') return;
+          if (previewAbortRef.current === controller) {
+            previewRequestKeyRef.current = '';
+            previewAbortRef.current = null;
+            setPreviewLoading(false);
+          }
+          showToast('Preview render failed â€” check server terminal for details', 'error');
+        });
+      return;
+
+      /* Legacy image-loader path retained temporarily for reference.
       const hslStr = encodeURIComponent(JSON.stringify(hsl));
       const curvesStr = encodeURIComponent(JSON.stringify(curves));
       const hslPairs = Object.entries(hsl)
@@ -544,11 +702,12 @@ export default function App() {
         showToast('Preview render failed — check server terminal for details', 'error');
       };
       img.src = url;
+      */
     }, 200);
 
     return () => clearTimeout(debounceRef.current);
   }, [
-    selectedFile,
+    selectedFile, rawUrl, previewUrl,
     params.stock, params.exposure, params.highlights,
     params.shadows, params.blacks, params.whites, params.midtones,
     params.contrast, params.temp, params.tint,
@@ -559,7 +718,7 @@ export default function App() {
     params.print_stock, params.print_strength,
     params.print_c, params.print_m, params.print_y,
     params.print_contrast, params.print_black_point,
-    curves, hsl,
+    curves, hsl, replaceObjectUrl, revokeObjectUrl, showToast,
   ]);
 
   useEffect(() => {
