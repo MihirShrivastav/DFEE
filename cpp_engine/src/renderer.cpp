@@ -486,6 +486,13 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     hi_hue_target = get_cc("hi_hue_conv_rad", hi_hue_target);
     hi_hue_strength = get_cc("hi_hue_conv_str", hi_hue_strength / std::max(fc, 1.0e-6F)) * fc;
 
+    const float shadow_a_scale = response.shadow_bias_lab[1] * kBiasScale * fc;
+    const float shadow_b_scale = response.shadow_bias_lab[2] * kBiasScale * fc;
+    const float mid_a_scale = response.midtone_bias_lab[1] * kBiasScale * fc;
+    const float mid_b_scale = response.midtone_bias_lab[2] * kBiasScale * fc;
+    const float hi_a_scale = response.highlight_bias_lab[1] * kBiasScale * fc;
+    const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc;
+
     Image out(rgb_linear.width, rgb_linear.height, 3);
     for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
         float r = rgb_linear.pixels[i * 3 + 0];
@@ -512,14 +519,8 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
             const float mid_zone = z2 * 0.5F + z3 + z4 * 0.5F;
             const float hi_zone = z4 * 0.5F + z5;
 
-            float a_bias = 0.0F;
-            float b_bias = 0.0F;
-            a_bias += shadow_zone * response.shadow_bias_lab[1] * kBiasScale * fc;
-            b_bias += shadow_zone * response.shadow_bias_lab[2] * kBiasScale * fc;
-            a_bias += mid_zone * response.midtone_bias_lab[1] * kBiasScale * fc;
-            b_bias += mid_zone * response.midtone_bias_lab[2] * kBiasScale * fc;
-            a_bias += hi_zone * response.highlight_bias_lab[1] * kBiasScale * fc;
-            b_bias += hi_zone * response.highlight_bias_lab[2] * kBiasScale * fc;
+            const float a_bias = shadow_zone * shadow_a_scale + mid_zone * mid_a_scale + hi_zone * hi_a_scale;
+            const float b_bias = shadow_zone * shadow_b_scale + mid_zone * mid_b_scale + hi_zone * hi_b_scale;
 
             const float weight_red_orange = std::pow(clampf(std::cos(hue - 0.6F), 0.0F, 1.0F), 2.0F);
             const float weight_blue_cyan = std::pow(clampf(std::cos(hue - 4.0F), 0.0F, 1.0F), 2.0F);
