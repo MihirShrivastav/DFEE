@@ -160,6 +160,18 @@ float gamma_decode_22(const float value) {
 }
 
 #if DFEE_HAS_OPENCV
+float sample_lut(const std::vector<float>& lut, const float normalized) {
+    if (lut.empty()) {
+        return normalized;
+    }
+    const float clamped = std::clamp(normalized, 0.0F, 1.0F);
+    const float scaled = clamped * static_cast<float>(lut.size() - 1U);
+    const std::size_t lower = static_cast<std::size_t>(scaled);
+    const std::size_t upper = std::min(lower + 1U, lut.size() - 1U);
+    const float mix = scaled - static_cast<float>(lower);
+    return lut[lower] * (1.0F - mix) + lut[upper] * mix;
+}
+
 cv::Mat image_to_cv32fc3(const Image& image) {
     cv::Mat mat(image.height, image.width, CV_32FC3);
     for (int y = 0; y < image.height; ++y) {
@@ -188,12 +200,15 @@ Image cv32fc3_to_image(const cv::Mat& mat) {
 
 cv::Mat gamma_encode_image_22(const Image& image) {
     cv::Mat mat(image.height, image.width, CV_32FC3);
+    const float* src = image.pixels.data();
     for (int y = 0; y < image.height; ++y) {
+        auto* row = mat.ptr<cv::Vec3f>(y);
         for (int x = 0; x < image.width; ++x) {
-            auto& pixel = mat.at<cv::Vec3f>(y, x);
-            pixel[0] = gamma_encode_22(image.at(x, y, 0));
-            pixel[1] = gamma_encode_22(image.at(x, y, 1));
-            pixel[2] = gamma_encode_22(image.at(x, y, 2));
+            auto& pixel = row[x];
+            pixel[0] = gamma_encode_22(src[0]);
+            pixel[1] = gamma_encode_22(src[1]);
+            pixel[2] = gamma_encode_22(src[2]);
+            src += 3;
         }
     }
     return mat;
@@ -201,26 +216,18 @@ cv::Mat gamma_encode_image_22(const Image& image) {
 
 Image gamma_decode_mat_22(const cv::Mat& mat) {
     Image image(mat.cols, mat.rows, 3);
+    float* dst = image.pixels.data();
     for (int y = 0; y < mat.rows; ++y) {
+        const auto* row = mat.ptr<cv::Vec3f>(y);
         for (int x = 0; x < mat.cols; ++x) {
-            const auto& pixel = mat.at<cv::Vec3f>(y, x);
-            image.at(x, y, 0) = gamma_decode_22(pixel[0]);
-            image.at(x, y, 1) = gamma_decode_22(pixel[1]);
-            image.at(x, y, 2) = gamma_decode_22(pixel[2]);
+            const auto& pixel = row[x];
+            dst[0] = gamma_decode_22(pixel[0]);
+            dst[1] = gamma_decode_22(pixel[1]);
+            dst[2] = gamma_decode_22(pixel[2]);
+            dst += 3;
         }
     }
     return image;
-}
-
-cv::Mat compute_gamma_luminance(const cv::Mat& gamma_rgb) {
-    cv::Mat luminance(gamma_rgb.rows, gamma_rgb.cols, CV_32F);
-    for (int y = 0; y < gamma_rgb.rows; ++y) {
-        for (int x = 0; x < gamma_rgb.cols; ++x) {
-            const auto& pixel = gamma_rgb.at<cv::Vec3f>(y, x);
-            luminance.at<float>(y, x) = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
-        }
-    }
-    return luminance;
 }
 
 std::vector<std::pair<float, float>> parse_curve_points(const std::string& curves_text) {
@@ -640,7 +647,6 @@ Image apply_pre_film_preview_sliders(
     const float midtones_value = request.midtones + plan.pre_film_normalization.midtones_compensation;
 
     cv::Mat gamma_rgb = gamma_encode_image_22(adjusted);
-    cv::Mat luminance = compute_gamma_luminance(gamma_rgb);
 
     if (contrast_value != 0.0F) {
         const float k = std::clamp(contrast_value / 100.0F, -1.0F, 1.0F) * 2.5F;
@@ -648,12 +654,12 @@ Image apply_pre_film_preview_sliders(
             const float denom = std::tanh(k * 0.5F);
             if (std::fabs(denom) > 1.0e-6F) {
                 for (int y = 0; y < gamma_rgb.rows; ++y) {
+                    auto* row = gamma_rgb.ptr<cv::Vec3f>(y);
                     for (int x = 0; x < gamma_rgb.cols; ++x) {
-                        auto& pixel = gamma_rgb.at<cv::Vec3f>(y, x);
+                        auto& pixel = row[x];
                         for (int c = 0; c < 3; ++c) {
                             pixel[c] = clamp01(0.5F + std::tanh(k * (pixel[c] - 0.5F)) / (2.0F * denom));
                         }
-                        luminance.at<float>(y, x) = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
                     }
                 }
             }
@@ -671,10 +677,21 @@ Image apply_pre_film_preview_sliders(
         const float midtone_gamma = has_midtones
             ? std::clamp(1.0F / (1.0F + midtones_value * 0.01F), 0.2F, 5.0F)
             : 1.0F;
+        constexpr std::size_t kMidtoneLutSize = 4096U;
+        std::vector<float> midtone_lut;
+        if (has_midtones) {
+            midtone_lut.resize(kMidtoneLutSize);
+            for (std::size_t i = 0; i < kMidtoneLutSize; ++i) {
+                const float sample = static_cast<float>(i) / static_cast<float>(kMidtoneLutSize - 1U);
+                midtone_lut[i] = std::pow(std::max(sample, 1.0e-8F), midtone_gamma);
+            }
+        }
+
         for (int y = 0; y < gamma_rgb.rows; ++y) {
+            auto* row = gamma_rgb.ptr<cv::Vec3f>(y);
             for (int x = 0; x < gamma_rgb.cols; ++x) {
-                auto& pixel = gamma_rgb.at<cv::Vec3f>(y, x);
-                float y_value = luminance.at<float>(y, x);
+                auto& pixel = row[x];
+                float y_value = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
 
                 const auto apply_tonal_shift = [&](const float amount, const float pivot, const float range, const float power, const bool highlights_side) {
                     if (amount == 0.0F) {
@@ -683,7 +700,14 @@ Image apply_pre_film_preview_sliders(
                     const float normalized = highlights_side
                         ? std::clamp((y_value - pivot) / range, 0.0F, 1.0F)
                         : std::clamp((pivot - y_value) / range, 0.0F, 1.0F);
-                    const float weight = std::pow(normalized, power);
+                    float weight = normalized;
+                    if (power == 2.0F) {
+                        weight *= normalized;
+                    } else if (power == 1.5F) {
+                        weight *= std::sqrt(normalized);
+                    } else {
+                        weight = std::pow(normalized, power);
+                    }
                     pixel[0] = clamp01(pixel[0] + amount * weight);
                     pixel[1] = clamp01(pixel[1] + amount * weight);
                     pixel[2] = clamp01(pixel[2] + amount * weight);
@@ -696,14 +720,12 @@ Image apply_pre_film_preview_sliders(
                 apply_tonal_shift(blacks_amount, 0.35F, 0.35F, 2.0F, false);
 
                 if (has_midtones) {
-                    const float weight = std::clamp(1.0F - std::pow(2.0F * y_value - 1.0F, 2.0F), 0.0F, 1.0F);
+                    const float weight = std::clamp(4.0F * y_value * (1.0F - y_value), 0.0F, 1.0F);
                     for (int c = 0; c < 3; ++c) {
-                        const float bent = std::pow(std::clamp(pixel[c], 1.0e-8F, 1.0F), midtone_gamma);
+                        const float bent = sample_lut(midtone_lut, pixel[c]);
                         pixel[c] = clamp01(pixel[c] * (1.0F - weight) + bent * weight);
                     }
-                    y_value = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
                 }
-                luminance.at<float>(y, x) = y_value;
             }
         }
     }
