@@ -14,9 +14,13 @@
 #include <array>
 #include <cmath>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <numbers>
 #include <optional>
+#include <sstream>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -385,6 +389,53 @@ DecodedRawChannelMasks resize_clipping_masks(
     };
 }
 
+LuminanceImage resize_luminance_image(
+    const LuminanceImage& source,
+    const int target_width,
+    const int target_height,
+    const int interpolation = cv::INTER_LINEAR) {
+    if (source.width == target_width && source.height == target_height) {
+        return source;
+    }
+    cv::Mat source_mat(source.height, source.width, CV_32F);
+    for (int y = 0; y < source.height; ++y) {
+        for (int x = 0; x < source.width; ++x) {
+            source_mat.at<float>(y, x) = source.at(x, y);
+        }
+    }
+    cv::Mat resized_mat;
+    cv::resize(source_mat, resized_mat, cv::Size(target_width, target_height), 0.0, 0.0, interpolation);
+    LuminanceImage resized(target_width, target_height);
+    for (int y = 0; y < target_height; ++y) {
+        for (int x = 0; x < target_width; ++x) {
+            resized.at(x, y) = resized_mat.at<float>(y, x);
+        }
+    }
+    return resized;
+}
+
+ZoneMasks resize_zone_masks(
+    const ZoneMasks& source,
+    const int target_width,
+    const int target_height) {
+    ZoneMasks resized;
+    for (std::size_t i = 0; i < source.zones.size(); ++i) {
+        resized.zones[i] = resize_luminance_image(source.zones[i], target_width, target_height, cv::INTER_LINEAR);
+    }
+    return resized;
+}
+
+SpatialMasks resize_spatial_masks(
+    const SpatialMasks& source,
+    const int target_width,
+    const int target_height) {
+    return {
+        .grain_receptivity_mask = resize_luminance_image(source.grain_receptivity_mask, target_width, target_height, cv::INTER_LINEAR),
+        .halation_source_mask = resize_luminance_image(source.halation_source_mask, target_width, target_height, cv::INTER_LINEAR),
+        .halation_receiver_mask = resize_luminance_image(source.halation_receiver_mask, target_width, target_height, cv::INTER_LINEAR),
+    };
+}
+
 NativeRawPreviewResponse encode_preview_jpeg_bytes(const Image& preview_rgb, const std::string& filename) {
     NativeRawPreviewResponse response;
     response.filename = filename;
@@ -418,6 +469,97 @@ NativeRawPreviewResponse encode_preview_jpeg_bytes(const Image& preview_rgb, con
     response.content_type = "image/jpeg";
     response.jpeg_bytes = std::move(jpeg_bytes);
     return response;
+}
+
+struct NativeRenderWorkResult {
+    SolverInput solver_input;
+    ZoneMasks zone_masks;
+    SpatialMasks spatial_masks;
+    RenderPlan render_plan;
+};
+
+std::string escape_json_string(const std::string& value) {
+    std::string out;
+    out.reserve(value.size() + 8U);
+    for (const char ch : value) {
+        switch (ch) {
+            case '\\': out += "\\\\"; break;
+            case '"': out += "\\\""; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += ch; break;
+        }
+    }
+    return out;
+}
+
+std::string json_number(const float value, const int precision = 6) {
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(precision) << value;
+    return out.str();
+}
+
+std::string json_float_array3(const std::array<float, 3>& values) {
+    std::ostringstream out;
+    out << "[" << json_number(values[0]) << "," << json_number(values[1]) << "," << json_number(values[2]) << "]";
+    return out.str();
+}
+
+std::string json_string_array(const std::vector<std::string>& values) {
+    std::ostringstream out;
+    out << "[";
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i > 0U) {
+            out << ",";
+        }
+        out << "\"" << escape_json_string(values[i]) << "\"";
+    }
+    out << "]";
+    return out.str();
+}
+
+std::string json_float_map(const std::unordered_map<std::string, float>& values) {
+    std::vector<std::pair<std::string, float>> ordered(values.begin(), values.end());
+    std::ranges::sort(ordered, [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+    std::ostringstream out;
+    out << "{";
+    for (std::size_t i = 0; i < ordered.size(); ++i) {
+        if (i > 0U) {
+            out << ",";
+        }
+        out << "\"" << escape_json_string(ordered[i].first) << "\":" << json_number(ordered[i].second);
+    }
+    out << "}";
+    return out.str();
+}
+
+void write_text_file(const std::filesystem::path& path, const std::string& content) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        throw std::runtime_error("Unable to open file for writing: " + path.string());
+    }
+    out.write(content.data(), static_cast<std::streamsize>(content.size()));
+    if (!out.good()) {
+        throw std::runtime_error("Failed while writing file: " + path.string());
+    }
+}
+
+bool export_trace_enabled() {
+    const char* value = std::getenv("DFEE_TRACE_EXPORT");
+    return value != nullptr && value[0] != '\0' && value[0] != '0';
+}
+
+void append_export_trace(const std::filesystem::path& project_root, const std::string& line) {
+    if (!export_trace_enabled()) {
+        return;
+    }
+    const auto path = project_root / "cpp_engine" / "out" / "export_trace.log";
+    std::ofstream out(path, std::ios::app | std::ios::binary);
+    if (!out.is_open()) {
+        return;
+    }
+    out << line << "\n";
 }
 
 Image apply_pre_film_preview_sliders(
@@ -730,6 +872,232 @@ Image apply_post_bloom(
     }
 
     return cv32fc3_to_image(screen);
+}
+
+std::string serialize_feature_report_json(
+    const SolverInput& input,
+    const RenderPlan& render_plan,
+    const FilmStockProfile& stock_profile,
+    const PrintStockProfile* print_stock,
+    const std::string& input_filename,
+    const std::string& output_filename) {
+    std::ostringstream out;
+    out << "{\n";
+    out << "  \"engine_version\": \"" << escape_json_string(kEngineVersion) << "\",\n";
+    out << "  \"input_file\": \"" << escape_json_string(input_filename) << "\",\n";
+    out << "  \"output_file\": \"" << escape_json_string(output_filename) << "\",\n";
+    out << "  \"stock_profile\": \"" << escape_json_string(stock_profile.stock_id) << "\",\n";
+    out << "  \"print_stock\": \"" << escape_json_string(print_stock != nullptr ? print_stock->print_stock_id : "none") << "\",\n";
+    out << "  \"image_diagnosis\": {"
+        << "\"tonal_state\": \"" << escape_json_string(render_plan.input_diagnosis.tonal_state) << "\","
+        << "\"dynamic_range_stops\": " << json_number(render_plan.input_diagnosis.dynamic_range_stops) << ","
+        << "\"shadow_cast\": \"" << escape_json_string(render_plan.input_diagnosis.shadow_cast) << "\","
+        << "\"midtone_anchor\": " << json_number(render_plan.input_diagnosis.midtone_anchor) << ","
+        << "\"highlight_headroom\": " << json_number(render_plan.input_diagnosis.highlight_headroom) << ","
+        << "\"neon_risk\": " << json_number(render_plan.input_diagnosis.neon_risk) << ","
+        << "\"specular_candidate_strength\": " << json_number(render_plan.input_diagnosis.specular_candidate_strength)
+        << "},\n";
+    out << "  \"feature_summary\": {\n";
+    out << "    \"tonal_distribution\": {";
+    const auto& tonal = input.tonal_distribution;
+    out << "\"luma_p01\": " << json_number(tonal.luma_p01) << ","
+        << "\"luma_p05\": " << json_number(tonal.luma_p05) << ","
+        << "\"luma_p25\": " << json_number(tonal.luma_p25) << ","
+        << "\"luma_p50\": " << json_number(tonal.luma_p50) << ","
+        << "\"luma_p75\": " << json_number(tonal.luma_p75) << ","
+        << "\"luma_p95\": " << json_number(tonal.luma_p95) << ","
+        << "\"luma_p99\": " << json_number(tonal.luma_p99) << ","
+        << "\"luma_p995\": " << json_number(tonal.luma_p995) << ","
+        << "\"dynamic_range_stops\": " << json_number(tonal.dynamic_range_stops) << ","
+        << "\"midtone_anchor\": " << json_number(tonal.midtone_anchor) << ","
+        << "\"highlight_headroom\": " << json_number(tonal.highlight_headroom) << ","
+        << "\"shadow_depth\": " << json_number(tonal.shadow_depth) << ","
+        << "\"tonal_skew\": \"" << escape_json_string(tonal.tonal_skew) << "\","
+        << "\"contrast_index\": " << json_number(tonal.contrast_index) << ","
+        << "\"black_point_actual\": " << json_number(tonal.black_point_actual) << ","
+        << "\"white_point_actual\": " << json_number(tonal.white_point_actual)
+        << "},\n";
+    out << "    \"hue_saturation_state\": {";
+    const auto& color = input.hue_saturation_state;
+    out << "\"sat_shadow_mean\": " << json_number(color.sat_shadow_mean) << ","
+        << "\"sat_mid_mean\": " << json_number(color.sat_mid_mean) << ","
+        << "\"sat_highlight_mean\": " << json_number(color.sat_highlight_mean) << ","
+        << "\"sat_p95\": " << json_number(color.sat_p95) << ","
+        << "\"neon_risk\": " << json_number(color.neon_risk) << ","
+        << "\"dominant_hue_bins\": " << json_string_array({color.dominant_hue_bins[0], color.dominant_hue_bins[1], color.dominant_hue_bins[2]}) << ","
+        << "\"hue_entropy\": " << json_number(color.hue_entropy) << ","
+        << "\"red_orange_density\": " << json_number(color.red_orange_density) << ","
+        << "\"green_yellow_density\": " << json_number(color.green_yellow_density) << ","
+        << "\"warm_cool_ratio\": " << json_number(color.warm_cool_ratio) << ","
+        << "\"cyan_blue_ratio\": " << json_number(color.cyan_blue_ratio) << ","
+        << "\"mean_chroma\": " << json_number(color.mean_chroma)
+        << "},\n";
+    out << "    \"spatial_frequency\": {";
+    const auto& spatial = input.spatial_frequency;
+    out << "\"texture_density\": " << json_number(spatial.texture_density) << ","
+        << "\"smooth_area_ratio\": " << json_number(spatial.smooth_area_ratio) << ","
+        << "\"edge_density\": " << json_number(spatial.edge_density) << ","
+        << "\"digital_sharpness_score\": " << json_number(spatial.digital_sharpness_score) << ","
+        << "\"specular_point_ratio\": " << json_number(spatial.specular_point_ratio) << ","
+        << "\"large_highlight_area_ratio\": " << json_number(spatial.large_highlight_area_ratio)
+        << "},\n";
+    out << "    \"channel_behavior\": {\"clipping_ratios\": " << json_float_map(input.clipping_ratios) << "}";
+    if (input.camera_input_bias.has_value()) {
+        const auto& bias = *input.camera_input_bias;
+        out << ",\n    \"camera_input_bias\": {"
+            << "\"neutral_confidence\": " << json_number(bias.neutral_confidence) << ","
+            << "\"global_cast_lab\": " << json_float_array3(bias.global_cast_lab) << ","
+            << "\"shadow_cast_lab\": " << json_float_array3(bias.shadow_cast_lab) << ","
+            << "\"midtone_cast_lab\": " << json_float_array3(bias.midtone_cast_lab) << ","
+            << "\"highlight_cast_lab\": " << json_float_array3(bias.highlight_cast_lab) << ","
+            << "\"blue_excess_index\": " << json_number(bias.blue_excess_index) << ","
+            << "\"green_magenta_bias\": " << json_number(bias.green_magenta_bias) << ","
+            << "\"warm_cool_bias\": " << json_number(bias.warm_cool_bias)
+            << "}";
+    }
+    out << "\n  },\n";
+    out << "  \"render_plan\": {\n";
+    out << "    \"pre_film_normalization\": {"
+        << "\"exposure_compensation_stops\": " << json_number(render_plan.pre_film_normalization.exposure_compensation_stops) << ","
+        << "\"shadow_blue_normalization\": " << json_number(render_plan.pre_film_normalization.shadow_blue_normalization) << ","
+        << "\"green_magenta_stabilization\": " << json_number(render_plan.pre_film_normalization.green_magenta_stabilization) << ","
+        << "\"highlight_channel_recovery\": " << json_number(render_plan.pre_film_normalization.highlight_channel_recovery) << ","
+        << "\"contrast_compensation\": " << json_number(render_plan.pre_film_normalization.contrast_compensation) << ","
+        << "\"highlights_compensation\": " << json_number(render_plan.pre_film_normalization.highlights_compensation) << ","
+        << "\"shadows_compensation\": " << json_number(render_plan.pre_film_normalization.shadows_compensation) << ","
+        << "\"blacks_compensation\": " << json_number(render_plan.pre_film_normalization.blacks_compensation) << ","
+        << "\"whites_compensation\": " << json_number(render_plan.pre_film_normalization.whites_compensation) << ","
+        << "\"midtones_compensation\": " << json_number(render_plan.pre_film_normalization.midtones_compensation)
+        << "},\n";
+    out << "    \"film_response\": {"
+        << "\"toe_strength\": " << json_number(render_plan.film_response.toe_strength) << ","
+        << "\"toe_length\": " << json_number(render_plan.film_response.toe_length) << ","
+        << "\"midtone_density\": " << json_number(render_plan.film_response.midtone_density) << ","
+        << "\"shoulder_strength\": " << json_number(render_plan.film_response.shoulder_strength) << ","
+        << "\"highlight_rolloff_start\": " << json_number(render_plan.film_response.highlight_rolloff_start) << ","
+        << "\"black_density_floor\": " << json_number(render_plan.film_response.black_density_floor) << ","
+        << "\"highlight_desaturation\": " << json_number(render_plan.film_response.highlight_desaturation) << ","
+        << "\"blue_cyan_compression\": " << json_number(render_plan.film_response.blue_cyan_compression) << ","
+        << "\"red_orange_compression\": " << json_number(render_plan.film_response.red_orange_compression) << ","
+        << "\"neon_compression\": " << json_number(render_plan.film_response.neon_compression) << ","
+        << "\"chroma_boost\": " << json_number(render_plan.film_response.chroma_boost) << ","
+        << "\"channel_toe_mult\": " << json_float_array3(render_plan.film_response.channel_toe_mult) << ","
+        << "\"channel_shoulder_mult\": " << json_float_array3(render_plan.film_response.channel_shoulder_mult) << ","
+        << "\"channel_midtone_mult\": " << json_float_array3(render_plan.film_response.channel_midtone_mult) << ","
+        << "\"shadow_bias_lab\": " << json_float_array3(render_plan.film_response.shadow_bias_lab) << ","
+        << "\"midtone_bias_lab\": " << json_float_array3(render_plan.film_response.midtone_bias_lab) << ","
+        << "\"highlight_bias_lab\": " << json_float_array3(render_plan.film_response.highlight_bias_lab) << ","
+        << "\"pan_weight_r\": " << json_number(render_plan.film_response.pan_weight_r) << ","
+        << "\"pan_weight_g\": " << json_number(render_plan.film_response.pan_weight_g) << ","
+        << "\"pan_weight_b\": " << json_number(render_plan.film_response.pan_weight_b) << ","
+        << "\"chroma_coupling\": " << json_float_map(render_plan.film_response.chroma_coupling) << ","
+        << "\"dye_contamination\": " << json_float_map(render_plan.film_response.dye_contamination) << ","
+        << "\"stock_type\": \"" << escape_json_string(render_plan.film_response.stock_type) << "\","
+        << "\"film_color\": " << json_number(render_plan.film_response.film_color)
+        << "},\n";
+    out << "    \"material_effects\": {"
+        << "\"grain_strength\": " << json_number(render_plan.material_effects.grain_strength) << ","
+        << "\"grain_size\": " << json_number(render_plan.material_effects.grain_size) << ","
+        << "\"grain_roughness\": " << json_number(render_plan.material_effects.grain_roughness) << ","
+        << "\"grain_chroma_strength\": " << json_number(render_plan.material_effects.grain_chroma_strength) << ","
+        << "\"halation_strength\": " << json_number(render_plan.material_effects.halation_strength) << ","
+        << "\"bloom_strength\": " << json_number(render_plan.material_effects.bloom_strength) << ","
+        << "\"edge_softening\": " << json_number(render_plan.material_effects.edge_softening) << ","
+        << "\"sharpness\": " << json_number(render_plan.material_effects.sharpness) << ","
+        << "\"sharpness_mask\": " << json_number(render_plan.material_effects.sharpness_mask)
+        << "},\n";
+    out << "    \"print_finish\": ";
+    if (render_plan.print_finish.has_value()) {
+        const auto& print_finish = *render_plan.print_finish;
+        out << "{"
+            << "\"strength\": " << json_number(print_finish.strength) << ","
+            << "\"print_c\": " << json_number(print_finish.print_c) << ","
+            << "\"print_m\": " << json_number(print_finish.print_m) << ","
+            << "\"print_y\": " << json_number(print_finish.print_y) << ","
+            << "\"print_contrast\": " << json_number(print_finish.print_contrast) << ","
+            << "\"print_black_point\": " << json_number(print_finish.print_black_point) << ","
+            << "\"shadow_lift\": " << json_number(print_finish.shadow_lift) << ","
+            << "\"contrast_boost\": " << json_number(print_finish.contrast_boost) << ","
+            << "\"highlight_rolloff\": " << json_number(print_finish.highlight_rolloff) << ","
+            << "\"highlight_rolloff_rate\": " << json_number(print_finish.highlight_rolloff_rate) << ","
+            << "\"toe_depth\": " << json_number(print_finish.toe_depth) << ","
+            << "\"shadow_bias_lab\": " << json_float_array3(print_finish.shadow_bias_lab) << ","
+            << "\"midtone_bias_lab\": " << json_float_array3(print_finish.midtone_bias_lab) << ","
+            << "\"highlight_bias_lab\": " << json_float_array3(print_finish.highlight_bias_lab) << ","
+            << "\"blue_suppression\": " << json_number(print_finish.blue_suppression) << ","
+            << "\"red_boost\": " << json_number(print_finish.red_boost) << ","
+            << "\"green_shift\": " << json_number(print_finish.green_shift) << ","
+            << "\"saturation_scale\": " << json_number(print_finish.saturation_scale) << ","
+            << "\"grain_strength\": " << json_number(print_finish.grain_strength) << ","
+            << "\"grain_size\": " << json_number(print_finish.grain_size)
+            << "}";
+    } else {
+        out << "null";
+    }
+    out << "\n  },\n";
+    out << "  \"warnings\": " << json_string_array(render_plan.warnings) << "\n";
+    out << "}\n";
+    return out.str();
+}
+
+NativeRenderWorkResult render_native_image(
+    const std::filesystem::path& project_root,
+    const Image& source_rgb,
+    const LuminanceImage& source_luminance,
+    const DecodedRawChannelMasks& clipping_masks,
+    const NativeRawMetadata& metadata,
+    const std::unordered_map<std::string, float>& clipping_ratios,
+    const NativePreviewRenderRequest& request,
+    const FilmStockProfile& stock_profile,
+    const PrintStockProfile* print_stock) {
+    NativeRenderWorkResult result;
+    append_export_trace(project_root, "render_native_image:analyze:start");
+    ImageStateAnalyzer analyzer;
+    result.solver_input.clipping_ratios = clipping_ratios;
+    append_export_trace(project_root, "render_native_image:analyze_tonal:start");
+    result.solver_input.tonal_distribution = analyzer.analyze_tonal(source_luminance, clipping_ratios);
+    append_export_trace(project_root, "render_native_image:analyze_tonal:done");
+    append_export_trace(project_root, "render_native_image:zone_masks:start");
+    result.zone_masks = analyzer.generate_zone_masks(source_luminance, result.solver_input.tonal_distribution.midtone_anchor);
+    append_export_trace(project_root, "render_native_image:zone_masks:done");
+    append_export_trace(project_root, "render_native_image:analyze_color:start");
+    result.solver_input.hue_saturation_state = analyzer.analyze_color(source_rgb, result.zone_masks);
+    append_export_trace(project_root, "render_native_image:analyze_color:done");
+    append_export_trace(project_root, "render_native_image:analyze_spatial:start");
+    auto spatial = analyzer.analyze_spatial(source_luminance);
+    result.solver_input.spatial_frequency = spatial.first;
+    result.spatial_masks = std::move(spatial.second);
+    append_export_trace(project_root, "render_native_image:analyze_spatial:done");
+    append_export_trace(project_root, "render_native_image:bias:start");
+    result.solver_input.camera_input_bias = CameraBiasEstimator().estimate_bias(source_rgb, clipping_masks, result.zone_masks);
+    append_export_trace(project_root, "render_native_image:bias:done");
+    if (metadata.iso > 0) {
+        result.solver_input.raw_iso = metadata.iso;
+    }
+    append_export_trace(project_root, "render_native_image:analyze:done");
+
+    SolverControls controls;
+    controls.adaptation_strength = request.adaptation;
+    controls.exposure_intent = "Preserve";
+    controls.grain_amount = request.grain;
+    controls.grain_strength = request.grain_strength;
+    controls.grain_size = request.grain_size;
+    controls.grain_roughness = request.grain_roughness;
+    controls.halation_amount = request.halation;
+    controls.sharpness = request.sharpness;
+    controls.sharpness_mask = request.sharpness_mask;
+    controls.film_color = request.film_color;
+    controls.print_strength = request.print_strength;
+    controls.print_c = request.print_c;
+    controls.print_m = request.print_m;
+    controls.print_y = request.print_y;
+    controls.print_contrast = request.print_contrast;
+    controls.print_black_point = request.print_black_point;
+
+    append_export_trace(project_root, "render_native_image:solve:start");
+    result.render_plan = RenderPlanSolver().solve(result.solver_input, stock_profile, controls, print_stock);
+    append_export_trace(project_root, "render_native_image:solve:done");
+    return result;
 }
 #endif
 
@@ -1164,6 +1532,322 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             response.jpeg_bytes = encoded.jpeg_bytes;
             response.error = encoded.error;
         }
+    }
+
+    finalize_engine_metadata(response.engine);
+    return response;
+#endif
+}
+
+NativeExportResponse EngineSession::export_image(const NativeExportRequest& request) {
+    NativeExportResponse response;
+    response.filename = resolve_filename(request.filename);
+    response.engine = build_engine_metadata();
+    response.export_format = request.export_format;
+
+#if !DFEE_HAS_OPENCV
+    response.status = "unavailable";
+    response.error = {
+        .code = "OPENCV_UNAVAILABLE",
+        .user_message = "Native export is not available in this build.",
+        .detail = "DFEE was built without OpenCV discovery; configure with the windows-msvc-vcpkg preset.",
+    };
+    finalize_engine_metadata(response.engine);
+    return response;
+#else
+    {
+        ScopedStageTimer total(response.engine, "export_image_total");
+        append_export_trace(project_root_, "export_image:start");
+        {
+            ScopedStageTimer stage(response.engine, "export_image_resolve_session");
+            append_export_trace(project_root_, "export_image:resolve_session:start");
+            if (response.filename.empty()) {
+                response.status = "error";
+                response.error = {
+                    .code = "RAW_FILENAME_MISSING",
+                    .user_message = "Select a RAW file before continuing.",
+                    .detail = "export_image received an empty filename and no session file is currently selected.",
+                };
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+            append_export_trace(project_root_, "export_image:resolve_session:done");
+        }
+
+        const auto raw_path = raw_dir_ / response.filename;
+        const std::string basename = raw_path.stem().string();
+        std::string canonical_format = request.export_format;
+        std::ranges::transform(canonical_format, canonical_format.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (canonical_format != "tiff" && canonical_format != "png16" && canonical_format != "png8") {
+            canonical_format = "tiff";
+        }
+        response.export_format = canonical_format;
+
+        Image rendered;
+        std::optional<SolverInput> solver_input;
+        std::optional<RenderPlan> render_plan;
+        std::optional<FilmStockProfile> stock_profile;
+        std::optional<PrintStockProfile> print_stock_profile;
+
+        if (request.stock == "none") {
+            ScopedStageTimer stage(response.engine, "export_image_passthrough");
+            append_export_trace(project_root_, "export_image:passthrough:start");
+            if (!full_decode_cache_.has_value() || full_decode_cache_->filename != response.filename) {
+                const auto decode = decode_raw({
+                    .filename = response.filename,
+                    .draft_mode = false,
+                });
+                if (!decode.ok) {
+                    response.status = decode.status;
+                    response.error = decode.error;
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
+            }
+            rendered = full_decode_cache_->decoded.rgb_linear;
+            append_export_trace(project_root_, "export_image:passthrough:done");
+        } else {
+            {
+                ScopedStageTimer stage(response.engine, "export_image_ensure_full_cache");
+                append_export_trace(project_root_, "export_image:ensure_full_cache:start");
+                if (!full_decode_cache_.has_value() || full_decode_cache_->filename != response.filename) {
+                    const auto decode = decode_raw({
+                        .filename = response.filename,
+                        .draft_mode = false,
+                    });
+                    if (!decode.ok) {
+                        response.status = decode.status;
+                        response.error = decode.error;
+                        finalize_engine_metadata(response.engine);
+                        return response;
+                    }
+                }
+                append_export_trace(project_root_, "export_image:ensure_full_cache:done");
+            }
+            {
+                ScopedStageTimer stage(response.engine, "export_image_load_profiles");
+                append_export_trace(project_root_, "export_image:load_profiles:start");
+                try {
+                    stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
+                    if (request.print_stock != "none") {
+                        print_stock_profile = load_print_stock_profile(print_stocks_dir_ / (request.print_stock + ".yaml"));
+                    }
+                } catch (const std::exception& ex) {
+                    response.status = "error";
+                    response.error = {
+                        .code = "PROFILE_LOAD_FAILED",
+                        .user_message = "The selected film or print profile could not be loaded.",
+                        .detail = ex.what(),
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
+                append_export_trace(project_root_, "export_image:load_profiles:done");
+            }
+            {
+                ScopedStageTimer stage(response.engine, "export_image_render");
+                append_export_trace(project_root_, "export_image:render:start");
+                const auto& decoded = full_decode_cache_->decoded;
+                Image analysis_rgb;
+                LuminanceImage analysis_luminance;
+                DecodedRawChannelMasks analysis_clipping_masks;
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_prepare_analysis");
+                    constexpr int kAnalysisMaxEdge = 2048;
+                    analysis_rgb = resize_image_to_max_edge(decoded.rgb_linear, kAnalysisMaxEdge);
+                    analysis_luminance = compute_luminance(analysis_rgb);
+                    analysis_clipping_masks = resize_clipping_masks(
+                        decoded.clipping_masks,
+                        decoded.rgb_linear.width,
+                        decoded.rgb_linear.height,
+                        analysis_rgb.width,
+                        analysis_rgb.height);
+                }
+                const auto clipping_ratio_map = std::unordered_map<std::string, float>{
+                    {"R", decoded.summary.clipping_ratio_r},
+                    {"G", decoded.summary.clipping_ratio_g},
+                    {"B", decoded.summary.clipping_ratio_b},
+                    {"RAW", decoded.summary.raw_clipping_ratio},
+                };
+                NativeRenderWorkResult work;
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_working_analysis");
+                    work = render_native_image(
+                        project_root_,
+                        analysis_rgb,
+                        analysis_luminance,
+                        analysis_clipping_masks,
+                        decoded.metadata,
+                        clipping_ratio_map,
+                        request,
+                        *stock_profile,
+                        print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+                }
+                solver_input = std::move(work.solver_input);
+                render_plan = std::move(work.render_plan);
+
+                append_export_trace(project_root_, "export_image:resize_masks_for_fullres:start");
+                ZoneMasks fullres_zone_masks;
+                SpatialMasks fullres_spatial_masks;
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_resize_masks");
+                    fullres_zone_masks = resize_zone_masks(work.zone_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
+                    fullres_spatial_masks = resize_spatial_masks(work.spatial_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
+                }
+                append_export_trace(project_root_, "export_image:resize_masks_for_fullres:done");
+
+                append_export_trace(project_root_, "export_image:fullres_prefilm:start");
+                Image fullres_prefilm;
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_prefilm_fullres");
+                    fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
+                }
+                append_export_trace(project_root_, "export_image:fullres_prefilm:done");
+
+                append_export_trace(project_root_, "export_image:fullres_renderer:start");
+                FilmRenderer renderer;
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_film_fullres");
+                    {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_pre_film_normalization");
+                        rendered = renderer.apply_pre_film_normalization(
+                            fullres_prefilm,
+                            fullres_zone_masks,
+                            render_plan->pre_film_normalization);
+                    }
+                    if (render_plan->stock_type == "monochrome") {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_panchromatic");
+                        rendered = renderer.apply_panchromatic_conversion(rendered, render_plan->film_response);
+                    }
+                    {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_tone_response");
+                        rendered = renderer.apply_film_tone_response(rendered, render_plan->film_response);
+                    }
+                    {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_color_response");
+                        if (render_plan->stock_type != "monochrome") {
+                            rendered = renderer.apply_color_response_and_coupling(
+                                rendered,
+                                fullres_zone_masks,
+                                render_plan->film_response);
+                        }
+                    }
+                    {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_acutance");
+                        rendered = renderer.apply_acutance_shaping(rendered, render_plan->material_effects);
+                    }
+                    {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_halation_bloom");
+                        rendered = renderer.apply_halation_bloom(
+                            rendered,
+                            fullres_zone_masks,
+                            fullres_spatial_masks,
+                            render_plan->material_effects);
+                    }
+                    {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_grain");
+                        rendered = renderer.apply_film_grain(rendered, fullres_spatial_masks, render_plan->material_effects);
+                    }
+                    if (render_plan->print_finish.has_value()) {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_print_finish");
+                        rendered = renderer.apply_print_finish(rendered, *render_plan->print_finish);
+                    }
+                }
+                append_export_trace(project_root_, "export_image:fullres_renderer:done");
+
+                append_export_trace(project_root_, "export_image:fullres_post:start");
+                {
+                    ScopedStageTimer substage(response.engine, "export_image_render_post_fullres");
+                    rendered = apply_post_film_color(rendered, request);
+                    rendered = apply_curves(rendered, request.curves);
+                    rendered = apply_hsl(rendered, request);
+                    rendered = renderer.apply_clarity(rendered, request.clarity);
+                    rendered = renderer.apply_texture(rendered, request.texture);
+                    rendered = renderer.apply_dehaze(rendered, request.dehaze);
+                    rendered = apply_post_bloom(rendered, request.bloom);
+                }
+                append_export_trace(project_root_, "export_image:fullres_post:done");
+                append_export_trace(project_root_, "export_image:render:done");
+            }
+        }
+
+        {
+            ScopedStageTimer stage(response.engine, "export_image_write_output");
+            append_export_trace(project_root_, "export_image:write_output:start");
+            const std::string stock_label = request.stock.empty() ? "none" : request.stock;
+            if (canonical_format == "tiff") {
+                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.tif");
+                response.format_label = "16-bit TIFF";
+            } else if (canonical_format == "png16") {
+                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee_16.png");
+                response.format_label = "16-bit PNG";
+            } else {
+                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.png");
+                response.format_label = "8-bit PNG";
+            }
+
+            cv::Mat output_mat(rendered.height, rendered.width, canonical_format == "png8" ? CV_8UC3 : CV_16UC3);
+            for (int y = 0; y < rendered.height; ++y) {
+                for (int x = 0; x < rendered.width; ++x) {
+                    const float r = linear_to_srgb_channel(rendered.at(x, y, 0));
+                    const float g = linear_to_srgb_channel(rendered.at(x, y, 1));
+                    const float b = linear_to_srgb_channel(rendered.at(x, y, 2));
+                    if (canonical_format == "png8") {
+                        auto& pixel = output_mat.at<cv::Vec3b>(y, x);
+                        pixel[0] = static_cast<std::uint8_t>(std::clamp(b * 255.0F, 0.0F, 255.0F));
+                        pixel[1] = static_cast<std::uint8_t>(std::clamp(g * 255.0F, 0.0F, 255.0F));
+                        pixel[2] = static_cast<std::uint8_t>(std::clamp(r * 255.0F, 0.0F, 255.0F));
+                    } else {
+                        auto& pixel = output_mat.at<cv::Vec<uint16_t, 3>>(y, x);
+                        pixel[0] = static_cast<std::uint16_t>(std::clamp(b * 65535.0F, 0.0F, 65535.0F));
+                        pixel[1] = static_cast<std::uint16_t>(std::clamp(g * 65535.0F, 0.0F, 65535.0F));
+                        pixel[2] = static_cast<std::uint16_t>(std::clamp(r * 65535.0F, 0.0F, 65535.0F));
+                    }
+                }
+            }
+            if (!cv::imwrite(response.output_path.string(), output_mat)) {
+                response.status = "error";
+                response.error = {
+                    .code = "EXPORT_WRITE_FAILED",
+                    .user_message = "The native export could not be written to disk.",
+                    .detail = "cv::imwrite returned false for " + response.output_path.string(),
+                };
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+            append_export_trace(project_root_, "export_image:write_output:done");
+        }
+
+        if (render_plan.has_value() && solver_input.has_value() && stock_profile.has_value()) {
+            ScopedStageTimer stage(response.engine, "export_image_write_report");
+            append_export_trace(project_root_, "export_image:write_report:start");
+            response.report_path = raw_dir_ / (basename + "_" + request.stock + "_report.json");
+            try {
+                write_text_file(
+                    response.report_path,
+                    serialize_feature_report_json(
+                        *solver_input,
+                        *render_plan,
+                        *stock_profile,
+                        print_stock_profile.has_value() ? &*print_stock_profile : nullptr,
+                        response.filename,
+                        response.output_path.filename().string()));
+            } catch (const std::exception& ex) {
+                response.status = "error";
+                response.error = {
+                    .code = "EXPORT_REPORT_WRITE_FAILED",
+                    .user_message = "The native export report could not be written.",
+                    .detail = ex.what(),
+                };
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+            append_export_trace(project_root_, "export_image:write_report:done");
+        }
+
+        response.ok = true;
+        response.status = "success";
+        append_export_trace(project_root_, "export_image:done");
     }
 
     finalize_engine_metadata(response.engine);

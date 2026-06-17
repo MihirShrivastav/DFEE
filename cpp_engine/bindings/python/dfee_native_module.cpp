@@ -269,6 +269,13 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     return request;
 }
 
+dfee::NativeExportRequest export_request_from_dict(PyObject* dict) {
+    dfee::NativeExportRequest request;
+    static_cast<dfee::NativePreviewRenderRequest&>(request) = preview_request_from_dict(dict);
+    request.export_format = dict_string(dict, "export_format", "tiff");
+    return request;
+}
+
 PyObject* py_cuda_status(PyObject*, PyObject*) {
     return cuda_status_to_dict(dfee::query_cuda_status());
 }
@@ -560,6 +567,42 @@ PyObject* py_render_preview(PyObject*, PyObject* args) {
     }
 }
 
+PyObject* py_export_image(PyObject*, PyObject* args) {
+    PyObject* capsule = nullptr;
+    PyObject* request_dict = nullptr;
+    if (!PyArg_ParseTuple(args, "OO!", &capsule, &PyDict_Type, &request_dict)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->export_image(export_request_from_dict(request_dict));
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
+        PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
+        PyDict_SetItemString(dict, "output_path", PyUnicode_FromString(result.output_path.string().c_str()));
+        PyDict_SetItemString(dict, "report_path", PyUnicode_FromString(result.report_path.string().c_str()));
+        PyDict_SetItemString(dict, "export_format", PyUnicode_FromString(result.export_format.c_str()));
+        PyDict_SetItemString(dict, "format_label", PyUnicode_FromString(result.format_label.c_str()));
+        if (!result.error.empty()) {
+            PyObject* error = native_error_to_dict(result.error);
+            PyDict_SetItemString(dict, "error", error);
+            Py_DECREF(error);
+        }
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyMethodDef kMethods[] = {
     {"engine_version", py_engine_version, METH_NOARGS, "Return the native engine version."},
     {"cuda_status", py_cuda_status, METH_NOARGS, "Return CUDA build/runtime status."},
@@ -571,6 +614,7 @@ PyMethodDef kMethods[] = {
     {"cache_state", py_cache_state, METH_VARARGS, "Inspect native session cache ownership state."},
     {"raw_preview", reinterpret_cast<PyCFunction>(py_raw_preview), METH_VARARGS | METH_KEYWORDS, "Return cached native RAW preview JPEG bytes."},
     {"render_preview", py_render_preview, METH_VARARGS, "Render a native JPEG preview through the film pipeline."},
+    {"export_image", py_export_image, METH_VARARGS, "Export a native full-resolution render to disk."},
     {nullptr, nullptr, 0, nullptr},
 };
 

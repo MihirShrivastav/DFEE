@@ -33,6 +33,11 @@ public:
         const ZoneMasks& zone_masks,
         const FilmResponsePlan& response) const;
 
+    [[nodiscard]] Image apply_color_response_and_coupling(
+        const Image& rgb_linear,
+        const ZoneMasks& zone_masks,
+        const FilmResponsePlan& response) const;
+
     [[nodiscard]] Image apply_luminance_chroma_coupling(
         const Image& rgb_linear,
         const FilmResponsePlan& response) const;

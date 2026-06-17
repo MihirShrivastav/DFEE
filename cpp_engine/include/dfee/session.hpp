@@ -25,6 +25,7 @@ public:
     [[nodiscard]] NativeRawDecodeResponse decode_raw(const NativeRawDecodeRequest& request);
     [[nodiscard]] NativeRawPreviewResponse raw_preview(const NativeRawPreviewRequest& request);
     [[nodiscard]] NativePreviewRenderResponse render_preview(const NativePreviewRenderRequest& request);
+    [[nodiscard]] NativeExportResponse export_image(const NativeExportRequest& request);
     [[nodiscard]] NativeSessionCacheStateResponse cache_state() const;
     [[nodiscard]] CudaStatus cuda_status() const noexcept;
 

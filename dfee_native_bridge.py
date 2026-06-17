@@ -204,6 +204,22 @@ class NativeRenderedPreview:
 
 
 @dataclass(frozen=True)
+class NativeExportRequest(NativePreviewRenderRequest):
+    export_format: str = "tiff"
+
+
+@dataclass(frozen=True)
+class NativeExportResult:
+    filename: str
+    status: str
+    output_path: Path
+    report_path: Path | None
+    export_format: str
+    format_label: str
+    engine: NativeEngineInfo
+
+
+@dataclass(frozen=True)
 class NativeErrorInfo:
     code: str
     user_message: str
@@ -470,6 +486,33 @@ class NativeEngineSession:
             status=str(payload.get("status", "")),
             content_type=str(payload.get("content_type", "image/jpeg")),
             jpeg_bytes=bytes(payload.get("jpeg_bytes", b"")),
+            engine=_parse_engine_info(dict(payload.get("engine", {}))),
+        )
+
+    def export_image(self, request: NativeExportRequest) -> NativeExportResult:
+        try:
+            payload = dict(self._native_module.export_image(self._handle, request.__dict__))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        if "error" in payload:
+            error = _parse_error_info(dict(payload["error"]))
+            raise NativeOperationError(
+                error.code,
+                error.user_message,
+                error.detail,
+                filename=str(payload.get("filename", "")),
+                status=str(payload.get("status", "")),
+            )
+
+        report_path_raw = str(payload.get("report_path", "") or "")
+        return NativeExportResult(
+            filename=str(payload.get("filename", "")),
+            status=str(payload.get("status", "")),
+            output_path=Path(str(payload.get("output_path", ""))),
+            report_path=Path(report_path_raw) if report_path_raw else None,
+            export_format=str(payload.get("export_format", "")),
+            format_label=str(payload.get("format_label", "")),
             engine=_parse_engine_info(dict(payload.get("engine", {}))),
         )
 

@@ -234,6 +234,7 @@ struct NativeExportResponse {
     std::filesystem::path output_path;
     std::filesystem::path report_path;
     std::string export_format = "tiff";
+    std::string format_label;
     NativeError error;
     NativeEngineMetadata engine;
 };
