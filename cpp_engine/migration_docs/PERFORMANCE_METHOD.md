@@ -62,7 +62,24 @@ treated separately.
 
 ## Current Export Probe
 
-Until a dedicated benchmark harness is added, the working export probe is:
+The repository benchmark entrypoint for this probe is:
+
+- `cpp_engine/tools/export_benchmark.py`
+
+Run it from the repo root:
+
+```powershell
+cd d:\Codebases\DFEE
+python cpp_engine\tools\export_benchmark.py
+```
+
+By default it writes:
+
+```text
+cpp_engine/out/benchmarks/native_export_benchmark.json
+```
+
+The working export probe is:
 
 - select one stable local RAW fixture from `raw_files/`
 - run native export through `dfee_native_bridge.py`

@@ -58,6 +58,23 @@ $env:PYTHONPATH = "out\build\windows-msvc\Debug"
 python -c "import dfee_native; s=dfee_native.create_session('D:/Codebases/DFEE'); print(dfee_native.engine_version()); print(dfee_native.cuda_status()); print(len(dfee_native.list_profiles(s)['stocks']))"
 ```
 
+Native export benchmark harness:
+
+```powershell
+cd d:\Codebases\DFEE
+python cpp_engine\tools\export_benchmark.py
+```
+
+By default that writes a JSON artifact to:
+
+```text
+cpp_engine/out/benchmarks/native_export_benchmark.json
+```
+
+The harness follows the rules in
+[migration_docs/PERFORMANCE_METHOD.md](d:/Codebases/DFEE/cpp_engine/migration_docs/PERFORMANCE_METHOD.md)
+and reports both cold and warm-cache runs for the stable native export probe.
+
 ## Python Integration
 
 Low-level extension module:
@@ -130,3 +147,6 @@ and keep these rules in mind:
 - separate cold-cache and warm-cache results
 - keep only changes that improve the target metric and preserve test/parity confidence
 - prefer removing redundant passes, conversions, and per-pixel repeated setup before attempting approximations
+
+The current repository benchmark entrypoint for this method is
+`cpp_engine/tools/export_benchmark.py`.

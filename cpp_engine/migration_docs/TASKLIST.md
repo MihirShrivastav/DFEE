@@ -97,7 +97,7 @@ Status values:
 | M6-002 | planned | Replace bloom/halation with separable or pyramid highlight diffusion | Visual QA plus performance benchmark | Only after baseline parity. |
 | M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Must preserve stock character. |
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |
-| M6-005 | next | Add performance dashboard or benchmark script | Benchmark output artifact | Track select, preview, export, RAM, VRAM. Follow `migration_docs/PERFORMANCE_METHOD.md` so all measurements use stable cold/warm probe rules. |
+| M6-005 | done | Add performance dashboard or benchmark script | Benchmark output artifact | `cpp_engine/tools/export_benchmark.py` now emits a stable native export JSON artifact for the documented cold/warm probe. Dashboarding can build on that later. |
 
 ## Standing Engineering Tasks
 
