@@ -2,6 +2,7 @@ import os
 import glob
 import io
 import logging
+from functools import lru_cache
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -79,6 +80,30 @@ class ActiveSession:
 
 session = ActiveSession()
 
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _native_profiles_enabled() -> bool:
+    return _env_flag("DFEE_USE_NATIVE_PROFILES", default=False)
+
+
+@lru_cache(maxsize=1)
+def _get_native_bridge_module():
+    import dfee_native_bridge
+
+    return dfee_native_bridge
+
+
+@lru_cache(maxsize=1)
+def _get_native_engine_session():
+    native_bridge = _get_native_bridge_module()
+    return native_bridge.create_session(BASE_DIR)
+
 def _load_stock_profile(stock_id):
     return FilmStockProfile(os.path.join(STOCKS_DIR, f"{stock_id}.yaml"))
 
@@ -107,6 +132,70 @@ def downsample_to_preview(img, max_edge=1024):
     new_w = int(w * scale)
     new_h = int(h * scale)
     return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+
+def _list_profiles_python():
+    stocks_files = glob.glob(os.path.join(STOCKS_DIR, "*.yaml"))
+    stocks = [{"id": "none", "name": "No emulation (RAW)", "type": "passthrough"}]
+    for f in sorted(stocks_files):
+        name = os.path.splitext(os.path.basename(f))[0]
+        try:
+            p = FilmStockProfile(f)
+            stocks.append({
+                "id": name,
+                "name": p.stock_name,
+                "type": p.stock_type
+            })
+        except Exception as exc:
+            logger.warning("Skipping invalid stock profile %s: %s", f, exc)
+
+    print_stocks_files = glob.glob(os.path.join(PRINT_STOCKS_DIR, "*.yaml"))
+    print_stocks = [{"id": "none", "name": "No print finish"}]
+    for f in sorted(print_stocks_files):
+        try:
+            p = PrintStockProfile(f)
+            print_stocks.append({
+                "id": p.print_stock_id,
+                "name": p.print_stock_name,
+            })
+        except Exception as exc:
+            logger.warning("Skipping invalid print stock profile %s: %s", f, exc)
+
+    return {"stocks": stocks, "print_stocks": print_stocks}
+
+
+def _list_profiles_native():
+    native_session = _get_native_engine_session()
+    profiles = native_session.list_profiles()
+
+    stocks = [{"id": "none", "name": "No emulation (RAW)", "type": "passthrough"}]
+    stocks.extend(
+        {
+            "id": stock.stock_id,
+            "name": stock.stock_name,
+            "type": stock.stock_type,
+        }
+        for stock in profiles.stocks
+    )
+
+    print_stocks = [{"id": "none", "name": "No print finish"}]
+    print_stocks.extend(
+        {
+            "id": print_stock.print_stock_id,
+            "name": print_stock.print_stock_name,
+        }
+        for print_stock in profiles.print_stocks
+    )
+
+    return {
+        "stocks": stocks,
+        "print_stocks": print_stocks,
+        "engine": {
+            "engine_version": profiles.engine.engine_version,
+            "libraw_enabled": profiles.engine.libraw_enabled,
+            "cuda_mode": profiles.engine.cuda_status.mode,
+        },
+    }
 
 # Pydantic schemas
 class SelectRequest(BaseModel):
@@ -285,6 +374,26 @@ def list_files():
 
 @app.get("/api/profiles")
 def list_profiles():
+    use_native = _native_profiles_enabled()
+    logger.info("Listing available stock and print profiles (native=%s)", use_native)
+
+    if use_native:
+        try:
+            native_payload = _list_profiles_native()
+            engine = native_payload.pop("engine")
+            logger.info(
+                "Listed profiles via native engine version=%s cuda_mode=%s libraw_enabled=%s",
+                engine["engine_version"],
+                engine["cuda_mode"],
+                engine["libraw_enabled"],
+            )
+            return native_payload
+        except Exception:
+            logger.exception("Native profile listing failed, falling back to Python profile loader")
+            return _list_profiles_python()
+    else:
+        return _list_profiles_python()
+
     logger.info("Listing available stock and print profiles")
     # List stocks — prepend a 'none' passthrough option
     stocks_files = glob.glob(os.path.join(STOCKS_DIR, "*.yaml"))

@@ -58,3 +58,14 @@ w_i(EV) = exp(-(EV - c_i)^2 / 2sigma^2) / sum_j exp(-(EV - c_j)^2 / 2sigma^2)
 $env:PYTHONPATH="."
 pytest tests/test_dfee.py
 ```
+
+To exercise native profile discovery through the existing FastAPI route while
+keeping the response shape unchanged:
+
+```powershell
+$env:DFEE_USE_NATIVE_PROFILES="1"
+python server.py
+```
+
+With that flag enabled, `/api/profiles` uses the C++ bridge for stock and print
+profile listing and falls back to the Python loader if the native path fails.

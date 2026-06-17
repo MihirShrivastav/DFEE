@@ -31,7 +31,7 @@ Status values:
 | M1-002 | done | Replace ad hoc CPython capsule API with a thin stable Python wrapper module | `pytest tests/test_native_bridge.py -q` | Wrapper lives in `dfee_native_bridge.py` and keeps capsule handles away from future `server.py` integration. |
 | M1-003 | done | Add structured native error type and Python exception mapping | `pytest tests/test_native_bridge.py -q` | Native errors now carry `code`, `user_message`, and `detail` through the C++ layer, `.pyd`, and Python wrapper exceptions. |
 | M1-004 | done | Add per-stage timing model and JSON serialization helpers | `ctest --preset windows-msvc` and `pytest tests/test_native_bridge.py -q` | Native metadata now carries stage timings plus serialized `metadata_json` through the `.pyd` and Python wrapper. |
-| M1-005 | planned | Wire FastAPI `/api/profiles` to native profile listing behind a feature flag | FastAPI integration test | Start with low-risk endpoint before moving image bytes. |
+| M1-005 | done | Wire FastAPI `/api/profiles` to native profile listing behind a feature flag | `pytest tests/test_server_errors.py -q` | `DFEE_USE_NATIVE_PROFILES=1` switches `/api/profiles` onto the native bridge, preserves the existing response shape, and falls back to the Python loader if the native path fails. |
 | M1-006 | planned | Add native engine capability endpoint or internal startup log | Server startup log review | Should log engine version, mode, CUDA status, and fallback reason. |
 
 ## Milestone M2 - RAW Decode And Session Ownership

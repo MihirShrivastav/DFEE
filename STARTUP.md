@@ -47,6 +47,14 @@ python server.py
 Then manually open your browser to:
 `http://127.0.0.1:8000`
 
+To route `/api/profiles` through the native C++ engine while leaving the rest
+of the backend on the Python pipeline, enable the feature flag before starting
+the server:
+```powershell
+$env:DFEE_USE_NATIVE_PROFILES="1"
+python server.py
+```
+
 ---
 
 ## Using the Workspace Interface

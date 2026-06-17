@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from fastapi.testclient import TestClient
 
@@ -13,10 +14,14 @@ class TestServerRawFailureHandling(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(server.app)
         server.session = server.ActiveSession()
+        server._get_native_bridge_module.cache_clear()
+        server._get_native_engine_session.cache_clear()
         self._temp_files: list[Path] = []
 
     def tearDown(self):
         server.session = server.ActiveSession()
+        server._get_native_bridge_module.cache_clear()
+        server._get_native_engine_session.cache_clear()
         for path in self._temp_files:
             try:
                 path.unlink(missing_ok=True)
@@ -58,6 +63,52 @@ class TestServerRawFailureHandling(unittest.TestCase):
 
         follow_up = self.client.get("/")
         self.assertEqual(follow_up.status_code, 200)
+
+    def test_profiles_can_use_native_loader_behind_flag(self):
+        native_payload = {
+            "stocks": [
+                {"id": "none", "name": "No emulation (RAW)", "type": "passthrough"},
+                {"id": "portra_400", "name": "Kodak Portra 400", "type": "color_negative"},
+            ],
+            "print_stocks": [
+                {"id": "none", "name": "No print finish"},
+                {"id": "kodak_2383", "name": "Kodak Vision 2383"},
+            ],
+            "engine": {
+                "engine_version": "0.1.0",
+                "libraw_enabled": True,
+                "cuda_mode": "cpu",
+            },
+        }
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PROFILES": "1"}, clear=False):
+            with mock.patch.object(server, "_list_profiles_native", return_value=native_payload) as native_mock:
+                with mock.patch.object(server, "_list_profiles_python") as python_mock:
+                    response = self.client.get("/api/profiles")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "stocks": native_payload["stocks"],
+            "print_stocks": native_payload["print_stocks"],
+        })
+        native_mock.assert_called_once_with()
+        python_mock.assert_not_called()
+
+    def test_profiles_fall_back_to_python_loader_when_native_listing_fails(self):
+        python_payload = {
+            "stocks": [{"id": "none", "name": "No emulation (RAW)", "type": "passthrough"}],
+            "print_stocks": [{"id": "none", "name": "No print finish"}],
+        }
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PROFILES": "true"}, clear=False):
+            with mock.patch.object(server, "_list_profiles_native", side_effect=RuntimeError("native failed")) as native_mock:
+                with mock.patch.object(server, "_list_profiles_python", return_value=python_payload) as python_mock:
+                    response = self.client.get("/api/profiles")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), python_payload)
+        native_mock.assert_called_once_with()
+        python_mock.assert_called_once_with()
 
 
 if __name__ == "__main__":
