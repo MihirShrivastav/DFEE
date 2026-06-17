@@ -83,6 +83,9 @@ Useful options:
 
 - `--label <name>`: store a short scenario or revision label in the artifact
 - `--baseline <path>`: compare the current run against a previous artifact
+- `--baseline-name <name>`: compare against `cpp_engine/out/benchmarks/baselines/<name>.json`
+- `--promote-baseline`: replace the named baseline with the current run artifact
+- `--fail-on-regression`: return a non-zero exit code when the warm baseline comparison regresses
 - `--cold-runs <n>` / `--warm-runs <n>`: control phase sample counts
 
 The artifact now stores:
@@ -90,6 +93,21 @@ The artifact now stores:
 - per-run raw timings
 - per-phase summary statistics
 - optional baseline deltas when `--baseline` is provided
+- optional regression verdict metadata when `--fail-on-regression` is used
+
+Recommended named-baseline workflow:
+
+```powershell
+cd d:\Codebases\DFEE
+python cpp_engine\tools\export_benchmark.py --label stable-baseline --baseline-name export_stable --promote-baseline
+python cpp_engine\tools\export_benchmark.py --label experiment-a --baseline-name export_stable --fail-on-regression
+```
+
+Interpretation:
+
+- use `--promote-baseline` only after a run is accepted as the new reference point
+- use `--fail-on-regression` during experiments so the shell result reflects whether warm export got worse
+- prefer the warm `export_image_total` and `export_image_render` deltas as the first acceptance gate
 
 The working export probe is:
 

@@ -82,6 +82,14 @@ cd d:\Codebases\DFEE
 python cpp_engine\tools\export_benchmark.py --label current --baseline cpp_engine\out\benchmarks\native_export_benchmark.json --output cpp_engine\out\benchmarks\native_export_benchmark_compare.json
 ```
 
+Named-baseline workflow:
+
+```powershell
+cd d:\Codebases\DFEE
+python cpp_engine\tools\export_benchmark.py --label stable-baseline --baseline-name export_stable --promote-baseline
+python cpp_engine\tools\export_benchmark.py --label candidate-change --baseline-name export_stable --fail-on-regression
+```
+
 ## Python Integration
 
 Low-level extension module:

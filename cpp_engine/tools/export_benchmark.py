@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import json
 import os
 import statistics
@@ -60,6 +61,27 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional benchmark JSON artifact to compare against. Comparison deltas are written into the new artifact.",
+    )
+    parser.add_argument(
+        "--baseline-name",
+        default="",
+        help="Named baseline stored under cpp_engine/out/benchmarks/baselines/<name>.json.",
+    )
+    parser.add_argument(
+        "--promote-baseline",
+        action="store_true",
+        help="Copy the current artifact into the named baseline slot after the run completes.",
+    )
+    parser.add_argument(
+        "--fail-on-regression",
+        action="store_true",
+        help="Exit non-zero when the warm export baseline comparison regresses beyond the configured tolerance.",
+    )
+    parser.add_argument(
+        "--regression-tolerance-percent",
+        type=float,
+        default=0.0,
+        help="Allowed warm-median regression percentage before --fail-on-regression returns a failure.",
     )
     return parser.parse_args()
 
@@ -148,6 +170,18 @@ def artifact_output_path(project_root: Path, requested_output: Path | None) -> P
     if requested_output is not None:
         return requested_output.resolve()
     return (project_root / "cpp_engine" / "out" / "benchmarks" / "native_export_benchmark.json").resolve()
+
+
+def baseline_storage_dir(project_root: Path) -> Path:
+    return (project_root / "cpp_engine" / "out" / "benchmarks" / "baselines").resolve()
+
+
+def resolve_baseline_path(project_root: Path, args: argparse.Namespace) -> Path | None:
+    if args.baseline is not None:
+        return args.baseline.resolve()
+    if args.baseline_name:
+        return baseline_storage_dir(project_root) / f"{args.baseline_name}.json"
+    return None
 
 
 def summarize_numeric_values(values: list[float]) -> dict[str, float]:
@@ -253,6 +287,29 @@ def phase_summary_from_payload(payload: dict[str, Any]) -> dict[str, dict[str, A
     return {}
 
 
+def evaluate_regression_verdict(
+    baseline_comparison: dict[str, Any],
+    tolerance_percent: float,
+) -> dict[str, Any]:
+    warm = baseline_comparison.get("phase_deltas", {}).get("warm", {})
+    metrics = warm.get("metrics_ms", {})
+    total_delta = metrics.get("export_image_total", {})
+    render_delta = metrics.get("export_image_render", {})
+
+    total_delta_percent = float(total_delta.get("delta_percent", 0.0))
+    render_delta_percent = float(render_delta.get("delta_percent", 0.0))
+    total_regressed = total_delta_percent > tolerance_percent
+    render_regressed = render_delta_percent > tolerance_percent
+
+    return {
+        "baseline_available": bool(warm),
+        "tolerance_percent": float(tolerance_percent),
+        "warm_total_delta_percent": total_delta_percent,
+        "warm_render_delta_percent": render_delta_percent,
+        "regressed": total_regressed or render_regressed,
+    }
+
+
 def run_export_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     project_root = args.project_root.resolve()
     build_dir = resolve_build_dir(project_root, args.build_dir)
@@ -310,8 +367,8 @@ def run_export_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         "method_reference": "cpp_engine/migration_docs/PERFORMANCE_METHOD.md",
     }
 
-    if args.baseline is not None:
-        baseline_path = args.baseline.resolve()
+    baseline_path = resolve_baseline_path(project_root, args)
+    if baseline_path is not None and baseline_path.exists():
         baseline_payload = json.loads(baseline_path.read_text(encoding="utf-8"))
         baseline_phase_summary = phase_summary_from_payload(baseline_payload)
         payload["baseline_comparison"] = {
@@ -319,8 +376,28 @@ def run_export_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             "baseline_label": str(baseline_payload.get("label", "")),
             "phase_deltas": compare_against_baseline(phase_summary, baseline_phase_summary),
         }
+    elif baseline_path is not None:
+        payload["baseline_comparison"] = {
+            "baseline_path": str(baseline_path),
+            "baseline_label": "",
+            "phase_deltas": {},
+            "status": "missing",
+        }
+
+    if args.fail_on_regression:
+        payload["regression_verdict"] = evaluate_regression_verdict(
+            payload.get("baseline_comparison", {}),
+            args.regression_tolerance_percent,
+        )
 
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    if args.promote_baseline:
+        if not args.baseline_name:
+            raise ValueError("--promote-baseline requires --baseline-name.")
+        target_path = baseline_storage_dir(project_root) / f"{args.baseline_name}.json"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(output_path, target_path)
+        payload["promoted_baseline_path"] = str(target_path)
     payload["artifact_path"] = str(output_path)
     return payload
 
@@ -352,6 +429,8 @@ def main() -> int:
             f"render={render_ms:.3f}ms wall={run['wall_ms']:.3f}ms"
         )
     baseline_comparison = payload.get("baseline_comparison", {})
+    if baseline_comparison.get("status") == "missing":
+        print(f"baseline missing: {baseline_comparison.get('baseline_path', '')}")
     for phase, phase_delta in baseline_comparison.get("phase_deltas", {}).items():
         total_delta = phase_delta.get("metrics_ms", {}).get("export_image_total")
         render_delta = phase_delta.get("metrics_ms", {}).get("export_image_render")
@@ -369,6 +448,18 @@ def main() -> int:
                     f"({render_delta['delta_percent']:.2f}%)"
                 )
             print(f"baseline [{phase}]{total_text}{render_text}")
+    if payload.get("promoted_baseline_path"):
+        print(f"promoted baseline: {payload['promoted_baseline_path']}")
+    verdict = payload.get("regression_verdict")
+    if verdict:
+        state = "REGRESSION" if verdict.get("regressed") else "ok"
+        print(
+            f"verdict: {state} warm_total_delta={verdict.get('warm_total_delta_percent', 0.0):.2f}% "
+            f"warm_render_delta={verdict.get('warm_render_delta_percent', 0.0):.2f}% "
+            f"tolerance={verdict.get('tolerance_percent', 0.0):.2f}%"
+        )
+        if verdict.get("baseline_available") and verdict.get("regressed"):
+            return 2
     return 0
 
 
