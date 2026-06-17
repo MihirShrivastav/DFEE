@@ -135,3 +135,8 @@ path so metadata, diagnostics, and Python fallback state remain compatible.
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA
 fallback reason.
+
+When you run `python server.py`, the backend now uses DFEE's own compact console
+logger and disables Uvicorn's noisy access-log lines. Route-level DFEE logs stay
+visible, but the full query-string request spam from slider-driven preview calls
+is suppressed.

@@ -68,6 +68,10 @@ On startup, the backend log now prints the native engine capability snapshot,
 including engine version, LibRaw availability, CUDA mode, device details, and
 fallback reason if CUDA is unavailable.
 
+The `python server.py` path now also uses DFEE's compact colorized console
+logging and suppresses Uvicorn access-log spam, so repeated slider requests no
+longer flood the terminal with full query strings.
+
 To route `/api/raw-image` through the native C++ preview path while keeping the
 rest of the backend on the Python pipeline:
 ```powershell

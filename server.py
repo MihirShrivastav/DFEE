@@ -23,7 +23,65 @@ from dfee.renderer import FilmRenderer
 from dfee.profile import FilmStockProfile, PrintStockProfile
 from dfee.report import RenderReporter
 
-logging.basicConfig(level=logging.INFO)
+
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[36m",
+        logging.INFO: "\033[32m",
+        logging.WARNING: "\033[33m",
+        logging.ERROR: "\033[31m",
+        logging.CRITICAL: "\033[35m",
+    }
+    RESET = "\033[0m"
+
+    def __init__(self, use_color: bool) -> None:
+        super().__init__(
+            fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+            datefmt="%H:%M:%S",
+        )
+        self.use_color = use_color
+
+    def format(self, record: logging.LogRecord) -> str:
+        original_levelname = record.levelname
+        if self.use_color:
+            color = self.COLORS.get(record.levelno, "")
+            if color:
+                record.levelname = f"{color}{record.levelname}{self.RESET}"
+        try:
+            return super().format(record)
+        finally:
+            record.levelname = original_levelname
+
+
+def _should_use_color() -> bool:
+    if os.getenv("NO_COLOR"):
+        return False
+    return bool(getattr(sys.stdout, "isatty", lambda: False)())
+
+
+def _configure_logging() -> None:
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(logging.INFO)
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(ColorFormatter(use_color=_should_use_color()))
+    root_logger.addHandler(handler)
+
+    logging.getLogger("uvicorn.access").handlers.clear()
+    logging.getLogger("uvicorn.access").propagate = True
+
+
+def _uvicorn_run_kwargs() -> dict:
+    return {
+        "host": "127.0.0.1",
+        "port": 8000,
+        "log_config": None,
+        "access_log": False,
+    }
+
+
+_configure_logging()
 logger = logging.getLogger("dfee.server")
 
 
@@ -1200,4 +1258,4 @@ def serve_index():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, **_uvicorn_run_kwargs())

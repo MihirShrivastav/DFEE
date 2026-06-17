@@ -1,3 +1,4 @@
+import logging
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -80,6 +81,29 @@ class TestServerRawFailureHandling(unittest.TestCase):
             self.assertFalse(server._native_preview_enabled())
             self.assertFalse(server._native_export_enabled())
             self.assertFalse(server._native_select_enabled())
+
+    def test_uvicorn_run_kwargs_disable_access_log_and_custom_log_config(self):
+        kwargs = server._uvicorn_run_kwargs()
+        self.assertEqual(kwargs["host"], "127.0.0.1")
+        self.assertEqual(kwargs["port"], 8000)
+        self.assertIsNone(kwargs["log_config"])
+        self.assertFalse(kwargs["access_log"])
+
+    def test_color_formatter_formats_without_mutating_record(self):
+        formatter = server.ColorFormatter(use_color=False)
+        record = logging.LogRecord(
+            name="dfee.server",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="hello world",
+            args=(),
+            exc_info=None,
+        )
+        rendered = formatter.format(record)
+        self.assertIn("INFO", rendered)
+        self.assertIn("hello world", rendered)
+        self.assertEqual(record.levelname, "INFO")
 
     def test_select_rejects_unsupported_raw_without_crashing(self):
         filename = self._create_temp_raw_file("server_test_unsupported.arw", b"not a real raw file\n")
