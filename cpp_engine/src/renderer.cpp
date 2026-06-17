@@ -305,6 +305,34 @@ struct GrainNoiseCacheEntry {
     return make_standard_normal_mat(height, width, rng);
 }
 
+[[nodiscard]] std::array<float, 8193> build_power_lut(const float exponent) {
+    std::array<float, 8193> lut{};
+    for (std::size_t index = 0; index < lut.size(); ++index) {
+        const float x = static_cast<float>(index) / static_cast<float>(lut.size() - 1);
+        lut[index] = std::pow(x, exponent);
+    }
+    return lut;
+}
+
+[[nodiscard]] std::array<float, 8193> build_grain_modulation_lut() {
+    std::array<float, 8193> lut{};
+    for (std::size_t index = 0; index < lut.size(); ++index) {
+        const float x = static_cast<float>(index) / static_cast<float>(lut.size() - 1);
+        lut[index] = (std::pow(x, 0.6F) * std::pow(1.0F - x, 0.9F)) / 0.364F;
+    }
+    return lut;
+}
+
+template <std::size_t N>
+[[nodiscard]] float sample_unit_lut(const std::array<float, N>& lut, const float value) {
+    const float clamped = clamp01(value);
+    const float scaled = clamped * static_cast<float>(N - 1);
+    const auto lower = static_cast<std::size_t>(scaled);
+    const auto upper = std::min(lower + 1, N - 1);
+    const float t = scaled - static_cast<float>(lower);
+    return lut[lower] + (lut[upper] - lut[lower]) * t;
+}
+
 void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     cv::Scalar mean;
     cv::Scalar stddev;
@@ -1297,30 +1325,36 @@ Image FilmRenderer::apply_film_grain(
         };
     }
 
-    cv::Mat grain_receptivity = luminance_image_to_mat(spatial_masks.grain_receptivity_mask);
-    cv::Mat gamma = gamma_encode_mat(rgb_linear);
     Image out(rgb_linear.width, rgb_linear.height, 3);
     constexpr std::array<float, 3> kStrengthMults{0.75F, 0.95F, 1.35F};
+    const float strength_r = effects.grain_strength * 0.038F * kStrengthMults[0];
+    const float strength_g = effects.grain_strength * 0.038F * kStrengthMults[1];
+    const float strength_b = effects.grain_strength * 0.038F * kStrengthMults[2];
+    const auto& grain_receptivity = spatial_masks.grain_receptivity_mask.values;
+    static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
+    static const auto kGammaDecodeLut = build_power_lut(2.2F);
+    static const auto kGrainModulationLut = build_grain_modulation_lut();
 
     for (int y = 0; y < h; ++y) {
+        const float* noise_r_row = noise_r.ptr<float>(y);
+        const float* noise_g_row = noise_g.ptr<float>(y);
+        const float* noise_b_row = noise_b.ptr<float>(y);
         for (int x = 0; x < w; ++x) {
-            const float smooth_mod = grain_receptivity.at<float>(y, x);
-            const float noise_values[3] = {
-                noise_r.at<float>(y, x),
-                noise_g.at<float>(y, x),
-                noise_b.at<float>(y, x),
-            };
-            auto& dst0 = out.at(x, y, 0);
-            auto& dst1 = out.at(x, y, 1);
-            auto& dst2 = out.at(x, y, 2);
-            float* dst_channels[3] = {&dst0, &dst1, &dst2};
-            for (int channel = 0; channel < 3; ++channel) {
-                const float ch = gamma.at<cv::Vec3f>(y, x)[channel];
-                const float mod = ((std::pow(ch, 0.6F) * std::pow(1.0F - ch, 0.9F)) / 0.364F) * smooth_mod;
-                const float ch_strength = effects.grain_strength * 0.038F * kStrengthMults[static_cast<std::size_t>(channel)];
-                const float gamma_out = clamp01(ch + noise_values[channel] * ch_strength * mod);
-                *dst_channels[channel] = std::pow(gamma_out, 2.2F);
-            }
+            const std::size_t pixel_index = static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
+            const std::size_t base = pixel_index * 3U;
+            const float smooth_mod = grain_receptivity[pixel_index];
+
+            const float gamma_r = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 0]);
+            const float gamma_g = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 1]);
+            const float gamma_b = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 2]);
+
+            const float gamma_out_r = clamp01(gamma_r + noise_r_row[x] * strength_r * sample_unit_lut(kGrainModulationLut, gamma_r) * smooth_mod);
+            const float gamma_out_g = clamp01(gamma_g + noise_g_row[x] * strength_g * sample_unit_lut(kGrainModulationLut, gamma_g) * smooth_mod);
+            const float gamma_out_b = clamp01(gamma_b + noise_b_row[x] * strength_b * sample_unit_lut(kGrainModulationLut, gamma_b) * smooth_mod);
+
+            out.pixels[base + 0] = sample_unit_lut(kGammaDecodeLut, gamma_out_r);
+            out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, gamma_out_g);
+            out.pixels[base + 2] = sample_unit_lut(kGammaDecodeLut, gamma_out_b);
         }
     }
 
