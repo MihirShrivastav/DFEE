@@ -579,10 +579,6 @@ Image apply_pre_film_preview_sliders(
     cv::Mat gamma_rgb = gamma_encode_image_22(adjusted);
     cv::Mat luminance = compute_gamma_luminance(gamma_rgb);
 
-    const auto recompute_luminance = [&]() {
-        luminance = compute_gamma_luminance(gamma_rgb);
-    };
-
     if (contrast_value != 0.0F) {
         const float k = std::clamp(contrast_value / 100.0F, -1.0F, 1.0F) * 2.5F;
         if (std::fabs(k) > 0.02F) {
@@ -594,9 +590,9 @@ Image apply_pre_film_preview_sliders(
                         for (int c = 0; c < 3; ++c) {
                             pixel[c] = clamp01(0.5F + std::tanh(k * (pixel[c] - 0.5F)) / (2.0F * denom));
                         }
+                        luminance.at<float>(y, x) = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
                     }
                 }
-                recompute_luminance();
             }
         }
     }
@@ -619,9 +615,9 @@ Image apply_pre_film_preview_sliders(
                 pixel[0] = clamp01(pixel[0] + amount * weight);
                 pixel[1] = clamp01(pixel[1] + amount * weight);
                 pixel[2] = clamp01(pixel[2] + amount * weight);
+                luminance.at<float>(y, x) = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
             }
         }
-        recompute_luminance();
     };
 
     apply_additive_tonal(highlights_value, 0.45F, 0.30F, 0.70F, 1.5F, true);

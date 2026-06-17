@@ -679,34 +679,65 @@ Image FilmRenderer::apply_film_tone_response(
     }
 
     Image toned(rgb_linear.width, rgb_linear.height, 3);
+    constexpr std::size_t kToneLutSize = 16384U;
+    std::array<float, 3> alpha{};
+    std::array<float, 3> beta{};
+    std::array<float, 3> mid{};
+    std::array<float, 3> shoulder_k{};
+    std::array<std::vector<float>, 3> tone_luts{};
     for (int channel = 0; channel < 3; ++channel) {
-        const float alpha = 1.0F + response.toe_strength * response.channel_toe_mult[static_cast<std::size_t>(channel)];
-        const float beta = 1.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
-        const float mid = response.midtone_density * response.channel_midtone_mult[static_cast<std::size_t>(channel)];
-        const float k = 2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
+        const std::size_t index = static_cast<std::size_t>(channel);
+        alpha[index] =
+            1.0F + response.toe_strength * response.channel_toe_mult[static_cast<std::size_t>(channel)];
+        beta[index] =
+            1.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
+        mid[index] =
+            response.midtone_density * response.channel_midtone_mult[static_cast<std::size_t>(channel)];
+        shoulder_k[index] =
+            2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
 
-        for (int y = 0; y < rgb_linear.height; ++y) {
-            for (int x = 0; x < rgb_linear.width; ++x) {
-                const float ch = rgb_linear.at(x, y, channel);
-                const float ch_safe = ch > 1.0F
-                    ? 1.0F - 1.0F / std::max(1.0e-6F, 1.0F + k * (ch - 1.0F))
-                    : ch;
-                const float ch_clamp = clampf(ch_safe, 1.0e-12F, 1.0F - 1.0e-12F);
-                float s_curve = std::pow(ch_clamp, alpha) /
-                    (std::pow(ch_clamp, alpha) + std::pow(1.0F - ch_clamp, beta));
+        auto& lut = tone_luts[index];
+        lut.resize(kToneLutSize);
+        for (std::size_t sample_index = 0; sample_index < kToneLutSize; ++sample_index) {
+            const float ch_clamp = static_cast<float>(sample_index) / static_cast<float>(kToneLutSize - 1U);
+            const float ch_safe = clampf(ch_clamp, 1.0e-12F, 1.0F - 1.0e-12F);
+            const float ch_pow_alpha = std::pow(ch_safe, alpha[index]);
+            float s_curve = ch_pow_alpha /
+                (ch_pow_alpha + std::pow(1.0F - ch_safe, beta[index]));
 
+            const float mid_value = mid[index];
+            if (mid_value != 1.0F) {
                 const float delta = s_curve - 0.5F;
                 const float mid_weight = std::exp(-(delta * delta) / (2.0F * 0.12F * 0.12F));
-                if (mid != 1.0F) {
-                    const float s_curve_gamma = std::pow(s_curve, 1.0F / mid);
-                    s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
-                }
-
-                const float toe_fade = clampf(s_curve / 0.25F, 0.0F, 1.0F);
-                const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
-                toned.at(x, y, channel) = clamp01(s_curve + response.black_density_floor * shadow_weight);
+                const float s_curve_gamma = std::pow(s_curve, 1.0F / mid_value);
+                s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
             }
+
+            const float toe_fade = clampf(s_curve / 0.25F, 0.0F, 1.0F);
+            const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
+            lut[sample_index] = clamp01(s_curve + response.black_density_floor * shadow_weight);
         }
+    }
+
+    const auto apply_tone_curve = [&](const float ch, const int channel) {
+        const std::size_t index = static_cast<std::size_t>(channel);
+        const float ch_safe = ch > 1.0F
+            ? 1.0F - 1.0F / std::max(1.0e-6F, 1.0F + shoulder_k[index] * (ch - 1.0F))
+            : ch;
+        const float ch_clamp = clampf(ch_safe, 0.0F, 1.0F);
+        const float scaled = ch_clamp * static_cast<float>(kToneLutSize - 1U);
+        const std::size_t lower = static_cast<std::size_t>(scaled);
+        const std::size_t upper = std::min(lower + 1U, kToneLutSize - 1U);
+        const float mix = scaled - static_cast<float>(lower);
+        const auto& lut = tone_luts[index];
+        return lut[lower] * (1.0F - mix) + lut[upper] * mix;
+    };
+
+    for (std::size_t pixel_index = 0; pixel_index < rgb_linear.pixel_count(); ++pixel_index) {
+        const std::size_t base = pixel_index * 3U;
+        toned.pixels[base + 0U] = apply_tone_curve(rgb_linear.pixels[base + 0U], 0);
+        toned.pixels[base + 1U] = apply_tone_curve(rgb_linear.pixels[base + 1U], 1);
+        toned.pixels[base + 2U] = apply_tone_curve(rgb_linear.pixels[base + 2U], 2);
     }
 
     return toned;
