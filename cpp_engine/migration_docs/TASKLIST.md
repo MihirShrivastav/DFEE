@@ -68,12 +68,12 @@ Status values:
 
 | ID | Status | Task | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| M4-001 | planned | Add native JPEG encoder for previews | Byte decode test | Prefer libjpeg-turbo or OpenCV based on final dependency choice. |
-| M4-002 | planned | Add native 8-bit PNG export | Export test | Preserve color management expectations. |
-| M4-003 | planned | Add native 16-bit PNG export | Export test | Ensure scaling and endianness are correct. |
-| M4-004 | planned | Add native 16-bit TIFF export | Export test | Main photographer-grade export path. |
+| M4-001 | planned | Add native JPEG encoder for previews and final exports | Byte decode test plus JPEG export test | Include photographer-facing export controls such as JPEG quality and embedded DPI metadata. |
+| M4-002 | planned | Add native 8-bit PNG export | Export test | Preserve color management expectations and carry export DPI metadata where the format supports it. |
+| M4-003 | planned | Add native 16-bit PNG export | Export test | Ensure scaling and endianness are correct, and keep the export contract ready for richer output options. |
+| M4-004 | planned | Add native 16-bit TIFF export | Export test | Main photographer-grade export path; keep room for TIFF compression and metadata controls. |
 | M4-005 | planned | Add native report JSON writer | Report compatibility test | Existing diagnosis/render-plan fields plus native metadata. |
-| M4-006 | planned | Move `/api/select`, `/api/raw-image`, `/api/preview`, `/api/export` internals to native engine | Full FastAPI integration suite | Keep route definitions, logging, validation in Python. |
+| M4-006 | active | Move `/api/select`, `/api/raw-image`, `/api/preview`, `/api/export` internals to native engine | Full FastAPI integration suite | `/api/select` now has a native-first metadata/diagnostics path and warms draft/preview analysis caches; native-default promotion and remaining route cleanup are still pending. |
 | M4-007 | planned | Add Python fallback/debug switch during cutover | Manual and automated fallback test | Temporary only; native should be default after parity. |
 
 ## Milestone M5 - CUDA Acceleration

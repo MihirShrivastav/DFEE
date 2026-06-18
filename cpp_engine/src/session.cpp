@@ -46,6 +46,23 @@ NativeEngineMetadata build_engine_metadata() {
     return metadata;
 }
 
+NativeSelectDiagnostics build_select_diagnostics(const SolverInput& solver_input) {
+    NativeSelectDiagnostics diagnostics;
+    diagnostics.tonal_skew = solver_input.tonal_distribution.tonal_skew;
+    diagnostics.dynamic_range_stops = solver_input.tonal_distribution.dynamic_range_stops;
+    diagnostics.midtone_anchor = solver_input.tonal_distribution.midtone_anchor;
+    diagnostics.highlight_headroom = solver_input.tonal_distribution.highlight_headroom;
+    diagnostics.shadow_depth = solver_input.tonal_distribution.shadow_depth;
+    diagnostics.neon_risk = solver_input.hue_saturation_state.neon_risk;
+    diagnostics.dominant_hues = solver_input.hue_saturation_state.dominant_hue_bins;
+    diagnostics.palette_entropy = solver_input.hue_saturation_state.hue_entropy;
+    diagnostics.specular_ratio = solver_input.spatial_frequency.specular_point_ratio;
+    diagnostics.neutral_confidence = solver_input.camera_input_bias.has_value()
+        ? solver_input.camera_input_bias->neutral_confidence
+        : 0.0F;
+    return diagnostics;
+}
+
 void finalize_engine_metadata(NativeEngineMetadata& metadata) {
     metadata.metadata_json = serialize_native_engine_metadata_json(metadata);
 }
@@ -1266,11 +1283,62 @@ NativeSelectResponse EngineSession::select_file(const NativeSelectRequest& reque
             }
             selected_filename_ = request.filename;
         }
+        {
+            ScopedStageTimer stage(result.engine, "select_decode_draft");
+            if (!draft_decode_cache_.has_value() || draft_decode_cache_->filename != request.filename) {
+                const auto file_response = decode_raw_image_from_file({
+                    .filename = raw_path.string(),
+                    .draft_mode = true,
+                });
+                if (!file_response.ok) {
+                    result.status = file_response.status;
+                    result.message = file_response.error.user_message;
+                    result.error = file_response.error;
+                    finalize_engine_metadata(result.engine);
+                    return result;
+                }
+                draft_decode_cache_ = CachedDecode{
+                    .filename = request.filename,
+                    .draft_mode = true,
+                    .decoded = file_response.decoded,
+                };
+                refresh_preview_cache_from_draft();
+            }
+        }
+        {
+            ScopedStageTimer stage(result.engine, "select_prepare_raw_preview");
+            if (!raw_preview_jpeg_cache_.has_value() ||
+                raw_preview_jpeg_cache_->filename != request.filename ||
+                raw_preview_jpeg_cache_->max_edge != 1024) {
+                const auto encoded = encode_raw_preview(request.filename, 1024);
+                if (!encoded.ok) {
+                    result.status = encoded.status;
+                    result.message = encoded.error.user_message;
+                    result.error = encoded.error;
+                    finalize_engine_metadata(result.engine);
+                    return result;
+                }
+                raw_preview_jpeg_cache_ = CachedRawPreviewJpeg{
+                    .filename = request.filename,
+                    .max_edge = 1024,
+                    .jpeg_bytes = encoded.jpeg_bytes,
+                };
+            }
+        }
+        {
+            ScopedStageTimer stage(result.engine, "select_analyze_preview");
+            SolverInput solver_input;
+            ZoneMasks zone_masks;
+            SpatialMasks spatial_masks;
+            populate_preview_analysis_cache(request.filename, solver_input, zone_masks, spatial_masks);
+            result.metadata = draft_decode_cache_->decoded.metadata;
+            result.diagnostics = build_select_diagnostics(solver_input);
+        }
     }
 
     result.ok = true;
-    result.status = "selected";
-    result.message = "Native session selected the RAW file and reset any stale decode caches.";
+    result.status = "loaded";
+    result.message = "Native session warmed draft decode, preview cache, and diagnostics for the selected RAW file.";
     finalize_engine_metadata(result.engine);
     return result;
 }
@@ -1513,52 +1581,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         SpatialMasks spatial_masks;
         {
             ScopedStageTimer stage(response.engine, "render_preview_analyze");
-            bool used_cached_analysis = false;
-            {
-                ScopedStageTimer cache_lookup(response.engine, "render_preview_analyze_cache_lookup");
-                if (preview_analysis_cache_.has_value() && preview_analysis_cache_->filename == response.filename) {
-                    solver_input = preview_analysis_cache_->solver_input;
-                    zone_masks = preview_analysis_cache_->zone_masks;
-                    spatial_masks = preview_analysis_cache_->spatial_masks;
-                    used_cached_analysis = true;
-                }
-            }
-
-            if (!used_cached_analysis) {
-                ScopedStageTimer compute_stage(response.engine, "render_preview_analyze_compute");
-                ImageStateAnalyzer analyzer;
-                solver_input.clipping_ratios = {
-                    {"R", draft.decoded.summary.clipping_ratio_r},
-                    {"G", draft.decoded.summary.clipping_ratio_g},
-                    {"B", draft.decoded.summary.clipping_ratio_b},
-                    {"RAW", draft.decoded.summary.raw_clipping_ratio},
-                };
-                solver_input.tonal_distribution = analyzer.analyze_tonal(preview.luminance, solver_input.clipping_ratios);
-                zone_masks = analyzer.generate_zone_masks(preview.luminance, solver_input.tonal_distribution.midtone_anchor);
-                solver_input.hue_saturation_state = analyzer.analyze_color(preview.rgb_linear, zone_masks);
-                auto spatial_result = analyzer.analyze_spatial(preview.luminance);
-                solver_input.spatial_frequency = spatial_result.first;
-                spatial_masks = std::move(spatial_result.second);
-
-                const auto preview_masks = resize_clipping_masks(
-                    draft.decoded.clipping_masks,
-                    draft.decoded.rgb_linear.width,
-                    draft.decoded.rgb_linear.height,
-                    preview.rgb_linear.width,
-                    preview.rgb_linear.height);
-                CameraBiasEstimator bias_estimator;
-                solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
-                if (draft.decoded.metadata.iso > 0) {
-                    solver_input.raw_iso = draft.decoded.metadata.iso;
-                }
-
-                preview_analysis_cache_ = CachedPreviewAnalysis{
-                    .filename = response.filename,
-                    .solver_input = solver_input,
-                    .zone_masks = zone_masks,
-                    .spatial_masks = spatial_masks,
-                };
-            }
+            populate_preview_analysis_cache(response.filename, solver_input, zone_masks, spatial_masks);
         }
 
         RenderPlan render_plan;
@@ -2082,6 +2105,63 @@ std::string EngineSession::resolve_filename(const std::string& filename) const {
         return filename;
     }
     return selected_filename_;
+}
+
+void EngineSession::populate_preview_analysis_cache(
+    const std::string& filename,
+    SolverInput& solver_input,
+    ZoneMasks& zone_masks,
+    SpatialMasks& spatial_masks) {
+    if (!preview_cache_.has_value() || !draft_decode_cache_.has_value()) {
+        throw NativeException({
+            .code = "PREVIEW_ANALYSIS_NOT_READY",
+            .user_message = "A draft RAW decode is required before preview analysis can run.",
+            .detail = "populate_preview_analysis_cache requires both draft and preview caches for filename: " + filename,
+        });
+    }
+
+    if (preview_analysis_cache_.has_value() && preview_analysis_cache_->filename == filename) {
+        solver_input = preview_analysis_cache_->solver_input;
+        zone_masks = preview_analysis_cache_->zone_masks;
+        spatial_masks = preview_analysis_cache_->spatial_masks;
+        return;
+    }
+
+    const auto& preview = *preview_cache_;
+    const auto& draft = *draft_decode_cache_;
+
+    ImageStateAnalyzer analyzer;
+    solver_input.clipping_ratios = {
+        {"R", draft.decoded.summary.clipping_ratio_r},
+        {"G", draft.decoded.summary.clipping_ratio_g},
+        {"B", draft.decoded.summary.clipping_ratio_b},
+        {"RAW", draft.decoded.summary.raw_clipping_ratio},
+    };
+    solver_input.tonal_distribution = analyzer.analyze_tonal(preview.luminance, solver_input.clipping_ratios);
+    zone_masks = analyzer.generate_zone_masks(preview.luminance, solver_input.tonal_distribution.midtone_anchor);
+    solver_input.hue_saturation_state = analyzer.analyze_color(preview.rgb_linear, zone_masks);
+    auto spatial_result = analyzer.analyze_spatial(preview.luminance);
+    solver_input.spatial_frequency = spatial_result.first;
+    spatial_masks = std::move(spatial_result.second);
+
+    const auto preview_masks = resize_clipping_masks(
+        draft.decoded.clipping_masks,
+        draft.decoded.rgb_linear.width,
+        draft.decoded.rgb_linear.height,
+        preview.rgb_linear.width,
+        preview.rgb_linear.height);
+    CameraBiasEstimator bias_estimator;
+    solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
+    if (draft.decoded.metadata.iso > 0) {
+        solver_input.raw_iso = draft.decoded.metadata.iso;
+    }
+
+    preview_analysis_cache_ = CachedPreviewAnalysis{
+        .filename = filename,
+        .solver_input = solver_input,
+        .zone_masks = zone_masks,
+        .spatial_masks = spatial_masks,
+    };
 }
 
 void EngineSession::clear_decode_caches() {

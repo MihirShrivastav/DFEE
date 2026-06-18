@@ -65,11 +65,27 @@ class NativeSelectRequest:
 
 
 @dataclass(frozen=True)
+class NativeSelectDiagnostics:
+    tonal_skew: str
+    dynamic_range_stops: float
+    midtone_anchor: float
+    highlight_headroom: float
+    shadow_depth: float
+    neon_risk: float
+    dominant_hues: list[str]
+    palette_entropy: float
+    specular_ratio: float
+    neutral_confidence: float
+
+
+@dataclass(frozen=True)
 class NativeSelectResult:
     ok: bool
     filename: str
     status: str
     message: str
+    metadata: "NativeRawMetadata"
+    diagnostics: NativeSelectDiagnostics
     engine: NativeEngineInfo
 
 
@@ -206,6 +222,10 @@ class NativeRenderedPreview:
 @dataclass(frozen=True)
 class NativeExportRequest(NativePreviewRenderRequest):
     export_format: str = "tiff"
+    jpeg_quality: int = 92
+    export_dpi: int = 300
+    embed_metadata: bool = True
+    export_color_space: str = "srgb"
 
 
 @dataclass(frozen=True)
@@ -268,6 +288,21 @@ def _parse_engine_info(payload: dict[str, Any]) -> NativeEngineInfo:
         cuda_status=_parse_cuda_status(dict(payload.get("cuda_status", {}))),
         timings=timings,
         metadata_json=str(payload.get("metadata_json", "")),
+    )
+
+
+def _parse_select_diagnostics(payload: dict[str, Any]) -> NativeSelectDiagnostics:
+    return NativeSelectDiagnostics(
+        tonal_skew=str(payload.get("tonal_skew", "normal")),
+        dynamic_range_stops=float(payload.get("dynamic_range_stops", 0.0)),
+        midtone_anchor=float(payload.get("midtone_anchor", 0.18)),
+        highlight_headroom=float(payload.get("highlight_headroom", 0.0)),
+        shadow_depth=float(payload.get("shadow_depth", 0.0)),
+        neon_risk=float(payload.get("neon_risk", 0.0)),
+        dominant_hues=[str(v) for v in payload.get("dominant_hues", [])],
+        palette_entropy=float(payload.get("palette_entropy", 0.0)),
+        specular_ratio=float(payload.get("specular_ratio", 0.0)),
+        neutral_confidence=float(payload.get("neutral_confidence", 0.0)),
     )
 
 
@@ -383,6 +418,8 @@ class NativeEngineSession:
             filename=str(payload.get("filename", "")),
             status=str(payload.get("status", "")),
             message=str(payload.get("message", "")),
+            metadata=_parse_raw_metadata(dict(payload.get("metadata", {}))),
+            diagnostics=_parse_select_diagnostics(dict(payload.get("diagnostics", {}))),
             engine=_parse_engine_info(dict(payload.get("engine", {}))),
         )
         if "error" in payload:

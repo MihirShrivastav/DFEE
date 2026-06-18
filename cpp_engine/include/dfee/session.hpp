@@ -64,6 +64,11 @@ private:
     };
 
     [[nodiscard]] std::string resolve_filename(const std::string& filename) const;
+    void populate_preview_analysis_cache(
+        const std::string& filename,
+        SolverInput& solver_input,
+        ZoneMasks& zone_masks,
+        SpatialMasks& spatial_masks);
     void clear_decode_caches();
     void refresh_preview_cache_from_draft();
     [[nodiscard]] NativeRawPreviewResponse encode_raw_preview(const std::string& filename, int max_edge) const;

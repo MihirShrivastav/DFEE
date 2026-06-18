@@ -136,6 +136,29 @@ PyObject* raw_metadata_to_dict(const dfee::NativeRawMetadata& metadata) {
     return dict;
 }
 
+PyObject* select_diagnostics_to_dict(const dfee::NativeSelectDiagnostics& diagnostics) {
+    PyObject* dict = PyDict_New();
+    PyObject* dominant_hues = PyList_New(static_cast<Py_ssize_t>(diagnostics.dominant_hues.size()));
+    for (Py_ssize_t i = 0; i < static_cast<Py_ssize_t>(diagnostics.dominant_hues.size()); ++i) {
+        PyList_SET_ITEM(
+            dominant_hues,
+            i,
+            PyUnicode_FromString(diagnostics.dominant_hues[static_cast<std::size_t>(i)].c_str()));
+    }
+    PyDict_SetItemString(dict, "tonal_skew", PyUnicode_FromString(diagnostics.tonal_skew.c_str()));
+    PyDict_SetItemString(dict, "dynamic_range_stops", PyFloat_FromDouble(diagnostics.dynamic_range_stops));
+    PyDict_SetItemString(dict, "midtone_anchor", PyFloat_FromDouble(diagnostics.midtone_anchor));
+    PyDict_SetItemString(dict, "highlight_headroom", PyFloat_FromDouble(diagnostics.highlight_headroom));
+    PyDict_SetItemString(dict, "shadow_depth", PyFloat_FromDouble(diagnostics.shadow_depth));
+    PyDict_SetItemString(dict, "neon_risk", PyFloat_FromDouble(diagnostics.neon_risk));
+    PyDict_SetItemString(dict, "dominant_hues", dominant_hues);
+    PyDict_SetItemString(dict, "palette_entropy", PyFloat_FromDouble(diagnostics.palette_entropy));
+    PyDict_SetItemString(dict, "specular_ratio", PyFloat_FromDouble(diagnostics.specular_ratio));
+    PyDict_SetItemString(dict, "neutral_confidence", PyFloat_FromDouble(diagnostics.neutral_confidence));
+    Py_DECREF(dominant_hues);
+    return dict;
+}
+
 PyObject* raw_decode_summary_to_dict(const dfee::NativeRawDecodeSummary& summary) {
     PyObject* dict = PyDict_New();
     PyDict_SetItemString(dict, "image_width", PyLong_FromLong(summary.image_width));
@@ -206,6 +229,28 @@ float dict_float(PyObject* dict, const char* key, const float fallback = 0.0F) {
     return static_cast<float>(PyFloat_AsDouble(value));
 }
 
+int dict_int(PyObject* dict, const char* key, const int fallback = 0) {
+    if (dict == nullptr || !PyDict_Check(dict)) {
+        return fallback;
+    }
+    PyObject* value = PyDict_GetItemString(dict, key);
+    if (value == nullptr || value == Py_None) {
+        return fallback;
+    }
+    return static_cast<int>(PyLong_AsLong(value));
+}
+
+bool dict_bool(PyObject* dict, const char* key, const bool fallback = false) {
+    if (dict == nullptr || !PyDict_Check(dict)) {
+        return fallback;
+    }
+    PyObject* value = PyDict_GetItemString(dict, key);
+    if (value == nullptr || value == Py_None) {
+        return fallback;
+    }
+    return PyObject_IsTrue(value) == 1;
+}
+
 dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     dfee::NativePreviewRenderRequest request;
     request.filename = dict_string(dict, "filename");
@@ -273,6 +318,10 @@ dfee::NativeExportRequest export_request_from_dict(PyObject* dict) {
     dfee::NativeExportRequest request;
     static_cast<dfee::NativePreviewRenderRequest&>(request) = preview_request_from_dict(dict);
     request.export_format = dict_string(dict, "export_format", "tiff");
+    request.jpeg_quality = dict_int(dict, "jpeg_quality", 92);
+    request.export_dpi = dict_int(dict, "export_dpi", 300);
+    request.embed_metadata = dict_bool(dict, "embed_metadata", true);
+    request.export_color_space = dict_string(dict, "export_color_space", "srgb");
     return request;
 }
 
@@ -366,6 +415,12 @@ PyObject* py_select_file(PyObject*, PyObject* args) {
         PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
         PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
         PyDict_SetItemString(dict, "message", PyUnicode_FromString(result.message.c_str()));
+        PyObject* metadata = raw_metadata_to_dict(result.metadata);
+        PyObject* diagnostics = select_diagnostics_to_dict(result.diagnostics);
+        PyDict_SetItemString(dict, "metadata", metadata);
+        PyDict_SetItemString(dict, "diagnostics", diagnostics);
+        Py_DECREF(metadata);
+        Py_DECREF(diagnostics);
         if (!result.error.empty()) {
             PyObject* error = native_error_to_dict(result.error);
             PyDict_SetItemString(dict, "error", error);

@@ -68,7 +68,7 @@ python server.py
 
 That umbrella flag enables the current native-backed paths for:
 - `/api/profiles`
-- `/api/select` native warmup
+- `/api/select`
 - `/api/raw-image`
 - `/api/preview`
 - `/api/export`
@@ -120,17 +120,22 @@ With that flag enabled, `/api/export` asks the native engine to write the final
 image and report outputs and falls back to the Python export pipeline if the
 native export path fails.
 
-To warm the native session during `/api/select` while keeping the existing
-Python diagnostics response intact:
+To route `/api/select` through the native C++ session path:
 
 ```powershell
 $env:DFEE_USE_NATIVE_SELECT="1"
 python server.py
 ```
 
-With that flag enabled, `/api/select` warms native file-selection, draft-decode,
-and raw-preview state first, then still runs the current Python ingest/analyze
-path so metadata, diagnostics, and Python fallback state remain compatible.
+With that flag enabled, `/api/select` now runs through the native session path,
+warms draft decode, preview JPEG, and preview analysis state, and returns the
+same compact metadata and diagnostics response shape the frontend already uses.
+If a later native route falls back, the Python draft state is prepared lazily on
+demand instead of being eagerly computed during select.
+
+The export request model now also carries forward-looking photographer export
+options that the native export milestone will fully implement: `jpeg_quality`,
+`export_dpi`, `embed_metadata`, and `export_color_space`.
 
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA

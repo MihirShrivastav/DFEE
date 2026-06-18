@@ -407,6 +407,130 @@ def _get_native_rendered_preview(request_payload: dict):
     return preview
 
 
+def _metadata_response_payload(metadata) -> dict[str, str]:
+    if hasattr(metadata, "__dict__"):
+        payload = metadata.__dict__
+    else:
+        payload = dict(metadata)
+    return {str(key): str(value) for key, value in payload.items()}
+
+
+def _select_diagnostics_response_payload(diagnostics) -> dict:
+    source = diagnostics.__dict__ if hasattr(diagnostics, "__dict__") else dict(diagnostics)
+    return {
+        "tonal_skew": str(source.get("tonal_skew", "normal")),
+        "dynamic_range_stops": round(float(source.get("dynamic_range_stops", 0.0)), 2),
+        "midtone_anchor": round(float(source.get("midtone_anchor", 0.18)), 3),
+        "highlight_headroom": round(float(source.get("highlight_headroom", 0.0)), 3),
+        "shadow_depth": round(float(source.get("shadow_depth", 0.0)), 3),
+        "neon_risk": round(float(source.get("neon_risk", 0.0)), 3),
+        "dominant_hues": list(source.get("dominant_hues", [])),
+        "palette_entropy": round(float(source.get("palette_entropy", 0.0)), 2),
+        "specular_ratio": round(float(source.get("specular_ratio", 0.0)), 4),
+        "neutral_confidence": round(float(source.get("neutral_confidence", 0.0)), 2),
+    }
+
+
+def _reset_python_session_caches_for_selection(filename: str, metadata: dict, diagnostics: dict) -> None:
+    session.filename = filename
+    session.metadata = metadata
+    session.cached_diagnostics = diagnostics
+    session.rgb_linear = None
+    session.Y = None
+    session.clipping_masks = None
+    session.clipping_ratios = None
+    session.preview_rgb_linear = None
+    session.preview_Y = None
+    session.preview_clipping_masks = None
+    session.feature_dict = None
+    session.masks = None
+    session.fullres_rgb_linear = None
+    session.fullres_Y = None
+    session.fullres_clipping_masks = None
+    session.fullres_clipping_ratios = None
+    session.fullres_metadata = None
+    session.fullres_feature_dict = None
+    session.fullres_masks = None
+    session.raw_preview_bytes = None
+
+
+def _prepare_python_draft_session(filename: str) -> tuple[dict, dict]:
+    filepath = os.path.join(RAW_DIR, filename)
+    ingestor = RawIngestor(filepath)
+    rgb_linear, Y, clipping_masks, clipping_ratios, metadata = ingestor.ingest(draft_mode=True)
+
+    h, w = Y.shape
+    max_edge = 1024
+    if max(h, w) > max_edge:
+        scale = max_edge / max(h, w)
+        preview_rgb = cv2.resize(rgb_linear, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        preview_Y = cv2.resize(Y, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        preview_clip = {
+            "R": cv2.resize(clipping_masks["R"].astype(np.uint8), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST) > 0,
+            "G": cv2.resize(clipping_masks["G"].astype(np.uint8), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST) > 0,
+            "B": cv2.resize(clipping_masks["B"].astype(np.uint8), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST) > 0,
+        }
+    else:
+        preview_rgb = rgb_linear.copy()
+        preview_Y = Y.copy()
+        preview_clip = clipping_masks
+
+    analyzer = ImageStateAnalyzer()
+    feature_dict, masks = analyzer.analyze(preview_rgb, preview_Y, preview_clip, clipping_ratios)
+    feature_dict["raw_metadata"] = metadata
+
+    bias_estimator = CameraBiasEstimator()
+    bias_info = bias_estimator.estimate_bias(preview_rgb, preview_Y, preview_clip, masks["luminance_zone_masks"])
+    feature_dict["camera_input_bias"] = bias_info
+
+    session.filename = filename
+    session.rgb_linear = rgb_linear
+    session.Y = Y
+    session.clipping_masks = clipping_masks
+    session.clipping_ratios = clipping_ratios
+    session.metadata = metadata
+    session.preview_rgb_linear = preview_rgb
+    session.preview_Y = preview_Y
+    session.preview_clipping_masks = preview_clip
+    session.feature_dict = feature_dict
+    session.masks = masks
+    session.fullres_rgb_linear = None
+    session.fullres_Y = None
+    session.fullres_clipping_masks = None
+    session.fullres_clipping_ratios = None
+    session.fullres_metadata = None
+    session.fullres_feature_dict = None
+    session.fullres_masks = None
+
+    raw_display = linear_to_srgb(preview_rgb)
+    raw_display_uint8 = (raw_display * 255.0).astype(np.uint8)
+    _, raw_jpeg_bytes = cv2.imencode('.jpg', cv2.cvtColor(raw_display_uint8, cv2.COLOR_RGB2BGR))
+    session.raw_preview_bytes = raw_jpeg_bytes.tobytes()
+
+    tonal = feature_dict["tonal_distribution"]
+    color = feature_dict["hue_saturation_state"]
+    spatial = feature_dict["spatial_frequency"]
+    diagnostics = {
+        "tonal_skew": tonal["tonal_skew"],
+        "dynamic_range_stops": round(tonal["dynamic_range_stops"], 2),
+        "midtone_anchor": round(tonal["midtone_anchor"], 3),
+        "highlight_headroom": round(tonal["highlight_headroom"], 3),
+        "shadow_depth": round(tonal["shadow_depth"], 3),
+        "neon_risk": round(color["neon_risk"], 3),
+        "dominant_hues": color["dominant_hue_bins"],
+        "palette_entropy": round(color["hue_entropy"], 2),
+        "specular_ratio": round(spatial["specular_point_ratio"], 4),
+        "neutral_confidence": round(bias_info["neutral_confidence"], 2),
+    }
+    session.cached_diagnostics = diagnostics
+    return metadata, diagnostics
+
+
+def _get_native_select_result(filename: str):
+    native_session = _get_native_engine_session()
+    return native_session.select_file(filename)
+
+
 def _run_native_export(request_payload: dict) -> dict:
     native_bridge = _get_native_bridge_module()
     native_session = _get_native_engine_session()
@@ -420,13 +544,6 @@ def _run_native_export(request_payload: dict) -> dict:
         "format": exported.format_label,
         "engine": exported.engine,
     }
-
-
-def _warm_native_select(filename: str, *, max_edge: int = 1024) -> None:
-    native_session = _get_native_engine_session()
-    native_session.select_file(filename)
-    native_session.decode_raw(filename, draft_mode=True)
-    native_session.raw_preview(filename, max_edge=max_edge)
 
 # Pydantic schemas
 class SelectRequest(BaseModel):
@@ -480,6 +597,13 @@ class PreviewRequest(BaseModel):
     print_contrast: float = 0.0  # -100 to +100
     print_black_point: float = 0.0 # -100 to +100
     export_format: str = "tiff"   # "tiff" | "png16" | "png8"
+
+
+class ExportRequest(PreviewRequest):
+    jpeg_quality: int = 92
+    export_dpi: int = 300
+    embed_metadata: bool = True
+    export_color_space: str = "srgb"
 
 
 def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
@@ -778,6 +902,7 @@ def select_file(req: SelectRequest):
     try:
         # --- Analysis cache: skip expensive reprocessing if same file is already loaded ---
         if session.filename == req.filename and session.cached_diagnostics is not None:
+            cached_metadata = session.metadata if isinstance(session.metadata, dict) else {}
             logger.info(
                 "Select complete fp=%s file=%s backend=python_cached elapsed_ms=%.1f",
                 request_fp,
@@ -786,96 +911,36 @@ def select_file(req: SelectRequest):
             )
             return {
                 "status": "loaded",
-                "metadata": {k: str(v) for k, v in session.metadata.items()},
+                "metadata": {k: str(v) for k, v in cached_metadata.items()},
                 "diagnostics": session.cached_diagnostics
             }
 
         if use_native:
             try:
-                _warm_native_select(req.filename, max_edge=1024)
-                logger.info("Select native warmup complete fp=%s file=%s", request_fp, req.filename)
+                native_result = _get_native_select_result(req.filename)
+                metadata_payload = _metadata_response_payload(native_result.metadata)
+                diagnostics = _select_diagnostics_response_payload(native_result.diagnostics)
+                _reset_python_session_caches_for_selection(req.filename, metadata_payload, diagnostics)
+                logger.info(
+                    "Select complete fp=%s file=%s backend=native elapsed_ms=%.1f stages=%s",
+                    request_fp,
+                    req.filename,
+                    _elapsed_ms(started_at),
+                    _format_stage_timings(native_result.engine, top_n=8),
+                )
+                return {
+                    "status": "loaded",
+                    "metadata": metadata_payload,
+                    "diagnostics": diagnostics,
+                }
             except Exception:
                 logger.exception(
-                    "Select native warmup failed fp=%s file=%s, continuing with Python analysis path",
+                    "Select native path failed fp=%s file=%s, continuing with Python analysis path",
                     request_fp,
                     req.filename,
                 )
 
-        # Ingest in draft mode (half_size) for quick loading
-        ingestor = RawIngestor(filepath)
-        rgb_linear, Y, clipping_masks, clipping_ratios, metadata = ingestor.ingest(draft_mode=True)
-        
-        # Scale to max 1024px for real-time preview responsiveness
-        h, w = Y.shape
-        max_edge = 1024
-        if max(h, w) > max_edge:
-            scale = max_edge / max(h, w)
-            preview_rgb = cv2.resize(rgb_linear, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            preview_Y = cv2.resize(Y, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            preview_clip = {
-                "R": cv2.resize(clipping_masks["R"].astype(np.uint8), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST) > 0,
-                "G": cv2.resize(clipping_masks["G"].astype(np.uint8), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST) > 0,
-                "B": cv2.resize(clipping_masks["B"].astype(np.uint8), (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST) > 0
-            }
-        else:
-            preview_rgb = rgb_linear.copy()
-            preview_Y = Y.copy()
-            preview_clip = clipping_masks
-            
-        # Analyze using downscaled preview canvas
-        analyzer = ImageStateAnalyzer()
-        feature_dict, masks = analyzer.analyze(preview_rgb, preview_Y, preview_clip, clipping_ratios)
-        feature_dict["raw_metadata"] = metadata
-        
-        bias_estimator = CameraBiasEstimator()
-        bias_info = bias_estimator.estimate_bias(preview_rgb, preview_Y, preview_clip, masks["luminance_zone_masks"])
-        feature_dict["camera_input_bias"] = bias_info
-        
-        # Save to Active Session
-        session.filename = req.filename
-        session.rgb_linear = rgb_linear
-        session.Y = Y
-        session.clipping_masks = clipping_masks
-        session.clipping_ratios = clipping_ratios
-        session.metadata = metadata
-        session.preview_rgb_linear = preview_rgb
-        session.preview_Y = preview_Y
-        session.preview_clipping_masks = preview_clip
-        session.feature_dict = feature_dict
-        session.masks = masks
-
-        # Reset full-res cache on new file selection
-        session.fullres_rgb_linear = None
-        session.fullres_Y = None
-        session.fullres_clipping_masks = None
-        session.fullres_clipping_ratios = None
-        session.fullres_metadata = None
-        session.fullres_feature_dict = None
-        session.fullres_masks = None
-        
-        # Build and cache raw preview JPEG
-        raw_display = linear_to_srgb(preview_rgb)
-        raw_display_uint8 = (raw_display * 255.0).astype(np.uint8)
-        _, raw_jpeg_bytes = cv2.imencode('.jpg', cv2.cvtColor(raw_display_uint8, cv2.COLOR_RGB2BGR))
-        session.raw_preview_bytes = raw_jpeg_bytes.tobytes()
-        
-        # Build and cache diagnostics dict
-        tonal = feature_dict["tonal_distribution"]
-        color = feature_dict["hue_saturation_state"]
-        spatial = feature_dict["spatial_frequency"]
-        diagnostics = {
-            "tonal_skew": tonal["tonal_skew"],
-            "dynamic_range_stops": round(tonal["dynamic_range_stops"], 2),
-            "midtone_anchor": round(tonal["midtone_anchor"], 3),
-            "highlight_headroom": round(tonal["highlight_headroom"], 3),
-            "shadow_depth": round(tonal["shadow_depth"], 3),
-            "neon_risk": round(color["neon_risk"], 3),
-            "dominant_hues": color["dominant_hue_bins"],
-            "palette_entropy": round(color["hue_entropy"], 2),
-            "specular_ratio": round(spatial["specular_point_ratio"], 4),
-            "neutral_confidence": round(bias_info["neutral_confidence"], 2)
-        }
-        session.cached_diagnostics = diagnostics
+        metadata, diagnostics = _prepare_python_draft_session(req.filename)
 
         logger.info(
             "Select complete fp=%s file=%s backend=python elapsed_ms=%.1f",
@@ -924,6 +989,16 @@ def get_raw_image():
         except Exception:
             logger.exception(
                 "Raw preview native path failed fp=%s file=%s, falling back to Python cache",
+                request_fp,
+                session.filename,
+            )
+
+    if session.filename and not session.raw_preview_bytes:
+        try:
+            _prepare_python_draft_session(session.filename)
+        except Exception:
+            logger.exception(
+                "Raw preview Python fallback preparation failed fp=%s file=%s",
                 request_fp,
                 session.filename,
             )
@@ -1101,6 +1176,13 @@ def get_preview(
             )
 
     try:
+        if (
+            session.preview_rgb_linear is None
+            or session.masks is None
+            or session.feature_dict is None
+        ):
+            _prepare_python_draft_session(filename)
+
         stock_profile = _load_stock_profile(stock)
 
         solver = RenderPlanSolver()
@@ -1183,7 +1265,7 @@ def get_preview(
         raise HTTPException(status_code=500, detail=f"Failed to render preview: {str(e)}")
 
 @app.post("/api/export")
-def export_file(req: PreviewRequest):
+def export_file(req: ExportRequest):
     started_at = time.perf_counter()
     request_fp = _request_fingerprint(req.model_dump())
     logger.info(

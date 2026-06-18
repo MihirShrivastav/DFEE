@@ -502,7 +502,11 @@ class TestNativeBridge(unittest.TestCase):
         result = self.session.select_file(raw_filename)
         self.assertTrue(result.ok)
         self.assertEqual(result.filename, raw_filename)
-        self.assertEqual(result.status, "selected")
+        self.assertEqual(result.status, "loaded")
+        self.assertGreater(result.metadata.image_width, 0)
+        self.assertGreater(result.metadata.image_height, 0)
+        self.assertIsInstance(result.diagnostics.tonal_skew, str)
+        self.assertGreaterEqual(result.diagnostics.dynamic_range_stops, 0.0)
         self.assertGreater(len(result.engine.timings), 0)
         self.assertIn("select_file_total", result.engine.metadata_json)
 
@@ -558,8 +562,9 @@ class TestNativeBridge(unittest.TestCase):
         self.session.select_file(raw_filename)
         initial_state = self.session.cache_state()
         self.assertEqual(initial_state.selected_filename, raw_filename)
-        self.assertFalse(initial_state.draft_decode_cached)
-        self.assertFalse(initial_state.preview_cached)
+        self.assertTrue(initial_state.draft_decode_cached)
+        self.assertTrue(initial_state.preview_cached)
+        self.assertTrue(initial_state.raw_preview_jpeg_cached)
         self.assertFalse(initial_state.full_decode_cached)
 
         if self.session.list_profiles().engine.libraw_enabled:
@@ -567,7 +572,7 @@ class TestNativeBridge(unittest.TestCase):
             after_draft = self.session.cache_state()
             self.assertTrue(after_draft.draft_decode_cached)
             self.assertTrue(after_draft.preview_cached)
-            self.assertFalse(after_draft.raw_preview_jpeg_cached)
+            self.assertTrue(after_draft.raw_preview_jpeg_cached)
             self.assertFalse(after_draft.full_decode_cached)
             self.assertEqual(after_draft.draft_width, draft_summary.image_width)
             self.assertEqual(after_draft.draft_height, draft_summary.image_height)
@@ -742,9 +747,8 @@ class TestNativeBridge(unittest.TestCase):
             self.assertIn(ctx.exception.code, {"LIBRAW_UNSUPPORTED_RAW", "LIBRAW_OPEN_FAILED"})
             self.assertIn(ctx.exception.status, {"unsupported", "error"})
 
-            self.session.select_file(unsupported_filename)
             with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
-                self.session.decode_raw(unsupported_filename, draft_mode=True)
+                self.session.select_file(unsupported_filename)
             self.assertIn(ctx.exception.code, {"LIBRAW_UNSUPPORTED_RAW", "LIBRAW_OPEN_FAILED"})
             self.assertIn(ctx.exception.status, {"unsupported", "error"})
 
@@ -753,9 +757,8 @@ class TestNativeBridge(unittest.TestCase):
             self.assertFalse(unsupported_cache.preview_cached)
             self.assertFalse(unsupported_cache.raw_preview_jpeg_cached)
 
-            self.session.select_file(corrupt_filename)
             with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
-                self.session.decode_raw(corrupt_filename, draft_mode=True)
+                self.session.select_file(corrupt_filename)
             self.assertIn(ctx.exception.code, {"LIBRAW_CORRUPT_RAW", "LIBRAW_OPEN_FAILED"})
             self.assertEqual(ctx.exception.status, "error")
 

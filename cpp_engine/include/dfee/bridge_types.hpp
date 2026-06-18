@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <string>
@@ -47,20 +48,6 @@ struct NativeSelectRequest {
     std::string filename;
 };
 
-struct NativeSelectResponse {
-    bool ok = false;
-    std::string filename;
-    std::string status;
-    std::string message;
-    NativeError error;
-    NativeEngineMetadata engine;
-};
-
-struct NativeRawPreviewRequest {
-    std::string filename;
-    int max_edge = 1024;
-};
-
 struct NativeRawMetadata {
     std::string camera_make;
     std::string camera_model;
@@ -78,6 +65,35 @@ struct NativeRawMetadata {
     int raw_height = 0;
     int raw_width = 0;
     std::string metadata_json;
+};
+
+struct NativeSelectDiagnostics {
+    std::string tonal_skew = "normal";
+    float dynamic_range_stops = 0.0F;
+    float midtone_anchor = 0.18F;
+    float highlight_headroom = 0.0F;
+    float shadow_depth = 0.0F;
+    float neon_risk = 0.0F;
+    std::array<std::string, 3> dominant_hues{"Red", "Orange", "Yellow"};
+    float palette_entropy = 0.0F;
+    float specular_ratio = 0.0F;
+    float neutral_confidence = 0.0F;
+};
+
+struct NativeSelectResponse {
+    bool ok = false;
+    std::string filename;
+    std::string status;
+    std::string message;
+    NativeRawMetadata metadata;
+    NativeSelectDiagnostics diagnostics;
+    NativeError error;
+    NativeEngineMetadata engine;
+};
+
+struct NativeRawPreviewRequest {
+    std::string filename;
+    int max_edge = 1024;
 };
 
 struct NativeRawMetadataRequest {
@@ -225,6 +241,10 @@ struct NativePreviewRenderResponse {
 
 struct NativeExportRequest : NativePreviewRenderRequest {
     std::string export_format = "tiff";
+    int jpeg_quality = 92;
+    int export_dpi = 300;
+    bool embed_metadata = true;
+    std::string export_color_space = "srgb";
 };
 
 struct NativeExportResponse {
