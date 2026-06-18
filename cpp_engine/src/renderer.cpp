@@ -4,11 +4,13 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <limits>
 #include <numbers>
 #include <random>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
@@ -116,6 +118,16 @@ void append_timing_metric(
         .stage = std::string(timing_prefix) + suffix,
         .milliseconds = milliseconds,
     });
+}
+
+[[nodiscard]] bool should_trace_gamut_reentry(
+    NativeEngineMetadata* metadata,
+    const char* timing_prefix) {
+    if (metadata == nullptr || timing_prefix == nullptr || timing_prefix[0] == '\0') {
+        return false;
+    }
+    const char* value = std::getenv("DFEE_TRACE_GAMUT_REENTRY");
+    return value != nullptr && std::string_view(value) == "1";
 }
 
 [[nodiscard]] cv::Mat rgb_image_to_mat(const Image& image, const bool clamp_values = false) {
@@ -726,15 +738,8 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc;
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
+    const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);
     std::size_t gamut_reentry_count = 0U;
-    std::size_t gamut_reentry_any_low_count = 0U;
-    std::size_t gamut_reentry_any_high_count = 0U;
-    std::size_t gamut_reentry_r_low_count = 0U;
-    std::size_t gamut_reentry_g_low_count = 0U;
-    std::size_t gamut_reentry_b_low_count = 0U;
-    std::size_t gamut_reentry_r_high_count = 0U;
-    std::size_t gamut_reentry_g_high_count = 0U;
-    std::size_t gamut_reentry_b_high_count = 0U;
     for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
         const OklabPixel base_oklab = rgb_to_oklab_pixel(
             rgb_linear.pixels[i * 3 + 0],
@@ -794,15 +799,9 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         const bool needs_gamut_clamp = any_low || any_high;
 
         if (needs_gamut_clamp) {
-            ++gamut_reentry_count;
-            gamut_reentry_any_low_count += any_low ? 1U : 0U;
-            gamut_reentry_any_high_count += any_high ? 1U : 0U;
-            gamut_reentry_r_low_count += r_low ? 1U : 0U;
-            gamut_reentry_g_low_count += g_low ? 1U : 0U;
-            gamut_reentry_b_low_count += b_low ? 1U : 0U;
-            gamut_reentry_r_high_count += r_high ? 1U : 0U;
-            gamut_reentry_g_high_count += g_high ? 1U : 0U;
-            gamut_reentry_b_high_count += b_high ? 1U : 0U;
+            if (trace_gamut_reentry) {
+                ++gamut_reentry_count;
+            }
             const OklabPixel coupled_oklab = rgb_to_oklab_pixel(
                 clamp01(adjusted_rgb[0]),
                 clamp01(adjusted_rgb[1]),
@@ -835,16 +834,8 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         out.pixels[i * 3 + 2] = rgb[2];
     }
 
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_count", static_cast<double>(gamut_reentry_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_any_low_count", static_cast<double>(gamut_reentry_any_low_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_any_high_count", static_cast<double>(gamut_reentry_any_high_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_r_low_count", static_cast<double>(gamut_reentry_r_low_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_g_low_count", static_cast<double>(gamut_reentry_g_low_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_b_low_count", static_cast<double>(gamut_reentry_b_low_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_r_high_count", static_cast<double>(gamut_reentry_r_high_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_g_high_count", static_cast<double>(gamut_reentry_g_high_count));
-    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_b_high_count", static_cast<double>(gamut_reentry_b_high_count));
-    if (rgb_linear.pixel_count() > 0U) {
+    if (trace_gamut_reentry) {
+        append_timing_metric(metadata, timing_prefix, "__gamut_reentry_count", static_cast<double>(gamut_reentry_count));
         append_timing_metric(
             metadata,
             timing_prefix,
