@@ -73,8 +73,8 @@ Status values:
 | M4-003 | planned | Add native 16-bit PNG export | Export test | Ensure scaling and endianness are correct, and keep the export contract ready for richer output options. |
 | M4-004 | planned | Add native 16-bit TIFF export | Export test | Main photographer-grade export path; keep room for TIFF compression and metadata controls. |
 | M4-005 | planned | Add native report JSON writer | Report compatibility test | Existing diagnosis/render-plan fields plus native metadata. |
-| M4-006 | active | Move `/api/select`, `/api/raw-image`, `/api/preview`, `/api/export` internals to native engine | Full FastAPI integration suite | `/api/select` now has a native-first metadata/diagnostics path and warms draft/preview analysis caches; native-default promotion and remaining route cleanup are still pending. |
-| M4-007 | planned | Add Python fallback/debug switch during cutover | Manual and automated fallback test | Temporary only; native should be default after parity. |
+| M4-006 | done | Move `/api/select`, `/api/raw-image`, `/api/preview`, `/api/export` internals to native engine | Full FastAPI integration suite | All core FastAPI image routes are now native-first, `/api/select` returns native metadata/diagnostics, and the native backend is the default route path with Python fallback still preserved for resilience. |
+| M4-007 | active | Add Python fallback/debug switch during cutover | Manual and automated fallback test | `DFEE_USE_NATIVE_ENGINE=0` and route-level overrides remain available for debugging; keep them until the richer export-option and encoder milestones are fully native. |
 
 ## Milestone M5 - CUDA Acceleration
 

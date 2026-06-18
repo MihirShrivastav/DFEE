@@ -69,13 +69,21 @@ class TestServerRawFailureHandling(unittest.TestCase):
             ],
         )
 
-    def test_global_native_flag_enables_route_when_no_override_is_set(self):
-        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_ENGINE": "1"}, clear=True):
+    def test_native_backend_is_enabled_by_default_when_no_override_is_set(self):
+        with mock.patch.dict(server.os.environ, {}, clear=True):
             self.assertTrue(server._native_profiles_enabled())
             self.assertTrue(server._native_raw_image_enabled())
             self.assertTrue(server._native_preview_enabled())
             self.assertTrue(server._native_export_enabled())
             self.assertTrue(server._native_select_enabled())
+
+    def test_global_native_flag_can_disable_routes_when_set_false(self):
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_ENGINE": "0"}, clear=True):
+            self.assertFalse(server._native_profiles_enabled())
+            self.assertFalse(server._native_raw_image_enabled())
+            self.assertFalse(server._native_preview_enabled())
+            self.assertFalse(server._native_export_enabled())
+            self.assertFalse(server._native_select_enabled())
 
     def test_route_override_takes_precedence_over_global_native_flag(self):
         with mock.patch.dict(
@@ -390,6 +398,63 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["export_format"], "png8")
         self.assertEqual(payload["exposure"], 0.1)
         self.assertEqual(payload["saturation"], 6.0)
+
+    def test_export_uses_python_backend_when_requested_options_exceed_native_support(self):
+        raw_filename = self._raw_filename()
+        server.session.filename = raw_filename
+        server.session.fullres_rgb_linear = np.full((2, 2, 3), 0.25, dtype=np.float32)
+        server.session.fullres_Y = np.full((2, 2), 0.25, dtype=np.float32)
+        server.session.fullres_clipping_masks = {"R": np.zeros((2, 2), dtype=bool), "G": np.zeros((2, 2), dtype=bool), "B": np.zeros((2, 2), dtype=bool)}
+        server.session.fullres_clipping_ratios = {"R": 0.0, "G": 0.0, "B": 0.0}
+        server.session.fullres_metadata = {"image_width": 2, "image_height": 2}
+        server.session.fullres_feature_dict = {"camera_input_bias": {}, "raw_metadata": {}}
+        server.session.fullres_masks = {"luminance_zone_masks": {}}
+
+        stock_profile = object()
+        render_plan = {
+            "pre_film_normalization": {
+                "exposure_compensation_stops": 0.0,
+                "contrast_compensation": 0.0,
+                "highlights_compensation": 0.0,
+                "shadows_compensation": 0.0,
+                "whites_compensation": 0.0,
+                "blacks_compensation": 0.0,
+                "midtones_compensation": 0.0,
+            }
+        }
+        rendered_linear = np.full((2, 2, 3), 0.25, dtype=np.float32)
+        solver_instance = mock.Mock(solve=mock.Mock(return_value=render_plan))
+        renderer_instance = mock.Mock(render=mock.Mock(return_value=rendered_linear))
+        reporter_instance = mock.Mock(write_report=mock.Mock())
+        image_instance = mock.Mock(save=mock.Mock())
+
+        with mock.patch.object(server, "_run_native_export") as native_mock:
+            with mock.patch.object(server, "_load_stock_profile", return_value=stock_profile):
+                with mock.patch.object(server, "RenderPlanSolver", return_value=solver_instance):
+                    with mock.patch.object(server, "FilmRenderer", return_value=renderer_instance):
+                        with mock.patch.object(server, "_apply_pre_film_sliders", return_value=np.zeros((2, 2, 3), dtype=np.float32)):
+                            with mock.patch.object(server, "_apply_post_film_color", return_value=rendered_linear):
+                                with mock.patch.object(server, "_apply_post_film_effects", return_value=rendered_linear):
+                                    with mock.patch.object(server, "linear_to_srgb", return_value=rendered_linear):
+                                        with mock.patch.object(server, "RenderReporter", return_value=reporter_instance):
+                                            with mock.patch.object(server, "Image") as image_module:
+                                                image_module.fromarray.return_value = image_instance
+                                                response = self.client.post(
+                                                    "/api/export",
+                                                    json={
+                                                        "filename": raw_filename,
+                                                        "stock": "portra_400",
+                                                        "export_format": "jpeg",
+                                                        "jpeg_quality": 85,
+                                                        "export_dpi": 240,
+                                                    },
+                                                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["format"], "JPEG")
+        native_mock.assert_not_called()
+        reporter_instance.write_report.assert_called_once()
+        image_instance.save.assert_called_once()
 
     def test_export_falls_back_to_python_pipeline_when_native_export_fails(self):
         raw_filename = self._raw_filename()

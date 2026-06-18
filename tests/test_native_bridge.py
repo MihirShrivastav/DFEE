@@ -18,9 +18,13 @@ from dfee.solver import RenderPlanSolver
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-NATIVE_BUILD_DIR = BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc-vcpkg" / "Debug"
-if not NATIVE_BUILD_DIR.exists():
-    NATIVE_BUILD_DIR = BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc" / "Debug"
+_NATIVE_BUILD_CANDIDATES = [
+    BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc-vcpkg" / "Release",
+    BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc" / "Release",
+    BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc-vcpkg" / "Debug",
+    BASE_DIR / "cpp_engine" / "out" / "build" / "windows-msvc" / "Debug",
+]
+NATIVE_BUILD_DIR = next((path for path in _NATIVE_BUILD_CANDIDATES if path.exists()), _NATIVE_BUILD_CANDIDATES[-1])
 
 if NATIVE_BUILD_DIR.exists():
     sys.path.insert(0, str(NATIVE_BUILD_DIR))

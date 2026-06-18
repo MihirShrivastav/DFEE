@@ -59,19 +59,27 @@ $env:PYTHONPATH="."
 pytest tests/test_dfee.py
 ```
 
-To enable the staged native backend across every migrated FastAPI route:
+By default, DFEE now prefers the native backend across every migrated FastAPI route.
+To force that preference explicitly:
 
 ```powershell
 $env:DFEE_USE_NATIVE_ENGINE="1"
 python server.py
 ```
 
-That umbrella flag enables the current native-backed paths for:
+The native-default path covers:
 - `/api/profiles`
 - `/api/select`
 - `/api/raw-image`
 - `/api/preview`
 - `/api/export`
+
+To force the legacy Python backend globally for debugging:
+
+```powershell
+$env:DFEE_USE_NATIVE_ENGINE="0"
+python server.py
+```
 
 Per-route flags still exist as debug overrides. If a per-route flag is set, it
 takes precedence over `DFEE_USE_NATIVE_ENGINE`.
@@ -133,9 +141,11 @@ same compact metadata and diagnostics response shape the frontend already uses.
 If a later native route falls back, the Python draft state is prepared lazily on
 demand instead of being eagerly computed during select.
 
-The export request model now also carries forward-looking photographer export
-options that the native export milestone will fully implement: `jpeg_quality`,
-`export_dpi`, `embed_metadata`, and `export_color_space`.
+The export request model now also carries photographer-facing export options:
+`jpeg_quality`, `export_dpi`, `embed_metadata`, and `export_color_space`.
+At the moment, if an export request asks for an option combination the native
+path does not fully honor yet, the server deliberately routes that request
+through the Python export path instead of silently degrading behavior.
 
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA

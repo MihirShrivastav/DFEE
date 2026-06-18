@@ -175,10 +175,9 @@ Improve quality and responsiveness further without losing reproducibility.
 
 This is the recommended near-term sequence for the next implementation slices:
 
-1. Phase A: native `/api/select` contract and backend-default cutover.
-2. Phase B: isolated color-stage benchmark plus accepted export optimization.
-3. Phase C: report/encoder cleanup needed to make native the clean default.
-4. Phase D: real CUDA probing and first execution scaffolding.
+1. Phase B: isolated color-stage benchmark plus accepted export optimization.
+2. Phase C: richer native export and encoder work so photographer-facing options no longer force Python fallback.
+3. Phase D: real CUDA probing and first execution scaffolding.
 
 ## Operating Rules
 

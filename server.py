@@ -228,7 +228,7 @@ def _env_flag_override(name: str) -> bool | None:
 
 
 def _native_engine_enabled() -> bool:
-    return _env_flag("DFEE_USE_NATIVE_ENGINE", default=False)
+    return _env_flag("DFEE_USE_NATIVE_ENGINE", default=True)
 
 
 def _route_native_enabled(override_name: str) -> bool:
@@ -544,6 +544,21 @@ def _run_native_export(request_payload: dict) -> dict:
         "format": exported.format_label,
         "engine": exported.engine,
     }
+
+
+def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, str]:
+    fmt = (request.export_format or "tiff").lower().strip()
+    if fmt not in {"tiff", "png16", "png8"}:
+        return False, f"export_format={fmt}"
+    if int(request.jpeg_quality) != 92:
+        return False, f"jpeg_quality={request.jpeg_quality}"
+    if int(request.export_dpi) != 300:
+        return False, f"export_dpi={request.export_dpi}"
+    if bool(request.embed_metadata) is not True:
+        return False, f"embed_metadata={request.embed_metadata}"
+    if (request.export_color_space or "srgb").lower().strip() != "srgb":
+        return False, f"export_color_space={request.export_color_space}"
+    return True, ""
 
 # Pydantic schemas
 class SelectRequest(BaseModel):
@@ -1268,6 +1283,7 @@ def get_preview(
 def export_file(req: ExportRequest):
     started_at = time.perf_counter()
     request_fp = _request_fingerprint(req.model_dump())
+    native_export_supported, native_export_reason = _native_export_request_supported(req)
     logger.info(
         "Export request fp=%s file=%s stock=%s print_stock=%s format=%s native=%s",
         request_fp,
@@ -1275,14 +1291,14 @@ def export_file(req: ExportRequest):
         req.stock,
         req.print_stock,
         req.export_format,
-        _native_export_enabled(),
+        _native_export_enabled() and native_export_supported,
     )
     filepath = os.path.join(RAW_DIR, req.filename)
     if not os.path.exists(filepath):
         logger.warning("Export failed fp=%s file=%s reason=file_not_found", request_fp, req.filename)
         raise HTTPException(status_code=404, detail="File not found")
 
-    if _native_export_enabled():
+    if _native_export_enabled() and native_export_supported:
         try:
             native_result = _run_native_export(req.model_dump())
             logger.info(
@@ -1301,6 +1317,13 @@ def export_file(req: ExportRequest):
                 request_fp,
                 req.filename,
             )
+    elif _native_export_enabled():
+        logger.info(
+            "Export using python backend fp=%s file=%s reason=native_option_gap detail=%s",
+            request_fp,
+            req.filename,
+            native_export_reason,
+        )
 
     try:
         stock_profile = _load_stock_profile(req.stock) if req.stock != "none" else None
@@ -1409,7 +1432,7 @@ def export_file(req: ExportRequest):
 
         # ── Determine output format ────────────────────────────────────────
         fmt = (req.export_format or "tiff").lower().strip()
-        if fmt not in ("tiff", "png16", "png8"):
+        if fmt not in ("tiff", "png16", "png8", "jpeg", "jpg"):
             fmt = "tiff"
 
         rendered_clipped = np.clip(rendered, 0.0, 1.0)
@@ -1422,7 +1445,14 @@ def export_file(req: ExportRequest):
             uint16_data = (srgb_data * 65535.0).astype(np.uint16)
             uint16_data = np.ascontiguousarray(uint16_data)
             import tifffile
-            tifffile.imwrite(output_path, uint16_data, photometric='rgb', compression=None)
+            tifffile.imwrite(
+                output_path,
+                uint16_data,
+                photometric='rgb',
+                compression=None,
+                resolution=(req.export_dpi, req.export_dpi),
+                resolutionunit='INCH',
+            )
             format_label = "16-bit TIFF"
 
         elif fmt == "png16":
@@ -1436,14 +1466,29 @@ def export_file(req: ExportRequest):
             tifffile.imwrite(output_path, uint16_data, photometric='rgb')
             format_label = "16-bit PNG"
 
-        else:  # png8
+        elif fmt == "png8":
             output_filename = f"{basename}_{req.stock}_dfee.png"
             output_path     = os.path.join(RAW_DIR, output_filename)
             logger.info("Saving 8-bit PNG to %s", output_path)
             uint8_data = (srgb_data * 255.0).astype(np.uint8)
             img = Image.fromarray(uint8_data, mode="RGB")
-            img.save(output_path, format="PNG", optimize=False, compress_level=1)
+            img.save(output_path, format="PNG", optimize=False, compress_level=1, dpi=(req.export_dpi, req.export_dpi))
             format_label = "8-bit PNG"
+        else:
+            output_filename = f"{basename}_{req.stock}_dfee.jpg"
+            output_path     = os.path.join(RAW_DIR, output_filename)
+            logger.info("Saving JPEG to %s quality=%s dpi=%s", output_path, req.jpeg_quality, req.export_dpi)
+            uint8_data = (srgb_data * 255.0).astype(np.uint8)
+            img = Image.fromarray(uint8_data, mode="RGB")
+            img.save(
+                output_path,
+                format="JPEG",
+                quality=int(np.clip(req.jpeg_quality, 1, 100)),
+                subsampling=0,
+                optimize=True,
+                dpi=(req.export_dpi, req.export_dpi),
+            )
+            format_label = "JPEG"
 
         if render_plan is not None and report_path is not None:
             reporter = RenderReporter()
