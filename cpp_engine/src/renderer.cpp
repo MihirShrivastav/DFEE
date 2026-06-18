@@ -104,6 +104,20 @@ struct OklchPixel {
     return out;
 }
 
+void append_timing_metric(
+    NativeEngineMetadata* metadata,
+    const char* timing_prefix,
+    const char* suffix,
+    const double milliseconds) {
+    if (metadata == nullptr || timing_prefix == nullptr || timing_prefix[0] == '\0') {
+        return;
+    }
+    metadata->timings.push_back({
+        .stage = std::string(timing_prefix) + suffix,
+        .milliseconds = milliseconds,
+    });
+}
+
 [[nodiscard]] cv::Mat rgb_image_to_mat(const Image& image, const bool clamp_values = false) {
     cv::Mat out(image.height, image.width, CV_32FC3);
     for (int y = 0; y < image.height; ++y) {
@@ -648,7 +662,9 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 [[nodiscard]] Image apply_color_response_and_coupling_pipeline(
     const Image& rgb_linear,
     const ZoneMasks& zone_masks,
-    const FilmResponsePlan& response) {
+    const FilmResponsePlan& response,
+    NativeEngineMetadata* metadata,
+    const char* timing_prefix) {
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_color_response_and_coupling_pipeline expects a 3-channel RGB image");
     }
@@ -710,6 +726,15 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc;
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
+    std::size_t gamut_reentry_count = 0U;
+    std::size_t gamut_reentry_any_low_count = 0U;
+    std::size_t gamut_reentry_any_high_count = 0U;
+    std::size_t gamut_reentry_r_low_count = 0U;
+    std::size_t gamut_reentry_g_low_count = 0U;
+    std::size_t gamut_reentry_b_low_count = 0U;
+    std::size_t gamut_reentry_r_high_count = 0U;
+    std::size_t gamut_reentry_g_high_count = 0U;
+    std::size_t gamut_reentry_b_high_count = 0U;
     for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
         const OklabPixel base_oklab = rgb_to_oklab_pixel(
             rgb_linear.pixels[i * 3 + 0],
@@ -758,12 +783,26 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         adjusted.a += a_bias;
         adjusted.b += b_bias;
         const auto adjusted_rgb = oklab_to_rgb_pixel_unclamped(adjusted);
-        const bool needs_gamut_clamp =
-            adjusted_rgb[0] < 0.0F || adjusted_rgb[0] > 1.0F ||
-            adjusted_rgb[1] < 0.0F || adjusted_rgb[1] > 1.0F ||
-            adjusted_rgb[2] < 0.0F || adjusted_rgb[2] > 1.0F;
+        const bool r_low = adjusted_rgb[0] < 0.0F;
+        const bool g_low = adjusted_rgb[1] < 0.0F;
+        const bool b_low = adjusted_rgb[2] < 0.0F;
+        const bool r_high = adjusted_rgb[0] > 1.0F;
+        const bool g_high = adjusted_rgb[1] > 1.0F;
+        const bool b_high = adjusted_rgb[2] > 1.0F;
+        const bool any_low = r_low || g_low || b_low;
+        const bool any_high = r_high || g_high || b_high;
+        const bool needs_gamut_clamp = any_low || any_high;
 
         if (needs_gamut_clamp) {
+            ++gamut_reentry_count;
+            gamut_reentry_any_low_count += any_low ? 1U : 0U;
+            gamut_reentry_any_high_count += any_high ? 1U : 0U;
+            gamut_reentry_r_low_count += r_low ? 1U : 0U;
+            gamut_reentry_g_low_count += g_low ? 1U : 0U;
+            gamut_reentry_b_low_count += b_low ? 1U : 0U;
+            gamut_reentry_r_high_count += r_high ? 1U : 0U;
+            gamut_reentry_g_high_count += g_high ? 1U : 0U;
+            gamut_reentry_b_high_count += b_high ? 1U : 0U;
             const OklabPixel coupled_oklab = rgb_to_oklab_pixel(
                 clamp01(adjusted_rgb[0]),
                 clamp01(adjusted_rgb[1]),
@@ -794,6 +833,23 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         out.pixels[i * 3 + 0] = rgb[0];
         out.pixels[i * 3 + 1] = rgb[1];
         out.pixels[i * 3 + 2] = rgb[2];
+    }
+
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_count", static_cast<double>(gamut_reentry_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_any_low_count", static_cast<double>(gamut_reentry_any_low_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_any_high_count", static_cast<double>(gamut_reentry_any_high_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_r_low_count", static_cast<double>(gamut_reentry_r_low_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_g_low_count", static_cast<double>(gamut_reentry_g_low_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_b_low_count", static_cast<double>(gamut_reentry_b_low_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_r_high_count", static_cast<double>(gamut_reentry_r_high_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_g_high_count", static_cast<double>(gamut_reentry_g_high_count));
+    append_timing_metric(metadata, timing_prefix, "__gamut_reentry_b_high_count", static_cast<double>(gamut_reentry_b_high_count));
+    if (rgb_linear.pixel_count() > 0U) {
+        append_timing_metric(
+            metadata,
+            timing_prefix,
+            "__gamut_reentry_ratio_percent",
+            100.0 * static_cast<double>(gamut_reentry_count) / static_cast<double>(rgb_linear.pixel_count()));
     }
     return out;
 }
@@ -978,8 +1034,10 @@ Image FilmRenderer::apply_dye_contamination(
 Image FilmRenderer::apply_color_response_and_coupling(
     const Image& rgb_linear,
     const ZoneMasks& zone_masks,
-    const FilmResponsePlan& response) const {
-    return apply_color_response_and_coupling_pipeline(rgb_linear, zone_masks, response);
+    const FilmResponsePlan& response,
+    NativeEngineMetadata* metadata,
+    const char* timing_prefix) const {
+    return apply_color_response_and_coupling_pipeline(rgb_linear, zone_masks, response, metadata, timing_prefix);
 }
 
 Image FilmRenderer::apply_luminance_chroma_coupling(

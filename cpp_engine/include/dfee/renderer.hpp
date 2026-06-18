@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dfee/analyzer.hpp"
+#include "dfee/bridge_types.hpp"
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
 #include "dfee/solver.hpp"
@@ -40,7 +41,9 @@ public:
     [[nodiscard]] Image apply_color_response_and_coupling(
         const Image& rgb_linear,
         const ZoneMasks& zone_masks,
-        const FilmResponsePlan& response) const;
+        const FilmResponsePlan& response,
+        NativeEngineMetadata* metadata = nullptr,
+        const char* timing_prefix = nullptr) const;
 
     [[nodiscard]] Image apply_luminance_chroma_coupling(
         const Image& rgb_linear,

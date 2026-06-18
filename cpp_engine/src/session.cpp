@@ -1627,7 +1627,9 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 rendered = renderer.apply_color_response_and_coupling(
                     rendered,
                     zone_masks,
-                    render_plan.film_response);
+                    render_plan.film_response,
+                    &response.engine,
+                    "render_preview_film_stage_color_response");
             }
             {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_acutance");
@@ -1915,7 +1917,9 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             rendered = renderer.apply_color_response_and_coupling(
                                 rendered,
                                 fullres_zone_masks,
-                                render_plan->film_response);
+                                render_plan->film_response,
+                                &response.engine,
+                                "export_image_render_stage_color_response");
                         }
                     }
                     {
