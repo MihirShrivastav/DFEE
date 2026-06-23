@@ -147,7 +147,10 @@ The export request model now also carries photographer-facing export options:
 Current native export support:
 - `jpeg` / `jpg`: native final export supports `jpeg_quality`, writes `.jpg`,
   and embeds JFIF DPI metadata from `export_dpi` when `embed_metadata=true`.
-- `png8`, `png16`, `tiff`: native final export remains available for the current
+- `png8`: native final export writes `.png`, preserves the current sRGB 8-bit
+  output path, and embeds PNG `pHYs` DPI metadata from `export_dpi` when
+  `embed_metadata=true`.
+- `png16`, `tiff`: native final export remains available for the current
   baseline option set.
 
 If an export request asks for an option combination the native path does not

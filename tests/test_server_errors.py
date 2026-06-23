@@ -399,6 +399,36 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["exposure"], 0.1)
         self.assertEqual(payload["saturation"], 6.0)
 
+    def test_export_can_use_native_png8_path_with_dpi(self):
+        native_result = {
+            "status": "success",
+            "output_path": "D:/Codebases/DFEE/raw_files/example_portra_400_dfee.png",
+            "report_path": "D:/Codebases/DFEE/raw_files/example_portra_400_report.json",
+            "format": "8-bit PNG",
+            "engine": self._fake_engine_info(),
+        }
+
+        with mock.patch.object(server, "_run_native_export", return_value=native_result) as native_mock:
+            response = self.client.post(
+                "/api/export",
+                json={
+                    "filename": self._raw_filename(),
+                    "stock": "portra_400",
+                    "print_stock": "kodak_2383",
+                    "export_format": "png8",
+                    "export_dpi": 240,
+                    "embed_metadata": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["format"], "8-bit PNG")
+        native_mock.assert_called_once()
+        payload = native_mock.call_args.args[0]
+        self.assertEqual(payload["export_format"], "png8")
+        self.assertEqual(payload["export_dpi"], 240)
+        self.assertTrue(payload["embed_metadata"])
+
     def test_export_uses_python_backend_when_requested_options_exceed_native_support(self):
         raw_filename = self._raw_filename()
         server.session.filename = raw_filename
@@ -426,7 +456,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         solver_instance = mock.Mock(solve=mock.Mock(return_value=render_plan))
         renderer_instance = mock.Mock(render=mock.Mock(return_value=rendered_linear))
         reporter_instance = mock.Mock(write_report=mock.Mock())
-        image_instance = mock.Mock(save=mock.Mock())
+        tifffile_module = mock.Mock(imwrite=mock.Mock())
 
         with mock.patch.object(server, "_run_native_export") as native_mock:
             with mock.patch.object(server, "_load_stock_profile", return_value=stock_profile):
@@ -437,23 +467,22 @@ class TestServerRawFailureHandling(unittest.TestCase):
                                 with mock.patch.object(server, "_apply_post_film_effects", return_value=rendered_linear):
                                     with mock.patch.object(server, "linear_to_srgb", return_value=rendered_linear):
                                         with mock.patch.object(server, "RenderReporter", return_value=reporter_instance):
-                                            with mock.patch.object(server, "Image") as image_module:
-                                                image_module.fromarray.return_value = image_instance
+                                            with mock.patch.dict("sys.modules", {"tifffile": tifffile_module}):
                                                 response = self.client.post(
                                                     "/api/export",
                                                     json={
                                                         "filename": raw_filename,
                                                         "stock": "portra_400",
-                                                        "export_format": "png8",
+                                                        "export_format": "png16",
                                                         "export_dpi": 240,
                                                     },
                                                 )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["format"], "8-bit PNG")
+        self.assertEqual(response.json()["format"], "16-bit PNG")
         native_mock.assert_not_called()
         reporter_instance.write_report.assert_called_once()
-        image_instance.save.assert_called_once()
+        tifffile_module.imwrite.assert_called_once()
 
     def test_export_can_use_native_jpeg_path_with_quality_and_dpi(self):
         native_result = {

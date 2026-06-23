@@ -109,6 +109,142 @@ std::uint32_t compute_stable_grain_seed(
     return hash == 0U ? 1U : hash;
 }
 
+std::uint32_t read_be_u32(const unsigned char* data) {
+    return (static_cast<std::uint32_t>(data[0]) << 24U) |
+        (static_cast<std::uint32_t>(data[1]) << 16U) |
+        (static_cast<std::uint32_t>(data[2]) << 8U) |
+        static_cast<std::uint32_t>(data[3]);
+}
+
+void append_be_u32(std::vector<unsigned char>& bytes, const std::uint32_t value) {
+    bytes.push_back(static_cast<unsigned char>((value >> 24U) & 0xFFU));
+    bytes.push_back(static_cast<unsigned char>((value >> 16U) & 0xFFU));
+    bytes.push_back(static_cast<unsigned char>((value >> 8U) & 0xFFU));
+    bytes.push_back(static_cast<unsigned char>(value & 0xFFU));
+}
+
+std::uint32_t compute_png_crc32(const unsigned char* data, const std::size_t size) {
+    std::uint32_t crc = 0xFFFFFFFFU;
+    for (std::size_t i = 0; i < size; ++i) {
+        crc ^= static_cast<std::uint32_t>(data[i]);
+        for (int bit = 0; bit < 8; ++bit) {
+            const std::uint32_t mask = 0U - (crc & 1U);
+            crc = (crc >> 1U) ^ (0xEDB88320U & mask);
+        }
+    }
+    return ~crc;
+}
+
+void append_png_chunk(
+    std::vector<unsigned char>& output,
+    const std::array<unsigned char, 4>& type,
+    const unsigned char* data,
+    const std::size_t size) {
+    append_be_u32(output, static_cast<std::uint32_t>(size));
+    const std::size_t chunk_start = output.size();
+    output.insert(output.end(), type.begin(), type.end());
+    if (size > 0U) {
+        output.insert(output.end(), data, data + size);
+    }
+    const std::uint32_t crc = compute_png_crc32(output.data() + chunk_start, 4U + size);
+    append_be_u32(output, crc);
+}
+
+bool patch_png_phys_density(
+    const std::filesystem::path& output_path,
+    const int dpi,
+    std::string& detail) {
+    std::ifstream input(output_path, std::ios::binary);
+    if (!input) {
+        detail = "Could not reopen PNG for metadata patch: " + output_path.string();
+        return false;
+    }
+
+    std::vector<unsigned char> bytes(
+        (std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+    constexpr std::array<unsigned char, 8> kPngSignature = {
+        0x89U, 0x50U, 0x4EU, 0x47U, 0x0DU, 0x0AU, 0x1AU, 0x0AU,
+    };
+    if (bytes.size() < kPngSignature.size() + 12U ||
+        !std::equal(kPngSignature.begin(), kPngSignature.end(), bytes.begin())) {
+        detail = "PNG output did not contain a valid PNG signature: " + output_path.string();
+        return false;
+    }
+
+    const std::uint32_t pixels_per_meter = static_cast<std::uint32_t>(
+        std::max(1L, std::lround(static_cast<double>(dpi) / 0.0254)));
+    std::array<unsigned char, 9> phys_payload = {};
+    phys_payload[0] = static_cast<unsigned char>((pixels_per_meter >> 24U) & 0xFFU);
+    phys_payload[1] = static_cast<unsigned char>((pixels_per_meter >> 16U) & 0xFFU);
+    phys_payload[2] = static_cast<unsigned char>((pixels_per_meter >> 8U) & 0xFFU);
+    phys_payload[3] = static_cast<unsigned char>(pixels_per_meter & 0xFFU);
+    phys_payload[4] = phys_payload[0];
+    phys_payload[5] = phys_payload[1];
+    phys_payload[6] = phys_payload[2];
+    phys_payload[7] = phys_payload[3];
+    phys_payload[8] = 1U;
+
+    std::vector<unsigned char> patched;
+    patched.insert(patched.end(), kPngSignature.begin(), kPngSignature.end());
+
+    const std::array<unsigned char, 4> kPhysType = {'p', 'H', 'Y', 's'};
+    const std::array<unsigned char, 4> kIhdrType = {'I', 'H', 'D', 'R'};
+    bool phys_written = false;
+    bool saw_ihdr = false;
+
+    std::size_t offset = kPngSignature.size();
+    while (offset + 12U <= bytes.size()) {
+        const std::uint32_t data_size = read_be_u32(bytes.data() + offset);
+        const std::size_t chunk_size = 12U + static_cast<std::size_t>(data_size);
+        if (offset + chunk_size > bytes.size()) {
+            detail = "PNG chunk bounds were invalid while patching density metadata: " + output_path.string();
+            return false;
+        }
+
+        const unsigned char* chunk_type = bytes.data() + offset + 4U;
+        const bool is_phys = std::equal(kPhysType.begin(), kPhysType.end(), chunk_type);
+        const bool is_ihdr = std::equal(kIhdrType.begin(), kIhdrType.end(), chunk_type);
+
+        if (is_phys) {
+            append_png_chunk(patched, kPhysType, phys_payload.data(), phys_payload.size());
+            phys_written = true;
+        } else {
+            patched.insert(patched.end(), bytes.begin() + static_cast<std::ptrdiff_t>(offset), bytes.begin() + static_cast<std::ptrdiff_t>(offset + chunk_size));
+            if (is_ihdr) {
+                saw_ihdr = true;
+                if (!phys_written) {
+                    append_png_chunk(patched, kPhysType, phys_payload.data(), phys_payload.size());
+                    phys_written = true;
+                }
+            }
+        }
+
+        offset += chunk_size;
+    }
+
+    if (offset != bytes.size()) {
+        detail = "PNG output contained trailing bytes after chunk parsing: " + output_path.string();
+        return false;
+    }
+    if (!saw_ihdr || !phys_written) {
+        detail = "PNG output did not contain a writable IHDR/pHYs placement point: " + output_path.string();
+        return false;
+    }
+
+    std::ofstream output(output_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        detail = "Could not reopen PNG for metadata writeback: " + output_path.string();
+        return false;
+    }
+    output.write(reinterpret_cast<const char*>(patched.data()), static_cast<std::streamsize>(patched.size()));
+    if (!output.good()) {
+        detail = "Failed while writing patched PNG metadata: " + output_path.string();
+        return false;
+    }
+    return true;
+}
+
 bool patch_jpeg_jfif_density(
     const std::filesystem::path& output_path,
     const int dpi,
@@ -2095,6 +2231,19 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 };
                 finalize_engine_metadata(response.engine);
                 return response;
+            }
+            if (canonical_format == "png8" && request.embed_metadata) {
+                std::string png_metadata_error;
+                if (!patch_png_phys_density(response.output_path, request.export_dpi, png_metadata_error)) {
+                    response.status = "error";
+                    response.error = {
+                        .code = "EXPORT_METADATA_WRITE_FAILED",
+                        .user_message = "The native PNG export could not write DPI metadata.",
+                        .detail = png_metadata_error,
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
             }
             if (canonical_format == "jpeg" && request.embed_metadata) {
                 std::string jpeg_metadata_error;
