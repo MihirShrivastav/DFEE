@@ -459,6 +459,36 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["export_dpi"], 240)
         self.assertTrue(payload["embed_metadata"])
 
+    def test_export_can_use_native_tiff_path_with_dpi(self):
+        native_result = {
+            "status": "success",
+            "output_path": "D:/Codebases/DFEE/raw_files/example_portra_400_dfee.tif",
+            "report_path": "D:/Codebases/DFEE/raw_files/example_portra_400_report.json",
+            "format": "16-bit TIFF",
+            "engine": self._fake_engine_info(),
+        }
+
+        with mock.patch.object(server, "_run_native_export", return_value=native_result) as native_mock:
+            response = self.client.post(
+                "/api/export",
+                json={
+                    "filename": self._raw_filename(),
+                    "stock": "portra_400",
+                    "print_stock": "kodak_2383",
+                    "export_format": "tiff",
+                    "export_dpi": 240,
+                    "embed_metadata": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["format"], "16-bit TIFF")
+        native_mock.assert_called_once()
+        payload = native_mock.call_args.args[0]
+        self.assertEqual(payload["export_format"], "tiff")
+        self.assertEqual(payload["export_dpi"], 240)
+        self.assertTrue(payload["embed_metadata"])
+
     def test_export_uses_python_backend_when_requested_options_exceed_native_support(self):
         raw_filename = self._raw_filename()
         server.session.filename = raw_filename
@@ -504,7 +534,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
                                                         "filename": raw_filename,
                                                         "stock": "portra_400",
                                                         "export_format": "tiff",
-                                                        "export_dpi": 240,
+                                                        "export_color_space": "adobergb",
                                                     },
                                                 )
 

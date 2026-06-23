@@ -2216,7 +2216,18 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 }
             }
             std::vector<int> write_params;
-            if (canonical_format == "jpeg") {
+            if (canonical_format == "tiff") {
+                write_params = {
+                    cv::IMWRITE_TIFF_COMPRESSION,
+                    cv::IMWRITE_TIFF_COMPRESSION_NONE,
+                    cv::IMWRITE_TIFF_RESUNIT,
+                    2,
+                    cv::IMWRITE_TIFF_XDPI,
+                    std::clamp(request.export_dpi, 1, 65535),
+                    cv::IMWRITE_TIFF_YDPI,
+                    std::clamp(request.export_dpi, 1, 65535),
+                };
+            } else if (canonical_format == "jpeg") {
                 write_params = {
                     cv::IMWRITE_JPEG_QUALITY,
                     std::clamp(request.jpeg_quality, 1, 100),

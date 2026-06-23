@@ -867,6 +867,53 @@ class TestNativeBridge(unittest.TestCase):
                 )
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
 
+    def test_export_image_tiff_with_dpi(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            exported = self.session.export_image(
+                dfee_native_bridge.NativeExportRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    print_stock="kodak_2383",
+                    export_format="tiff",
+                    export_dpi=240,
+                    embed_metadata=True,
+                )
+            )
+
+            self._temp_files.append(exported.output_path)
+            if exported.report_path is not None:
+                self._temp_files.append(exported.report_path)
+
+            self.assertEqual(exported.status, "success")
+            self.assertEqual(exported.export_format, "tiff")
+            self.assertEqual(exported.format_label, "16-bit TIFF")
+            self.assertEqual(exported.output_path.suffix.lower(), ".tif")
+            self.assertTrue(exported.output_path.exists())
+
+            exported_bgr = cv2.imread(str(exported.output_path), cv2.IMREAD_UNCHANGED)
+            self.assertIsNotNone(exported_bgr)
+            self.assertEqual(exported_bgr.dtype, np.uint16)
+            self.assertEqual(exported_bgr.shape[2], 3)
+
+            with Image.open(exported.output_path) as tiff_image:
+                self.assertEqual(tiff_image.format, "TIFF")
+                dpi = tiff_image.info.get("dpi")
+                self.assertIsNotNone(dpi)
+                self.assertEqual(tuple(round(v) for v in dpi), (240, 240))
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.export_image(
+                    dfee_native_bridge.NativeExportRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        export_format="tiff",
+                    )
+                )
+            self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
+
     def test_unsupported_and_corrupt_raw_failures(self):
         unsupported_filename = self._create_temp_raw_file(
             "native_test_unsupported.arw",
