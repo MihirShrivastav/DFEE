@@ -444,17 +444,47 @@ class TestServerRawFailureHandling(unittest.TestCase):
                                                     json={
                                                         "filename": raw_filename,
                                                         "stock": "portra_400",
-                                                        "export_format": "jpeg",
-                                                        "jpeg_quality": 85,
+                                                        "export_format": "png8",
                                                         "export_dpi": 240,
                                                     },
                                                 )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["format"], "JPEG")
+        self.assertEqual(response.json()["format"], "8-bit PNG")
         native_mock.assert_not_called()
         reporter_instance.write_report.assert_called_once()
         image_instance.save.assert_called_once()
+
+    def test_export_can_use_native_jpeg_path_with_quality_and_dpi(self):
+        native_result = {
+            "status": "success",
+            "output_path": "D:/Codebases/DFEE/raw_files/example_portra_400_dfee.jpg",
+            "report_path": "D:/Codebases/DFEE/raw_files/example_portra_400_report.json",
+            "format": "JPEG",
+            "engine": self._fake_engine_info(),
+        }
+
+        with mock.patch.object(server, "_run_native_export", return_value=native_result) as native_mock:
+            response = self.client.post(
+                "/api/export",
+                json={
+                    "filename": self._raw_filename(),
+                    "stock": "portra_400",
+                    "print_stock": "kodak_2383",
+                    "export_format": "jpeg",
+                    "jpeg_quality": 85,
+                    "export_dpi": 240,
+                    "embed_metadata": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["format"], "JPEG")
+        native_mock.assert_called_once()
+        payload = native_mock.call_args.args[0]
+        self.assertEqual(payload["export_format"], "jpeg")
+        self.assertEqual(payload["jpeg_quality"], 85)
+        self.assertEqual(payload["export_dpi"], 240)
 
     def test_export_falls_back_to_python_pipeline_when_native_export_fails(self):
         raw_filename = self._raw_filename()

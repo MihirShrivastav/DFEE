@@ -109,6 +109,61 @@ std::uint32_t compute_stable_grain_seed(
     return hash == 0U ? 1U : hash;
 }
 
+bool patch_jpeg_jfif_density(
+    const std::filesystem::path& output_path,
+    const int dpi,
+    std::string& detail) {
+    std::ifstream input(output_path, std::ios::binary);
+    if (!input) {
+        detail = "Could not reopen JPEG for metadata patch: " + output_path.string();
+        return false;
+    }
+
+    std::vector<unsigned char> bytes(
+        (std::istreambuf_iterator<char>(input)),
+        std::istreambuf_iterator<char>());
+    if (bytes.size() < 20U || bytes[0] != 0xFFU || bytes[1] != 0xD8U) {
+        detail = "JPEG output did not contain a valid SOI/JFIF header: " + output_path.string();
+        return false;
+    }
+
+    const std::uint16_t density = static_cast<std::uint16_t>(std::clamp(dpi, 1, 65535));
+    bool patched = false;
+    for (std::size_t i = 2; i + 16U < bytes.size(); ++i) {
+        if (bytes[i] != 0xFFU || bytes[i + 1U] != 0xE0U) {
+            continue;
+        }
+        if (bytes[i + 4U] != 'J' || bytes[i + 5U] != 'F' || bytes[i + 6U] != 'I' ||
+            bytes[i + 7U] != 'F' || bytes[i + 8U] != '\0') {
+            continue;
+        }
+        bytes[i + 11U] = 1U;
+        bytes[i + 12U] = static_cast<unsigned char>((density >> 8U) & 0xFFU);
+        bytes[i + 13U] = static_cast<unsigned char>(density & 0xFFU);
+        bytes[i + 14U] = static_cast<unsigned char>((density >> 8U) & 0xFFU);
+        bytes[i + 15U] = static_cast<unsigned char>(density & 0xFFU);
+        patched = true;
+        break;
+    }
+
+    if (!patched) {
+        detail = "JPEG output did not contain a writable JFIF APP0 density segment: " + output_path.string();
+        return false;
+    }
+
+    std::ofstream output(output_path, std::ios::binary | std::ios::trunc);
+    if (!output) {
+        detail = "Could not reopen JPEG for metadata writeback: " + output_path.string();
+        return false;
+    }
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (!output.good()) {
+        detail = "Failed while writing patched JPEG metadata: " + output_path.string();
+        return false;
+    }
+    return true;
+}
+
 Image resize_image_to_max_edge(const Image& source, const int max_edge) {
     if (source.empty() || max_edge <= 0) {
         return source;
@@ -1755,7 +1810,10 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
         const std::string basename = raw_path.stem().string();
         std::string canonical_format = request.export_format;
         std::ranges::transform(canonical_format, canonical_format.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        if (canonical_format != "tiff" && canonical_format != "png16" && canonical_format != "png8") {
+        if (canonical_format == "jpg") {
+            canonical_format = "jpeg";
+        }
+        if (canonical_format != "tiff" && canonical_format != "png16" && canonical_format != "png8" && canonical_format != "jpeg") {
             canonical_format = "tiff";
         }
         response.export_format = canonical_format;
@@ -1994,18 +2052,21 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
             } else if (canonical_format == "png16") {
                 response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee_16.png");
                 response.format_label = "16-bit PNG";
+            } else if (canonical_format == "jpeg") {
+                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.jpg");
+                response.format_label = "JPEG";
             } else {
                 response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.png");
                 response.format_label = "8-bit PNG";
             }
 
-            cv::Mat output_mat(rendered.height, rendered.width, canonical_format == "png8" ? CV_8UC3 : CV_16UC3);
+            cv::Mat output_mat(rendered.height, rendered.width, (canonical_format == "png8" || canonical_format == "jpeg") ? CV_8UC3 : CV_16UC3);
             for (int y = 0; y < rendered.height; ++y) {
                 for (int x = 0; x < rendered.width; ++x) {
                     const float r = linear_to_srgb_channel(rendered.at(x, y, 0));
                     const float g = linear_to_srgb_channel(rendered.at(x, y, 1));
                     const float b = linear_to_srgb_channel(rendered.at(x, y, 2));
-                    if (canonical_format == "png8") {
+                    if (canonical_format == "png8" || canonical_format == "jpeg") {
                         auto& pixel = output_mat.at<cv::Vec3b>(y, x);
                         pixel[0] = static_cast<std::uint8_t>(std::clamp(b * 255.0F, 0.0F, 255.0F));
                         pixel[1] = static_cast<std::uint8_t>(std::clamp(g * 255.0F, 0.0F, 255.0F));
@@ -2018,7 +2079,14 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                 }
             }
-            if (!cv::imwrite(response.output_path.string(), output_mat)) {
+            std::vector<int> write_params;
+            if (canonical_format == "jpeg") {
+                write_params = {
+                    cv::IMWRITE_JPEG_QUALITY,
+                    std::clamp(request.jpeg_quality, 1, 100),
+                };
+            }
+            if (!cv::imwrite(response.output_path.string(), output_mat, write_params)) {
                 response.status = "error";
                 response.error = {
                     .code = "EXPORT_WRITE_FAILED",
@@ -2027,6 +2095,19 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 };
                 finalize_engine_metadata(response.engine);
                 return response;
+            }
+            if (canonical_format == "jpeg" && request.embed_metadata) {
+                std::string jpeg_metadata_error;
+                if (!patch_jpeg_jfif_density(response.output_path, request.export_dpi, jpeg_metadata_error)) {
+                    response.status = "error";
+                    response.error = {
+                        .code = "EXPORT_METADATA_WRITE_FAILED",
+                        .user_message = "The native JPEG export could not write DPI metadata.",
+                        .detail = jpeg_metadata_error,
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
             }
             append_export_trace(project_root_, "export_image:write_output:done");
         }

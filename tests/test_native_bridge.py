@@ -6,6 +6,7 @@ import math
 
 import cv2
 import numpy as np
+from PIL import Image
 
 from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
@@ -730,6 +731,49 @@ class TestNativeBridge(unittest.TestCase):
                         filename=raw_filename,
                         stock="portra_400",
                         export_format="png8",
+                    )
+                )
+            self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
+
+    def test_export_image_jpeg_with_quality_and_dpi(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            exported = self.session.export_image(
+                dfee_native_bridge.NativeExportRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    print_stock="kodak_2383",
+                    export_format="jpeg",
+                    jpeg_quality=85,
+                    export_dpi=240,
+                    embed_metadata=True,
+                )
+            )
+
+            self._temp_files.append(exported.output_path)
+            if exported.report_path is not None:
+                self._temp_files.append(exported.report_path)
+
+            self.assertEqual(exported.status, "success")
+            self.assertEqual(exported.export_format, "jpeg")
+            self.assertEqual(exported.format_label, "JPEG")
+            self.assertEqual(exported.output_path.suffix.lower(), ".jpg")
+            self.assertTrue(exported.output_path.exists())
+
+            with Image.open(exported.output_path) as jpeg_image:
+                self.assertEqual(jpeg_image.format, "JPEG")
+                dpi = jpeg_image.info.get("dpi")
+                self.assertIsNotNone(dpi)
+                self.assertEqual(tuple(round(v) for v in dpi), (240, 240))
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.export_image(
+                    dfee_native_bridge.NativeExportRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        export_format="jpeg",
                     )
                 )
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})

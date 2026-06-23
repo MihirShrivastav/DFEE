@@ -68,7 +68,7 @@ Status values:
 
 | ID | Status | Task | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| M4-001 | planned | Add native JPEG encoder for previews and final exports | Byte decode test plus JPEG export test | Include photographer-facing export controls such as JPEG quality and embedded DPI metadata. |
+| M4-001 | done | Add native JPEG encoder for previews and final exports | `pytest tests/test_native_bridge.py tests/test_server_errors.py -q` and `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` | Native preview rendering already returned JPEG bytes, and native final export now supports JPEG output with photographer-facing `jpeg_quality` control plus embedded JFIF DPI metadata. The FastAPI export gate now keeps supported JPEG requests on the native path and still falls back cleanly for richer non-JPEG combinations that have not been ported yet. |
 | M4-002 | planned | Add native 8-bit PNG export | Export test | Preserve color management expectations and carry export DPI metadata where the format supports it. |
 | M4-003 | planned | Add native 16-bit PNG export | Export test | Ensure scaling and endianness are correct, and keep the export contract ready for richer output options. |
 | M4-004 | planned | Add native 16-bit TIFF export | Export test | Main photographer-grade export path; keep room for TIFF compression and metadata controls. |

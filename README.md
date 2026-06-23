@@ -143,9 +143,16 @@ demand instead of being eagerly computed during select.
 
 The export request model now also carries photographer-facing export options:
 `jpeg_quality`, `export_dpi`, `embed_metadata`, and `export_color_space`.
-At the moment, if an export request asks for an option combination the native
-path does not fully honor yet, the server deliberately routes that request
-through the Python export path instead of silently degrading behavior.
+
+Current native export support:
+- `jpeg` / `jpg`: native final export supports `jpeg_quality`, writes `.jpg`,
+  and embeds JFIF DPI metadata from `export_dpi` when `embed_metadata=true`.
+- `png8`, `png16`, `tiff`: native final export remains available for the current
+  baseline option set.
+
+If an export request asks for an option combination the native path does not
+fully honor yet, the server deliberately routes that request through the Python
+export path instead of silently degrading behavior.
 
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA

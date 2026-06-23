@@ -548,13 +548,19 @@ def _run_native_export(request_payload: dict) -> dict:
 
 def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, str]:
     fmt = (request.export_format or "tiff").lower().strip()
-    if fmt not in {"tiff", "png16", "png8"}:
+    if fmt not in {"tiff", "png16", "png8", "jpeg", "jpg"}:
         return False, f"export_format={fmt}"
-    if int(request.jpeg_quality) != 92:
-        return False, f"jpeg_quality={request.jpeg_quality}"
-    if int(request.export_dpi) != 300:
-        return False, f"export_dpi={request.export_dpi}"
-    if bool(request.embed_metadata) is not True:
+    if fmt in {"jpeg", "jpg"}:
+        if int(request.jpeg_quality) < 1 or int(request.jpeg_quality) > 100:
+            return False, f"jpeg_quality={request.jpeg_quality}"
+        if int(request.export_dpi) < 1 or int(request.export_dpi) > 65535:
+            return False, f"export_dpi={request.export_dpi}"
+    else:
+        if int(request.jpeg_quality) != 92:
+            return False, f"jpeg_quality={request.jpeg_quality}"
+        if int(request.export_dpi) != 300:
+            return False, f"export_dpi={request.export_dpi}"
+    if fmt != "jpeg" and fmt != "jpg" and bool(request.embed_metadata) is not True:
         return False, f"embed_metadata={request.embed_metadata}"
     if (request.export_color_space or "srgb").lower().strip() != "srgb":
         return False, f"export_color_space={request.export_color_space}"
