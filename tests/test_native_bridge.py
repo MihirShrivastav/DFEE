@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import unittest
@@ -58,6 +59,47 @@ class TestNativeBridge(unittest.TestCase):
         path.write_bytes(payload)
         self._temp_files.append(path)
         return path.name
+
+    def _assert_report_shape(self, report_payload: dict, expected_input: str, expected_output: str, expected_stock: str, expected_print: str) -> None:
+        self.assertEqual(
+            set(report_payload.keys()),
+            {
+                "engine_version",
+                "input_file",
+                "output_file",
+                "stock_profile",
+                "print_stock",
+                "image_diagnosis",
+                "feature_summary",
+                "render_plan",
+                "warnings",
+            },
+        )
+        self.assertEqual(report_payload["input_file"], expected_input)
+        self.assertEqual(report_payload["output_file"], expected_output)
+        self.assertEqual(report_payload["stock_profile"], expected_stock)
+        self.assertEqual(report_payload["print_stock"], expected_print)
+        self.assertIsInstance(report_payload["warnings"], list)
+        self.assertEqual(
+            set(report_payload["feature_summary"].keys()),
+            {
+                "tonal_distribution",
+                "hue_saturation_state",
+                "spatial_frequency",
+                "channel_behavior",
+                "camera_input_bias",
+            },
+        )
+        self.assertIn("clipping_ratios", report_payload["feature_summary"]["channel_behavior"])
+        self.assertEqual(
+            set(report_payload["render_plan"].keys()),
+            {
+                "pre_film_normalization",
+                "film_response",
+                "material_effects",
+                "print_finish",
+            },
+        )
 
     @staticmethod
     def _linear_to_srgb(linear: np.ndarray) -> np.ndarray:
@@ -720,9 +762,14 @@ class TestNativeBridge(unittest.TestCase):
             self.assertGreater(exported_bgr.shape[0], 0)
             self.assertGreater(exported_bgr.shape[1], 0)
 
-            report_data = exported.report_path.read_text(encoding="utf-8")
-            self.assertIn("\"render_plan\"", report_data)
-            self.assertIn("\"feature_summary\"", report_data)
+            report_payload = json.loads(exported.report_path.read_text(encoding="utf-8"))
+            self._assert_report_shape(
+                report_payload,
+                expected_input=raw_filename,
+                expected_output=exported.output_path.name,
+                expected_stock="portra_400",
+                expected_print="kodak_2383",
+            )
         else:
             self.session.select_file(raw_filename)
             with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
@@ -913,6 +960,48 @@ class TestNativeBridge(unittest.TestCase):
                     )
                 )
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
+
+    def test_export_report_json_shape_compatible(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            exported = self.session.export_image(
+                dfee_native_bridge.NativeExportRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    print_stock="kodak_2383",
+                    export_format="png8",
+                )
+            )
+
+            self._temp_files.append(exported.output_path)
+            if exported.report_path is not None:
+                self._temp_files.append(exported.report_path)
+
+            self.assertIsNotNone(exported.report_path)
+            report_payload = json.loads(exported.report_path.read_text(encoding="utf-8"))
+            self._assert_report_shape(
+                report_payload,
+                expected_input=raw_filename,
+                expected_output=exported.output_path.name,
+                expected_stock="portra_400",
+                expected_print="kodak_2383",
+            )
+            self.assertIsInstance(report_payload["image_diagnosis"]["tonal_state"], str)
+            self.assertIsInstance(
+                report_payload["render_plan"]["pre_film_normalization"]["exposure_compensation_stops"],
+                (int, float),
+            )
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError):
+                self.session.export_image(
+                    dfee_native_bridge.NativeExportRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        export_format="png8",
+                    )
+                )
 
     def test_unsupported_and_corrupt_raw_failures(self):
         unsupported_filename = self._create_temp_raw_file(

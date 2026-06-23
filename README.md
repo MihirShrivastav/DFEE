@@ -156,6 +156,10 @@ Current native export support:
 - `tiff`: native final export writes `.tif`, preserves the current 16-bit sRGB
   output path, and writes inch-based TIFF DPI metadata from `export_dpi`.
 
+Native exports that render a stock profile also write the sidecar JSON report
+with the existing DFEE contract sections: `image_diagnosis`,
+`feature_summary`, `render_plan`, and `warnings`.
+
 If an export request asks for an option combination the native path does not
 fully honor yet, the server deliberately routes that request through the Python
 export path instead of silently degrading behavior.
