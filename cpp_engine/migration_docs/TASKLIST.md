@@ -75,6 +75,7 @@ Status values:
 | M4-005 | done | Add native report JSON writer | `pytest tests/test_native_bridge.py tests/test_server_errors.py -q` | Native export already writes the sidecar report JSON through `serialize_feature_report_json(...)`; this milestone closes the contract by asserting top-level compatibility (`engine_version`, input/output files, stock/print ids, image diagnosis, feature summary, render plan, warnings) and the expected nested section layout. |
 | M4-006 | done | Move `/api/select`, `/api/raw-image`, `/api/preview`, `/api/export` internals to native engine | Full FastAPI integration suite | All core FastAPI image routes are now native-first, `/api/select` returns native metadata/diagnostics, and the native backend is the default route path with Python fallback still preserved for resilience. |
 | M4-007 | active | Add Python fallback/debug switch during cutover | Manual and automated fallback test | `DFEE_USE_NATIVE_ENGINE=0` and route-level overrides remain available for debugging; keep them until the richer export-option and encoder milestones are fully native. |
+| M4-008 | done | Add native export memory-pressure preflight and fail-fast route behavior | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and `pytest tests/test_native_bridge.py tests/test_server_errors.py -q` | Native export now drops nonessential preview caches before full-res render, estimates peak memory, checks Windows memory pressure, and rejects unsafe jobs with HTTP `507` instead of falling back to Python. |
 
 ## Milestone M5 - CUDA Acceleration
 
@@ -98,6 +99,7 @@ Status values:
 | M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Must preserve stock character. |
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |
 | M6-005 | done | Add performance dashboard or benchmark script | Benchmark output artifact | `cpp_engine/tools/export_benchmark.py` now emits a stable native export JSON artifact for the documented cold/warm probe. Dashboarding can build on that later. |
+| M6-006 | planned | Rework large-image export around tiled render and row-streamed encoders | Large RAW export stress test | Current preflight guards crashes, but true production-grade memory scaling still requires tiled processing and scanline/row output for PNG/TIFF. |
 
 ## Standing Engineering Tasks
 

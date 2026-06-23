@@ -1322,7 +1322,18 @@ def export_file(req: ExportRequest):
             )
             native_result.pop("engine", None)
             return native_result
-        except Exception:
+        except Exception as exc:
+            error_code = getattr(exc, "code", "")
+            if error_code == "EXPORT_MEMORY_BUDGET_EXCEEDED":
+                detail = getattr(exc, "user_message", str(exc)) or str(exc)
+                logger.error(
+                    "Export rejected fp=%s file=%s backend=native code=%s detail=%s",
+                    request_fp,
+                    req.filename,
+                    error_code,
+                    getattr(exc, "detail", detail),
+                )
+                raise HTTPException(status_code=507, detail=detail) from exc
             logger.exception(
                 "Export native path failed fp=%s file=%s, falling back to Python pipeline",
                 request_fp,

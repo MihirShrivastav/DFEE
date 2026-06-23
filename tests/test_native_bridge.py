@@ -1003,6 +1003,33 @@ class TestNativeBridge(unittest.TestCase):
                     )
                 )
 
+    def test_export_image_fails_fast_when_memory_budget_too_low(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            with unittest.mock.patch.dict(os.environ, {"DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB": "1"}, clear=False):
+                with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                    self.session.export_image(
+                        dfee_native_bridge.NativeExportRequest(
+                            filename=raw_filename,
+                            stock="portra_400",
+                            print_stock="kodak_2383",
+                            export_format="png16",
+                        )
+                    )
+            self.assertEqual(ctx.exception.code, "EXPORT_MEMORY_BUDGET_EXCEEDED")
+            self.assertEqual(ctx.exception.status, "error")
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError):
+                self.session.export_image(
+                    dfee_native_bridge.NativeExportRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        export_format="png16",
+                    )
+                )
+
     def test_unsupported_and_corrupt_raw_failures(self):
         unsupported_filename = self._create_temp_raw_file(
             "native_test_unsupported.arw",

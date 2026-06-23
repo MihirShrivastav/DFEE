@@ -126,7 +126,10 @@ python server.py
 
 With that flag enabled, `/api/export` asks the native engine to write the final
 image and report outputs and falls back to the Python export pipeline if the
-native export path fails.
+native export path fails. The exception is native memory-pressure rejection:
+when the native engine estimates that the export would exceed the current safe
+memory budget, the route returns HTTP `507 Insufficient Storage` instead of
+falling back to Python.
 
 To route `/api/select` through the native C++ session path:
 
@@ -163,6 +166,17 @@ with the existing DFEE contract sections: `image_diagnosis`,
 If an export request asks for an option combination the native path does not
 fully honor yet, the server deliberately routes that request through the Python
 export path instead of silently degrading behavior.
+
+Native export memory safety:
+- Before a full native export, the engine drops nonessential preview caches and
+  estimates full-resolution peak memory demand.
+- On Windows, the engine checks current physical-memory availability and the
+  low-memory notification API before rendering.
+- If the system is already under memory pressure, `/api/export` rejects the
+  request with HTTP `507` rather than risking a fallback into another
+  high-memory export path.
+- For testing or conservative local tuning, set
+  `DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB` to force a lower native export budget.
 
 At backend startup, DFEE now also logs the native engine capability snapshot:
 engine version, LibRaw availability, CUDA mode, device details, and any CUDA

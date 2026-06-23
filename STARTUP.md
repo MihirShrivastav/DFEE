@@ -93,6 +93,15 @@ $env:DFEE_USE_NATIVE_EXPORT="1"
 python server.py
 ```
 
+If the native engine detects that a full export would exceed the current safe
+memory budget, `/api/export` now returns HTTP `507 Insufficient Storage`
+instead of falling back to the Python export path. For local stress testing you
+can force a stricter native export budget with:
+```powershell
+$env:DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB="1024"
+python server.py
+```
+
 To warm the native session during `/api/select` while still returning the
 existing Python metadata and diagnostics payload:
 ```powershell

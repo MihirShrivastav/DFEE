@@ -638,6 +638,27 @@ class TestServerRawFailureHandling(unittest.TestCase):
         reporter_instance.write_report.assert_called_once()
         image_instance.save.assert_called_once()
 
+    def test_export_returns_507_when_native_memory_budget_exceeded(self):
+        native_error = RuntimeError("native memory budget exceeded")
+        native_error.code = "EXPORT_MEMORY_BUDGET_EXCEEDED"
+        native_error.user_message = "The export was stopped before rendering because it would exceed the current safe memory budget."
+        native_error.detail = "Estimated native export peak exceeds safe memory budget."
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_EXPORT": "1"}, clear=False):
+            with mock.patch.object(server, "_run_native_export", side_effect=native_error):
+                response = self.client.post(
+                    "/api/export",
+                    json={
+                        "filename": self._raw_filename(),
+                        "stock": "portra_400",
+                        "print_stock": "kodak_2383",
+                        "export_format": "png16",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 507)
+        self.assertIn("safe memory budget", response.json()["detail"])
+
     def test_select_can_warm_native_session_behind_flag(self):
         raw_filename = self._raw_filename()
         native_result = SimpleNamespace(

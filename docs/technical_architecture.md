@@ -32,12 +32,12 @@ The pipeline follows a physical order of operations:
 
 ### 3. State Management & API
 - **In-Memory Caching:** When a file is selected, the server extracts the linear RGB data from the RAW file (using `rawpy`), downscales it for preview caching, and holds it in a `session` variable to allow real-time sliders without re-decoding.
-- **Native Bridge Status:** The native module currently exposes `engine_version`, `cuda_status`, `create_session`, `list_profiles`, and `select_file`. `select_file` validates session/file plumbing only; LibRaw decode, native JPEG preview, and native full-resolution export are the next migration slices.
+- **Native Bridge Status:** The native module now backs the main FastAPI image routes by default, including native RAW decode, preview JPEG generation, rendered preview JPEG generation, and full-resolution export. The Python backend remains available as a debug/fallback path through `DFEE_USE_NATIVE_ENGINE=0` and route-specific overrides.
 - **Endpoints:**
   - `GET /api/profiles`: Lists available camera negative and print stock profiles.
   - `POST /api/select`: Instructs the backend to load and cache a specific image.
   - `GET /api/preview`: Renders the cached image rapidly using the requested query parameters.
-  - `POST /api/export`: Runs the solver and renderer on the full-resolution un-downscaled image arrays and saves to disk.
+  - `POST /api/export`: Runs the solver and renderer on the full-resolution un-downscaled image arrays and saves to disk. Under native memory pressure, this route rejects the request with HTTP `507` instead of silently falling back to another high-memory export path.
 
 ### 4. Native Engine Build
 ```powershell

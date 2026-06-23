@@ -25,6 +25,14 @@
 #include <unordered_map>
 #include <vector>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <memoryapi.h>
+#endif
+
 #if DFEE_HAS_OPENCV
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -107,6 +115,112 @@ std::uint32_t compute_stable_grain_seed(
     hash = fnv1a_append_u32(hash, quantize_hash_float(effects.grain_chroma_strength));
     hash = fnv1a_append_u32(hash, static_cast<std::uint32_t>(effects.grain_strength > 0.0F ? 1U : 0U));
     return hash == 0U ? 1U : hash;
+}
+
+struct NativeMemorySnapshot {
+    bool available = false;
+    std::uint64_t total_physical = 0;
+    std::uint64_t available_physical = 0;
+    std::uint64_t total_page_file = 0;
+    std::uint64_t available_page_file = 0;
+    bool low_memory_signal = false;
+};
+
+[[nodiscard]] std::optional<std::uint64_t> parse_env_memory_budget_bytes(const char* name) {
+    const char* raw = std::getenv(name);
+    if (raw == nullptr || *raw == '\0') {
+        return std::nullopt;
+    }
+    char* end = nullptr;
+    const unsigned long long value_mb = std::strtoull(raw, &end, 10);
+    if (end == raw || (end != nullptr && *end != '\0') || value_mb == 0ULL) {
+        return std::nullopt;
+    }
+    return static_cast<std::uint64_t>(value_mb) * 1024ULL * 1024ULL;
+}
+
+[[nodiscard]] NativeMemorySnapshot query_native_memory_snapshot() {
+    NativeMemorySnapshot snapshot;
+#if defined(_WIN32)
+    MEMORYSTATUSEX memory_status{};
+    memory_status.dwLength = sizeof(memory_status);
+    if (GlobalMemoryStatusEx(&memory_status)) {
+        snapshot.available = true;
+        snapshot.total_physical = static_cast<std::uint64_t>(memory_status.ullTotalPhys);
+        snapshot.available_physical = static_cast<std::uint64_t>(memory_status.ullAvailPhys);
+        snapshot.total_page_file = static_cast<std::uint64_t>(memory_status.ullTotalPageFile);
+        snapshot.available_page_file = static_cast<std::uint64_t>(memory_status.ullAvailPageFile);
+    }
+
+    HANDLE low_memory_handle = CreateMemoryResourceNotification(LowMemoryResourceNotification);
+    if (low_memory_handle != nullptr) {
+        BOOL low_memory = FALSE;
+        if (QueryMemoryResourceNotification(low_memory_handle, &low_memory)) {
+            snapshot.low_memory_signal = low_memory != FALSE;
+        }
+        CloseHandle(low_memory_handle);
+    }
+#endif
+    return snapshot;
+}
+
+[[nodiscard]] std::string format_bytes_human(const std::uint64_t bytes) {
+    constexpr std::array<const char*, 5> kUnits{"B", "KB", "MB", "GB", "TB"};
+    double value = static_cast<double>(bytes);
+    std::size_t unit = 0;
+    while (value >= 1024.0 && unit + 1 < kUnits.size()) {
+        value /= 1024.0;
+        ++unit;
+    }
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(unit == 0 ? 0 : 1) << value << " " << kUnits[unit];
+    return out.str();
+}
+
+[[nodiscard]] std::uint64_t estimate_export_peak_bytes(
+    const int width,
+    const int height,
+    const std::string& format,
+    const bool stock_enabled) {
+    const std::uint64_t pixels =
+        static_cast<std::uint64_t>(std::max(width, 0)) * static_cast<std::uint64_t>(std::max(height, 0));
+    const std::uint64_t rgb_float = pixels * 3ULL * sizeof(float);
+    const std::uint64_t luminance_float = pixels * sizeof(float);
+    const std::uint64_t clipping_masks = pixels * 3ULL * sizeof(std::uint8_t);
+    const std::uint64_t output_bytes = pixels * ((format == "png8" || format == "jpeg") ? 3ULL : 6ULL);
+
+    std::uint64_t estimate = rgb_float + luminance_float + clipping_masks + output_bytes;
+    if (stock_enabled) {
+        const std::uint64_t full_zone_masks = pixels * 7ULL * sizeof(float);
+        const std::uint64_t full_spatial_masks = pixels * 3ULL * sizeof(float);
+        const std::uint64_t concurrent_full_images = rgb_float * 3ULL;
+        const std::uint64_t cv_headroom = rgb_float + luminance_float;
+        estimate += full_zone_masks + full_spatial_masks + concurrent_full_images + cv_headroom;
+    } else {
+        estimate += rgb_float;
+    }
+
+    return static_cast<std::uint64_t>(static_cast<long double>(estimate) * 1.20L);
+}
+
+[[nodiscard]] std::uint64_t compute_safe_export_budget_bytes(const NativeMemorySnapshot& snapshot) {
+    if (!snapshot.available || snapshot.available_physical == 0ULL) {
+        return 0ULL;
+    }
+    if (snapshot.low_memory_signal) {
+        const std::uint64_t reserve = std::max<std::uint64_t>(
+            1536ULL * 1024ULL * 1024ULL,
+            snapshot.total_physical / 8ULL);
+        if (snapshot.available_physical <= reserve) {
+            return 0ULL;
+        }
+        return snapshot.available_physical - reserve;
+    }
+    const std::uint64_t reserve = 768ULL * 1024ULL * 1024ULL;
+    if (snapshot.available_physical <= reserve) {
+        return 0ULL;
+    }
+    return snapshot.available_physical - reserve;
 }
 
 std::uint32_t read_be_u32(const unsigned char* data) {
@@ -2016,6 +2130,54 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 append_export_trace(project_root_, "export_image:load_profiles:done");
             }
             {
+                ScopedStageTimer stage(response.engine, "export_image_memory_preflight");
+                draft_decode_cache_.reset();
+                preview_cache_.reset();
+                raw_preview_jpeg_cache_.reset();
+                preview_analysis_cache_.reset();
+
+                const auto budget_override = parse_env_memory_budget_bytes("DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB");
+                const auto memory_snapshot = query_native_memory_snapshot();
+                const auto& decoded = full_decode_cache_->decoded;
+                const std::uint64_t estimated_peak = estimate_export_peak_bytes(
+                    decoded.rgb_linear.width,
+                    decoded.rgb_linear.height,
+                    canonical_format,
+                    true);
+                const std::uint64_t safe_budget = budget_override.has_value()
+                    ? *budget_override
+                    : compute_safe_export_budget_bytes(memory_snapshot);
+                const bool enforce_budget =
+                    budget_override.has_value() ||
+                    memory_snapshot.low_memory_signal ||
+                    (memory_snapshot.available && memory_snapshot.available_physical < (2048ULL * 1024ULL * 1024ULL));
+                if (enforce_budget && safe_budget > 0ULL && estimated_peak > safe_budget) {
+                    response.status = "error";
+                    std::ostringstream detail;
+                    detail
+                        << "Estimated native export peak " << format_bytes_human(estimated_peak)
+                        << " exceeds safe memory budget " << format_bytes_human(safe_budget);
+                    if (memory_snapshot.available) {
+                        detail
+                            << " (available physical " << format_bytes_human(memory_snapshot.available_physical)
+                            << ", total physical " << format_bytes_human(memory_snapshot.total_physical) << ")";
+                        if (memory_snapshot.low_memory_signal) {
+                            detail << "; system low-memory notification is active";
+                        }
+                    }
+                    if (budget_override.has_value()) {
+                        detail << "; budget overridden by DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB";
+                    }
+                    response.error = {
+                        .code = "EXPORT_MEMORY_BUDGET_EXCEEDED",
+                        .user_message = "The export was stopped before rendering because it would exceed the current safe memory budget.",
+                        .detail = detail.str(),
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
+            }
+            {
                 ScopedStageTimer stage(response.engine, "export_image_render");
                 append_export_trace(project_root_, "export_image:render:start");
                 const auto& decoded = full_decode_cache_->decoded;
@@ -2108,6 +2270,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
                 }
                 append_export_trace(project_root_, "export_image:fullres_prefilm:done");
+                export_analysis_cache_.reset();
 
                 append_export_trace(project_root_, "export_image:fullres_renderer:start");
                 FilmRenderer renderer;
@@ -2120,6 +2283,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             fullres_zone_masks,
                             render_plan->pre_film_normalization);
                     }
+                    fullres_prefilm = Image();
                     if (render_plan->stock_type == "monochrome") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_panchromatic");
                         rendered = renderer.apply_panchromatic_conversion(rendered, render_plan->film_response);
@@ -2151,10 +2315,12 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             fullres_spatial_masks,
                             render_plan->material_effects);
                     }
+                    fullres_zone_masks = ZoneMasks();
                     {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_grain");
                         rendered = renderer.apply_film_grain(rendered, fullres_spatial_masks, render_plan->material_effects);
                     }
+                    fullres_spatial_masks = SpatialMasks();
                     if (render_plan->print_finish.has_value()) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_print_finish");
                         rendered = renderer.apply_print_finish(rendered, *render_plan->print_finish);
