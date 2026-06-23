@@ -555,7 +555,7 @@ def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, st
             return False, f"jpeg_quality={request.jpeg_quality}"
         if int(request.export_dpi) < 1 or int(request.export_dpi) > 65535:
             return False, f"export_dpi={request.export_dpi}"
-    elif fmt == "png8":
+    elif fmt == "png8" or fmt == "png16":
         if int(request.jpeg_quality) != 92:
             return False, f"jpeg_quality={request.jpeg_quality}"
         if int(request.export_dpi) < 1 or int(request.export_dpi) > 65535:
@@ -565,7 +565,7 @@ def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, st
             return False, f"jpeg_quality={request.jpeg_quality}"
         if int(request.export_dpi) != 300:
             return False, f"export_dpi={request.export_dpi}"
-    if fmt not in {"jpeg", "jpg", "png8"} and bool(request.embed_metadata) is not True:
+    if fmt not in {"jpeg", "jpg", "png8", "png16"} and bool(request.embed_metadata) is not True:
         return False, f"embed_metadata={request.embed_metadata}"
     if (request.export_color_space or "srgb").lower().strip() != "srgb":
         return False, f"export_color_space={request.export_color_space}"

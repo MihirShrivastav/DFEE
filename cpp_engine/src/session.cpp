@@ -2232,11 +2232,11 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 finalize_engine_metadata(response.engine);
                 return response;
             }
-            if (canonical_format == "png8" && request.embed_metadata) {
+            if ((canonical_format == "png8" || canonical_format == "png16") && request.embed_metadata) {
                 std::string png_metadata_error;
                 if (!patch_png_phys_density(response.output_path, request.export_dpi, png_metadata_error)) {
                     response.status = "error";
-                    response.error = {
+                        response.error = {
                         .code = "EXPORT_METADATA_WRITE_FAILED",
                         .user_message = "The native PNG export could not write DPI metadata.",
                         .detail = png_metadata_error,

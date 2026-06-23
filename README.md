@@ -150,8 +150,11 @@ Current native export support:
 - `png8`: native final export writes `.png`, preserves the current sRGB 8-bit
   output path, and embeds PNG `pHYs` DPI metadata from `export_dpi` when
   `embed_metadata=true`.
-- `png16`, `tiff`: native final export remains available for the current
-  baseline option set.
+- `png16`: native final export writes `.png`, preserves the current 16-bit sRGB
+  output path, and embeds PNG `pHYs` DPI metadata from `export_dpi` when
+  `embed_metadata=true`.
+- `tiff`: native final export remains available for the current baseline option
+  set.
 
 If an export request asks for an option combination the native path does not
 fully honor yet, the server deliberately routes that request through the Python
