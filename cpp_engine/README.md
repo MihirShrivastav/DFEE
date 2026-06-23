@@ -7,6 +7,11 @@ Performance work on the native engine follows a documented measurement protocol:
 Use that document as the source of truth for benchmark discipline, warm-cache vs
 cold-cache interpretation, and optimization acceptance rules.
 
+Editing-flow architecture decisions are documented separately in
+[migration_docs/EDITING_FLOW_ARCHITECTURE.md](d:/Codebases/DFEE/cpp_engine/migration_docs/EDITING_FLOW_ARCHITECTURE.md).
+Use that document as the source of truth for tiling, ROI preview, invalidation,
+cache budgets, async preview job behavior, and CUDA transfer discipline.
+
 ## Current Milestone
 
 The current native scaffold builds:

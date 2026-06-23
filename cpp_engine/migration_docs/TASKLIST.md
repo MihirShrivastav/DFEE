@@ -100,6 +100,7 @@ Status values:
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |
 | M6-005 | done | Add performance dashboard or benchmark script | Benchmark output artifact | `cpp_engine/tools/export_benchmark.py` now emits a stable native export JSON artifact for the documented cold/warm probe. Dashboarding can build on that later. |
 | M6-006 | planned | Rework large-image export around tiled render and row-streamed encoders | Large RAW export stress test | Current preflight guards crashes, but true production-grade memory scaling still requires tiled processing and scanline/row output for PNG/TIFF. |
+| M6-007 | done | Document native editing-flow architecture principles | Manual doc review | `migration_docs/EDITING_FLOW_ARCHITECTURE.md` now defines DFEE guidance for tiled export, ROI preview, graph invalidation, cache budgets, async preview jobs, and CUDA transfer discipline. |
 
 ## Standing Engineering Tasks
 
