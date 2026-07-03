@@ -142,14 +142,23 @@ struct NativeSessionCacheState {
     bool draft_decode_cached = false;
     int draft_width = 0;
     int draft_height = 0;
+    std::size_t draft_decode_bytes = 0;
     bool preview_cached = false;
     int preview_width = 0;
     int preview_height = 0;
+    std::size_t preview_bytes = 0;
     bool raw_preview_jpeg_cached = false;
     std::size_t raw_preview_jpeg_bytes = 0;
+    bool preview_analysis_cached = false;
+    std::size_t preview_analysis_bytes = 0;
     bool full_decode_cached = false;
     int full_width = 0;
     int full_height = 0;
+    std::size_t full_decode_bytes = 0;
+    bool export_analysis_cached = false;
+    std::size_t export_analysis_bytes = 0;
+    std::size_t total_estimated_bytes = 0;
+    std::size_t cache_budget_bytes = 0;
 };
 
 struct NativeSessionCacheStateResponse {

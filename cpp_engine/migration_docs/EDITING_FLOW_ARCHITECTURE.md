@@ -207,6 +207,18 @@ Each major cache should have:
 - a size estimate
 - a budget or eviction strategy
 
+Current native implementation:
+
+- `NativeEngineSession.cache_state()` reports estimated cache bytes for draft
+  decode, preview RGB/luminance, RAW preview JPEG, preview analysis, full decode,
+  and export analysis caches.
+- `DFEE_NATIVE_CACHE_BUDGET_MB` enables a conservative native session cache
+  budget. When set, the engine prunes lower-priority caches before dropping the
+  active draft/preview state.
+- This is the first cache-budget control plane. It is not a substitute for
+  tiled export, but it prevents unbounded session cache growth while that larger
+  architecture is being implemented.
+
 ### G. Effect-specific efficient algorithms
 
 Some stages are too expensive to remain naive full-frame implementations.

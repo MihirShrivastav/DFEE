@@ -101,6 +101,7 @@ Status values:
 | M6-005 | done | Add performance dashboard or benchmark script | Benchmark output artifact | `cpp_engine/tools/export_benchmark.py` now emits a stable native export JSON artifact for the documented cold/warm probe. Dashboarding can build on that later. |
 | M6-006 | planned | Rework large-image export around tiled render and row-streamed encoders | Large RAW export stress test | Current preflight guards crashes, but true production-grade memory scaling still requires tiled processing and scanline/row output for PNG/TIFF. |
 | M6-007 | done | Document native editing-flow architecture principles | Manual doc review | `migration_docs/EDITING_FLOW_ARCHITECTURE.md` now defines DFEE guidance for tiled export, ROI preview, graph invalidation, cache budgets, async preview jobs, and CUDA transfer discipline. |
+| M6-008 | done | Add native session cache byte accounting and budget pruning | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and `pytest tests/test_native_bridge.py -q` | `cache_state()` now reports estimated bytes for draft decode, preview, raw preview JPEG, preview analysis, full decode, and export analysis caches. `DFEE_NATIVE_CACHE_BUDGET_MB` enables conservative pruning of lower-priority caches when a session exceeds the configured budget. |
 
 ## Standing Engineering Tasks
 

@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+from unittest import mock
 from pathlib import Path
 import math
 
@@ -613,6 +614,11 @@ class TestNativeBridge(unittest.TestCase):
         self.assertTrue(initial_state.preview_cached)
         self.assertTrue(initial_state.raw_preview_jpeg_cached)
         self.assertFalse(initial_state.full_decode_cached)
+        self.assertGreater(initial_state.draft_decode_bytes, 0)
+        self.assertGreater(initial_state.preview_bytes, 0)
+        self.assertGreater(initial_state.raw_preview_jpeg_bytes, 0)
+        self.assertGreater(initial_state.preview_analysis_bytes, 0)
+        self.assertGreater(initial_state.total_estimated_bytes, 0)
 
         if self.session.list_profiles().engine.libraw_enabled:
             draft_summary, _ = self.session.decode_raw(raw_filename, draft_mode=True)
@@ -636,6 +642,8 @@ class TestNativeBridge(unittest.TestCase):
             self.assertTrue(after_full.full_decode_cached)
             self.assertEqual(after_full.full_width, full_summary.image_width)
             self.assertEqual(after_full.full_height, full_summary.image_height)
+            self.assertGreater(after_full.full_decode_bytes, after_full.draft_decode_bytes)
+            self.assertGreater(after_full.total_estimated_bytes, after_draft.total_estimated_bytes)
         else:
             with self.assertRaises(dfee_native_bridge.NativeOperationError):
                 self.session.decode_raw(raw_filename, draft_mode=True)
@@ -644,6 +652,20 @@ class TestNativeBridge(unittest.TestCase):
             self.assertFalse(after_failed_decode.preview_cached)
             self.assertFalse(after_failed_decode.raw_preview_jpeg_cached)
             self.assertFalse(after_failed_decode.full_decode_cached)
+
+    def test_cache_budget_prunes_native_session_caches(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            with mock.patch.dict(os.environ, {"DFEE_NATIVE_CACHE_BUDGET_MB": "1"}, clear=False):
+                self.session.select_file(raw_filename)
+                state = self.session.cache_state()
+            self.assertEqual(state.cache_budget_bytes, 1024 * 1024)
+            self.assertLessEqual(state.total_estimated_bytes, state.cache_budget_bytes)
+            self.assertFalse(state.full_decode_cached)
+        else:
+            with self.assertRaises(dfee_native_bridge.NativeOperationError):
+                with mock.patch.dict(os.environ, {"DFEE_NATIVE_CACHE_BUDGET_MB": "1"}, clear=False):
+                    self.session.select_file(raw_filename)
 
     def test_raw_preview(self):
         raw_filename = self._raw_filename()
@@ -1007,7 +1029,7 @@ class TestNativeBridge(unittest.TestCase):
         raw_filename = self._raw_filename()
         if self.session.list_profiles().engine.libraw_enabled:
             self.session.select_file(raw_filename)
-            with unittest.mock.patch.dict(os.environ, {"DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB": "1"}, clear=False):
+            with mock.patch.dict(os.environ, {"DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB": "1"}, clear=False):
                 with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
                     self.session.export_image(
                         dfee_native_bridge.NativeExportRequest(

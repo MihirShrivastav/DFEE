@@ -129,14 +129,23 @@ class NativeSessionCacheState:
     draft_decode_cached: bool
     draft_width: int
     draft_height: int
+    draft_decode_bytes: int
     preview_cached: bool
     preview_width: int
     preview_height: int
+    preview_bytes: int
     raw_preview_jpeg_cached: bool
     raw_preview_jpeg_bytes: int
+    preview_analysis_cached: bool
+    preview_analysis_bytes: int
     full_decode_cached: bool
     full_width: int
     full_height: int
+    full_decode_bytes: int
+    export_analysis_cached: bool
+    export_analysis_bytes: int
+    total_estimated_bytes: int
+    cache_budget_bytes: int
 
 
 @dataclass(frozen=True)
@@ -348,14 +357,23 @@ def _parse_session_cache_state(payload: dict[str, Any]) -> NativeSessionCacheSta
         draft_decode_cached=bool(payload.get("draft_decode_cached", False)),
         draft_width=int(payload.get("draft_width", 0)),
         draft_height=int(payload.get("draft_height", 0)),
+        draft_decode_bytes=int(payload.get("draft_decode_bytes", 0)),
         preview_cached=bool(payload.get("preview_cached", False)),
         preview_width=int(payload.get("preview_width", 0)),
         preview_height=int(payload.get("preview_height", 0)),
+        preview_bytes=int(payload.get("preview_bytes", 0)),
         raw_preview_jpeg_cached=bool(payload.get("raw_preview_jpeg_cached", False)),
         raw_preview_jpeg_bytes=int(payload.get("raw_preview_jpeg_bytes", 0)),
+        preview_analysis_cached=bool(payload.get("preview_analysis_cached", False)),
+        preview_analysis_bytes=int(payload.get("preview_analysis_bytes", 0)),
         full_decode_cached=bool(payload.get("full_decode_cached", False)),
         full_width=int(payload.get("full_width", 0)),
         full_height=int(payload.get("full_height", 0)),
+        full_decode_bytes=int(payload.get("full_decode_bytes", 0)),
+        export_analysis_cached=bool(payload.get("export_analysis_cached", False)),
+        export_analysis_bytes=int(payload.get("export_analysis_bytes", 0)),
+        total_estimated_bytes=int(payload.get("total_estimated_bytes", 0)),
+        cache_budget_bytes=int(payload.get("cache_budget_bytes", 0)),
     )
 
 

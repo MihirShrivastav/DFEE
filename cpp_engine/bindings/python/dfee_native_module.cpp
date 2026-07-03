@@ -180,14 +180,23 @@ PyObject* cache_state_to_dict(const dfee::NativeSessionCacheState& cache) {
     PyDict_SetItemString(dict, "draft_decode_cached", cache.draft_decode_cached ? Py_True : Py_False);
     PyDict_SetItemString(dict, "draft_width", PyLong_FromLong(cache.draft_width));
     PyDict_SetItemString(dict, "draft_height", PyLong_FromLong(cache.draft_height));
+    PyDict_SetItemString(dict, "draft_decode_bytes", PyLong_FromSize_t(cache.draft_decode_bytes));
     PyDict_SetItemString(dict, "preview_cached", cache.preview_cached ? Py_True : Py_False);
     PyDict_SetItemString(dict, "preview_width", PyLong_FromLong(cache.preview_width));
     PyDict_SetItemString(dict, "preview_height", PyLong_FromLong(cache.preview_height));
+    PyDict_SetItemString(dict, "preview_bytes", PyLong_FromSize_t(cache.preview_bytes));
     PyDict_SetItemString(dict, "raw_preview_jpeg_cached", cache.raw_preview_jpeg_cached ? Py_True : Py_False);
     PyDict_SetItemString(dict, "raw_preview_jpeg_bytes", PyLong_FromSize_t(cache.raw_preview_jpeg_bytes));
+    PyDict_SetItemString(dict, "preview_analysis_cached", cache.preview_analysis_cached ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "preview_analysis_bytes", PyLong_FromSize_t(cache.preview_analysis_bytes));
     PyDict_SetItemString(dict, "full_decode_cached", cache.full_decode_cached ? Py_True : Py_False);
     PyDict_SetItemString(dict, "full_width", PyLong_FromLong(cache.full_width));
     PyDict_SetItemString(dict, "full_height", PyLong_FromLong(cache.full_height));
+    PyDict_SetItemString(dict, "full_decode_bytes", PyLong_FromSize_t(cache.full_decode_bytes));
+    PyDict_SetItemString(dict, "export_analysis_cached", cache.export_analysis_cached ? Py_True : Py_False);
+    PyDict_SetItemString(dict, "export_analysis_bytes", PyLong_FromSize_t(cache.export_analysis_bytes));
+    PyDict_SetItemString(dict, "total_estimated_bytes", PyLong_FromSize_t(cache.total_estimated_bytes));
+    PyDict_SetItemString(dict, "cache_budget_bytes", PyLong_FromSize_t(cache.cache_budget_bytes));
     return dict;
 }
 

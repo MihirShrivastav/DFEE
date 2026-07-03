@@ -223,6 +223,46 @@ struct NativeMemorySnapshot {
     return snapshot.available_physical - reserve;
 }
 
+[[nodiscard]] std::size_t vector_bytes(const std::vector<float>& values) {
+    return values.size() * sizeof(float);
+}
+
+[[nodiscard]] std::size_t vector_bytes(const std::vector<std::uint8_t>& values) {
+    return values.size() * sizeof(std::uint8_t);
+}
+
+[[nodiscard]] std::size_t image_bytes(const Image& image) {
+    return vector_bytes(image.pixels);
+}
+
+[[nodiscard]] std::size_t luminance_bytes(const LuminanceImage& image) {
+    return vector_bytes(image.values);
+}
+
+[[nodiscard]] std::size_t clipping_mask_bytes(const DecodedRawChannelMasks& masks) {
+    return vector_bytes(masks.red) + vector_bytes(masks.green) + vector_bytes(masks.blue);
+}
+
+[[nodiscard]] std::size_t decoded_raw_bytes(const DecodedRawImage& decoded) {
+    return image_bytes(decoded.rgb_linear) +
+        luminance_bytes(decoded.luminance) +
+        clipping_mask_bytes(decoded.clipping_masks);
+}
+
+[[nodiscard]] std::size_t zone_masks_bytes(const ZoneMasks& masks) {
+    std::size_t bytes = 0;
+    for (const auto& zone : masks.zones) {
+        bytes += luminance_bytes(zone);
+    }
+    return bytes;
+}
+
+[[nodiscard]] std::size_t spatial_masks_bytes(const SpatialMasks& masks) {
+    return luminance_bytes(masks.grain_receptivity_mask) +
+        luminance_bytes(masks.halation_source_mask) +
+        luminance_bytes(masks.halation_receiver_mask);
+}
+
 std::uint32_t read_be_u32(const unsigned char* data) {
     return (static_cast<std::uint32_t>(data[0]) << 24U) |
         (static_cast<std::uint32_t>(data[1]) << 16U) |
@@ -1639,6 +1679,10 @@ NativeSelectResponse EngineSession::select_file(const NativeSelectRequest& reque
             result.metadata = draft_decode_cache_->decoded.metadata;
             result.diagnostics = build_select_diagnostics(solver_input);
         }
+        {
+            ScopedStageTimer stage(result.engine, "select_enforce_cache_budget");
+            enforce_session_cache_budget();
+        }
     }
 
     result.ok = true;
@@ -1726,6 +1770,7 @@ NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& 
                 } else {
                     full_decode_cache_ = std::move(cache_entry);
                 }
+                enforce_session_cache_budget();
             }
         }
         {
@@ -1786,6 +1831,7 @@ NativeRawPreviewResponse EngineSession::raw_preview(const NativeRawPreviewReques
                     .max_edge = request.max_edge,
                     .jpeg_bytes = response.jpeg_bytes,
                 };
+                enforce_session_cache_budget();
             }
         }
     }
@@ -2013,6 +2059,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             response.content_type = encoded.content_type;
             response.jpeg_bytes = encoded.jpeg_bytes;
             response.error = encoded.error;
+            enforce_session_cache_budget();
         }
     }
 
@@ -2484,20 +2531,45 @@ NativeSessionCacheStateResponse EngineSession::cache_state() const {
         response.cache.draft_decode_cached = true;
         response.cache.draft_width = draft_decode_cache_->decoded.summary.image_width;
         response.cache.draft_height = draft_decode_cache_->decoded.summary.image_height;
+        response.cache.draft_decode_bytes = decoded_raw_bytes(draft_decode_cache_->decoded);
     }
     if (preview_cache_.has_value()) {
         response.cache.preview_cached = true;
         response.cache.preview_width = preview_cache_->rgb_linear.width;
         response.cache.preview_height = preview_cache_->rgb_linear.height;
+        response.cache.preview_bytes = image_bytes(preview_cache_->rgb_linear) + luminance_bytes(preview_cache_->luminance);
     }
     if (raw_preview_jpeg_cache_.has_value()) {
         response.cache.raw_preview_jpeg_cached = true;
         response.cache.raw_preview_jpeg_bytes = raw_preview_jpeg_cache_->jpeg_bytes.size();
     }
+    if (preview_analysis_cache_.has_value()) {
+        response.cache.preview_analysis_cached = true;
+        response.cache.preview_analysis_bytes =
+            zone_masks_bytes(preview_analysis_cache_->zone_masks) +
+            spatial_masks_bytes(preview_analysis_cache_->spatial_masks);
+    }
     if (full_decode_cache_.has_value()) {
         response.cache.full_decode_cached = true;
         response.cache.full_width = full_decode_cache_->decoded.summary.image_width;
         response.cache.full_height = full_decode_cache_->decoded.summary.image_height;
+        response.cache.full_decode_bytes = decoded_raw_bytes(full_decode_cache_->decoded);
+    }
+    if (export_analysis_cache_.has_value()) {
+        response.cache.export_analysis_cached = true;
+        response.cache.export_analysis_bytes =
+            zone_masks_bytes(export_analysis_cache_->zone_masks) +
+            spatial_masks_bytes(export_analysis_cache_->spatial_masks);
+    }
+    response.cache.total_estimated_bytes =
+        response.cache.draft_decode_bytes +
+        response.cache.preview_bytes +
+        response.cache.raw_preview_jpeg_bytes +
+        response.cache.preview_analysis_bytes +
+        response.cache.full_decode_bytes +
+        response.cache.export_analysis_bytes;
+    if (const auto cache_budget = parse_env_memory_budget_bytes("DFEE_NATIVE_CACHE_BUDGET_MB")) {
+        response.cache.cache_budget_bytes = static_cast<std::size_t>(*cache_budget);
     }
     finalize_engine_metadata(response.engine);
     return response;
@@ -2569,6 +2641,73 @@ void EngineSession::populate_preview_analysis_cache(
         .zone_masks = zone_masks,
         .spatial_masks = spatial_masks,
     };
+}
+
+void EngineSession::enforce_session_cache_budget() {
+    const auto cache_budget = parse_env_memory_budget_bytes("DFEE_NATIVE_CACHE_BUDGET_MB");
+    if (!cache_budget.has_value()) {
+        return;
+    }
+
+    auto estimated_bytes = [this]() -> std::uint64_t {
+        std::uint64_t total = 0;
+        if (draft_decode_cache_.has_value()) {
+            total += decoded_raw_bytes(draft_decode_cache_->decoded);
+        }
+        if (preview_cache_.has_value()) {
+            total += image_bytes(preview_cache_->rgb_linear) + luminance_bytes(preview_cache_->luminance);
+        }
+        if (raw_preview_jpeg_cache_.has_value()) {
+            total += raw_preview_jpeg_cache_->jpeg_bytes.size();
+        }
+        if (preview_analysis_cache_.has_value()) {
+            total += zone_masks_bytes(preview_analysis_cache_->zone_masks);
+            total += spatial_masks_bytes(preview_analysis_cache_->spatial_masks);
+        }
+        if (full_decode_cache_.has_value()) {
+            total += decoded_raw_bytes(full_decode_cache_->decoded);
+        }
+        if (export_analysis_cache_.has_value()) {
+            total += zone_masks_bytes(export_analysis_cache_->zone_masks);
+            total += spatial_masks_bytes(export_analysis_cache_->spatial_masks);
+        }
+        return total;
+    };
+
+    const auto over_budget = [&estimated_bytes, &cache_budget]() {
+        return estimated_bytes() > *cache_budget;
+    };
+
+    if (!over_budget()) {
+        return;
+    }
+
+    export_analysis_cache_.reset();
+    if (!over_budget()) {
+        return;
+    }
+
+    full_decode_cache_.reset();
+    if (!over_budget()) {
+        return;
+    }
+
+    raw_preview_jpeg_cache_.reset();
+    if (!over_budget()) {
+        return;
+    }
+
+    preview_analysis_cache_.reset();
+    if (!over_budget()) {
+        return;
+    }
+
+    preview_cache_.reset();
+    if (!over_budget()) {
+        return;
+    }
+
+    draft_decode_cache_.reset();
 }
 
 void EngineSession::clear_decode_caches() {
