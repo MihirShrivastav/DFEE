@@ -41,6 +41,8 @@
 namespace dfee {
 namespace {
 
+constexpr const char* kDefaultEffectPipelineVersion = "parity_v1";
+
 NativeEngineMetadata build_engine_metadata() {
     NativeEngineMetadata metadata;
     metadata.engine_version = kEngineVersion;
@@ -52,6 +54,22 @@ NativeEngineMetadata build_engine_metadata() {
     metadata.libraw_enabled = false;
 #endif
     return metadata;
+}
+
+[[nodiscard]] std::string normalized_effect_pipeline_version(const std::string& value) {
+    return value.empty() ? kDefaultEffectPipelineVersion : value;
+}
+
+[[nodiscard]] std::optional<NativeError> validate_effect_pipeline_version(const std::string& value) {
+    const std::string normalized = normalized_effect_pipeline_version(value);
+    if (normalized == kDefaultEffectPipelineVersion) {
+        return std::nullopt;
+    }
+    return NativeError{
+        .code = "UNSUPPORTED_EFFECT_PIPELINE_VERSION",
+        .user_message = "The requested effect pipeline version is not supported by this native engine build.",
+        .detail = "Supported effect_pipeline_version values: parity_v1. Requested: " + normalized,
+    };
 }
 
 NativeSelectDiagnostics build_select_diagnostics(const SolverInput& solver_input) {
@@ -1327,11 +1345,13 @@ std::string serialize_feature_report_json(
     const RenderPlan& render_plan,
     const FilmStockProfile& stock_profile,
     const PrintStockProfile* print_stock,
+    const std::string& effect_pipeline_version,
     const std::string& input_filename,
     const std::string& output_filename) {
     std::ostringstream out;
     out << "{\n";
     out << "  \"engine_version\": \"" << escape_json_string(kEngineVersion) << "\",\n";
+    out << "  \"effect_pipeline_version\": \"" << escape_json_string(normalized_effect_pipeline_version(effect_pipeline_version)) << "\",\n";
     out << "  \"input_file\": \"" << escape_json_string(input_filename) << "\",\n";
     out << "  \"output_file\": \"" << escape_json_string(output_filename) << "\",\n";
     out << "  \"stock_profile\": \"" << escape_json_string(stock_profile.stock_id) << "\",\n";
@@ -1869,6 +1889,12 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 finalize_engine_metadata(response.engine);
                 return response;
             }
+            if (const auto version_error = validate_effect_pipeline_version(request.effect_pipeline_version)) {
+                response.status = "error";
+                response.error = *version_error;
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
         }
 
         if (request.stock == "none") {
@@ -2097,6 +2123,12 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     .user_message = "Select a RAW file before continuing.",
                     .detail = "export_image received an empty filename and no session file is currently selected.",
                 };
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+            if (const auto version_error = validate_effect_pipeline_version(request.effect_pipeline_version)) {
+                response.status = "error";
+                response.error = *version_error;
                 finalize_engine_metadata(response.engine);
                 return response;
             }
@@ -2497,6 +2529,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         *render_plan,
                         *stock_profile,
                         print_stock_profile.has_value() ? &*print_stock_profile : nullptr,
+                        request.effect_pipeline_version,
                         response.filename,
                         response.output_path.filename().string()));
             } catch (const std::exception& ex) {

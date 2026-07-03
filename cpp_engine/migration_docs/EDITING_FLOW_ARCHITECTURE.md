@@ -231,6 +231,12 @@ DFEE should continue following this rule:
 - local contrast should avoid repeated redundant blur/mask passes
 - encoder/write-out should not require unnecessary whole-image duplication
 
+Effect rewrites must be versioned. The current native API and report contract
+use `effect_pipeline_version=parity_v1` as the CPU parity baseline. Unsupported
+versions are rejected instead of being silently rendered through a mismatched
+implementation, and JSON reports include the version so future redesigned
+effects remain reproducible.
+
 This is where much of the practical "editor feels instant" gain comes from.
 
 ### H. CPU/GPU transfer discipline

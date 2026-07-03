@@ -548,6 +548,9 @@ def _run_native_export(request_payload: dict) -> dict:
 
 def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, str]:
     fmt = (request.export_format or "tiff").lower().strip()
+    effect_pipeline_version = (request.effect_pipeline_version or "parity_v1").strip()
+    if effect_pipeline_version != "parity_v1":
+        return False, f"effect_pipeline_version={effect_pipeline_version}"
     if fmt not in {"tiff", "png16", "png8", "jpeg", "jpg"}:
         return False, f"export_format={fmt}"
     if fmt in {"jpeg", "jpg"}:
@@ -578,6 +581,7 @@ class SelectRequest(BaseModel):
 class PreviewRequest(BaseModel):
     filename: str
     stock: str
+    effect_pipeline_version: str = "parity_v1"
     exposure: float = 0.0    # EV stops
     highlights: float = 0.0  # -100 to +100
     shadows: float = 0.0     # -100 to +100
@@ -1045,6 +1049,7 @@ def get_raw_image():
 def get_preview(
     filename: str,
     stock: str,
+    effect_pipeline_version: str = "parity_v1",
     exposure: float = 0.0,
     highlights: float = 0.0,
     shadows: float = 0.0,
@@ -1091,6 +1096,7 @@ def get_preview(
     native_payload = {
         "filename": filename,
         "stock": stock,
+        "effect_pipeline_version": effect_pipeline_version,
         "exposure": exposure,
         "highlights": highlights,
         "shadows": shadows,
@@ -1149,6 +1155,14 @@ def get_preview(
         "print_black_point": print_black_point,
     }
     request_fp = _request_fingerprint(native_payload)
+    if (effect_pipeline_version or "parity_v1").strip() != "parity_v1":
+        logger.warning(
+            "Preview failed fp=%s file=%s reason=unsupported_effect_pipeline_version value=%s",
+            request_fp,
+            filename,
+            effect_pipeline_version,
+        )
+        raise HTTPException(status_code=400, detail="Unsupported effect_pipeline_version")
     logger.info(
         "Preview request fp=%s file=%s stock=%s print_stock=%s native=%s",
         request_fp,
@@ -1340,6 +1354,14 @@ def export_file(req: ExportRequest):
                 req.filename,
             )
     elif _native_export_enabled():
+        if native_export_reason.startswith("effect_pipeline_version="):
+            logger.warning(
+                "Export failed fp=%s file=%s reason=unsupported_effect_pipeline_version detail=%s",
+                request_fp,
+                req.filename,
+                native_export_reason,
+            )
+            raise HTTPException(status_code=400, detail="Unsupported effect_pipeline_version")
         logger.info(
             "Export using python backend fp=%s file=%s reason=native_option_gap detail=%s",
             request_fp,

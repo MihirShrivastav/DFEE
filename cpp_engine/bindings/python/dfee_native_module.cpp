@@ -264,6 +264,7 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     dfee::NativePreviewRenderRequest request;
     request.filename = dict_string(dict, "filename");
     request.stock = dict_string(dict, "stock");
+    request.effect_pipeline_version = dict_string(dict, "effect_pipeline_version", "parity_v1");
     request.exposure = dict_float(dict, "exposure");
     request.highlights = dict_float(dict, "highlights");
     request.shadows = dict_float(dict, "shadows");

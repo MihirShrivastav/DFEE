@@ -94,7 +94,7 @@ Status values:
 
 | ID | Status | Task | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| M6-001 | planned | Add versioned effect pipeline flagging | Report version test | Improved effects must be explainable/reproducible. |
+| M6-001 | done | Add versioned effect pipeline flagging | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and targeted pytest unsupported-version tests | Preview/export requests now carry `effect_pipeline_version`; `parity_v1` is the only supported implementation and native reports record it for reproducibility. |
 | M6-002 | planned | Replace bloom/halation with separable or pyramid highlight diffusion | Visual QA plus performance benchmark | Only after baseline parity. |
 | M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Must preserve stock character. |
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |

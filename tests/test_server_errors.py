@@ -315,6 +315,25 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["saturation"], 10.0)
         self.assertEqual(payload["bloom"], 5.0)
 
+    def test_preview_rejects_unsupported_effect_pipeline_version(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview") as native_mock:
+                response = self.client.get(
+                    "/api/preview",
+                    params={
+                        "filename": "example.ARW",
+                        "stock": "portra_400",
+                        "effect_pipeline_version": "future_v2",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("effect_pipeline_version", response.json()["detail"])
+        native_mock.assert_not_called()
+
     def test_preview_falls_back_to_python_pipeline_when_native_render_fails(self):
         server.session.filename = "example.ARW"
         server.session.preview_rgb_linear = mock.Mock(copy=mock.Mock(return_value=np.zeros((2, 2, 3), dtype=np.float32)))
@@ -574,6 +593,24 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["export_format"], "jpeg")
         self.assertEqual(payload["jpeg_quality"], 85)
         self.assertEqual(payload["export_dpi"], 240)
+
+    def test_export_rejects_unsupported_effect_pipeline_version(self):
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_EXPORT": "1"}, clear=False):
+            with mock.patch.object(server, "_run_native_export") as native_mock:
+                response = self.client.post(
+                    "/api/export",
+                    json={
+                        "filename": self._raw_filename(),
+                        "stock": "portra_400",
+                        "print_stock": "kodak_2383",
+                        "export_format": "png8",
+                        "effect_pipeline_version": "future_v2",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("effect_pipeline_version", response.json()["detail"])
+        native_mock.assert_not_called()
 
     def test_export_falls_back_to_python_pipeline_when_native_export_fails(self):
         raw_filename = self._raw_filename()

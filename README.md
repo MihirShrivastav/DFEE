@@ -144,7 +144,10 @@ same compact metadata and diagnostics response shape the frontend already uses.
 If a later native route falls back, the Python draft state is prepared lazily on
 demand instead of being eagerly computed during select.
 
-The export request model now also carries photographer-facing export options:
+The preview/export request model now also carries `effect_pipeline_version`.
+The only supported value today is `parity_v1`; unsupported values are rejected
+instead of silently rendering through the wrong effect implementation. The
+export request model also carries photographer-facing export options:
 `jpeg_quality`, `export_dpi`, `embed_metadata`, and `export_color_space`.
 
 Current native export support:
@@ -161,7 +164,9 @@ Current native export support:
 
 Native exports that render a stock profile also write the sidecar JSON report
 with the existing DFEE contract sections: `image_diagnosis`,
-`feature_summary`, `render_plan`, and `warnings`.
+`feature_summary`, `render_plan`, and `warnings`. Reports include
+`effect_pipeline_version` so future redesigned effects remain reproducible and
+auditable.
 
 If an export request asks for an option combination the native path does not
 fully honor yet, the server deliberately routes that request through the Python

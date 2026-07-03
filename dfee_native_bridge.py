@@ -161,6 +161,7 @@ class NativeRawPreview:
 class NativePreviewRenderRequest:
     filename: str
     stock: str
+    effect_pipeline_version: str = "parity_v1"
     exposure: float = 0.0
     highlights: float = 0.0
     shadows: float = 0.0

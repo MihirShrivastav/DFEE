@@ -66,6 +66,7 @@ class TestNativeBridge(unittest.TestCase):
             set(report_payload.keys()),
             {
                 "engine_version",
+                "effect_pipeline_version",
                 "input_file",
                 "output_file",
                 "stock_profile",
@@ -80,6 +81,7 @@ class TestNativeBridge(unittest.TestCase):
         self.assertEqual(report_payload["output_file"], expected_output)
         self.assertEqual(report_payload["stock_profile"], expected_stock)
         self.assertEqual(report_payload["print_stock"], expected_print)
+        self.assertEqual(report_payload["effect_pipeline_version"], "parity_v1")
         self.assertIsInstance(report_payload["warnings"], list)
         self.assertEqual(
             set(report_payload["feature_summary"].keys()),
@@ -750,6 +752,30 @@ class TestNativeBridge(unittest.TestCase):
                     )
                 )
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
+
+    def test_render_preview_rejects_unsupported_effect_pipeline_version(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError) as ctx:
+                self.session.render_preview(
+                    dfee_native_bridge.NativePreviewRenderRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        effect_pipeline_version="future_v2",
+                    )
+                )
+            self.assertEqual(ctx.exception.code, "UNSUPPORTED_EFFECT_PIPELINE_VERSION")
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError):
+                self.session.render_preview(
+                    dfee_native_bridge.NativePreviewRenderRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        effect_pipeline_version="future_v2",
+                    )
+                )
 
     def test_export_image(self):
         raw_filename = self._raw_filename()

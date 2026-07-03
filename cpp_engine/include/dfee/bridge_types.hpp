@@ -180,6 +180,7 @@ struct NativeRawPreviewResponse {
 struct NativePreviewRenderRequest {
     std::string filename;
     std::string stock;
+    std::string effect_pipeline_version = "parity_v1";
     float exposure = 0.0F;
     float highlights = 0.0F;
     float shadows = 0.0F;
