@@ -324,6 +324,9 @@ struct GrainNoiseCacheKey {
     std::int32_t grain_size_q = 0;
     std::int32_t grain_roughness_q = 0;
     std::int32_t grain_chroma_q = 0;
+    std::int32_t grain_clumpiness_q = 0;
+    std::int32_t grain_micro_grit_q = 0;
+    std::int32_t grain_layer_correlation_q = 0;
 
     [[nodiscard]] bool matches(const GrainNoiseCacheKey& other) const noexcept {
         return width == other.width &&
@@ -331,7 +334,10 @@ struct GrainNoiseCacheKey {
             seed == other.seed &&
             grain_size_q == other.grain_size_q &&
             grain_roughness_q == other.grain_roughness_q &&
-            grain_chroma_q == other.grain_chroma_q;
+            grain_chroma_q == other.grain_chroma_q &&
+            grain_clumpiness_q == other.grain_clumpiness_q &&
+            grain_micro_grit_q == other.grain_micro_grit_q &&
+            grain_layer_correlation_q == other.grain_layer_correlation_q;
     }
 };
 
@@ -1476,6 +1482,9 @@ Image FilmRenderer::apply_film_grain(
         .grain_size_q = quantize_grain_param(effects.grain_size),
         .grain_roughness_q = quantize_grain_param(effects.grain_roughness),
         .grain_chroma_q = quantize_grain_param(effects.grain_chroma_strength),
+        .grain_clumpiness_q = 0,
+        .grain_micro_grit_q = 0,
+        .grain_layer_correlation_q = 0,
     };
     static thread_local std::optional<GrainNoiseCacheEntry> grain_noise_cache;
 
@@ -1600,6 +1609,9 @@ Image FilmRenderer::apply_filmic_grain(
         .grain_size_q = quantize_grain_param(effects.grain_size),
         .grain_roughness_q = quantize_grain_param(effects.grain_roughness),
         .grain_chroma_q = quantize_grain_param(effects.grain_chroma_strength),
+        .grain_clumpiness_q = quantize_grain_param(effects.grain_clumpiness),
+        .grain_micro_grit_q = quantize_grain_param(effects.grain_micro_grit),
+        .grain_layer_correlation_q = quantize_grain_param(effects.grain_layer_correlation),
     };
     static thread_local std::optional<GrainNoiseCacheEntry> filmic_grain_noise_cache;
 
@@ -1622,18 +1634,19 @@ Image FilmRenderer::apply_filmic_grain(
 
         const float family_size = std::clamp(effects.grain_size, 0.05F, 1.5F);
         const float family_roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
-        const bool high_speed_like = effects.grain_strength > 0.48F || family_size > 0.58F;
-        const bool fine_grain_like = effects.grain_strength < 0.22F && family_size < 0.25F;
-        const float clump_scale = high_speed_like ? 1.12F : (fine_grain_like ? 0.82F : 1.0F);
-        const float roughness_boost = high_speed_like ? 0.08F : (fine_grain_like ? -0.06F : 0.0F);
-        const float v2_roughness = std::clamp(family_roughness + roughness_boost, 0.0F, 1.0F);
+        const float clump_scale = std::clamp(0.70F + effects.grain_clumpiness * 0.75F, 0.55F, 1.80F);
+        const float v2_roughness = std::clamp(
+            family_roughness * 0.65F + effects.grain_clumpiness * 0.25F + effects.grain_micro_grit * 0.18F,
+            0.0F,
+            1.0F);
+        const float mono_size_mult = 0.92F + effects.grain_clumpiness * 0.30F;
 
         if (is_mono) {
             noise_g = generate_grain_noise_channel(
                 sparse_master,
                 grit_master,
                 family_size * clump_scale,
-                high_speed_like ? 1.10F : 1.0F,
+                mono_size_mult,
                 scale_factor,
                 v2_roughness);
             noise_r = noise_g;
@@ -1651,10 +1664,15 @@ Image FilmRenderer::apply_filmic_grain(
             noise_g = generate_grain_noise_channel(
                 sparse_g, grit_g, family_size * clump_scale, 1.00F, scale_factor, v2_roughness);
             const cv::Mat noise_b_ind = generate_grain_noise_channel(
-                sparse_b, grit_b, family_size * clump_scale, high_speed_like ? 1.38F : 1.20F, scale_factor, v2_roughness);
+                sparse_b,
+                grit_b,
+                family_size * clump_scale,
+                1.12F + effects.grain_micro_grit * 0.65F,
+                scale_factor,
+                v2_roughness);
 
             const float base_chroma = clampf(effects.grain_chroma_strength * 3.5F, 0.0F, 1.0F);
-            const float layer_correlation = fine_grain_like ? 0.88F : (high_speed_like ? 0.58F : 0.74F);
+            const float layer_correlation = std::clamp(effects.grain_layer_correlation, 0.0F, 1.0F);
             const float chroma_mix = base_chroma * (1.0F - layer_correlation + 0.45F);
             noise_r = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_r_ind;
             noise_b = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_b_ind;
@@ -1673,9 +1691,8 @@ Image FilmRenderer::apply_filmic_grain(
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
     constexpr std::array<float, 3> kStrengthMults{0.78F, 0.94F, 1.22F};
-    const bool high_speed_like = effects.grain_strength > 0.48F || effects.grain_size > 0.58F;
-    const bool fine_grain_like = effects.grain_strength < 0.22F && effects.grain_size < 0.25F;
-    const float stock_visibility = high_speed_like ? 1.14F : (fine_grain_like ? 0.72F : 1.0F);
+    const float pgi_visibility = std::clamp(effects.grain_target_pgi / 40.0F, 0.55F, 1.55F);
+    const float stock_visibility = pgi_visibility * std::clamp(0.82F + effects.grain_midtone_response * 0.18F, 0.65F, 1.25F);
     const float strength_base = effects.grain_strength * 0.032F * stock_visibility;
     const float strength_r = strength_base * kStrengthMults[0];
     const float strength_g = strength_base * kStrengthMults[1];
@@ -1702,10 +1719,11 @@ Image FilmRenderer::apply_filmic_grain(
             const float lower_mid = smoothstep01((y_gamma - 0.16F) / 0.24F) * (1.0F - smoothstep01((y_gamma - 0.58F) / 0.24F));
             const float midtone = smoothstep01((y_gamma - 0.30F) / 0.22F) * (1.0F - smoothstep01((y_gamma - 0.72F) / 0.22F));
             const float highlight = smoothstep01((y_gamma - 0.70F) / 0.22F);
-            const float shadow_response = high_speed_like ? 0.92F : (fine_grain_like ? 0.48F : 0.72F);
-            const float highlight_response = fine_grain_like ? 0.18F : (high_speed_like ? 0.34F : 0.27F);
+            const float shadow_response = std::clamp(effects.grain_shadow_response + effects.grain_underexposure_coarsening * 0.20F, 0.0F, 1.5F);
+            const float midtone_response = std::clamp(effects.grain_midtone_response, 0.0F, 1.5F);
+            const float highlight_response = std::clamp(effects.grain_highlight_response - effects.grain_overexposure_smoothing * 0.18F, 0.0F, 0.85F);
             const float density_mod =
-                (0.35F + shadow_response * 0.55F * lifted_shadow + 0.95F * lower_mid + 0.55F * midtone) *
+                (0.35F + shadow_response * 0.55F * lifted_shadow + midtone_response * 0.95F * lower_mid + midtone_response * 0.55F * midtone) *
                 (1.0F - (0.70F - highlight_response) * highlight);
             const float exposure_mod = std::max(0.0F, density_mod) * smooth_mod;
 

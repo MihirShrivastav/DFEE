@@ -54,6 +54,16 @@ grain:
   chroma_strength: 0.0
   peak_zone: midtones
   texture_masking: 0.6
+  family: bw_cubic
+  target_pgi_35mm_4x6: 54
+  clumpiness: 0.70
+  micro_grit: 0.30
+  layer_correlation: 1.00
+  shadow_response: 0.90
+  midtone_response: 1.12
+  highlight_response: 0.38
+  underexposure_coarsening: 0.42
+  overexposure_smoothing: 0.16
 halation:
   trigger: specular_only
   strength: 0.1

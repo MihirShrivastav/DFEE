@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 namespace dfee {
 namespace {
@@ -25,6 +26,115 @@ namespace {
     const float fallback) {
     const auto it = values.find(key);
     return it != values.end() ? static_cast<float>(it->second) : fallback;
+}
+
+[[nodiscard]] std::string get_string(
+    const std::unordered_map<std::string, std::string>& values,
+    const std::string& key,
+    const std::string& fallback) {
+    const auto it = values.find(key);
+    return it != values.end() && !it->second.empty() ? it->second : fallback;
+}
+
+[[nodiscard]] std::string infer_grain_family(
+    const FilmStockProfile& stock_profile,
+    const float grain_strength,
+    const float grain_size,
+    const float grain_chroma_strength) {
+    if (stock_profile.stock_type == StockType::Monochrome) {
+        return grain_size >= 0.70F ? "bw_cubic" : "bw_tabular";
+    }
+    if (stock_profile.stock_type == StockType::ColorReversal) {
+        return "color_reversal_fine";
+    }
+    if (grain_strength >= 0.50F || grain_size >= 0.58F || grain_chroma_strength >= 0.16F) {
+        return "modern_color_negative_high_speed";
+    }
+    if (grain_strength >= 0.34F || grain_size >= 0.40F) {
+        return "consumer_color_negative";
+    }
+    return "modern_color_negative_fine";
+}
+
+struct GrainFamilyDefaults {
+    float target_pgi = 37.0F;
+    float clumpiness = 0.45F;
+    float micro_grit = 0.22F;
+    float layer_correlation = 0.75F;
+    float shadow_response = 0.72F;
+    float midtone_response = 1.0F;
+    float highlight_response = 0.28F;
+    float underexposure_coarsening = 0.25F;
+    float overexposure_smoothing = 0.25F;
+};
+
+[[nodiscard]] GrainFamilyDefaults grain_family_defaults(const std::string& family) {
+    if (family == "modern_color_negative_high_speed") {
+        return {
+            .target_pgi = 52.0F,
+            .clumpiness = 0.62F,
+            .micro_grit = 0.34F,
+            .layer_correlation = 0.58F,
+            .shadow_response = 0.92F,
+            .midtone_response = 1.10F,
+            .highlight_response = 0.34F,
+            .underexposure_coarsening = 0.42F,
+            .overexposure_smoothing = 0.18F,
+        };
+    }
+    if (family == "consumer_color_negative") {
+        return {
+            .target_pgi = 45.0F,
+            .clumpiness = 0.54F,
+            .micro_grit = 0.28F,
+            .layer_correlation = 0.68F,
+            .shadow_response = 0.82F,
+            .midtone_response = 1.05F,
+            .highlight_response = 0.30F,
+            .underexposure_coarsening = 0.34F,
+            .overexposure_smoothing = 0.22F,
+        };
+    }
+    if (family == "color_reversal_fine") {
+        return {
+            .target_pgi = 25.0F,
+            .clumpiness = 0.26F,
+            .micro_grit = 0.13F,
+            .layer_correlation = 0.88F,
+            .shadow_response = 0.48F,
+            .midtone_response = 0.78F,
+            .highlight_response = 0.18F,
+            .underexposure_coarsening = 0.18F,
+            .overexposure_smoothing = 0.34F,
+        };
+    }
+    if (family == "bw_cubic") {
+        return {
+            .target_pgi = 56.0F,
+            .clumpiness = 0.72F,
+            .micro_grit = 0.30F,
+            .layer_correlation = 1.0F,
+            .shadow_response = 0.92F,
+            .midtone_response = 1.15F,
+            .highlight_response = 0.40F,
+            .underexposure_coarsening = 0.45F,
+            .overexposure_smoothing = 0.14F,
+        };
+    }
+    if (family == "bw_tabular") {
+        return {
+            .target_pgi = 40.0F,
+            .clumpiness = 0.42F,
+            .micro_grit = 0.20F,
+            .layer_correlation = 1.0F,
+            .shadow_response = 0.74F,
+            .midtone_response = 0.96F,
+            .highlight_response = 0.32F,
+            .underexposure_coarsening = 0.30F,
+            .overexposure_smoothing = 0.20F,
+        };
+    }
+    return {};
 }
 
 [[nodiscard]] std::array<float, 3> get_array3(
@@ -320,6 +430,14 @@ RenderPlan RenderPlanSolver::solve(
         grain_strength *= 1.0F - 0.20F * noise_sensitivity;
     }
 
+    const std::string inferred_grain_family = infer_grain_family(
+        stock_profile,
+        grain_strength,
+        grain_size,
+        get_numeric(stock_profile.numeric_values, "grain.chroma_strength", 0.0F));
+    const std::string grain_family = get_string(stock_profile.string_values, "grain.family", inferred_grain_family);
+    const GrainFamilyDefaults grain_defaults = grain_family_defaults(grain_family);
+
     float halation_strength = get_numeric(stock_profile.numeric_values, "halation.strength", 0.0F);
     float bloom_strength = 0.10F;
     if (controls.halation_amount == "Off") {
@@ -342,6 +460,16 @@ RenderPlan RenderPlanSolver::solve(
         .grain_size = grain_size,
         .grain_roughness = grain_roughness,
         .grain_chroma_strength = get_numeric(stock_profile.numeric_values, "grain.chroma_strength", 0.0F),
+        .grain_family = grain_family,
+        .grain_target_pgi = get_numeric(stock_profile.numeric_values, "grain.target_pgi_35mm_4x6", grain_defaults.target_pgi),
+        .grain_clumpiness = get_numeric(stock_profile.numeric_values, "grain.clumpiness", grain_defaults.clumpiness),
+        .grain_micro_grit = get_numeric(stock_profile.numeric_values, "grain.micro_grit", grain_defaults.micro_grit),
+        .grain_layer_correlation = get_numeric(stock_profile.numeric_values, "grain.layer_correlation", grain_defaults.layer_correlation),
+        .grain_shadow_response = get_numeric(stock_profile.numeric_values, "grain.shadow_response", grain_defaults.shadow_response),
+        .grain_midtone_response = get_numeric(stock_profile.numeric_values, "grain.midtone_response", grain_defaults.midtone_response),
+        .grain_highlight_response = get_numeric(stock_profile.numeric_values, "grain.highlight_response", grain_defaults.highlight_response),
+        .grain_underexposure_coarsening = get_numeric(stock_profile.numeric_values, "grain.underexposure_coarsening", grain_defaults.underexposure_coarsening),
+        .grain_overexposure_smoothing = get_numeric(stock_profile.numeric_values, "grain.overexposure_smoothing", grain_defaults.overexposure_smoothing),
         .halation_strength = halation_strength,
         .bloom_strength = bloom_strength,
         .edge_softening = clampf(0.15F, 0.05F, 0.35F) * 0.5F,

@@ -264,6 +264,72 @@ void test_render_plan_solver() {
     assert(plan.print_finish->grain_size > 0.0F);
 }
 
+void test_render_plan_solver_rich_grain_profile_fields() {
+    dfee::FilmStockProfile stock;
+    stock.stock_id = "synthetic_grain_profile";
+    stock.stock_name = "Synthetic Grain Profile";
+    stock.stock_type = dfee::StockType::ColorNegative;
+    stock.numeric_values = {
+        {"adaptation.base_iso", 400.0},
+        {"tone_response.toe_strength", 0.35},
+        {"tone_response.toe_length", 0.25},
+        {"tone_response.shoulder_strength", 0.5},
+        {"tone_response.highlight_rolloff_start", 0.72},
+        {"tone_response.black_density_floor", 0.02},
+        {"hue_saturation_response.saturation_boost", 1.0},
+        {"hue_saturation_response.red_orange_midtone_compression", 0.2},
+        {"hue_saturation_response.cyan_blue_highlight_compression", 0.2},
+        {"hue_saturation_response.neon_compression", 0.5},
+        {"hue_saturation_response.highlight_desaturation", 0.4},
+        {"grain.size", 0.48},
+        {"grain.strength", 0.52},
+        {"grain.roughness", 0.44},
+        {"grain.chroma_strength", 0.18},
+        {"grain.target_pgi_35mm_4x6", 58.0},
+        {"grain.clumpiness", 0.71},
+        {"grain.micro_grit", 0.37},
+        {"grain.layer_correlation", 0.51},
+        {"grain.shadow_response", 1.08},
+        {"grain.midtone_response", 1.16},
+        {"grain.highlight_response", 0.29},
+        {"grain.underexposure_coarsening", 0.49},
+        {"grain.overexposure_smoothing", 0.21},
+        {"halation.strength", 0.2},
+    };
+    stock.string_values = {
+        {"grain.family", "modern_color_negative_high_speed"},
+    };
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 10.0F;
+    input.tonal_distribution.midtone_anchor = 0.35F;
+    input.tonal_distribution.highlight_headroom = 0.3F;
+    input.tonal_distribution.shadow_depth = 0.08F;
+    input.tonal_distribution.luma_p95 = 0.78F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{
+        .neutral_confidence = 0.95F,
+    };
+    input.raw_iso = 400;
+
+    dfee::SolverControls controls;
+    controls.grain_amount = "Auto";
+
+    const dfee::RenderPlanSolver solver;
+    const auto plan = solver.solve(input, stock, controls);
+
+    assert(plan.material_effects.grain_family == "modern_color_negative_high_speed");
+    assert(std::fabs(plan.material_effects.grain_target_pgi - 58.0F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_clumpiness - 0.71F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_micro_grit - 0.37F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_layer_correlation - 0.51F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_shadow_response - 1.08F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_midtone_response - 1.16F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_highlight_response - 0.29F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_underexposure_coarsening - 0.49F) < 1.0e-4F);
+    assert(std::fabs(plan.material_effects.grain_overexposure_smoothing - 0.21F) < 1.0e-4F);
+}
+
 void test_pre_film_normalization() {
     dfee::Image rgb(4, 4, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -1021,6 +1087,7 @@ int main() {
         test_spatial_analysis();
         test_camera_bias_estimator();
         test_render_plan_solver();
+        test_render_plan_solver_rich_grain_profile_fields();
         test_pre_film_normalization();
         test_panchromatic_conversion();
         test_film_tone_response();

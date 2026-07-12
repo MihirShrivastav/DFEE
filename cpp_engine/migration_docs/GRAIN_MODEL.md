@@ -128,6 +128,15 @@ These fields are optional so existing YAML remains compatible. When absent,
 the native solver should infer reasonable values from `stock_type`, ISO/base ISO,
 `grain.size`, `grain.strength`, `grain.chroma_strength`, and `grain.roughness`.
 
+Implementation status:
+
+- The native solver accepts these optional fields and infers defaults when they
+  are absent.
+- All active `profiles/stocks/*.yaml` files now include curated values for the
+  optional fields.
+- Native reports include the resolved grain family and numeric grain model
+  values in `render_plan.material_effects`.
+
 ## Initial Native Algorithm
 
 1. Resolve stock-family grain parameters.

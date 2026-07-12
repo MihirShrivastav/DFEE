@@ -99,6 +99,16 @@ struct MaterialEffectsPlan {
     float grain_roughness = 0.0F;
     float grain_chroma_strength = 0.0F;
     std::uint32_t grain_seed = 0U;
+    std::string grain_family = "modern_color_negative_fine";
+    float grain_target_pgi = 37.0F;
+    float grain_clumpiness = 0.45F;
+    float grain_micro_grit = 0.22F;
+    float grain_layer_correlation = 0.75F;
+    float grain_shadow_response = 0.72F;
+    float grain_midtone_response = 1.0F;
+    float grain_highlight_response = 0.28F;
+    float grain_underexposure_coarsening = 0.25F;
+    float grain_overexposure_smoothing = 0.25F;
     float halation_strength = 0.0F;
     float bloom_strength = 0.0F;
     float edge_softening = 0.0F;
