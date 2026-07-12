@@ -141,7 +141,7 @@ Implementation status:
 
 1. Resolve stock-family grain parameters.
 2. Generate or fetch deterministic procedural fields:
-   - low-frequency clump field
+   - band-limited clump field with no visible large-scale mottling
    - mid-frequency particle field
    - micro-grit field
    - optional independent dye-layer fields
@@ -156,6 +156,14 @@ Implementation status:
 6. For monochrome stocks, use a single silver-density field.
 7. Clamp gently and avoid introducing false color in neutral highlights.
 
+Visual QA note:
+
+- Do not build `filmic_v2` grain from sparse impulse fields convolved with large
+  kernels. That creates Gaussian-looking islands in smooth skies. Clumping must
+  stay band-limited and subordinate to fine particle texture, and color-layer
+  decorrelation must stay tight enough that dye grain does not read as RGB
+  blotches.
+
 ## Acceptance Tests
 
 Native tests:
@@ -167,6 +175,8 @@ Native tests:
 - fine-grain stock fixture has lower grain variance than high-speed fixture.
 - monochrome stock fixture has near-identical per-channel grain deltas.
 - color stock fixture has controlled but nonzero channel decorrelation.
+- flat sky-like fixture has low block-scale grain energy relative to pixel-scale
+  grain, preventing visible blotchy patterns.
 
 Bridge/server tests:
 

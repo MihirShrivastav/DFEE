@@ -835,6 +835,82 @@ void test_filmic_grain_density_response_and_stock_character() {
     }
 }
 
+void test_filmic_grain_avoids_low_frequency_blotches() {
+    dfee::Image rgb(96, 96, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.42F;
+            rgb.at(x, y, 1) = 0.45F;
+            rgb.at(x, y, 2) = 0.50F;
+        }
+    }
+
+    dfee::SpatialMasks spatial_masks;
+    spatial_masks.grain_receptivity_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            spatial_masks.grain_receptivity_mask.at(x, y) = 1.0F;
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.grain_strength = 0.70F;
+    effects.grain_size = 0.65F;
+    effects.grain_roughness = 0.58F;
+    effects.grain_chroma_strength = 0.14F;
+    effects.grain_clumpiness = 0.75F;
+    effects.grain_micro_grit = 0.34F;
+    effects.grain_layer_correlation = 0.55F;
+    effects.grain_seed = 24680U;
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_filmic_grain(rgb, spatial_masks, effects);
+
+    double sum = 0.0;
+    double sum_sq = 0.0;
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            const double delta =
+                0.2126 * static_cast<double>(adjusted.at(x, y, 0) - rgb.at(x, y, 0)) +
+                0.7152 * static_cast<double>(adjusted.at(x, y, 1) - rgb.at(x, y, 1)) +
+                0.0722 * static_cast<double>(adjusted.at(x, y, 2) - rgb.at(x, y, 2));
+            sum += delta;
+            sum_sq += delta * delta;
+        }
+    }
+    const double count = static_cast<double>(rgb.width * rgb.height);
+    const double pixel_std = std::sqrt(std::max(0.0, sum_sq / count - (sum / count) * (sum / count)));
+
+    constexpr int kBlock = 12;
+    double block_sum = 0.0;
+    double block_sum_sq = 0.0;
+    int block_count = 0;
+    for (int by = 0; by < rgb.height; by += kBlock) {
+        for (int bx = 0; bx < rgb.width; bx += kBlock) {
+            double block_delta = 0.0;
+            int samples = 0;
+            for (int y = by; y < std::min(by + kBlock, rgb.height); ++y) {
+                for (int x = bx; x < std::min(bx + kBlock, rgb.width); ++x) {
+                    block_delta +=
+                        0.2126 * static_cast<double>(adjusted.at(x, y, 0) - rgb.at(x, y, 0)) +
+                        0.7152 * static_cast<double>(adjusted.at(x, y, 1) - rgb.at(x, y, 1)) +
+                        0.0722 * static_cast<double>(adjusted.at(x, y, 2) - rgb.at(x, y, 2));
+                    ++samples;
+                }
+            }
+            const double block_mean = block_delta / static_cast<double>(samples);
+            block_sum += block_mean;
+            block_sum_sq += block_mean * block_mean;
+            ++block_count;
+        }
+    }
+    const double block_mean = block_sum / static_cast<double>(block_count);
+    const double block_std = std::sqrt(std::max(0.0, block_sum_sq / static_cast<double>(block_count) - block_mean * block_mean));
+
+    assert(pixel_std > 1.0e-4);
+    assert(block_std < pixel_std * 0.22);
+}
+
 void test_print_finish() {
     dfee::Image rgb(8, 8, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -1101,6 +1177,7 @@ int main() {
         test_filmic_halation_bloom_compresses_and_diffuses_highlights();
         test_film_grain_determinism();
         test_filmic_grain_density_response_and_stock_character();
+        test_filmic_grain_avoids_low_frequency_blotches();
         test_print_finish();
         test_profile_loading();
         test_raw_failure_paths();
