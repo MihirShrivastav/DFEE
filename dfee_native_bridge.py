@@ -163,6 +163,8 @@ class NativePreviewRenderRequest:
     stock: str
     effect_pipeline_version: str = "parity_v1"
     exposure: float = 0.0
+    exposure_placement: str = "as_shot"
+    film_exposure_ev: float = 0.0
     highlights: float = 0.0
     shadows: float = 0.0
     blacks: float = 0.0

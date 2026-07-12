@@ -104,6 +104,15 @@ Status values:
 | M6-008 | done | Add native session cache byte accounting and budget pruning | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and `pytest tests/test_native_bridge.py -q` | `cache_state()` now reports estimated bytes for draft decode, preview, raw preview JPEG, preview analysis, full decode, and export analysis caches. `DFEE_NATIVE_CACHE_BUDGET_MB` enables conservative pruning of lower-priority caches when a session exceeds the configured budget. |
 | M6-009 | done | Audit and enforce native stock-profile field consumption | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` | Native profile loading now rejects unknown/non-finite fields, every active stock is resolved through the C++ solver in tests, and previously unconsumed colour, grain, adaptation, halation, and monochrome fields are mapped into native render plans/stages. See `STOCK_PROFILE_CONTRACT.md`. |
 
+## Milestone M7 - Film Lab Product Flow
+
+| ID | Status | Task | Verification | Notes |
+| --- | --- | --- | --- | --- |
+| M7-001 | done | Add native film-exposure placement contract | Native CTest plus bridge/server contract tests | Preview/export now accept `exposure_placement` and `film_exposure_ev`. The React Film Lab defaults to Auto Balanced while omitted API fields preserve legacy As Shot behavior. |
+| M7-002 | done | Reorganize React controls into film-lab primary flow | `npm run build` and `npm run lint` | The right panel now leads with Film Recipe, Film Exposure, Color Character, and Material Finish; generic tools remain available as advanced correction. |
+| M7-003 | next | Add independent stock-relative colour-character controls | Native renderer tests and visual QA | Build Highlight Color Hold, Shadow Color Retention, and Palette Separation as bounded native controls; do not map them to generic HSL sliders. |
+| M7-004 | planned | Add stock-specific push/pull process model | Stock response fixtures and visual QA | Model process response separately from source/film exposure after stock calibration data is available. |
+
 ## Standing Engineering Tasks
 
 | ID | Status | Task | Verification | Notes |

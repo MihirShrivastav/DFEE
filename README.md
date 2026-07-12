@@ -154,6 +154,19 @@ values are rejected instead of silently rendering through the wrong effect
 implementation. The export request model also carries photographer-facing export options:
 `jpeg_quality`, `export_dpi`, `embed_metadata`, and `export_color_space`.
 
+Film Lab preview and export controls use two additional stock-relative fields:
+
+- `exposure_placement`: `auto_balanced` asks the solver for a stock-aware
+  scene placement; `as_shot` retains the captured RAW placement. Missing API
+  values default to `as_shot` to preserve existing clients.
+- `film_exposure_ev`: a bounded `-3.0` to `+3.0` offset applied before the
+  selected stock's tone and colour response. It is intentionally separate from
+  the advanced digital `exposure` correction.
+
+Unsupported placement values and out-of-range film exposure offsets are
+rejected with HTTP `400`. The React Film Lab explicitly sends
+`exposure_placement=auto_balanced` as its default starting point.
+
 Current native export support:
 - `jpeg` / `jpg`: native final export supports `jpeg_quality`, writes `.jpg`,
   and embeds JFIF DPI metadata from `export_dpi` when `embed_metadata=true`.

@@ -551,6 +551,10 @@ def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, st
     effect_pipeline_version = (request.effect_pipeline_version or "parity_v1").strip()
     if effect_pipeline_version not in {"parity_v1", "filmic_v2"}:
         return False, f"effect_pipeline_version={effect_pipeline_version}"
+    if request.exposure_placement not in {"auto_balanced", "as_shot"}:
+        return False, f"exposure_placement={request.exposure_placement}"
+    if request.film_exposure_ev < -3.0 or request.film_exposure_ev > 3.0:
+        return False, f"film_exposure_ev={request.film_exposure_ev}"
     if fmt not in {"tiff", "png16", "png8", "jpeg", "jpg"}:
         return False, f"export_format={fmt}"
     if fmt in {"jpeg", "jpg"}:
@@ -583,6 +587,8 @@ class PreviewRequest(BaseModel):
     stock: str
     effect_pipeline_version: str = "parity_v1"
     exposure: float = 0.0    # EV stops
+    exposure_placement: str = "as_shot"  # auto_balanced | as_shot; preserves legacy callers
+    film_exposure_ev: float = 0.0  # EV relative to the selected exposure placement
     highlights: float = 0.0  # -100 to +100
     shadows: float = 0.0     # -100 to +100
     blacks: float = 0.0      # -100 to +100
@@ -1051,6 +1057,8 @@ def get_preview(
     stock: str,
     effect_pipeline_version: str = "parity_v1",
     exposure: float = 0.0,
+    exposure_placement: str = "as_shot",
+    film_exposure_ev: float = 0.0,
     highlights: float = 0.0,
     shadows: float = 0.0,
     blacks: float = 0.0,
@@ -1098,6 +1106,8 @@ def get_preview(
         "stock": stock,
         "effect_pipeline_version": effect_pipeline_version,
         "exposure": exposure,
+        "exposure_placement": exposure_placement,
+        "film_exposure_ev": film_exposure_ev,
         "highlights": highlights,
         "shadows": shadows,
         "blacks": blacks,
@@ -1163,6 +1173,22 @@ def get_preview(
             effect_pipeline_version,
         )
         raise HTTPException(status_code=400, detail="Unsupported effect_pipeline_version")
+    if exposure_placement not in {"auto_balanced", "as_shot"}:
+        logger.warning(
+            "Preview failed fp=%s file=%s reason=unsupported_exposure_placement value=%s",
+            request_fp,
+            filename,
+            exposure_placement,
+        )
+        raise HTTPException(status_code=400, detail="Unsupported exposure_placement")
+    if film_exposure_ev < -3.0 or film_exposure_ev > 3.0:
+        logger.warning(
+            "Preview failed fp=%s file=%s reason=film_exposure_ev_out_of_range value=%s",
+            request_fp,
+            filename,
+            film_exposure_ev,
+        )
+        raise HTTPException(status_code=400, detail="film_exposure_ev must be between -3 and 3")
     logger.info(
         "Preview request fp=%s file=%s stock=%s print_stock=%s native=%s",
         request_fp,
@@ -1228,7 +1254,7 @@ def get_preview(
         solver = RenderPlanSolver()
         user_overrides = {
             "adaptation_strength": adaptation,
-            "exposure_intent": "Preserve",
+            "exposure_intent": "Auto" if exposure_placement == "auto_balanced" else "Preserve",
             "grain_amount": grain,
             "grain_strength": grain_strength,
             "grain_size": grain_size,
@@ -1251,7 +1277,7 @@ def get_preview(
         rgb_input = session.preview_rgb_linear.copy()
         rgb_input = _apply_pre_film_sliders(
             rgb_input, session.masks,
-            exposure, highlights, shadows,
+            exposure + film_exposure_ev, highlights, shadows,
             blacks, whites, midtones, contrast, temp, tint, render_plan
         )
 
@@ -1308,6 +1334,22 @@ def get_preview(
 def export_file(req: ExportRequest):
     started_at = time.perf_counter()
     request_fp = _request_fingerprint(req.model_dump())
+    if req.exposure_placement not in {"auto_balanced", "as_shot"}:
+        logger.warning(
+            "Export failed fp=%s file=%s reason=unsupported_exposure_placement value=%s",
+            request_fp,
+            req.filename,
+            req.exposure_placement,
+        )
+        raise HTTPException(status_code=400, detail="Unsupported exposure_placement")
+    if req.film_exposure_ev < -3.0 or req.film_exposure_ev > 3.0:
+        logger.warning(
+            "Export failed fp=%s file=%s reason=film_exposure_ev_out_of_range value=%s",
+            request_fp,
+            req.filename,
+            req.film_exposure_ev,
+        )
+        raise HTTPException(status_code=400, detail="film_exposure_ev must be between -3 and 3")
     native_export_supported, native_export_reason = _native_export_request_supported(req)
     logger.info(
         "Export request fp=%s file=%s stock=%s print_stock=%s format=%s native=%s",
@@ -1423,7 +1465,7 @@ def export_file(req: ExportRequest):
             solver = RenderPlanSolver()
             user_overrides = {
                 "adaptation_strength": req.adaptation,
-                "exposure_intent": "Preserve",
+                "exposure_intent": "Auto" if req.exposure_placement == "auto_balanced" else "Preserve",
                 "grain_amount": req.grain,
                 "grain_strength": req.grain_strength,
                 "grain_size": req.grain_size,
@@ -1445,7 +1487,7 @@ def export_file(req: ExportRequest):
             logger.info("Rendering full-resolution emulation for %s", req.filename)
             rgb_input = _apply_pre_film_sliders(
                 rgb_linear.copy(), masks,
-                req.exposure, req.highlights, req.shadows,
+                req.exposure + req.film_exposure_ev, req.highlights, req.shadows,
                 req.blacks, req.whites, req.midtones,
                 req.contrast, req.temp, req.tint, render_plan
             )

@@ -34,6 +34,7 @@ The pipeline follows a physical order of operations:
 - **In-Memory Caching:** When a file is selected, the server extracts the linear RGB data from the RAW file (using `rawpy`), downscales it for preview caching, and holds it in a `session` variable to allow real-time sliders without re-decoding.
 - **Native Bridge Status:** The native module now backs the main FastAPI image routes by default, including native RAW decode, preview JPEG generation, rendered preview JPEG generation, and full-resolution export. The Python backend remains available as a debug/fallback path through `DFEE_USE_NATIVE_ENGINE=0` and route-specific overrides.
 - **Effect Pipeline Contract:** The React UI sends `effect_pipeline_version=filmic_v2` on both `GET /api/preview` and `POST /api/export` so native previews and exports use the newer filmic bloom/halation and grain engines. FastAPI still defaults missing values to `parity_v1` for compatibility and explicit parity testing.
+- **Film Exposure Contract:** The Film Lab sends `exposure_placement=auto_balanced` or `as_shot` plus `film_exposure_ev` (`-3` to `+3`) on preview and export. Native rendering applies the selected placement in the solver and applies the film-exposure offset before the emulation response. Omitted API fields retain `as_shot` compatibility behavior.
 - **Endpoints:**
   - `GET /api/profiles`: Lists available camera negative and print stock profiles.
   - `POST /api/select`: Instructs the backend to load and cache a specific image.

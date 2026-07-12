@@ -298,6 +298,8 @@ class TestServerRawFailureHandling(unittest.TestCase):
                         "stock": "portra_400",
                         "print_stock": "kodak_2383",
                         "exposure": 0.15,
+                        "exposure_placement": "auto_balanced",
+                        "film_exposure_ev": -0.35,
                         "saturation": 10.0,
                         "bloom": 5.0,
                     },
@@ -312,6 +314,8 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["stock"], "portra_400")
         self.assertEqual(payload["print_stock"], "kodak_2383")
         self.assertEqual(payload["exposure"], 0.15)
+        self.assertEqual(payload["exposure_placement"], "auto_balanced")
+        self.assertEqual(payload["film_exposure_ev"], -0.35)
         self.assertEqual(payload["saturation"], 10.0)
         self.assertEqual(payload["bloom"], 5.0)
 
@@ -332,6 +336,25 @@ class TestServerRawFailureHandling(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("effect_pipeline_version", response.json()["detail"])
+        native_mock.assert_not_called()
+
+    def test_preview_rejects_unsupported_exposure_placement(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview") as native_mock:
+                response = self.client.get(
+                    "/api/preview",
+                    params={
+                        "filename": "example.ARW",
+                        "stock": "portra_400",
+                        "exposure_placement": "invalid",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("exposure_placement", response.json()["detail"])
         native_mock.assert_not_called()
 
     def test_preview_accepts_filmic_v2_effect_pipeline_version(self):

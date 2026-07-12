@@ -262,6 +262,12 @@ void test_render_plan_solver() {
     assert(plan.print_finish->contrast_boost > 1.0F);
     assert(plan.print_finish->saturation_scale > 1.0F);
     assert(plan.print_finish->grain_size > 0.0F);
+
+    dfee::SolverControls auto_balanced_controls = controls;
+    auto_balanced_controls.exposure_intent = "Auto";
+    const auto auto_balanced_plan = solver.solve(input, stock, auto_balanced_controls, &print_stock);
+    assert(auto_balanced_plan.pre_film_normalization.exposure_compensation_stops >
+        plan.pre_film_normalization.exposure_compensation_stops);
 }
 
 void test_render_plan_solver_rich_grain_profile_fields() {

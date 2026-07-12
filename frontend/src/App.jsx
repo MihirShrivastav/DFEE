@@ -30,6 +30,8 @@ const DEFAULT_PARAMS = {
   stock: 'none',
 
   exposure: 0.0,
+  exposure_placement: 'auto_balanced',
+  film_exposure_ev: 0.0,
   highlights: 0,
   shadows: 0,
   blacks: 0,
@@ -206,9 +208,10 @@ export default function App() {
 
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
-    Profile: true, Curves: true, HSL: false,
-    Light: true, Color: true, Detail: false, Effects: false,
-    'Film Modifiers': false, Diagnostics: false, History: true,
+    Profile: true, 'Film Exposure': true, 'Color Character': true, Print: false, 'Material Finish': false,
+    Curves: true, HSL: false,
+    Light: true, Color: true, Detail: false,
+    Diagnostics: false, History: true,
   };
   const [openSections, setOpenSections] = useState(() => {
     try {
@@ -387,6 +390,9 @@ export default function App() {
         changes.push(`${k.charAt(0).toUpperCase()+k.slice(1)} ${diff > 0 ? '+' : ''}${k === 'exposure' ? diff.toFixed(2)+' EV' : diff}`);
       }
     }
+    if (np.exposure_placement !== pp.exposure_placement) {
+      changes.push(`Scene placement → ${np.exposure_placement === 'auto_balanced' ? 'Auto Balanced' : 'As Shot'}`);
+    }
     if (np.adaptation !== pp.adaptation) changes.push(`Adaptation → ${np.adaptation.toFixed(2)}`);
     if (np.grain !== pp.grain) changes.push(`Grain mode → ${np.grain}`);
     if (np.grain_strength !== pp.grain_strength && np.grain_strength !== -1.0) {
@@ -448,7 +454,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'adaptation', 'sharpness', 'sharpness_mask'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -586,6 +592,8 @@ export default function App() {
         stock: params.stock,
         effect_pipeline_version: EFFECT_PIPELINE_VERSION,
         exposure: String(params.exposure),
+        exposure_placement: params.exposure_placement,
+        film_exposure_ev: String(params.film_exposure_ev),
         highlights: String(params.highlights),
         shadows: String(params.shadows),
         blacks: String(params.blacks),
@@ -856,6 +864,8 @@ export default function App() {
           effect_pipeline_version: EFFECT_PIPELINE_VERSION,
 
           exposure: params.exposure,
+          exposure_placement: params.exposure_placement,
+          film_exposure_ev: params.film_exposure_ev,
           highlights: params.highlights,
           shadows: params.shadows,
           blacks: params.blacks,
@@ -973,7 +983,7 @@ export default function App() {
   }, [dragging]);
 
   const fmtVal = (key, v) => {
-    if (key === 'exposure') return (v > 0 ? '+' : '') + v.toFixed(2) + ' EV';
+    if (key === 'exposure' || key === 'film_exposure_ev') return (v > 0 ? '+' : '') + v.toFixed(2) + ' EV';
     if (key === 'adaptation' || key === 'sharpness' || key === 'sharpness_mask') return v.toFixed(2);
     if (key === 'temp') {
       const currentTemp = Math.max(2000, Math.min(20000, Math.round(T_as_shot + v * 80)));
@@ -1016,12 +1026,6 @@ export default function App() {
         { key: 'dehaze',  label: 'Dehaze',  min: -100, max: 100, step: 1 },
         { key: 'sharpness', label: 'Detail Sharpness', min: 0.0, max: 2.0, step: 0.05 },
         { key: 'sharpness_mask', label: 'Luminance Mask', min: 0.0, max: 1.0, step: 0.05 },
-      ],
-    },
-    {
-      title: 'Effects',
-      rows: [
-        { key: 'bloom', label: 'Film Bloom', min: 0, max: 100, step: 1 },
       ],
     },
   ];
@@ -1282,7 +1286,7 @@ export default function App() {
         {/* Controls */}
         <aside className="dfee-controls">
           <div className="controls-header-bar">
-            <span className="controls-header-title">Develop</span>
+            <span className="controls-header-title">Film Lab</span>
             <button className="reset-all-btn" onClick={handleResetAll} title="Reset all settings to defaults">
               ↺ Reset All
             </button>
@@ -1297,10 +1301,10 @@ export default function App() {
               />
             </div>
 
-            {/* Profile */}
-            <div className="control-group">
+            {/* Film recipe: the selected camera stock plus optional print medium. */}
+            <div className="control-group film-lab-recipe">
               <div className="group-title collapsible" onClick={() => toggleSection('Profile')}>
-                <span>Profile</span>
+                <span>Film Recipe</span>
                 <span className={`chevron ${openSections.Profile ? 'open' : ''}`}>›</span>
               </div>
               {openSections.Profile && (
@@ -1417,46 +1421,71 @@ export default function App() {
                       </div>
                     </div>
                   )}
-                  <div className="field" style={{ marginTop: 14 }}>
-                    <div className="slider-header" style={{ marginBottom: 4 }}>
-                      <span className="slider-label">Auto-Compensation (Adaptation)</span>
+                </div>
+              )}
+            </div>
+
+            <div className="control-group film-lab-group film-lab-exposure">
+              <div className="group-title collapsible" onClick={() => toggleSection('Film Exposure')}>
+                <span>Film Exposure</span>
+                <span className={`chevron ${openSections['Film Exposure'] ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections['Film Exposure'] && (
+                <div className="section-body">
+                  <div className="field">
+                    <span className="field-label" title="Auto Balanced establishes a stock-aware starting exposure. As Shot preserves the exposure placement in the RAW before film response.">Scene Placement</span>
+                    <div className="placement-toggle" role="group" aria-label="Scene placement">
+                      <button
+                        type="button"
+                        className={params.exposure_placement === 'auto_balanced' ? 'active' : ''}
+                        onClick={() => setParams(p => ({ ...p, exposure_placement: 'auto_balanced' }))}
+                      >Auto Balanced</button>
+                      <button
+                        type="button"
+                        className={params.exposure_placement === 'as_shot' ? 'active' : ''}
+                        onClick={() => setParams(p => ({ ...p, exposure_placement: 'as_shot' }))}
+                      >As Shot</button>
+                    </div>
+                  </div>
+                  <div className="slider-row">
+                    <div className="slider-header">
+                      <span className="slider-label" title="Changes the virtual exposure reaching the selected film stock before its tone and colour response.">Film Exposure</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {params.adaptation !== DEFAULT_PARAMS.adaptation && (
-                          <button
-                            className="revert-btn"
-                            title="Reset Auto-Compensation to default"
-                            onClick={() => setParams(p => ({ ...p, adaptation: DEFAULT_PARAMS.adaptation }))}
-                          >↺</button>
+                        {params.film_exposure_ev !== 0 && (
+                          <button className="revert-btn" title="Reset Film Exposure" onClick={() => setParams(p => ({ ...p, film_exposure_ev: 0 }))}>↺</button>
                         )}
-                        <span className={`slider-value${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider-value--dirty' : ''}`}>
-                          {Math.round(params.adaptation * 100)}%
+                        <span className={`slider-value${params.film_exposure_ev !== 0 ? ' slider-value--dirty' : ''}`}>
+                          {params.film_exposure_ev === 0 && params.exposure_placement === 'auto_balanced' ? 'Auto' : fmtVal('film_exposure_ev', params.film_exposure_ev)}
                         </span>
                       </div>
                     </div>
-                    <input
-                      type="range" min={0} max={1.5} step={0.05}
-                      value={params.adaptation} onChange={set('adaptation')}
-                      className={`slider${params.adaptation !== DEFAULT_PARAMS.adaptation ? ' slider--dirty' : ''}`}
+                    <input type="range" min={-3} max={3} step={0.05}
+                      value={params.film_exposure_ev} onChange={set('film_exposure_ev')}
+                      className={`slider slider-film-exposure${params.film_exposure_ev !== 0 ? ' slider--dirty' : ''}`}
                     />
                   </div>
-                  <div className="field" style={{ marginTop: 14 }}>
-                    <div className="slider-header" style={{ marginBottom: 4 }}>
-                      <span className="slider-label">Film Color</span>
+                </div>
+              )}
+            </div>
+
+            <div className="control-group film-lab-group film-lab-color">
+              <div className="group-title collapsible" onClick={() => toggleSection('Color Character')}>
+                <span>Color Character</span>
+                <span className={`chevron ${openSections['Color Character'] ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections['Color Character'] && (
+                <div className="section-body">
+                  <div className="slider-row">
+                    <div className="slider-header">
+                      <span className="slider-label" title="Scales the selected stock's dye, colour coupling, and crossover character. 100 keeps the calibrated stock response.">Emulsion Density</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {params.film_color !== DEFAULT_PARAMS.film_color && (
-                          <button
-                            className="revert-btn"
-                            title="Reset Film Color to default"
-                            onClick={() => setParams(p => ({ ...p, film_color: DEFAULT_PARAMS.film_color }))}
-                          >↺</button>
+                          <button className="revert-btn" title="Reset Emulsion Density" onClick={() => setParams(p => ({ ...p, film_color: DEFAULT_PARAMS.film_color }))}>↺</button>
                         )}
-                        <span className={`slider-value${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider-value--dirty' : ''}`}>
-                          {Math.round(params.film_color)}
-                        </span>
+                        <span className={`slider-value${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider-value--dirty' : ''}`}>{Math.round(params.film_color)}</span>
                       </div>
                     </div>
-                    <input
-                      type="range" min={0} max={200} step={5}
+                    <input type="range" min={0} max={200} step={5}
                       value={params.film_color} onChange={set('film_color')}
                       className={`slider slider-film-color${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider--dirty' : ''}`}
                     />
@@ -1465,8 +1494,10 @@ export default function App() {
               )}
             </div>
 
+            <div className="advanced-workflow-label"><span>Advanced Correction</span></div>
+
             {/* Curves */}
-            <div className="control-group">
+            <div className="control-group advanced-correction">
               <div className="group-title collapsible" onClick={() => toggleSection('Curves')}>
                 <span>Curves</span>
                 <span className={`chevron ${openSections.Curves ? 'open' : ''}`}>›</span>
@@ -1479,7 +1510,7 @@ export default function App() {
             </div>
 
             {/* HSL */}
-            <div className="control-group">
+            <div className="control-group advanced-correction">
               <div className="group-title collapsible" onClick={() => toggleSection('HSL')}>
                 <span>HSL</span>
                 <span className={`chevron ${openSections.HSL ? 'open' : ''}`}>›</span>
@@ -1493,7 +1524,7 @@ export default function App() {
 
             {/* Light + Color + Detail + Effects sliders */}
             {sliderGroups.map(group => (
-              <div className="control-group" key={group.title}>
+              <div className="control-group advanced-correction" key={group.title}>
                 <div className="group-title collapsible" onClick={() => toggleSection(group.title)}>
                   <span>{group.title}</span>
                   <span className={`chevron ${openSections[group.title] ? 'open' : ''}`}>›</span>
@@ -1564,13 +1595,13 @@ export default function App() {
               </div>
             ))}
 
-            {/* Film Modifiers */}
-            <div className="control-group">
-              <div className="group-title collapsible" onClick={() => toggleSection('Film Modifiers')}>
-                <span>Film Modifiers</span>
-                <span className={`chevron ${openSections['Film Modifiers'] ? 'open' : ''}`}>›</span>
+            {/* Film material finish */}
+            <div className="control-group film-lab-material">
+              <div className="group-title collapsible" onClick={() => toggleSection('Material Finish')}>
+                <span>Material Finish</span>
+                <span className={`chevron ${openSections['Material Finish'] ? 'open' : ''}`}>›</span>
               </div>
-              {openSections['Film Modifiers'] && (
+              {openSections['Material Finish'] && (
                 <div className="section-body">
                   {/* Custom Grain Controls */}
                   <div style={{ marginTop: 12, marginBottom: 12 }}>
@@ -1696,13 +1727,26 @@ export default function App() {
                       {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
                     </select>
                   </div>
+                  <div className="slider-row" style={{ marginTop: 12 }}>
+                    <div className="slider-header">
+                      <span className="slider-label" title="Adds stock-aware diffuse light response around bright source regions.">Bloom</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {params.bloom !== 0 && (
+                          <button className="revert-btn" title="Reset Bloom" onClick={() => setParams(p => ({ ...p, bloom: 0 }))}>↺</button>
+                        )}
+                        <span className={`slider-value${params.bloom !== 0 ? ' slider-value--dirty' : ''}`}>{params.bloom}</span>
+                      </div>
+                    </div>
+                    <input type="range" min={0} max={100} step={1} value={params.bloom}
+                      onChange={set('bloom')} className={`slider${params.bloom !== 0 ? ' slider--dirty' : ''}`} />
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Diagnostics */}
             {diagnostics && (
-              <div className="control-group">
+              <div className="control-group supporting-workflow">
                 <div
                   className={`group-title group-toggle ${diagOpen ? 'open' : ''}`}
                   onClick={() => setDiagOpen(v => !v)}
@@ -1757,7 +1801,7 @@ export default function App() {
 
             {/* History */}
             {history.length > 0 && (
-              <div className="control-group">
+              <div className="control-group supporting-workflow">
                 <div className="group-title collapsible" onClick={() => toggleSection('History')}>
                   <span>History</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

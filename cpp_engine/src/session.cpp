@@ -915,7 +915,13 @@ struct NativeRenderWorkResult {
 SolverControls build_solver_controls(const NativePreviewRenderRequest& request) {
     SolverControls controls;
     controls.adaptation_strength = request.adaptation;
-    controls.exposure_intent = "Preserve";
+    if (request.exposure_placement == "auto_balanced") {
+        controls.exposure_intent = "Auto";
+    } else if (request.exposure_placement == "as_shot") {
+        controls.exposure_intent = "Preserve";
+    } else {
+        throw std::invalid_argument("Unsupported exposure_placement: " + request.exposure_placement);
+    }
     controls.grain_amount = request.grain;
     controls.grain_strength = request.grain_strength;
     controls.grain_size = request.grain_size;
@@ -1023,7 +1029,8 @@ Image apply_pre_film_preview_sliders(
     RenderPlan& plan) {
     Image adjusted = rgb_input;
 
-    plan.pre_film_normalization.exposure_compensation_stops += request.exposure;
+    plan.pre_film_normalization.exposure_compensation_stops +=
+        request.exposure + std::clamp(request.film_exposure_ev, -3.0F, 3.0F);
     const float contrast_value = request.contrast + plan.pre_film_normalization.contrast_compensation;
     const float highlights_value = request.highlights + plan.pre_film_normalization.highlights_compensation;
     const float shadows_value = request.shadows + plan.pre_film_normalization.shadows_compensation;
@@ -2066,7 +2073,13 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             ScopedStageTimer stage(response.engine, "render_preview_solve_plan");
             SolverControls controls;
             controls.adaptation_strength = request.adaptation;
-            controls.exposure_intent = "Preserve";
+            if (request.exposure_placement == "auto_balanced") {
+                controls.exposure_intent = "Auto";
+            } else if (request.exposure_placement == "as_shot") {
+                controls.exposure_intent = "Preserve";
+            } else {
+                throw std::invalid_argument("Unsupported exposure_placement: " + request.exposure_placement);
+            }
             controls.grain_amount = request.grain;
             controls.grain_strength = request.grain_strength;
             controls.grain_size = request.grain_size;

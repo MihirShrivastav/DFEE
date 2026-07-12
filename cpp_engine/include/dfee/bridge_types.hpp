@@ -182,6 +182,8 @@ struct NativePreviewRenderRequest {
     std::string stock;
     std::string effect_pipeline_version = "parity_v1";
     float exposure = 0.0F;
+    std::string exposure_placement = "as_shot";
+    float film_exposure_ev = 0.0F;
     float highlights = 0.0F;
     float shadows = 0.0F;
     float blacks = 0.0F;
