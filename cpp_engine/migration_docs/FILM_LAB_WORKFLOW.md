@@ -55,3 +55,11 @@ workflow around Film Recipe, Film Exposure, Color Character, and Material
 Finish. Existing print controls and advanced digital controls remain available
 while later slices add independent stock-relative controls for highlight colour
 hold, shadow colour retention, and palette separation.
+
+## Remaining Implementation
+
+The detailed delivery order, contracts, dependencies, and acceptance criteria
+are maintained in [FILM_LAB_IMPLEMENTATION_PLAN.md](FILM_LAB_IMPLEMENTATION_PLAN.md).
+The next implementation slice is M7-003: real stock-relative Color Character
+controls. It must complete before process controls, recipes, or further visual
+knobs are added.
