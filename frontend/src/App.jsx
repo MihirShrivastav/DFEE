@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import CurvesPanel, { DEFAULT_POINTS as DEFAULT_CURVES } from './CurvesPanel';
 import HslPanel from './HslPanel';
 
 const API = 'http://localhost:8000';
+const EFFECT_PIPELINE_VERSION = 'filmic_v2';
 
 const RefreshIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -217,7 +218,11 @@ export default function App() {
   });
   const toggleSection = (name) => setOpenSections(prev => {
     const next = { ...prev, [name]: !prev[name] };
-    try { localStorage.setItem('dfee_open_sections', JSON.stringify(next)); } catch {}
+    try {
+      localStorage.setItem('dfee_open_sections', JSON.stringify(next));
+    } catch (err) {
+      console.warn('Unable to persist open section state', err);
+    }
     return next;
   });
 
@@ -418,7 +423,6 @@ export default function App() {
       setHistIdx(-1); // back to live
     }, 700);
     return () => clearTimeout(historyDebRef.current);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params, curves, hsl]);
 
   const applyHistoryEntry = useCallback((entry, idx) => {
@@ -449,13 +453,7 @@ export default function App() {
     setParams(p => ({ ...p, [key]: val }));
   };
 
-  // Boot
-  useEffect(() => {
-    fetchFiles();
-    fetchProfiles();
-  }, []);
-
-  const fetchFiles = async () => {
+  const fetchFiles = useCallback(async () => {
     setLoadingFiles(true);
     try {
       const res = await fetch(`${API}/api/files`);
@@ -466,15 +464,25 @@ export default function App() {
     } finally {
       setLoadingFiles(false);
     }
-  };
+  }, [showToast]);
 
-  const fetchProfiles = async () => {
+  const fetchProfiles = useCallback(async () => {
     try {
       const res = await fetch(`${API}/api/profiles`);
       const data = await res.json();
       setProfiles(data);
-    } catch {}
-  };
+    } catch (err) {
+      console.warn('Unable to load profiles', err);
+    }
+  }, []);
+
+  // Boot
+  useEffect(() => {
+    queueMicrotask(() => {
+      fetchFiles();
+      fetchProfiles();
+    });
+  }, [fetchFiles, fetchProfiles]);
 
   const selectFile = async (filename) => {
     const selectToken = selectTokenRef.current + 1;
@@ -545,6 +553,9 @@ export default function App() {
       previewRequestKeyRef.current = '';
       loadedPreviewKeyRef.current = '';
       revokeObjectUrl(previewObjectUrlRef);
+      // This branch intentionally mirrors the selected RAW preview immediately
+      // when the profile is disabled.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreviewUrl(rawUrl);
       setPreviewReady(!!rawUrl);
       setPreviewLoading(false);
@@ -554,7 +565,13 @@ export default function App() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
-      const requestKey = JSON.stringify({ filename: selectedFile, params, curves, hsl });
+      const requestKey = JSON.stringify({
+        filename: selectedFile,
+        effect_pipeline_version: EFFECT_PIPELINE_VERSION,
+        params,
+        curves,
+        hsl
+      });
       if (requestKey === loadedPreviewKeyRef.current && previewUrl) {
         setPreviewReady(true);
         setPreviewLoading(false);
@@ -567,6 +584,7 @@ export default function App() {
       const query = new URLSearchParams({
         filename: selectedFile,
         stock: params.stock,
+        effect_pipeline_version: EFFECT_PIPELINE_VERSION,
         exposure: String(params.exposure),
         highlights: String(params.highlights),
         shadows: String(params.shadows),
@@ -706,17 +724,7 @@ export default function App() {
 
     return () => clearTimeout(debounceRef.current);
   }, [
-    selectedFile, rawUrl, previewUrl,
-    params.stock, params.exposure, params.highlights,
-    params.shadows, params.blacks, params.whites, params.midtones,
-    params.contrast, params.temp, params.tint,
-    params.saturation, params.vibrance,
-    params.clarity, params.texture, params.dehaze, params.bloom,
-    params.adaptation, params.grain, params.grain_strength, params.grain_size, params.grain_roughness, params.halation,
-    params.sharpness, params.sharpness_mask, params.film_color,
-    params.print_stock, params.print_strength,
-    params.print_c, params.print_m, params.print_y,
-    params.print_contrast, params.print_black_point,
+    selectedFile, rawUrl, previewUrl, params,
     curves, hsl, replaceObjectUrl, revokeObjectUrl, showToast,
   ]);
 
@@ -845,6 +853,7 @@ export default function App() {
         body: JSON.stringify({
           filename: selectedFile,
           stock: params.stock,
+          effect_pipeline_version: EFFECT_PIPELINE_VERSION,
 
           exposure: params.exposure,
           highlights: params.highlights,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState } from 'react';
 
 // ─── Color definitions ────────────────────────────────────────────────────────
 // hue: CSS hue degree (0-360), sat/lum in % for the swatch
