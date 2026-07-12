@@ -691,6 +691,84 @@ void test_film_grain_determinism() {
     assert(channel_difference_found);
 }
 
+void test_filmic_grain_density_response_and_stock_character() {
+    dfee::Image rgb(48, 48, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            float value = 0.45F;
+            if (x < 16) {
+                value = 0.12F;
+            } else if (x >= 32) {
+                value = 0.88F;
+            }
+            rgb.at(x, y, 0) = value;
+            rgb.at(x, y, 1) = value;
+            rgb.at(x, y, 2) = value;
+        }
+    }
+
+    dfee::SpatialMasks spatial_masks;
+    spatial_masks.grain_receptivity_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            spatial_masks.grain_receptivity_mask.at(x, y) = 1.0F;
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.grain_strength = 0.62F;
+    effects.grain_size = 0.62F;
+    effects.grain_roughness = 0.55F;
+    effects.grain_chroma_strength = 0.12F;
+    effects.grain_seed = 12345U;
+
+    const dfee::FilmRenderer renderer;
+    const auto first = renderer.apply_filmic_grain(rgb, spatial_masks, effects);
+    const auto second = renderer.apply_filmic_grain(rgb, spatial_masks, effects);
+    assert(first.pixels == second.pixels);
+
+    const auto region_delta = [](const dfee::Image& source, const dfee::Image& adjusted, const int x0, const int x1) {
+        double total = 0.0;
+        std::size_t count = 0;
+        for (int y = 0; y < source.height; ++y) {
+            for (int x = x0; x < x1; ++x) {
+                for (int c = 0; c < 3; ++c) {
+                    total += std::fabs(adjusted.at(x, y, c) - source.at(x, y, c));
+                    ++count;
+                }
+            }
+        }
+        return static_cast<float>(total / static_cast<double>(count));
+    };
+
+    const float shadow_delta = region_delta(rgb, first, 0, 16);
+    const float mid_delta = region_delta(rgb, first, 16, 32);
+    const float highlight_delta = region_delta(rgb, first, 32, 48);
+    assert(mid_delta > highlight_delta * 1.7F);
+    assert(shadow_delta > highlight_delta * 1.2F);
+
+    dfee::MaterialEffectsPlan fine = effects;
+    fine.grain_strength = 0.14F;
+    fine.grain_size = 0.14F;
+    fine.grain_roughness = 0.22F;
+    fine.grain_chroma_strength = 0.01F;
+    fine.grain_seed = 12345U;
+    const auto fine_adjusted = renderer.apply_filmic_grain(rgb, spatial_masks, fine);
+    assert(region_delta(rgb, first, 16, 32) > region_delta(rgb, fine_adjusted, 16, 32) * 2.0F);
+
+    dfee::MaterialEffectsPlan mono = effects;
+    mono.grain_chroma_strength = 0.0F;
+    mono.grain_seed = 777U;
+    const auto mono_adjusted = renderer.apply_filmic_grain(rgb, spatial_masks, mono);
+    for (std::size_t i = 0; i < mono_adjusted.pixel_count(); ++i) {
+        const float r_delta = mono_adjusted.pixels[i * 3 + 0] - rgb.pixels[i * 3 + 0];
+        const float g_delta = mono_adjusted.pixels[i * 3 + 1] - rgb.pixels[i * 3 + 1];
+        const float b_delta = mono_adjusted.pixels[i * 3 + 2] - rgb.pixels[i * 3 + 2];
+        assert(std::fabs(r_delta - g_delta) < 3.0e-3F);
+        assert(std::fabs(g_delta - b_delta) < 3.0e-3F);
+    }
+}
+
 void test_print_finish() {
     dfee::Image rgb(8, 8, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -955,6 +1033,7 @@ int main() {
         test_halation_bloom();
         test_filmic_halation_bloom_compresses_and_diffuses_highlights();
         test_film_grain_determinism();
+        test_filmic_grain_density_response_and_stock_character();
         test_print_finish();
         test_profile_loading();
         test_raw_failure_paths();

@@ -1573,6 +1573,155 @@ Image FilmRenderer::apply_film_grain(
     return out;
 }
 
+Image FilmRenderer::apply_filmic_grain(
+    const Image& rgb_linear,
+    const SpatialMasks& spatial_masks,
+    const MaterialEffectsPlan& effects) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_filmic_grain expects a 3-channel RGB image");
+    }
+    if (spatial_masks.grain_receptivity_mask.width != rgb_linear.width ||
+        spatial_masks.grain_receptivity_mask.height != rgb_linear.height) {
+        throw std::invalid_argument("apply_filmic_grain expects grain receptivity mask to match the RGB image dimensions");
+    }
+    if (effects.grain_strength == 0.0F) {
+        return rgb_linear;
+    }
+
+    const int h = rgb_linear.height;
+    const int w = rgb_linear.width;
+    const float scale_factor = static_cast<float>(w) / 2048.0F;
+    const bool is_mono = effects.grain_chroma_strength <= 0.0F;
+    const std::uint32_t grain_seed = effects.grain_seed != 0U ? effects.grain_seed : compute_grain_seed(rgb_linear);
+    const GrainNoiseCacheKey cache_key{
+        .width = w,
+        .height = h,
+        .seed = grain_seed ^ 0x9E3779B9U,
+        .grain_size_q = quantize_grain_param(effects.grain_size),
+        .grain_roughness_q = quantize_grain_param(effects.grain_roughness),
+        .grain_chroma_q = quantize_grain_param(effects.grain_chroma_strength),
+    };
+    static thread_local std::optional<GrainNoiseCacheEntry> filmic_grain_noise_cache;
+
+    cv::Mat noise_r;
+    cv::Mat noise_g;
+    cv::Mat noise_b;
+
+    if (filmic_grain_noise_cache.has_value() && filmic_grain_noise_cache->key.matches(cache_key)) {
+        noise_r = filmic_grain_noise_cache->noise_r;
+        noise_g = filmic_grain_noise_cache->noise_g;
+        noise_b = filmic_grain_noise_cache->noise_b;
+    } else {
+        std::mt19937_64 rng(static_cast<std::uint64_t>(grain_seed) ^ 0xD1B54A32D192ED03ULL);
+        cv::Mat sparse_master = make_sparse_master(h, w, rng);
+        cv::Mat grit_master = make_standard_normal_mat(h, w, rng);
+        cv::Mat grit_blur;
+        cv::GaussianBlur(grit_master, grit_blur, cv::Size(3, 3), 0.5);
+        grit_master -= grit_blur;
+        normalize_zero_mean_unit_variance(grit_master);
+
+        const float family_size = std::clamp(effects.grain_size, 0.05F, 1.5F);
+        const float family_roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
+        const bool high_speed_like = effects.grain_strength > 0.48F || family_size > 0.58F;
+        const bool fine_grain_like = effects.grain_strength < 0.22F && family_size < 0.25F;
+        const float clump_scale = high_speed_like ? 1.12F : (fine_grain_like ? 0.82F : 1.0F);
+        const float roughness_boost = high_speed_like ? 0.08F : (fine_grain_like ? -0.06F : 0.0F);
+        const float v2_roughness = std::clamp(family_roughness + roughness_boost, 0.0F, 1.0F);
+
+        if (is_mono) {
+            noise_g = generate_grain_noise_channel(
+                sparse_master,
+                grit_master,
+                family_size * clump_scale,
+                high_speed_like ? 1.10F : 1.0F,
+                scale_factor,
+                v2_roughness);
+            noise_r = noise_g;
+            noise_b = noise_g;
+        } else {
+            const cv::Mat sparse_r = sparse_master;
+            const cv::Mat sparse_g = roll_mat(sparse_master, 17, 0);
+            const cv::Mat sparse_b = roll_mat(sparse_master, 0, 29);
+            const cv::Mat grit_r = grit_master;
+            const cv::Mat grit_g = roll_mat(grit_master, 17, 0);
+            const cv::Mat grit_b = roll_mat(grit_master, 0, 29);
+
+            const cv::Mat noise_r_ind = generate_grain_noise_channel(
+                sparse_r, grit_r, family_size * clump_scale, 0.82F, scale_factor, v2_roughness);
+            noise_g = generate_grain_noise_channel(
+                sparse_g, grit_g, family_size * clump_scale, 1.00F, scale_factor, v2_roughness);
+            const cv::Mat noise_b_ind = generate_grain_noise_channel(
+                sparse_b, grit_b, family_size * clump_scale, high_speed_like ? 1.38F : 1.20F, scale_factor, v2_roughness);
+
+            const float base_chroma = clampf(effects.grain_chroma_strength * 3.5F, 0.0F, 1.0F);
+            const float layer_correlation = fine_grain_like ? 0.88F : (high_speed_like ? 0.58F : 0.74F);
+            const float chroma_mix = base_chroma * (1.0F - layer_correlation + 0.45F);
+            noise_r = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_r_ind;
+            noise_b = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_b_ind;
+            normalize_zero_mean_unit_variance(noise_r);
+            normalize_zero_mean_unit_variance(noise_g);
+            normalize_zero_mean_unit_variance(noise_b);
+        }
+
+        filmic_grain_noise_cache = GrainNoiseCacheEntry{
+            .key = cache_key,
+            .noise_r = noise_r,
+            .noise_g = noise_g,
+            .noise_b = noise_b,
+        };
+    }
+
+    Image out(rgb_linear.width, rgb_linear.height, 3);
+    constexpr std::array<float, 3> kStrengthMults{0.78F, 0.94F, 1.22F};
+    const bool high_speed_like = effects.grain_strength > 0.48F || effects.grain_size > 0.58F;
+    const bool fine_grain_like = effects.grain_strength < 0.22F && effects.grain_size < 0.25F;
+    const float stock_visibility = high_speed_like ? 1.14F : (fine_grain_like ? 0.72F : 1.0F);
+    const float strength_base = effects.grain_strength * 0.032F * stock_visibility;
+    const float strength_r = strength_base * kStrengthMults[0];
+    const float strength_g = strength_base * kStrengthMults[1];
+    const float strength_b = strength_base * kStrengthMults[2];
+    const auto& grain_receptivity = spatial_masks.grain_receptivity_mask.values;
+    static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
+    static const auto kGammaDecodeLut = build_power_lut(2.2F);
+
+    for (int y = 0; y < h; ++y) {
+        const float* noise_r_row = noise_r.ptr<float>(y);
+        const float* noise_g_row = noise_g.ptr<float>(y);
+        const float* noise_b_row = noise_b.ptr<float>(y);
+        for (int x = 0; x < w; ++x) {
+            const std::size_t pixel_index = static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
+            const std::size_t base = pixel_index * 3U;
+            const float smooth_mod = grain_receptivity[pixel_index];
+
+            const float gamma_r = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 0]);
+            const float gamma_g = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 1]);
+            const float gamma_b = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 2]);
+            const float y_gamma = 0.2126F * gamma_r + 0.7152F * gamma_g + 0.0722F * gamma_b;
+
+            const float lifted_shadow = smoothstep01((0.42F - y_gamma) / 0.34F);
+            const float lower_mid = smoothstep01((y_gamma - 0.16F) / 0.24F) * (1.0F - smoothstep01((y_gamma - 0.58F) / 0.24F));
+            const float midtone = smoothstep01((y_gamma - 0.30F) / 0.22F) * (1.0F - smoothstep01((y_gamma - 0.72F) / 0.22F));
+            const float highlight = smoothstep01((y_gamma - 0.70F) / 0.22F);
+            const float shadow_response = high_speed_like ? 0.92F : (fine_grain_like ? 0.48F : 0.72F);
+            const float highlight_response = fine_grain_like ? 0.18F : (high_speed_like ? 0.34F : 0.27F);
+            const float density_mod =
+                (0.35F + shadow_response * 0.55F * lifted_shadow + 0.95F * lower_mid + 0.55F * midtone) *
+                (1.0F - (0.70F - highlight_response) * highlight);
+            const float exposure_mod = std::max(0.0F, density_mod) * smooth_mod;
+
+            const float gamma_out_r = clamp01(gamma_r + noise_r_row[x] * strength_r * exposure_mod);
+            const float gamma_out_g = clamp01(gamma_g + noise_g_row[x] * strength_g * exposure_mod);
+            const float gamma_out_b = clamp01(gamma_b + noise_b_row[x] * strength_b * exposure_mod);
+
+            out.pixels[base + 0] = sample_unit_lut(kGammaDecodeLut, gamma_out_r);
+            out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, gamma_out_g);
+            out.pixels[base + 2] = sample_unit_lut(kGammaDecodeLut, gamma_out_b);
+        }
+    }
+
+    return out;
+}
+
 Image FilmRenderer::apply_print_finish(
     const Image& rgb_linear,
     const PrintFinishPlan& print_finish) const {

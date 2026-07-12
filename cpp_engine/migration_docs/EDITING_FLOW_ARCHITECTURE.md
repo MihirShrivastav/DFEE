@@ -236,12 +236,12 @@ Grain redesign details live in `GRAIN_MODEL.md`. That note defines the
 cached procedural fields and explicit acceptance tests.
 
 Effect rewrites must be versioned. The native API and report contract use
-`effect_pipeline_version=parity_v1` as the CPU parity baseline. The first
-improved path, `filmic_v2`, keeps `parity_v1` intact while routing bloom and
-halation through a shoulder-aware multiscale diffusion model. Unsupported
-versions are rejected instead of being silently rendered through a mismatched
-implementation, and JSON reports include the version so future redesigned
-effects remain reproducible.
+`effect_pipeline_version=parity_v1` as the CPU parity baseline. The improved
+path, `filmic_v2`, keeps `parity_v1` intact while routing bloom/halation through
+a shoulder-aware multiscale diffusion model and grain through deterministic
+density-aware modulation. Unsupported versions are rejected instead of being
+silently rendered through a mismatched implementation, and JSON reports include
+the version so future redesigned effects remain reproducible.
 
 This is where much of the practical "editor feels instant" gain comes from.
 

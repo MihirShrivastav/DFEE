@@ -2133,7 +2133,9 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             }
             {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_grain");
-                rendered = renderer.apply_film_grain(rendered, spatial_masks, render_plan.material_effects);
+                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                    ? renderer.apply_filmic_grain(rendered, spatial_masks, render_plan.material_effects)
+                    : renderer.apply_film_grain(rendered, spatial_masks, render_plan.material_effects);
             }
             if (render_plan.print_finish.has_value()) {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_print_finish");
@@ -2493,7 +2495,9 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     fullres_zone_masks = ZoneMasks();
                     {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_grain");
-                        rendered = renderer.apply_film_grain(rendered, fullres_spatial_masks, render_plan->material_effects);
+                        rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                            ? renderer.apply_filmic_grain(rendered, fullres_spatial_masks, render_plan->material_effects)
+                            : renderer.apply_film_grain(rendered, fullres_spatial_masks, render_plan->material_effects);
                     }
                     fullres_spatial_masks = SpatialMasks();
                     if (render_plan->print_finish.has_value()) {

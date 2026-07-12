@@ -82,6 +82,11 @@ public:
         const SpatialMasks& spatial_masks,
         const MaterialEffectsPlan& effects) const;
 
+    [[nodiscard]] Image apply_filmic_grain(
+        const Image& rgb_linear,
+        const SpatialMasks& spatial_masks,
+        const MaterialEffectsPlan& effects) const;
+
     [[nodiscard]] Image apply_print_finish(
         const Image& rgb_linear,
         const PrintFinishPlan& print_finish) const;

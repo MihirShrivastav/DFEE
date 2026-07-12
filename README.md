@@ -146,12 +146,12 @@ demand instead of being eagerly computed during select.
 
 The preview/export request model now also carries `effect_pipeline_version`.
 Supported values are `parity_v1` and `filmic_v2`. `parity_v1` preserves the
-CPU parity baseline. `filmic_v2` enables the native filmic highlight-diffusion
-model for tasteful bloom/halation: excess highlight energy is diffused through
-bounded multiscale blurs while the source highlight region is gently shouldered
-instead of simply boosted. Unsupported values are rejected instead of silently
-rendering through the wrong effect implementation. The export request model
-also carries photographer-facing export options:
+CPU parity baseline. `filmic_v2` enables the native filmic redesign path:
+highlight bloom/halation uses bounded multiscale diffusion with source-region
+shoulder compression, and grain uses deterministic density-aware modulation so
+lower mids/shadows carry more texture than smooth highlights. Unsupported
+values are rejected instead of silently rendering through the wrong effect
+implementation. The export request model also carries photographer-facing export options:
 `jpeg_quality`, `export_dpi`, `embed_metadata`, and `export_color_space`.
 
 Current native export support:
