@@ -231,6 +231,10 @@ DFEE should continue following this rule:
 - local contrast should avoid repeated redundant blur/mask passes
 - encoder/write-out should not require unnecessary whole-image duplication
 
+Grain redesign details live in `GRAIN_MODEL.md`. That note defines the
+`filmic_v2` target: density-aware, stock-family-aware, deterministic grain with
+cached procedural fields and explicit acceptance tests.
+
 Effect rewrites must be versioned. The native API and report contract use
 `effect_pipeline_version=parity_v1` as the CPU parity baseline. The first
 improved path, `filmic_v2`, keeps `parity_v1` intact while routing bloom and

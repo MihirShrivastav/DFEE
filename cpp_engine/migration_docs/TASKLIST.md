@@ -96,7 +96,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | M6-001 | done | Add versioned effect pipeline flagging | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and targeted pytest unsupported-version tests | Preview/export requests now carry `effect_pipeline_version`; `parity_v1` is the default CPU parity implementation and native reports record the requested version for reproducibility. |
 | M6-002 | done | Replace bloom/halation with separable or pyramid highlight diffusion | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure`, `pytest tests/test_native_bridge.py tests/test_server_errors.py -q --tb=short`, and no-server preview timing probe | `filmic_v2` now routes native film-stage halation/bloom and the explicit Bloom post effect through shoulder-aware multiscale diffusion while preserving `parity_v1`. Probe on `credit @ryanbreitkreutz _DSC0027.ARW` with halation High and bloom 25: parity median preview `606ms`, v2 median preview `687ms`. |
-| M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Must preserve stock character. |
+| M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Use the `M6-003 Grain Redesign Tasklist` below and `migration_docs/GRAIN_MODEL.md`. Must preserve stock character. |
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |
 | M6-005 | done | Add performance dashboard or benchmark script | Benchmark output artifact | `cpp_engine/tools/export_benchmark.py` now emits a stable native export JSON artifact for the documented cold/warm probe. Dashboarding can build on that later. |
 | M6-006 | planned | Rework large-image export around tiled render and row-streamed encoders | Large RAW export stress test | Current preflight guards crashes, but true production-grade memory scaling still requires tiled processing and scanline/row output for PNG/TIFF. |
@@ -113,3 +113,16 @@ Status values:
 | S-004 | active | Keep generated build outputs ignored | `git status --short` | `cpp_engine/out/` must remain untracked. |
 | S-005 | active | Record significant migration decisions in APAM | APAM update after meaningful slices | Maintains project continuity across sessions. |
 | S-006 | active | Follow the documented native performance method for optimization work | Baseline/probe notes in same slice | Use `migration_docs/PERFORMANCE_METHOD.md` for stable probe discipline, warm-vs-cold interpretation, and accept/revert decisions. |
+
+## M6-003 Grain Redesign Tasklist
+
+| ID | Status | Task | Verification | Notes |
+| --- | --- | --- | --- | --- |
+| M6-003A | done | Document the filmic grain model before implementation | Manual doc review | `migration_docs/GRAIN_MODEL.md` defines the research-grounded behavior, exposure response, stock families, profile schema direction, and acceptance tests. |
+| M6-003B | planned | Add native `filmic_v2` grain dispatch while preserving `parity_v1` | Native unit test | Preview/export should call the new grain path only when `effect_pipeline_version=filmic_v2`. |
+| M6-003C | planned | Implement density-aware grain modulation | Native synthetic exposure test | Underexposed/lifted shadows and lower mids should show stronger/coarser grain than well-exposed highlights; bright smooth highlights should not get noisy overlay. |
+| M6-003D | planned | Add stock-family grain differentiation | Native synthetic stock test | Fine-grain stocks, consumer stocks, high-speed color stocks, cubic B&W, and tabular B&W should produce measurably different texture/chroma/correlation behavior. |
+| M6-003E | planned | Add richer optional grain profile fields | Profile load/list tests | Existing profiles must stay valid; optional fields should support `family`, `target_pgi`, `shadow_response`, `highlight_response`, `layer_correlation`, `micro_grit`, and `clumpiness`. |
+| M6-003F | planned | Add deterministic field caching for `filmic_v2` | Determinism and warm-preview timing tests | Same image/profile/settings must repeat exactly; warm renders should reuse precomputed fields and remain bounded. |
+| M6-003G | planned | Add bridge/server coverage for `filmic_v2` grain behavior | Targeted pytest | Confirm `filmic_v2` preview/export requests reach the new grain path without changing route contracts. |
+| M6-003H | planned | Run visual/performance acceptance probe | No-server preview timing plus image QA | Compare `parity_v1` vs `filmic_v2` grain on representative RAWs and stocks before marking M6-003 complete. |
