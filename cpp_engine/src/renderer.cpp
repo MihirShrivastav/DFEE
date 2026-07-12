@@ -483,27 +483,33 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float roughness,
     const float clumpiness,
     const float micro_grit) {
-    const int h = fine_in.rows;
-    const int w = fine_in.cols;
     const float channel_grain_size = std::max(0.05F, grain_size * size_multiplier * scale_factor);
 
-    cv::Mat fine_blur;
-    const float fine_sigma = std::clamp(0.42F + channel_grain_size * 0.05F, 0.38F, 0.70F);
-    cv::GaussianBlur(fine_in, fine_blur, cv::Size(3, 3), fine_sigma, fine_sigma, cv::BORDER_REFLECT_101);
-    cv::Mat fine = fine_in - fine_blur;
-    normalize_zero_mean_unit_variance(fine);
+    const float particle_sigma = std::clamp(0.55F + channel_grain_size * 0.72F, 0.55F, 1.85F);
+    cv::Mat particle;
+    cv::GaussianBlur(
+        fine_in,
+        particle,
+        cv::Size(0, 0),
+        particle_sigma,
+        particle_sigma,
+        cv::BORDER_REFLECT_101);
+    normalize_zero_mean_unit_variance(particle);
 
-    const int clump_kernel = odd_kernel_size(
-        static_cast<int>(3.0F + std::clamp(channel_grain_size, 0.0F, 1.2F) * 2.0F),
-        3,
-        std::min(h, w));
+    cv::Mat micro = fine_in.clone();
+    cv::Mat micro_soft;
+    cv::GaussianBlur(micro, micro_soft, cv::Size(3, 3), 0.55, 0.55, cv::BORDER_REFLECT_101);
+    micro -= micro_soft;
+    normalize_zero_mean_unit_variance(micro);
+
     cv::Mat clump_soft;
+    const float clump_sigma = std::clamp(particle_sigma * (1.55F + clumpiness * 0.75F), 1.05F, 3.25F);
     cv::GaussianBlur(
         clump_in,
         clump_soft,
-        cv::Size(clump_kernel, clump_kernel),
-        std::clamp(0.50F + channel_grain_size * 0.16F, 0.45F, 0.85F),
-        std::clamp(0.50F + channel_grain_size * 0.16F, 0.45F, 0.85F),
+        cv::Size(0, 0),
+        clump_sigma,
+        clump_sigma,
         cv::BORDER_REFLECT_101);
 
     cv::Mat clump_wide;
@@ -511,26 +517,25 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         clump_soft,
         clump_wide,
         cv::Size(0, 0),
-        std::clamp(1.4F + channel_grain_size * 0.45F, 1.2F, 2.6F),
-        std::clamp(1.4F + channel_grain_size * 0.45F, 1.2F, 2.6F),
+        std::clamp(clump_sigma * 2.8F, 3.0F, 7.0F),
+        std::clamp(clump_sigma * 2.8F, 3.0F, 7.0F),
         cv::BORDER_REFLECT_101);
     cv::Mat clump = clump_soft - clump_wide;
     normalize_zero_mean_unit_variance(clump);
 
-    cv::Mat crisp = fine.clone();
-    if (roughness > 0.0F || micro_grit > 0.0F) {
-        const float sharp_factor = std::clamp(roughness * 0.16F + micro_grit * 0.22F, 0.0F, 0.35F);
-        cv::Mat kernel_sharp = (cv::Mat_<float>(3, 3) <<
-            0.0F, -sharp_factor, 0.0F,
-            -sharp_factor, 1.0F + 4.0F * sharp_factor, -sharp_factor,
-            0.0F, -sharp_factor, 0.0F);
-        cv::filter2D(crisp, crisp, -1, kernel_sharp, cv::Point(-1, -1), 0.0, cv::BORDER_REFLECT_101);
-        normalize_zero_mean_unit_variance(crisp);
-    }
+    const float clump_blend = std::clamp(0.025F + clumpiness * 0.075F, 0.02F, 0.11F);
+    const float micro_blend = std::clamp(micro_grit * 0.10F, 0.0F, 0.14F);
+    cv::Mat noise = (1.0F - clump_blend - micro_blend) * particle + micro_blend * micro + clump_blend * clump;
+    normalize_zero_mean_unit_variance(noise);
 
-    const float clump_blend = std::clamp(0.035F + clumpiness * 0.12F + roughness * 0.035F, 0.03F, 0.18F);
-    const float crisp_blend = std::clamp(0.18F + micro_grit * 0.22F + roughness * 0.08F, 0.16F, 0.42F);
-    cv::Mat noise = (1.0F - clump_blend - crisp_blend) * fine + crisp_blend * crisp + clump_blend * clump;
+    const float shape = std::clamp(0.72F + roughness * 1.10F, 0.72F, 1.82F);
+    const float normalizer = std::tanh(shape);
+    for (int y = 0; y < noise.rows; ++y) {
+        float* row = noise.ptr<float>(y);
+        for (int x = 0; x < noise.cols; ++x) {
+            row[x] = std::tanh(row[x] * shape) / normalizer;
+        }
+    }
     normalize_zero_mean_unit_variance(noise);
     return noise;
 }
@@ -1692,10 +1697,7 @@ Image FilmRenderer::apply_filmic_grain(
         const float family_size = std::clamp(effects.grain_size, 0.05F, 1.5F);
         const float family_roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
         const float clump_scale = std::clamp(0.88F + effects.grain_clumpiness * 0.24F, 0.82F, 1.18F);
-        const float v2_roughness = std::clamp(
-            family_roughness * 0.58F + effects.grain_clumpiness * 0.10F + effects.grain_micro_grit * 0.16F,
-            0.0F,
-            1.0F);
+        const float v2_roughness = family_roughness;
         const float mono_size_mult = 0.92F + effects.grain_clumpiness * 0.12F;
 
         if (is_mono) {

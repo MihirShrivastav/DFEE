@@ -156,6 +156,17 @@ Implementation status:
 6. For monochrome stocks, use a single silver-density field.
 7. Clamp gently and avoid introducing false color in neutral highlights.
 
+Control semantics:
+
+- `size` owns spatial scale. Larger size may broaden particles; smaller size may
+  tighten particles.
+- `roughness` owns particle hardness and distribution shape. It must not sharpen
+  the field, add pixel-frequency detail, or change the effective particle size.
+- `micro_grit` is the only profile field allowed to add a small amount of fine
+  high-frequency texture, and it must remain subordinate to the particle field.
+- `clumpiness` may add band-limited grouping, but it must not create large
+  Gaussian islands in smooth skies.
+
 Visual QA note:
 
 - Do not build `filmic_v2` grain from sparse impulse fields convolved with large
@@ -177,6 +188,8 @@ Native tests:
 - color stock fixture has controlled but nonzero channel decorrelation.
 - flat sky-like fixture has low block-scale grain energy relative to pixel-scale
   grain, preventing visible blotchy patterns.
+- roughness-only changes do not materially increase pixel-to-pixel grain energy;
+  rough grain should look harder, not smaller or noisier.
 
 Bridge/server tests:
 

@@ -911,6 +911,67 @@ void test_filmic_grain_avoids_low_frequency_blotches() {
     assert(block_std < pixel_std * 0.22);
 }
 
+void test_filmic_grain_roughness_does_not_become_pixel_noise() {
+    dfee::Image rgb(160, 120, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.34F;
+            rgb.at(x, y, 1) = 0.38F;
+            rgb.at(x, y, 2) = 0.42F;
+        }
+    }
+
+    dfee::SpatialMasks spatial_masks;
+    spatial_masks.grain_receptivity_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            spatial_masks.grain_receptivity_mask.at(x, y) = 1.0F;
+        }
+    }
+
+    dfee::MaterialEffectsPlan smooth;
+    smooth.grain_strength = 0.68F;
+    smooth.grain_size = 0.95F;
+    smooth.grain_roughness = 0.0F;
+    smooth.grain_chroma_strength = 0.08F;
+    smooth.grain_clumpiness = 0.45F;
+    smooth.grain_micro_grit = 0.02F;
+    smooth.grain_layer_correlation = 0.72F;
+    smooth.grain_seed = 112233U;
+
+    dfee::MaterialEffectsPlan rough = smooth;
+    rough.grain_roughness = 1.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto smooth_adjusted = renderer.apply_filmic_grain(rgb, spatial_masks, smooth);
+    const auto rough_adjusted = renderer.apply_filmic_grain(rgb, spatial_masks, rough);
+
+    const auto neighbor_energy = [](const dfee::Image& source, const dfee::Image& adjusted) {
+        double total = 0.0;
+        std::size_t count = 0;
+        for (int y = 0; y < source.height; ++y) {
+            double previous_delta = 0.0;
+            for (int x = 0; x < source.width; ++x) {
+                const double delta =
+                    0.2126 * static_cast<double>(adjusted.at(x, y, 0) - source.at(x, y, 0)) +
+                    0.7152 * static_cast<double>(adjusted.at(x, y, 1) - source.at(x, y, 1)) +
+                    0.0722 * static_cast<double>(adjusted.at(x, y, 2) - source.at(x, y, 2));
+                if (x > 0) {
+                    total += std::fabs(delta - previous_delta);
+                    ++count;
+                }
+                previous_delta = delta;
+            }
+        }
+        return total / static_cast<double>(count);
+    };
+
+    const double smooth_neighbor_energy = neighbor_energy(rgb, smooth_adjusted);
+    const double rough_neighbor_energy = neighbor_energy(rgb, rough_adjusted);
+    assert(smooth_neighbor_energy > 1.0e-5);
+    assert(rough_neighbor_energy < smooth_neighbor_energy * 1.45);
+}
+
 void test_print_finish() {
     dfee::Image rgb(8, 8, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -1178,6 +1239,7 @@ int main() {
         test_film_grain_determinism();
         test_filmic_grain_density_response_and_stock_character();
         test_filmic_grain_avoids_low_frequency_blotches();
+        test_filmic_grain_roughness_does_not_become_pixel_noise();
         test_print_finish();
         test_profile_loading();
         test_raw_failure_paths();
