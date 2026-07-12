@@ -245,6 +245,48 @@ void append_timing_metric(
     return restored;
 }
 
+[[nodiscard]] cv::Mat gaussian_blur_downsampled_gray(
+    const cv::Mat& source,
+    const int radius,
+    const int max_working_edge) {
+    const int kernel = std::max(3, radius * 2 + 1);
+    const int current_max = std::max(source.cols, source.rows);
+    if (current_max <= max_working_edge) {
+        cv::Mat blurred;
+        cv::GaussianBlur(source, blurred, cv::Size(kernel, kernel), std::max(0.5, static_cast<double>(radius) / 2.5));
+        return blurred;
+    }
+
+    const float scale = static_cast<float>(max_working_edge) / static_cast<float>(current_max);
+    const int target_width = std::max(1, static_cast<int>(std::lround(source.cols * scale)));
+    const int target_height = std::max(1, static_cast<int>(std::lround(source.rows * scale)));
+
+    cv::Mat reduced;
+    cv::resize(source, reduced, cv::Size(target_width, target_height), 0.0, 0.0, cv::INTER_AREA);
+
+    const int scaled_radius = std::max(1, static_cast<int>(std::lround(radius * scale)));
+    int scaled_kernel = std::max(3, scaled_radius * 2 + 1);
+    if ((scaled_kernel % 2) == 0) {
+        ++scaled_kernel;
+    }
+
+    cv::Mat reduced_blur;
+    cv::GaussianBlur(
+        reduced,
+        reduced_blur,
+        cv::Size(scaled_kernel, scaled_kernel),
+        std::max(0.5, static_cast<double>(scaled_radius) / 2.5));
+
+    cv::Mat restored;
+    cv::resize(reduced_blur, restored, cv::Size(source.cols, source.rows), 0.0, 0.0, cv::INTER_LINEAR);
+    return restored;
+}
+
+[[nodiscard]] float smoothstep01(const float value) {
+    const float t = clamp01(value);
+    return t * t * (3.0F - 2.0F * t);
+}
+
 [[nodiscard]] cv::Mat roll_mat(const cv::Mat& source, const int shift_y, const int shift_x) {
     cv::Mat out(source.rows, source.cols, source.type());
     const int rows = source.rows;
@@ -1279,6 +1321,127 @@ Image FilmRenderer::apply_halation_bloom(
                 pixel[0] = (1.0F - weight) * pixel[0] + weight * blur[0];
                 pixel[1] = (1.0F - weight) * pixel[1] + weight * blur[1];
                 pixel[2] = (1.0F - weight) * pixel[2] + weight * blur[2];
+            }
+        }
+    }
+
+    return mat_to_rgb_image(rgb);
+}
+
+Image FilmRenderer::apply_filmic_halation_bloom(
+    const Image& rgb_linear,
+    const ZoneMasks& zone_masks,
+    const SpatialMasks& spatial_masks,
+    const MaterialEffectsPlan& effects) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_filmic_halation_bloom expects a 3-channel RGB image");
+    }
+    for (const auto& zone : zone_masks.zones) {
+        if (zone.width != rgb_linear.width || zone.height != rgb_linear.height) {
+            throw std::invalid_argument("apply_filmic_halation_bloom expects zone masks to match the RGB image dimensions");
+        }
+    }
+    if (spatial_masks.halation_source_mask.width != rgb_linear.width ||
+        spatial_masks.halation_source_mask.height != rgb_linear.height ||
+        spatial_masks.halation_receiver_mask.width != rgb_linear.width ||
+        spatial_masks.halation_receiver_mask.height != rgb_linear.height) {
+        throw std::invalid_argument("apply_filmic_halation_bloom expects spatial masks to match the RGB image dimensions");
+    }
+    if (effects.halation_strength <= 0.0F && effects.bloom_strength <= 0.0F) {
+        return rgb_linear;
+    }
+
+    cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);
+    const cv::Mat luminance = compute_luminance_mat(rgb);
+    const cv::Mat z5 = luminance_image_to_mat(zone_masks.zones[5]);
+    const cv::Mat halation_mask = luminance_image_to_mat(spatial_masks.halation_source_mask);
+    const cv::Mat receiver_mask = luminance_image_to_mat(spatial_masks.halation_receiver_mask);
+    cv::Mat source_mask(rgb.rows, rgb.cols, CV_32F);
+    cv::Mat bloom_source(rgb.rows, rgb.cols, CV_32FC3);
+    cv::Mat halation_source(rgb.rows, rgb.cols, CV_32F);
+
+    for (int y = 0; y < rgb.rows; ++y) {
+        for (int x = 0; x < rgb.cols; ++x) {
+            const float y_luma = luminance.at<float>(y, x);
+            const float highlight = smoothstep01((y_luma - 0.66F) / 0.28F);
+            const float excess = std::max(0.0F, y_luma - 0.58F);
+            const float source = clamp01(std::max(highlight, z5.at<float>(y, x)) * (0.35F + excess));
+            source_mask.at<float>(y, x) = source;
+
+            const auto& src = rgb.at<cv::Vec3f>(y, x);
+            auto& bloom = bloom_source.at<cv::Vec3f>(y, x);
+            const float bloom_weight = source * (0.55F + 0.45F * highlight);
+            bloom[0] = src[0] * bloom_weight;
+            bloom[1] = src[1] * bloom_weight;
+            bloom[2] = src[2] * bloom_weight;
+            halation_source.at<float>(y, x) = halation_mask.at<float>(y, x) * (0.40F + 0.60F * source);
+        }
+    }
+
+    const int short_edge = std::max(1, std::min(rgb_linear.width, rgb_linear.height));
+    const int halation_tight_radius = std::max(2, short_edge / 180);
+    const int halation_wide_radius = std::max(4, short_edge / 85);
+    const int bloom_tight_radius = std::max(3, short_edge / 95);
+    const int bloom_mid_radius = std::max(7, short_edge / 42);
+    const int bloom_wide_radius = std::max(13, short_edge / 18);
+
+    const cv::Mat halation_tight = gaussian_blur_downsampled_gray(halation_source, halation_tight_radius, 720);
+    const cv::Mat halation_wide = gaussian_blur_downsampled_gray(halation_source, halation_wide_radius, 720);
+    const cv::Mat bloom_tight = gaussian_blur_downsampled_rgb(
+        bloom_source,
+        odd_kernel_size(bloom_tight_radius * 2 + 1, 3, short_edge),
+        720);
+    const cv::Mat bloom_mid = gaussian_blur_downsampled_rgb(
+        bloom_source,
+        odd_kernel_size(bloom_mid_radius * 2 + 1, 3, short_edge),
+        640);
+    const cv::Mat bloom_wide = gaussian_blur_downsampled_rgb(
+        bloom_source,
+        odd_kernel_size(bloom_wide_radius * 2 + 1, 3, short_edge),
+        560);
+
+    const float halation_strength = std::max(0.0F, effects.halation_strength);
+    const float bloom_strength = std::max(0.0F, effects.bloom_strength);
+    const float combined_strength = std::clamp(halation_strength + bloom_strength, 0.0F, 1.8F);
+
+    for (int y = 0; y < rgb.rows; ++y) {
+        for (int x = 0; x < rgb.cols; ++x) {
+            auto& pixel = rgb.at<cv::Vec3f>(y, x);
+            const float source = source_mask.at<float>(y, x);
+
+            // Film highlights shoulder off as density increases. Diffusion should lower
+            // source-region contrast instead of simply painting white glow on top.
+            const float shoulder_loss = source * combined_strength * 0.10F;
+            pixel[0] *= 1.0F - shoulder_loss;
+            pixel[1] *= 1.0F - shoulder_loss;
+            pixel[2] *= 1.0F - shoulder_loss;
+
+            const float receiver = receiver_mask.at<float>(y, x);
+            const float halation_energy =
+                (0.72F * halation_tight.at<float>(y, x) + 0.28F * halation_wide.at<float>(y, x)) *
+                receiver *
+                halation_strength *
+                0.46F;
+            const float halation_warmth = smoothstep01(halation_energy * 5.0F);
+            pixel[0] += halation_energy;
+            pixel[1] += halation_energy * (0.16F + 0.22F * halation_warmth);
+            pixel[2] += halation_energy * 0.045F;
+
+            const cv::Vec3f bloom =
+                0.52F * bloom_tight.at<cv::Vec3f>(y, x) +
+                0.31F * bloom_mid.at<cv::Vec3f>(y, x) +
+                0.17F * bloom_wide.at<cv::Vec3f>(y, x);
+            const float bloom_gain = bloom_strength * 0.20F;
+            pixel[0] += bloom[0] * bloom_gain * 1.05F;
+            pixel[1] += bloom[1] * bloom_gain * 1.01F;
+            pixel[2] += bloom[2] * bloom_gain * 0.88F;
+
+            for (int channel = 0; channel < 3; ++channel) {
+                if (pixel[channel] > 0.92F) {
+                    const float over = pixel[channel] - 0.92F;
+                    pixel[channel] = 0.92F + over / (1.0F + over * 3.5F);
+                }
+                pixel[channel] = clamp01(pixel[channel]);
             }
         }
     }

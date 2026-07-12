@@ -753,6 +753,33 @@ class TestNativeBridge(unittest.TestCase):
                 )
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
 
+    def test_render_preview_accepts_filmic_v2_effect_pipeline_version(self):
+        raw_filename = self._raw_filename()
+        if self.session.list_profiles().engine.libraw_enabled:
+            self.session.select_file(raw_filename)
+            preview = self.session.render_preview(
+                dfee_native_bridge.NativePreviewRenderRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    halation="High",
+                    effect_pipeline_version="filmic_v2",
+                )
+            )
+
+            self.assertEqual(preview.content_type, "image/jpeg")
+            self.assertGreater(len(preview.jpeg_bytes), 0)
+            self.assertTrue(any(t.stage == "render_preview_film_stage_halation_bloom" for t in preview.engine.timings))
+        else:
+            self.session.select_file(raw_filename)
+            with self.assertRaises(dfee_native_bridge.NativeOperationError):
+                self.session.render_preview(
+                    dfee_native_bridge.NativePreviewRenderRequest(
+                        filename=raw_filename,
+                        stock="portra_400",
+                        effect_pipeline_version="filmic_v2",
+                    )
+                )
+
     def test_render_preview_rejects_unsupported_effect_pipeline_version(self):
         raw_filename = self._raw_filename()
         if self.session.list_profiles().engine.libraw_enabled:

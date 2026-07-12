@@ -587,6 +587,61 @@ void test_halation_bloom() {
     assert(adjusted.at(30, 30, 0) >= adjusted.at(30, 30, 2));
 }
 
+void test_filmic_halation_bloom_compresses_and_diffuses_highlights() {
+    dfee::Image rgb(96, 96, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.09F;
+            rgb.at(x, y, 1) = 0.09F;
+            rgb.at(x, y, 2) = 0.09F;
+        }
+    }
+    for (int y = 40; y < 56; ++y) {
+        for (int x = 40; x < 56; ++x) {
+            rgb.at(x, y, 0) = 0.96F;
+            rgb.at(x, y, 1) = 0.94F;
+            rgb.at(x, y, 2) = 0.88F;
+        }
+    }
+
+    dfee::ZoneMasks zone_masks;
+    for (auto& zone : zone_masks.zones) {
+        zone = dfee::LuminanceImage(rgb.width, rgb.height);
+    }
+    dfee::SpatialMasks spatial_masks;
+    spatial_masks.halation_source_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    spatial_masks.halation_receiver_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    const auto luminance = dfee::compute_luminance(rgb);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            if (x >= 44 && x < 52 && y >= 44 && y < 52) {
+                spatial_masks.halation_source_mask.at(x, y) = 1.0F;
+            }
+            if (x >= 32 && x < 64 && y >= 32 && y < 64) {
+                spatial_masks.halation_receiver_mask.at(x, y) = 1.0F - luminance.at(x, y);
+            }
+            zone_masks.zones[5].at(x, y) = dfee::clamp01((luminance.at(x, y) - 0.58F) / 0.34F);
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.halation_strength = 0.65F;
+    effects.bloom_strength = 0.70F;
+
+    const dfee::FilmRenderer renderer;
+    const auto adjusted = renderer.apply_filmic_halation_bloom(rgb, zone_masks, spatial_masks, effects);
+
+    const auto luma = [](const dfee::Image& image, const int x, const int y) {
+        return 0.2126F * image.at(x, y, 0) + 0.7152F * image.at(x, y, 1) + 0.0722F * image.at(x, y, 2);
+    };
+
+    assert(luma(adjusted, 48, 48) < luma(rgb, 48, 48));
+    assert(luma(adjusted, 35, 48) > luma(rgb, 35, 48));
+    assert(adjusted.at(35, 48, 0) > adjusted.at(35, 48, 1));
+    assert(adjusted.at(35, 48, 1) > adjusted.at(35, 48, 2));
+    assert(luma(adjusted, 8, 8) < luma(rgb, 8, 8) + 1.0e-4F);
+}
+
 void test_film_grain_determinism() {
     dfee::Image rgb(32, 32, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -898,6 +953,7 @@ int main() {
         test_texture();
         test_dehaze();
         test_halation_bloom();
+        test_filmic_halation_bloom_compresses_and_diffuses_highlights();
         test_film_grain_determinism();
         test_print_finish();
         test_profile_loading();

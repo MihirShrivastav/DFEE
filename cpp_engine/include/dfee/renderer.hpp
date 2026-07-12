@@ -71,6 +71,12 @@ public:
         const SpatialMasks& spatial_masks,
         const MaterialEffectsPlan& effects) const;
 
+    [[nodiscard]] Image apply_filmic_halation_bloom(
+        const Image& rgb_linear,
+        const ZoneMasks& zone_masks,
+        const SpatialMasks& spatial_masks,
+        const MaterialEffectsPlan& effects) const;
+
     [[nodiscard]] Image apply_film_grain(
         const Image& rgb_linear,
         const SpatialMasks& spatial_masks,

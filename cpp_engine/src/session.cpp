@@ -42,6 +42,7 @@ namespace dfee {
 namespace {
 
 constexpr const char* kDefaultEffectPipelineVersion = "parity_v1";
+constexpr const char* kFilmicEffectPipelineVersion = "filmic_v2";
 
 NativeEngineMetadata build_engine_metadata() {
     NativeEngineMetadata metadata;
@@ -60,15 +61,19 @@ NativeEngineMetadata build_engine_metadata() {
     return value.empty() ? kDefaultEffectPipelineVersion : value;
 }
 
+[[nodiscard]] bool is_filmic_effect_pipeline(const std::string& value) {
+    return normalized_effect_pipeline_version(value) == kFilmicEffectPipelineVersion;
+}
+
 [[nodiscard]] std::optional<NativeError> validate_effect_pipeline_version(const std::string& value) {
     const std::string normalized = normalized_effect_pipeline_version(value);
-    if (normalized == kDefaultEffectPipelineVersion) {
+    if (normalized == kDefaultEffectPipelineVersion || normalized == kFilmicEffectPipelineVersion) {
         return std::nullopt;
     }
     return NativeError{
         .code = "UNSUPPORTED_EFFECT_PIPELINE_VERSION",
         .user_message = "The requested effect pipeline version is not supported by this native engine build.",
-        .detail = "Supported effect_pipeline_version values: parity_v1. Requested: " + normalized,
+        .detail = "Supported effect_pipeline_version values: parity_v1, filmic_v2. Requested: " + normalized,
     };
 }
 
@@ -1340,6 +1345,83 @@ Image apply_post_bloom(
     return cv32fc3_to_image(screen);
 }
 
+[[nodiscard]] float smoothstep_unit(const float value) {
+    const float t = std::clamp(value, 0.0F, 1.0F);
+    return t * t * (3.0F - 2.0F * t);
+}
+
+Image apply_post_bloom_filmic(
+    const Image& rendered,
+    const float amount) {
+    if (amount <= 0.0F) {
+        return rendered;
+    }
+
+    const float strength = std::clamp(amount / 100.0F, 0.0F, 1.0F);
+    cv::Mat source = image_to_cv32fc3(rendered);
+    cv::Mat luminance(rendered.height, rendered.width, CV_32F);
+    cv::Mat source_mask(rendered.height, rendered.width, CV_32F);
+    cv::Mat masked_source(rendered.height, rendered.width, CV_32FC3);
+
+    for (int y = 0; y < rendered.height; ++y) {
+        for (int x = 0; x < rendered.width; ++x) {
+            const auto& pixel = source.at<cv::Vec3f>(y, x);
+            const float y_luma = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
+            luminance.at<float>(y, x) = y_luma;
+
+            const float highlight = smoothstep_unit((y_luma - 0.64F) / 0.30F);
+            const float excess = std::max(0.0F, y_luma - 0.56F);
+            const float mask = std::clamp(highlight * (0.45F + excess), 0.0F, 1.0F);
+            source_mask.at<float>(y, x) = mask;
+
+            auto& dst = masked_source.at<cv::Vec3f>(y, x);
+            dst[0] = pixel[0] * mask;
+            dst[1] = pixel[1] * mask;
+            dst[2] = pixel[2] * mask;
+        }
+    }
+
+    const int short_edge = std::min(rendered.width, rendered.height);
+    const int r1 = std::max(3, short_edge / 28);
+    const int r2 = std::max(7, short_edge / 12);
+    const int r3 = std::max(13, short_edge / 5);
+
+    const cv::Mat b1 = gaussian_blur_downsampled_rgb(masked_source, r1, 720);
+    const cv::Mat b2 = gaussian_blur_downsampled_rgb(masked_source, r2, 640);
+    const cv::Mat b3 = gaussian_blur_downsampled_rgb(masked_source, r3, 560);
+
+    cv::Mat out(rendered.height, rendered.width, CV_32FC3);
+    for (int y = 0; y < rendered.height; ++y) {
+        for (int x = 0; x < rendered.width; ++x) {
+            const cv::Vec3f bloom =
+                0.48F * b1.at<cv::Vec3f>(y, x) +
+                0.33F * b2.at<cv::Vec3f>(y, x) +
+                0.19F * b3.at<cv::Vec3f>(y, x);
+            const cv::Vec3f warm_bloom{
+                bloom[0] * 1.05F,
+                bloom[1] * 1.01F,
+                bloom[2] * 0.88F,
+            };
+
+            const auto& base = source.at<cv::Vec3f>(y, x);
+            auto& dst = out.at<cv::Vec3f>(y, x);
+            const float mask = source_mask.at<float>(y, x);
+            const float shoulder_loss = mask * strength * 0.16F;
+            const float gain = strength * 0.42F;
+            for (int channel = 0; channel < 3; ++channel) {
+                float value = base[channel] * (1.0F - shoulder_loss) + warm_bloom[channel] * gain;
+                if (value > 0.92F) {
+                    const float over = value - 0.92F;
+                    value = 0.92F + over / (1.0F + over * 3.0F);
+                }
+                dst[channel] = std::clamp(value, 0.0F, 1.0F);
+            }
+        }
+    }
+
+    return cv32fc3_to_image(out);
+}
+
 std::string serialize_feature_report_json(
     const SolverInput& input,
     const RenderPlan& render_plan,
@@ -2037,11 +2119,17 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             }
             {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_halation_bloom");
-                rendered = renderer.apply_halation_bloom(
-                    rendered,
-                    zone_masks,
-                    spatial_masks,
-                    render_plan.material_effects);
+                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                    ? renderer.apply_filmic_halation_bloom(
+                        rendered,
+                        zone_masks,
+                        spatial_masks,
+                        render_plan.material_effects)
+                    : renderer.apply_halation_bloom(
+                        rendered,
+                        zone_masks,
+                        spatial_masks,
+                        render_plan.material_effects);
             }
             {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_grain");
@@ -2074,7 +2162,9 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             }
             {
                 ScopedStageTimer substage(response.engine, "render_preview_post_stage_bloom");
-                rendered = apply_post_bloom(rendered, request.bloom);
+                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                    ? apply_post_bloom_filmic(rendered, request.bloom)
+                    : apply_post_bloom(rendered, request.bloom);
             }
         }
         {
@@ -2388,11 +2478,17 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                     {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_halation_bloom");
-                        rendered = renderer.apply_halation_bloom(
-                            rendered,
-                            fullres_zone_masks,
-                            fullres_spatial_masks,
-                            render_plan->material_effects);
+                        rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                            ? renderer.apply_filmic_halation_bloom(
+                                rendered,
+                                fullres_zone_masks,
+                                fullres_spatial_masks,
+                                render_plan->material_effects)
+                            : renderer.apply_halation_bloom(
+                                rendered,
+                                fullres_zone_masks,
+                                fullres_spatial_masks,
+                                render_plan->material_effects);
                     }
                     fullres_zone_masks = ZoneMasks();
                     {
@@ -2416,7 +2512,9 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     rendered = renderer.apply_clarity(rendered, request.clarity);
                     rendered = renderer.apply_texture(rendered, request.texture);
                     rendered = renderer.apply_dehaze(rendered, request.dehaze);
-                    rendered = apply_post_bloom(rendered, request.bloom);
+                    rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                        ? apply_post_bloom_filmic(rendered, request.bloom)
+                        : apply_post_bloom(rendered, request.bloom);
                 }
                 append_export_trace(project_root_, "export_image:fullres_post:done");
                 append_export_trace(project_root_, "export_image:render:done");

@@ -94,8 +94,8 @@ Status values:
 
 | ID | Status | Task | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| M6-001 | done | Add versioned effect pipeline flagging | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and targeted pytest unsupported-version tests | Preview/export requests now carry `effect_pipeline_version`; `parity_v1` is the only supported implementation and native reports record it for reproducibility. |
-| M6-002 | planned | Replace bloom/halation with separable or pyramid highlight diffusion | Visual QA plus performance benchmark | Only after baseline parity. |
+| M6-001 | done | Add versioned effect pipeline flagging | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and targeted pytest unsupported-version tests | Preview/export requests now carry `effect_pipeline_version`; `parity_v1` is the default CPU parity implementation and native reports record the requested version for reproducibility. |
+| M6-002 | done | Replace bloom/halation with separable or pyramid highlight diffusion | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure`, `pytest tests/test_native_bridge.py tests/test_server_errors.py -q --tb=short`, and no-server preview timing probe | `filmic_v2` now routes native film-stage halation/bloom and the explicit Bloom post effect through shoulder-aware multiscale diffusion while preserving `parity_v1`. Probe on `credit @ryanbreitkreutz _DSC0027.ARW` with halation High and bloom 25: parity median preview `606ms`, v2 median preview `687ms`. |
 | M6-003 | planned | Replace grain with deterministic procedural/precomputed fields | Visual QA plus determinism test | Must preserve stock character. |
 | M6-004 | planned | Redesign dehaze/local contrast after parity | Visual QA plus regression tests | Avoid changing current look accidentally. |
 | M6-005 | done | Add performance dashboard or benchmark script | Benchmark output artifact | `cpp_engine/tools/export_benchmark.py` now emits a stable native export JSON artifact for the documented cold/warm probe. Dashboarding can build on that later. |
