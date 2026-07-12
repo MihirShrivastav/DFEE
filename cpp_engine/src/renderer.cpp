@@ -658,6 +658,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float chroma_boost = 1.0F + (response.chroma_boost - 1.0F) * fc;
     const float red_comp = response.red_orange_compression * fc;
     const float blue_comp = response.blue_cyan_compression * fc;
+    const float yellow_green_muting = response.yellow_green_muting * fc;
     const float neon_comp = response.neon_compression * fc;
     const float highlight_desat = response.highlight_desaturation * fc;
 
@@ -729,8 +730,10 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
             const float weight_red_orange = std::pow(clampf(std::cos(hue - 0.6F), 0.0F, 1.0F), 2.0F);
             const float weight_blue_cyan = std::pow(clampf(std::cos(hue - 4.0F), 0.0F, 1.0F), 2.0F);
+            const float weight_yellow_green = std::pow(clampf(std::cos(hue - 1.75F), 0.0F, 1.0F), 2.0F);
             float c_new = chroma * (1.0F - red_comp * weight_red_orange * z3);
             c_new *= 1.0F - blue_comp * weight_blue_cyan * z5;
+            c_new *= 1.0F - yellow_green_muting * weight_yellow_green * mid_zone;
 
             if (neon_comp > 0.0F) {
                 constexpr float kKneeStart = 0.15F;
@@ -811,6 +814,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float chroma_boost = 1.0F + (response.chroma_boost - 1.0F) * fc;
     const float red_comp = response.red_orange_compression * fc;
     const float blue_comp = response.blue_cyan_compression * fc;
+    const float yellow_green_muting = response.yellow_green_muting * fc;
     const float neon_comp = response.neon_compression * fc;
     const float highlight_desat = response.highlight_desaturation * fc;
 
@@ -882,10 +886,13 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
         const float red_cos = clampf(std::cos(hue - 0.6F), 0.0F, 1.0F);
         const float blue_cos = clampf(std::cos(hue - 4.0F), 0.0F, 1.0F);
+        const float yellow_green_cos = clampf(std::cos(hue - 1.75F), 0.0F, 1.0F);
         const float weight_red_orange = red_cos * red_cos;
         const float weight_blue_cyan = blue_cos * blue_cos;
+        const float weight_yellow_green = yellow_green_cos * yellow_green_cos;
         float c_new = chroma * (1.0F - red_comp * weight_red_orange * z3);
         c_new *= 1.0F - blue_comp * weight_blue_cyan * z5;
+        c_new *= 1.0F - yellow_green_muting * weight_yellow_green * mid_zone;
 
         if (neon_comp > 0.0F) {
             constexpr float kKneeStart = 0.15F;
@@ -1431,6 +1438,7 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     cv::Mat source_mask(rgb.rows, rgb.cols, CV_32F);
     cv::Mat bloom_source(rgb.rows, rgb.cols, CV_32FC3);
     cv::Mat halation_source(rgb.rows, rgb.cols, CV_32F);
+    const bool specular_only = effects.halation_trigger == "specular_only";
 
     for (int y = 0; y < rgb.rows; ++y) {
         for (int x = 0; x < rgb.cols; ++x) {
@@ -1446,13 +1454,19 @@ Image FilmRenderer::apply_filmic_halation_bloom(
             bloom[0] = src[0] * bloom_weight;
             bloom[1] = src[1] * bloom_weight;
             bloom[2] = src[2] * bloom_weight;
-            halation_source.at<float>(y, x) = halation_mask.at<float>(y, x) * (0.40F + 0.60F * source);
+            const float halation_trigger = specular_only ? halation_mask.at<float>(y, x) : source;
+            halation_source.at<float>(y, x) = halation_trigger * (0.40F + 0.60F * source);
         }
     }
 
     const int short_edge = std::max(1, std::min(rgb_linear.width, rgb_linear.height));
-    const int halation_tight_radius = std::max(2, short_edge / 180);
-    const int halation_wide_radius = std::max(4, short_edge / 85);
+    const float halation_radius_scale = static_cast<float>(short_edge) / 2048.0F;
+    const int halation_tight_radius = std::max(
+        2,
+        static_cast<int>(std::lround(std::max(1.0F, effects.halation_radius_inner) * halation_radius_scale)));
+    const int halation_wide_radius = std::max(
+        halation_tight_radius + 1,
+        static_cast<int>(std::lround(std::max(effects.halation_radius_inner + 1.0F, effects.halation_radius_outer) * halation_radius_scale)));
     const int bloom_tight_radius = std::max(3, short_edge / 95);
     const int bloom_mid_radius = std::max(7, short_edge / 42);
     const int bloom_wide_radius = std::max(13, short_edge / 18);
@@ -1489,15 +1503,12 @@ Image FilmRenderer::apply_filmic_halation_bloom(
             pixel[2] *= 1.0F - shoulder_loss;
 
             const float receiver = receiver_mask.at<float>(y, x);
-            const float halation_energy =
-                (0.72F * halation_tight.at<float>(y, x) + 0.28F * halation_wide.at<float>(y, x)) *
-                receiver *
-                halation_strength *
-                0.46F;
-            const float halation_warmth = smoothstep01(halation_energy * 5.0F);
-            pixel[0] += halation_energy;
-            pixel[1] += halation_energy * (0.16F + 0.22F * halation_warmth);
-            pixel[2] += halation_energy * 0.045F;
+            const float halation_core_energy = halation_tight.at<float>(y, x) * receiver * halation_strength * 0.42F;
+            const float halation_fringe_energy = halation_wide.at<float>(y, x) * receiver * halation_strength * 0.18F;
+            for (int channel = 0; channel < 3; ++channel) {
+                pixel[channel] += halation_core_energy * effects.halation_warm_core[static_cast<std::size_t>(channel)];
+                pixel[channel] += halation_fringe_energy * effects.halation_red_fringe[static_cast<std::size_t>(channel)];
+            }
 
             const cv::Vec3f bloom =
                 0.52F * bloom_tight.at<cv::Vec3f>(y, x) +
@@ -1775,6 +1786,7 @@ Image FilmRenderer::apply_filmic_grain(
     const float strength_g = strength_base * kStrengthMults[1];
     const float strength_b = strength_base * kStrengthMults[2];
     const auto& grain_receptivity = spatial_masks.grain_receptivity_mask.values;
+    const float texture_masking = clampf(effects.grain_texture_masking, 0.0F, 1.0F);
     static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
     static const auto kGammaDecodeLut = build_power_lut(2.2F);
 
@@ -1796,13 +1808,41 @@ Image FilmRenderer::apply_filmic_grain(
             const float lower_mid = smoothstep01((y_gamma - 0.16F) / 0.24F) * (1.0F - smoothstep01((y_gamma - 0.58F) / 0.24F));
             const float midtone = smoothstep01((y_gamma - 0.30F) / 0.22F) * (1.0F - smoothstep01((y_gamma - 0.72F) / 0.22F));
             const float highlight = smoothstep01((y_gamma - 0.70F) / 0.22F);
-            const float shadow_response = std::clamp(effects.grain_shadow_response + effects.grain_underexposure_coarsening * 0.20F, 0.0F, 1.5F);
-            const float midtone_response = std::clamp(effects.grain_midtone_response, 0.0F, 1.5F);
-            const float highlight_response = std::clamp(effects.grain_highlight_response - effects.grain_overexposure_smoothing * 0.18F, 0.0F, 0.85F);
+            float shadow_zone_scale = 1.0F;
+            float lower_mid_zone_scale = 1.0F;
+            float midtone_zone_scale = 1.0F;
+            float highlight_zone_scale = 1.0F;
+            if (effects.grain_peak_zone == "midtones_heavy") {
+                shadow_zone_scale = 0.76F;
+                lower_mid_zone_scale = 0.78F;
+                midtone_zone_scale = 1.24F;
+                highlight_zone_scale = 0.72F;
+            } else if (effects.grain_peak_zone == "midtones") {
+                shadow_zone_scale = 0.84F;
+                lower_mid_zone_scale = 0.90F;
+                midtone_zone_scale = 1.12F;
+                highlight_zone_scale = 0.76F;
+            } else if (effects.grain_peak_zone == "highlights_light") {
+                shadow_zone_scale = 0.82F;
+                lower_mid_zone_scale = 0.90F;
+                midtone_zone_scale = 0.96F;
+                highlight_zone_scale = 0.48F;
+            }
+            const float shadow_response = std::clamp(
+                (effects.grain_shadow_response + effects.grain_underexposure_coarsening * 0.20F) * shadow_zone_scale,
+                0.0F,
+                1.5F);
+            const float lower_mid_response = std::clamp(effects.grain_midtone_response * lower_mid_zone_scale, 0.0F, 1.5F);
+            const float midtone_response = std::clamp(effects.grain_midtone_response * midtone_zone_scale, 0.0F, 1.5F);
+            const float highlight_response = std::clamp(
+                (effects.grain_highlight_response - effects.grain_overexposure_smoothing * 0.18F) * highlight_zone_scale,
+                0.0F,
+                0.85F);
             const float density_mod =
-                (0.35F + shadow_response * 0.55F * lifted_shadow + midtone_response * 0.95F * lower_mid + midtone_response * 0.55F * midtone) *
+                (0.35F + shadow_response * 0.55F * lifted_shadow + lower_mid_response * 0.95F * lower_mid + midtone_response * 0.55F * midtone) *
                 (1.0F - (0.70F - highlight_response) * highlight);
-            const float exposure_mod = std::max(0.0F, density_mod) * smooth_mod;
+            const float texture_mod = (1.0F - texture_masking) + texture_masking * smooth_mod;
+            const float exposure_mod = std::max(0.0F, density_mod) * texture_mod;
 
             const float gamma_out_r = clamp01(gamma_r + noise_r_row[x] * strength_r * exposure_mod);
             const float gamma_out_g = clamp01(gamma_g + noise_g_row[x] * strength_g * exposure_mod);

@@ -136,6 +136,10 @@ Implementation status:
   optional fields.
 - Native reports include the resolved grain family and numeric grain model
   values in `render_plan.material_effects`.
+- `peak_zone` now changes the tonal placement of v2 grain and
+  `texture_masking` controls how strongly the analyzer's smooth-region mask
+  suppresses grain over busy detail. Both remain stock-profile controls rather
+  than user-facing roughness substitutes.
 
 ## Initial Native Algorithm
 

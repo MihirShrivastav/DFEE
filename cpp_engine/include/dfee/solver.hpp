@@ -76,6 +76,7 @@ struct FilmResponsePlan {
     float highlight_desaturation = 0.0F;
     float blue_cyan_compression = 0.0F;
     float red_orange_compression = 0.0F;
+    float yellow_green_muting = 0.0F;
     float neon_compression = 0.0F;
     float chroma_boost = 1.0F;
     std::array<float, 3> channel_toe_mult{1.0F, 1.0F, 1.0F};
@@ -109,7 +110,14 @@ struct MaterialEffectsPlan {
     float grain_highlight_response = 0.28F;
     float grain_underexposure_coarsening = 0.25F;
     float grain_overexposure_smoothing = 0.25F;
+    std::string grain_peak_zone = "lower_mid_to_mid";
+    float grain_texture_masking = 1.0F;
     float halation_strength = 0.0F;
+    std::string halation_trigger = "specular_only";
+    float halation_radius_inner = 5.0F;
+    float halation_radius_outer = 20.0F;
+    std::array<float, 3> halation_warm_core{1.0F, 0.22F, 0.08F};
+    std::array<float, 3> halation_red_fringe{1.0F, 0.16F, 0.045F};
     float bloom_strength = 0.0F;
     float edge_softening = 0.0F;
     float sharpness = 0.0F;

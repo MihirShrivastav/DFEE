@@ -4,8 +4,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace dfee {
 namespace {
@@ -180,6 +182,92 @@ void flatten_profile_document(const YAML::Node& root, TProfile& profile) {
 }
 
 template <typename TProfile>
+void validate_profile_fields(
+    const TProfile& profile,
+    const std::unordered_set<std::string>& numeric_fields,
+    const std::unordered_set<std::string>& array_fields,
+    const std::unordered_set<std::string>& string_fields,
+    const std::string& kind) {
+    for (const auto& [key, value] : profile.numeric_values) {
+        if (!numeric_fields.contains(key)) {
+            throw std::runtime_error(kind + " profile contains an unsupported numeric field: '" + key + "'.");
+        }
+        if (!std::isfinite(value)) {
+            throw std::runtime_error(kind + " profile contains a non-finite numeric field: '" + key + "'.");
+        }
+    }
+    for (const auto& [key, values] : profile.numeric_arrays) {
+        if (!array_fields.contains(key)) {
+            throw std::runtime_error(kind + " profile contains an unsupported array field: '" + key + "'.");
+        }
+        if (values.size() != 3U) {
+            throw std::runtime_error(kind + " profile array field must contain exactly three values: '" + key + "'.");
+        }
+        for (const double value : values) {
+            if (!std::isfinite(value)) {
+                throw std::runtime_error(kind + " profile contains a non-finite array value: '" + key + "'.");
+            }
+        }
+    }
+    for (const auto& [key, value] : profile.string_values) {
+        if (!string_fields.contains(key)) {
+            throw std::runtime_error(kind + " profile contains an unsupported string field: '" + key + "'.");
+        }
+        if (value.empty()) {
+            throw std::runtime_error(kind + " profile contains an empty string field: '" + key + "'.");
+        }
+    }
+}
+
+void validate_native_film_stock_contract(const FilmStockProfile& profile) {
+    static const std::unordered_set<std::string> kNumericFields{
+        "adaptation.base_iso", "adaptation.default_strength", "adaptation.camera_cast_compensation_sensitivity",
+        "adaptation.highlight_stress_sensitivity", "adaptation.shadow_noise_sensitivity",
+        "tone_response.toe_strength", "tone_response.toe_length", "tone_response.midtone_contrast",
+        "tone_response.shoulder_strength", "tone_response.highlight_rolloff_start", "tone_response.black_density_floor",
+        "color_response.blue_cast_suppression", "color_response.green_magenta_stabilization",
+        "color_response.pan_weight_r", "color_response.pan_weight_g", "color_response.pan_weight_b",
+        "hue_saturation_response.saturation_boost", "hue_saturation_response.red_orange_midtone_compression",
+        "hue_saturation_response.yellow_green_muting", "hue_saturation_response.cyan_blue_highlight_compression",
+        "hue_saturation_response.neon_compression", "hue_saturation_response.highlight_desaturation",
+        "grain.size", "grain.strength", "grain.roughness", "grain.chroma_strength", "grain.texture_masking",
+        "grain.target_pgi_35mm_4x6", "grain.clumpiness", "grain.micro_grit", "grain.layer_correlation",
+        "grain.shadow_response", "grain.midtone_response", "grain.highlight_response",
+        "grain.underexposure_coarsening", "grain.overexposure_smoothing",
+        "halation.strength", "halation.radius_inner", "halation.radius_outer",
+        "chroma_coupling.hi_rolloff_start", "chroma_coupling.hi_rolloff_rate", "chroma_coupling.hi_compression",
+        "chroma_coupling.sh_rolloff_start", "chroma_coupling.sh_compression", "chroma_coupling.hi_hue_conv_rad",
+        "chroma_coupling.hi_hue_conv_str",
+        "dye_contamination.r_to_g", "dye_contamination.g_to_r", "dye_contamination.b_to_g",
+        "dye_contamination.b_to_r", "dye_contamination.r_to_b", "dye_contamination.g_to_b",
+    };
+    static const std::unordered_set<std::string> kArrayFields{
+        "tone_response.channel_toe_mult", "tone_response.channel_shoulder_mult", "tone_response.channel_midtone_mult",
+        "color_response.shadow_bias_lab", "color_response.midtone_bias_lab", "color_response.highlight_bias_lab",
+        "halation.warm_core", "halation.red_fringe",
+    };
+    static const std::unordered_set<std::string> kStringFields{
+        "stock_id", "stock_name", "stock_type", "grain.family", "grain.peak_zone", "halation.trigger",
+    };
+    validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, "Film stock");
+}
+
+void validate_native_print_stock_contract(const PrintStockProfile& profile) {
+    static const std::unordered_set<std::string> kNumericFields{
+        "tone.shadow_lift", "tone.contrast_boost", "tone.highlight_rolloff", "tone.highlight_rolloff_rate", "tone.toe_depth",
+        "color.blue_suppression", "color.red_boost", "color.green_shift", "color.saturation_scale",
+        "grain.strength", "grain.size",
+    };
+    static const std::unordered_set<std::string> kArrayFields{
+        "color.shadow_bias_lab", "color.midtone_bias_lab", "color.highlight_bias_lab",
+    };
+    static const std::unordered_set<std::string> kStringFields{
+        "print_stock_id", "print_stock_name",
+    };
+    validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, "Print stock");
+}
+
+template <typename TProfile>
 std::vector<TProfile> list_profiles_from_directory(
     const std::filesystem::path& directory,
     TProfile (*loader)(const std::filesystem::path&)) {
@@ -237,6 +325,7 @@ FilmStockProfile load_film_stock_profile(const std::filesystem::path& path) {
     profile.stock_name = root["stock_name"].as<std::string>();
     profile.stock_type = parse_stock_type(root["stock_type"].as<std::string>());
     flatten_profile_document(root, profile);
+    validate_native_film_stock_contract(profile);
     return profile;
 }
 
@@ -249,6 +338,7 @@ PrintStockProfile load_print_stock_profile(const std::filesystem::path& path) {
     profile.print_stock_id = root["print_stock_id"].as<std::string>();
     profile.print_stock_name = root["print_stock_name"].as<std::string>();
     flatten_profile_document(root, profile);
+    validate_native_print_stock_contract(profile);
     return profile;
 }
 

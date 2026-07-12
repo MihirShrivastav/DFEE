@@ -236,7 +236,11 @@ RenderPlan RenderPlanSolver::solve(
         plan.warnings.emplace_back("DIFFUSE_HIGHLIGHT_SUPPRESSION");
     }
 
-    const float adaptation_mult = controls.adaptation_strength;
+    const float profile_adaptation_strength = get_numeric(
+        stock_profile.numeric_values,
+        "adaptation.default_strength",
+        1.0F);
+    const float adaptation_mult = controls.adaptation_strength * profile_adaptation_strength;
     const float raw_comp = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
     const float stock_bias = compute_stock_bias(stock_profile, tonal);
 
@@ -275,11 +279,24 @@ RenderPlan RenderPlanSolver::solve(
             : neutral_conf * comp_sensitivity * 0.2F;
     }
 
-    const float shadow_blue_norm = (bias.has_value() ? bias->blue_excess_index : 0.0F) * cast_correction_mult;
+    const float blue_cast_suppression = get_numeric(
+        stock_profile.numeric_values,
+        "color_response.blue_cast_suppression",
+        1.0F);
+    const float green_magenta_stabilization = get_numeric(
+        stock_profile.numeric_values,
+        "color_response.green_magenta_stabilization",
+        1.0F);
+    const float shadow_blue_norm =
+        (bias.has_value() ? bias->blue_excess_index : 0.0F) * cast_correction_mult * blue_cast_suppression;
     const float green_mag_stab =
-        std::fabs(bias.has_value() ? bias->green_magenta_bias : 0.0F) * cast_correction_mult;
+        std::fabs(bias.has_value() ? bias->green_magenta_bias : 0.0F) * cast_correction_mult * green_magenta_stabilization;
+    const float highlight_stress_sensitivity = get_numeric(
+        stock_profile.numeric_values,
+        "adaptation.highlight_stress_sensitivity",
+        1.0F);
     const float highlight_channel_recovery = max_clip_ratio(input.clipping_ratios) > 0.0F
-        ? clampf(max_clip_ratio(input.clipping_ratios) * 5.0F, 0.1F, 0.9F)
+        ? clampf(max_clip_ratio(input.clipping_ratios) * 5.0F * highlight_stress_sensitivity, 0.1F, 0.9F)
         : 0.0F;
 
     float contrast_comp = 0.0F;
@@ -361,6 +378,7 @@ RenderPlan RenderPlanSolver::solve(
         .highlight_desaturation = highlight_desaturation,
         .blue_cyan_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.cyan_blue_highlight_compression", 0.0F),
         .red_orange_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.red_orange_midtone_compression", 0.0F),
+        .yellow_green_muting = get_numeric(stock_profile.numeric_values, "hue_saturation_response.yellow_green_muting", 0.0F),
         .neon_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.neon_compression", 0.0F),
         .chroma_boost = get_numeric(stock_profile.numeric_values, "hue_saturation_response.saturation_boost", 1.0F),
         .channel_toe_mult = get_array3(stock_profile.numeric_arrays, "tone_response.channel_toe_mult", {1.0F, 1.0F, 1.0F}),
@@ -369,9 +387,9 @@ RenderPlan RenderPlanSolver::solve(
         .shadow_bias_lab = get_array3(stock_profile.numeric_arrays, "color_response.shadow_bias_lab", {0.0F, 0.0F, 0.0F}),
         .midtone_bias_lab = get_array3(stock_profile.numeric_arrays, "color_response.midtone_bias_lab", {0.0F, 0.0F, 0.0F}),
         .highlight_bias_lab = get_array3(stock_profile.numeric_arrays, "color_response.highlight_bias_lab", {0.0F, 0.0F, 0.0F}),
-        .pan_weight_r = 0.25F,
-        .pan_weight_g = 0.55F,
-        .pan_weight_b = 0.20F,
+        .pan_weight_r = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_r", 0.25F),
+        .pan_weight_g = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_g", 0.55F),
+        .pan_weight_b = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_b", 0.20F),
         .chroma_coupling = get_prefixed_numeric_map(stock_profile.numeric_values, "chroma_coupling"),
         .dye_contamination = get_prefixed_numeric_map(stock_profile.numeric_values, "dye_contamination"),
         .stock_type = to_string(stock_profile.stock_type),
@@ -470,7 +488,14 @@ RenderPlan RenderPlanSolver::solve(
         .grain_highlight_response = get_numeric(stock_profile.numeric_values, "grain.highlight_response", grain_defaults.highlight_response),
         .grain_underexposure_coarsening = get_numeric(stock_profile.numeric_values, "grain.underexposure_coarsening", grain_defaults.underexposure_coarsening),
         .grain_overexposure_smoothing = get_numeric(stock_profile.numeric_values, "grain.overexposure_smoothing", grain_defaults.overexposure_smoothing),
+        .grain_peak_zone = get_string(stock_profile.string_values, "grain.peak_zone", "lower_mid_to_mid"),
+        .grain_texture_masking = get_numeric(stock_profile.numeric_values, "grain.texture_masking", 1.0F),
         .halation_strength = halation_strength,
+        .halation_trigger = get_string(stock_profile.string_values, "halation.trigger", "specular_only"),
+        .halation_radius_inner = get_numeric(stock_profile.numeric_values, "halation.radius_inner", 5.0F),
+        .halation_radius_outer = get_numeric(stock_profile.numeric_values, "halation.radius_outer", 20.0F),
+        .halation_warm_core = get_array3(stock_profile.numeric_arrays, "halation.warm_core", {1.0F, 0.22F, 0.08F}),
+        .halation_red_fringe = get_array3(stock_profile.numeric_arrays, "halation.red_fringe", {1.0F, 0.16F, 0.045F}),
         .bloom_strength = bloom_strength,
         .edge_softening = clampf(0.15F, 0.05F, 0.35F) * 0.5F,
         .sharpness = controls.sharpness,

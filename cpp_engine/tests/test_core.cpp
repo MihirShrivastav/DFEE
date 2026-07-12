@@ -469,6 +469,125 @@ void test_color_response() {
     assert(std::fabs(dst_oklab.at(2, 0, 2) - src_oklab.at(2, 0, 2)) > 1.0e-4F);
 }
 
+void test_yellow_green_muting() {
+    dfee::Image rgb(1, 1, 3);
+    rgb.pixels = {0.25F, 0.72F, 0.08F};
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    dfee::FilmResponsePlan baseline;
+    baseline.film_color = 100.0F;
+    dfee::FilmResponsePlan muted = baseline;
+    muted.yellow_green_muting = 0.70F;
+
+    const dfee::FilmRenderer renderer;
+    const auto baseline_result = renderer.apply_color_response(rgb, zones, baseline);
+    const auto muted_result = renderer.apply_color_response(rgb, zones, muted);
+    const auto baseline_oklab = dfee::rgb_to_oklab(baseline_result);
+    const auto muted_oklab = dfee::rgb_to_oklab(muted_result);
+    const float baseline_chroma = std::hypot(baseline_oklab.at(0, 0, 1), baseline_oklab.at(0, 0, 2));
+    const float muted_chroma = std::hypot(muted_oklab.at(0, 0, 1), muted_oklab.at(0, 0, 2));
+    assert(muted_chroma < baseline_chroma);
+}
+
+void test_filmic_grain_profile_placement_and_texture_masking() {
+    dfee::Image rgb(48, 16, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            const float value = x < 16 ? 0.10F : (x < 32 ? 0.38F : 0.72F);
+            rgb.at(x, y, 0) = value;
+            rgb.at(x, y, 1) = value;
+            rgb.at(x, y, 2) = value;
+        }
+    }
+
+    dfee::SpatialMasks masks;
+    masks.grain_receptivity_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            masks.grain_receptivity_mask.at(x, y) = x < 16 ? 0.0F : 1.0F;
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.grain_strength = 0.75F;
+    effects.grain_size = 0.60F;
+    effects.grain_chroma_strength = 0.0F;
+    effects.grain_seed = 8080U;
+    effects.grain_peak_zone = "midtones_heavy";
+    effects.grain_texture_masking = 1.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto masked = renderer.apply_filmic_grain(rgb, masks, effects);
+    effects.grain_texture_masking = 0.0F;
+    const auto unmasked = renderer.apply_filmic_grain(rgb, masks, effects);
+
+    const auto mean_delta = [&](const dfee::Image& adjusted, const int begin_x, const int end_x) {
+        double total = 0.0;
+        std::size_t count = 0U;
+        for (int y = 0; y < rgb.height; ++y) {
+            for (int x = begin_x; x < end_x; ++x) {
+                total += std::fabs(adjusted.at(x, y, 0) - rgb.at(x, y, 0));
+                ++count;
+            }
+        }
+        return total / static_cast<double>(count);
+    };
+
+    assert(mean_delta(masked, 0, 16) < mean_delta(unmasked, 0, 16) * 0.20);
+    assert(mean_delta(masked, 16, 32) > mean_delta(masked, 32, 48));
+}
+
+void test_filmic_halation_profile_geometry_and_colour() {
+    dfee::Image rgb(64, 64, 3);
+    for (int y = 0; y < rgb.height; ++y) {
+        for (int x = 0; x < rgb.width; ++x) {
+            rgb.at(x, y, 0) = 0.02F;
+            rgb.at(x, y, 1) = 0.02F;
+            rgb.at(x, y, 2) = 0.02F;
+        }
+    }
+    rgb.at(32, 32, 0) = 1.0F;
+    rgb.at(32, 32, 1) = 0.95F;
+    rgb.at(32, 32, 2) = 0.88F;
+
+    dfee::LuminanceImage luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+    dfee::SpatialMasks masks;
+    masks.halation_source_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    masks.halation_receiver_mask = dfee::LuminanceImage(rgb.width, rgb.height);
+    masks.halation_source_mask.at(32, 32) = 1.0F;
+    for (float& value : masks.halation_receiver_mask.values) {
+        value = 1.0F;
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.halation_strength = 0.8F;
+    effects.bloom_strength = 0.0F;
+    effects.halation_trigger = "specular_only";
+    effects.halation_radius_inner = 16.0F;
+    effects.halation_radius_outer = 40.0F;
+    effects.halation_warm_core = {1.0F, 0.45F, 0.10F};
+    effects.halation_red_fringe = {1.0F, 0.05F, 0.00F};
+
+    const dfee::FilmRenderer renderer;
+    const auto warm = renderer.apply_filmic_halation_bloom(rgb, zones, masks, effects);
+    effects.halation_warm_core = {0.0F, 0.0F, 1.0F};
+    effects.halation_red_fringe = {0.0F, 0.0F, 1.0F};
+    const auto blue = renderer.apply_filmic_halation_bloom(rgb, zones, masks, effects);
+
+    const int sample_x = 38;
+    const int sample_y = 32;
+    const float warm_red_delta = warm.at(sample_x, sample_y, 0) - rgb.at(sample_x, sample_y, 0);
+    const float warm_blue_delta = warm.at(sample_x, sample_y, 2) - rgb.at(sample_x, sample_y, 2);
+    const float blue_red_delta = blue.at(sample_x, sample_y, 0) - rgb.at(sample_x, sample_y, 0);
+    const float blue_blue_delta = blue.at(sample_x, sample_y, 2) - rgb.at(sample_x, sample_y, 2);
+    assert(warm_red_delta > warm_blue_delta);
+    assert(blue_blue_delta > blue_red_delta);
+}
+
 void test_luminance_chroma_coupling() {
     dfee::Image rgb(3, 1, 3);
     rgb.pixels = {
@@ -1040,6 +1159,29 @@ void test_profile_loading() {
     assert(!print.print_stock_id.empty());
     assert(!print.print_stock_name.empty());
 
+    dfee::SolverInput input;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.highlight_headroom = 0.30F;
+    input.tonal_distribution.shadow_depth = 0.08F;
+    input.tonal_distribution.luma_p95 = 0.72F;
+    input.raw_iso = 400;
+    const dfee::RenderPlanSolver solver;
+    const auto stocks = dfee::list_film_stock_profiles(repo_root / "profiles" / "stocks");
+    assert(stocks.size() >= 27U);
+    for (const auto& active_stock : stocks) {
+        const auto plan = solver.solve(input, active_stock);
+        assert(std::isfinite(plan.film_response.yellow_green_muting));
+        assert(std::isfinite(plan.material_effects.grain_texture_masking));
+        assert(plan.material_effects.grain_peak_zone == active_stock.string_values.at("grain.peak_zone"));
+        assert(plan.material_effects.halation_trigger == active_stock.string_values.at("halation.trigger"));
+        assert(std::fabs(plan.material_effects.halation_radius_inner - active_stock.numeric_values.at("halation.radius_inner")) < 1.0e-5F);
+        assert(std::fabs(plan.material_effects.halation_radius_outer - active_stock.numeric_values.at("halation.radius_outer")) < 1.0e-5F);
+        assert(std::fabs(plan.film_response.yellow_green_muting - active_stock.numeric_values.at("hue_saturation_response.yellow_green_muting")) < 1.0e-5F);
+        assert(std::fabs(plan.film_response.pan_weight_r - active_stock.numeric_values.at("color_response.pan_weight_r")) < 1.0e-5F);
+        assert(std::fabs(plan.film_response.pan_weight_g - active_stock.numeric_values.at("color_response.pan_weight_g")) < 1.0e-5F);
+        assert(std::fabs(plan.film_response.pan_weight_b - active_stock.numeric_values.at("color_response.pan_weight_b")) < 1.0e-5F);
+    }
+
     dfee::EngineSession session(repo_root);
     const auto listing = session.list_profiles();
     assert(!listing.stocks.empty());
@@ -1229,6 +1371,7 @@ int main() {
         test_panchromatic_conversion();
         test_film_tone_response();
         test_color_response();
+        test_yellow_green_muting();
         test_luminance_chroma_coupling();
         test_acutance_shaping();
         test_clarity();
@@ -1236,10 +1379,12 @@ int main() {
         test_dehaze();
         test_halation_bloom();
         test_filmic_halation_bloom_compresses_and_diffuses_highlights();
+        test_filmic_halation_profile_geometry_and_colour();
         test_film_grain_determinism();
         test_filmic_grain_density_response_and_stock_character();
         test_filmic_grain_avoids_low_frequency_blotches();
         test_filmic_grain_roughness_does_not_become_pixel_noise();
+        test_filmic_grain_profile_placement_and_texture_masking();
         test_print_finish();
         test_profile_loading();
         test_raw_failure_paths();
