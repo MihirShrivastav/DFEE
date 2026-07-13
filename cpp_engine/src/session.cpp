@@ -932,7 +932,7 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.film_color = request.film_color;
     controls.highlight_color_hold = request.highlight_color_hold;
     controls.shadow_color_retention = request.shadow_color_retention;
-    controls.palette_separation = request.palette_separation;
+    controls.palette_range = request.palette_range;
     controls.emulsion_color_density = request.emulsion_color_density;
     controls.print_strength = request.print_strength;
     controls.print_c = request.print_c;
@@ -1558,12 +1558,12 @@ std::string serialize_feature_report_json(
         << "\"film_color\": " << json_number(render_plan.film_response.film_color) << ",\n"
         << "\"highlight_color_hold\": " << json_number(render_plan.film_response.highlight_color_hold) << ",\n"
         << "\"shadow_color_retention\": " << json_number(render_plan.film_response.shadow_color_retention) << ",\n"
-        << "\"palette_separation\": " << json_number(render_plan.film_response.palette_separation) << ",\n"
+        << "\"palette_range\": " << json_number(render_plan.film_response.palette_range) << ",\n"
         << "\"emulsion_color_density\": " << json_number(render_plan.film_response.emulsion_color_density) << ",\n"
         << "\"highlight_hold_sensitivity\": " << json_number(render_plan.film_response.highlight_hold_sensitivity) << ",\n"
         << "\"shadow_retention_sensitivity\": " << json_number(render_plan.film_response.shadow_retention_sensitivity) << ",\n"
         << "\"emulsion_density_sensitivity\": " << json_number(render_plan.film_response.emulsion_density_sensitivity) << ",\n"
-        << "\"palette_separation_sensitivity\": " << json_number(render_plan.film_response.palette_separation_sensitivity)
+        << "\"palette_range_sensitivity\": " << json_number(render_plan.film_response.palette_range_sensitivity)
         << "},\n";
     out << "    \"material_effects\": {"
         << "\"grain_strength\": " << json_number(render_plan.material_effects.grain_strength) << ","
@@ -2018,7 +2018,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 const bool has_color_character =
                     request.highlight_color_hold != 0.0F ||
                     request.shadow_color_retention != 0.0F ||
-                    request.palette_separation != 0.0F ||
+                    request.palette_range != 0.0F ||
                     request.emulsion_color_density != 0.0F;
                 if (has_color_character && request.effect_pipeline_version == "parity_v1") {
                     throw std::invalid_argument(
@@ -2113,7 +2113,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.film_color = request.film_color;
             controls.highlight_color_hold = request.highlight_color_hold;
             controls.shadow_color_retention = request.shadow_color_retention;
-            controls.palette_separation = request.palette_separation;
+            controls.palette_range = request.palette_range;
             controls.emulsion_color_density = request.emulsion_color_density;
             controls.print_strength = request.print_strength;
             controls.print_c = request.print_c;
@@ -2286,7 +2286,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 const bool has_color_character =
                     request.highlight_color_hold != 0.0F ||
                     request.shadow_color_retention != 0.0F ||
-                    request.palette_separation != 0.0F ||
+                    request.palette_range != 0.0F ||
                     request.emulsion_color_density != 0.0F;
                 if (has_color_character && request.effect_pipeline_version == "parity_v1") {
                     throw std::invalid_argument(

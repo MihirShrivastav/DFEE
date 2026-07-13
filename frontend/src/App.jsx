@@ -57,7 +57,7 @@ const DEFAULT_PARAMS = {
   film_color: 100,
   highlight_color_hold: 0,
   shadow_color_retention: 0,
-  palette_separation: 0,
+  palette_range: 0,
   emulsion_color_density: 0,
   print_stock: 'none',
   print_strength: 1.0,
@@ -458,7 +458,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_separation', 'emulsion_color_density'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -624,7 +624,7 @@ export default function App() {
         film_color: String(params.film_color),
         highlight_color_hold: String(params.highlight_color_hold),
         shadow_color_retention: String(params.shadow_color_retention),
-        palette_separation: String(params.palette_separation),
+        palette_range: String(params.palette_range),
         emulsion_color_density: String(params.emulsion_color_density),
         print_stock: params.print_stock,
         print_strength: String(params.print_strength),
@@ -901,7 +901,7 @@ export default function App() {
           film_color: params.film_color,
           highlight_color_hold: params.highlight_color_hold,
           shadow_color_retention: params.shadow_color_retention,
-          palette_separation: params.palette_separation,
+          palette_range: params.palette_range,
           emulsion_color_density: params.emulsion_color_density,
           print_stock: params.print_stock,
           print_strength: params.print_strength,
@@ -1501,7 +1501,7 @@ export default function App() {
                     tooltip: 'How much colour is kept in the deep shadows.',
                   },
                   {
-                    key: 'palette_separation',
+                    key: 'palette_range',
                     label: 'Palette Separation',
                     tooltip: 'How distinctly different colours are held apart from one another.',
                   },

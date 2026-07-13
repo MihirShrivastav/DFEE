@@ -1313,13 +1313,13 @@ void test_color_character_request_fields_default_to_neutral_zero() {
     dfee::NativePreviewRenderRequest request;
     require_close(request.highlight_color_hold, 0.0F, 1.0e-6F);
     require_close(request.shadow_color_retention, 0.0F, 1.0e-6F);
-    require_close(request.palette_separation, 0.0F, 1.0e-6F);
+    require_close(request.palette_range, 0.0F, 1.0e-6F);
     require_close(request.emulsion_color_density, 0.0F, 1.0e-6F);
 
     dfee::SolverControls controls;
     controls.highlight_color_hold = request.highlight_color_hold;
     controls.shadow_color_retention = request.shadow_color_retention;
-    controls.palette_separation = request.palette_separation;
+    controls.palette_range = request.palette_range;
     controls.emulsion_color_density = request.emulsion_color_density;
     require_close(controls.highlight_color_hold, 0.0F, 1.0e-6F);
 }
@@ -1416,7 +1416,7 @@ void test_loader_accepts_optional_color_character_group() {
         out << "  shadow_retention_sensitivity: 0.5\n";
         out << "  emulsion_density_sensitivity: 0.4\n";
         out << "  palette:\n";
-        out << "    separation_sensitivity: 0.7\n";
+        out << "    range_sensitivity: 0.7\n";
         out << "    anchors: [30, 90, 150, 210, 270, 330]\n";
         out << "    anchor_weights: [1.0, 0.8, 0.6, 0.6, 0.8, 1.0]\n";
     }
@@ -1434,8 +1434,8 @@ void test_loader_accepts_optional_color_character_group() {
     if (!profile.numeric_values.contains("color_character.emulsion_density_sensitivity")) {
         throw std::runtime_error("color_character.emulsion_density_sensitivity not found in profile");
     }
-    if (!profile.numeric_values.contains("color_character.palette.separation_sensitivity")) {
-        throw std::runtime_error("color_character.palette.separation_sensitivity not found in profile");
+    if (!profile.numeric_values.contains("color_character.palette.range_sensitivity")) {
+        throw std::runtime_error("color_character.palette.range_sensitivity not found in profile");
     }
 
     // Verify variable-length arrays
@@ -1723,8 +1723,8 @@ static float hue_delta(float h, float a) {
     return d;
 }
 
-void test_palette_separation_neutral_pixel_preserved() {
-    // A near-gray pixel (very low chroma) must be byte-unchanged when palette_separation=+100.
+void test_palette_range_neutral_pixel_preserved() {
+    // A near-gray pixel (very low chroma) must be byte-unchanged when palette_range=+100.
     // Use equal R=G=B: perfectly neutral, OKLCh c == 0.
     dfee::Image rgb(1, 1, 3);
     rgb.pixels = {0.45F, 0.45F, 0.45F};
@@ -1734,16 +1734,16 @@ void test_palette_separation_neutral_pixel_preserved() {
     dfee::FilmResponsePlan response;
     response.stock_type = "color_negative";
     response.film_color = 100.0F;
-    response.palette_separation = 100.0F;
-    response.palette_separation_sensitivity = 1.0F;
+    response.palette_range = 100.0F;
+    response.palette_range_sensitivity = 1.0F;
     // palette_anchors left empty → default six anchors
 
     const dfee::FilmRenderer renderer;
     const auto out = renderer.apply_color_response_and_coupling(rgb, zones, response);
 
     // Neutral pixel: chroma is exactly 0, so g_c == 0. Hue shift must be 0.
-    // The output pixel must be indistinguishable from the baseline (palette_separation=0).
-    response.palette_separation = 0.0F;
+    // The output pixel must be indistinguishable from the baseline (palette_range=0).
+    response.palette_range = 0.0F;
     const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
 
     const float delta_r = std::fabs(out.at(0, 0, 0) - baseline.at(0, 0, 0));
@@ -1752,12 +1752,12 @@ void test_palette_separation_neutral_pixel_preserved() {
 
     if (delta_r > 1.0e-5F || delta_g > 1.0e-5F || delta_b > 1.0e-5F) {
         throw std::runtime_error(
-            "palette_separation=+100 changed a neutral pixel: dR=" + std::to_string(delta_r) +
+            "palette_range=+100 changed a neutral pixel: dR=" + std::to_string(delta_r) +
             " dG=" + std::to_string(delta_g) + " dB=" + std::to_string(delta_b));
     }
 }
 
-void test_palette_separation_direction() {
+void test_palette_range_direction() {
     // A saturated pixel at a hue clearly offset between two default anchors (0 and π/3 ≈ 1.047).
     // We need h_baseline comfortably closer to one anchor than the other so the nearest is unambiguous.
     // We place the pixel at h ≈ 0.3 rad (between 0 and π/3), nearest anchor = 0.
@@ -1789,11 +1789,11 @@ void test_palette_separation_direction() {
     dfee::FilmResponsePlan response;
     response.stock_type = "color_negative";
     response.film_color = 100.0F;
-    response.palette_separation_sensitivity = 1.0F;
+    response.palette_range_sensitivity = 1.0F;
     // palette_anchors empty → default 0, π/3, 2π/3, π, 4π/3, 5π/3
 
     // Baseline
-    response.palette_separation = 0.0F;
+    response.palette_range = 0.0F;
     const dfee::FilmRenderer renderer;
     const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
     const float h_baseline = read_hue(baseline, 0);
@@ -1828,12 +1828,12 @@ void test_palette_separation_direction() {
     }
 
     // At +100: should attract toward nearest anchor
-    response.palette_separation = 100.0F;
+    response.palette_range = 100.0F;
     const auto attracted = renderer.apply_color_response_and_coupling(rgb, zones, response);
     const float h_attracted = read_hue(attracted, 0);
 
     // At −100: should repel from nearest anchor
-    response.palette_separation = -100.0F;
+    response.palette_range = -100.0F;
     const auto repelled = renderer.apply_color_response_and_coupling(rgb, zones, response);
     const float h_repelled = read_hue(repelled, 0);
 
@@ -1843,7 +1843,7 @@ void test_palette_separation_direction() {
     // +100 must move hue closer to the nearest anchor
     if (!(dist_attracted < nearest_dist - 1.0e-5F)) {
         throw std::runtime_error(
-            "palette_separation=+100 did not attract hue toward nearest anchor: "
+            "palette_range=+100 did not attract hue toward nearest anchor: "
             "h_base=" + std::to_string(h_baseline) +
             " h_attracted=" + std::to_string(h_attracted) +
             " nearest_anchor=" + std::to_string(nearest_anchor) +
@@ -1854,7 +1854,7 @@ void test_palette_separation_direction() {
     // −100 must move hue further from the nearest anchor
     if (!(dist_repelled > nearest_dist + 1.0e-5F)) {
         throw std::runtime_error(
-            "palette_separation=-100 did not repel hue away from anchor: "
+            "palette_range=-100 did not repel hue away from anchor: "
             "h_base=" + std::to_string(h_baseline) +
             " h_repelled=" + std::to_string(h_repelled) +
             " nearest_anchor=" + std::to_string(nearest_anchor) +
@@ -1863,7 +1863,7 @@ void test_palette_separation_direction() {
     }
 }
 
-void test_palette_separation_wrap_stability() {
+void test_palette_range_wrap_stability() {
     // Two saturated pixels: one at hue just below 0 (≈ 359°) and one just above (≈ 1°).
     // Anchor at 0 rad. Both must move TOWARD 0 — no sign flip or large jump at the seam.
     //
@@ -1911,13 +1911,13 @@ void test_palette_separation_wrap_stability() {
     dfee::FilmResponsePlan response;
     response.stock_type = "color_negative";
     response.film_color = 100.0F;
-    response.palette_separation = 100.0F;
-    response.palette_separation_sensitivity = 1.0F;
+    response.palette_range = 100.0F;
+    response.palette_range_sensitivity = 1.0F;
     // Default anchors: 0, π/3, 2π/3, π, 4π/3, 5π/3 — nearest to both pixels is 0 rad.
 
     const dfee::FilmRenderer renderer;
     const auto baseline = renderer.apply_color_response_and_coupling(img, zones,
-        [&]() { auto r = response; r.palette_separation = 0.0F; return r; }());
+        [&]() { auto r = response; r.palette_range = 0.0F; return r; }());
     const auto out = renderer.apply_color_response_and_coupling(img, zones, response);
 
     const float h_base_A = read_hue(baseline, 0);
@@ -2004,8 +2004,8 @@ void test_palette_anchor_weights_gate_hue_shift() {
     dfee::FilmResponsePlan response;
     response.stock_type = "color_negative";
     response.film_color = 100.0F;
-    response.palette_separation_sensitivity = 1.0F;
-    response.palette_separation = 100.0F;
+    response.palette_range_sensitivity = 1.0F;
+    response.palette_range = 100.0F;
     response.palette_anchors = two_anchors;
 
     const dfee::FilmRenderer renderer;
@@ -2014,7 +2014,7 @@ void test_palette_anchor_weights_gate_hue_shift() {
     response.palette_anchor_weights = {1.0F, 1.0F};
     const auto baseline_zero_sep = [&]() {
         auto r = response;
-        r.palette_separation = 0.0F;
+        r.palette_range = 0.0F;
         return renderer.apply_color_response_and_coupling(rgb, zones, r);
     }();
     const auto with_weight1 = renderer.apply_color_response_and_coupling(rgb, zones, response);
@@ -2143,10 +2143,10 @@ void test_solver_color_character_family_defaults() {
             "portra_400: emulsion_density_sensitivity must be > 0, got " +
             std::to_string(color_plan.film_response.emulsion_density_sensitivity));
     }
-    if (!(color_plan.film_response.palette_separation_sensitivity > 0.0F)) {
+    if (!(color_plan.film_response.palette_range_sensitivity > 0.0F)) {
         throw std::runtime_error(
-            "portra_400: palette_separation_sensitivity must be > 0, got " +
-            std::to_string(color_plan.film_response.palette_separation_sensitivity));
+            "portra_400: palette_range_sensitivity must be > 0, got " +
+            std::to_string(color_plan.film_response.palette_range_sensitivity));
     }
 
     // Case 2: monochrome stock (tri_x_400) — all four sensitivities must be 0.
@@ -2169,10 +2169,10 @@ void test_solver_color_character_family_defaults() {
             "tri_x_400: emulsion_density_sensitivity must be 0 for monochrome, got " +
             std::to_string(mono_plan.film_response.emulsion_density_sensitivity));
     }
-    if (std::fabs(mono_plan.film_response.palette_separation_sensitivity) > 1.0e-6F) {
+    if (std::fabs(mono_plan.film_response.palette_range_sensitivity) > 1.0e-6F) {
         throw std::runtime_error(
-            "tri_x_400: palette_separation_sensitivity must be 0 for monochrome, got " +
-            std::to_string(mono_plan.film_response.palette_separation_sensitivity));
+            "tri_x_400: palette_range_sensitivity must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.palette_range_sensitivity));
     }
 }
 
@@ -2232,7 +2232,7 @@ void test_color_character_synthetic_zone_hue_fixture() {
     base_response.highlight_hold_sensitivity = 1.0F;
     base_response.shadow_retention_sensitivity = 1.0F;
     base_response.emulsion_density_sensitivity = 1.0F;
-    base_response.palette_separation_sensitivity = 1.0F;
+    base_response.palette_range_sensitivity = 1.0F;
     base_response.chroma_coupling = {
         {"hi_rolloff_start", 0.70F},
         {"hi_rolloff_rate", 2.0F},
@@ -2328,10 +2328,10 @@ void test_color_character_synthetic_zone_hue_fixture() {
     // -----------------------------------------------------------------------
     {
         dfee::FilmResponsePlan resp = base_response;
-        resp.palette_separation = 0.0F;
+        resp.palette_range = 0.0F;
         const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, resp);
 
-        resp.palette_separation = 100.0F;
+        resp.palette_range = 100.0F;
         const auto separated = renderer.apply_color_response_and_coupling(rgb, zones, resp);
 
         const float dr = std::fabs(separated.at(0, 0, 0) - baseline.at(0, 0, 0));
@@ -2340,7 +2340,7 @@ void test_color_character_synthetic_zone_hue_fixture() {
 
         if (dr > 1.0e-5F || dg > 1.0e-5F || db > 1.0e-5F) {
             throw std::runtime_error(
-                "synthetic fixture (c): palette_separation=+100 changed neutral gray pixel: "
+                "synthetic fixture (c): palette_range=+100 changed neutral gray pixel: "
                 "dR=" + std::to_string(dr) + " dG=" + std::to_string(dg) +
                 " dB=" + std::to_string(db));
         }
@@ -2353,7 +2353,7 @@ void test_color_character_synthetic_zone_hue_fixture() {
         dfee::FilmResponsePlan resp = base_response;
         resp.highlight_color_hold      = 50.0F;
         resp.shadow_color_retention    = 50.0F;
-        resp.palette_separation        = 50.0F;
+        resp.palette_range        = 50.0F;
         resp.emulsion_color_density    = 50.0F;
 
         const auto first  = renderer.apply_color_response_and_coupling(rgb, zones, resp);
@@ -2412,9 +2412,9 @@ int main() {
         test_loader_accepts_optional_color_character_group();
         test_highlight_color_hold_increases_only_highlight_chroma();
         test_shadow_color_retention_increases_shadow_chroma_without_lifting_blacks();
-        test_palette_separation_neutral_pixel_preserved();
-        test_palette_separation_direction();
-        test_palette_separation_wrap_stability();
+        test_palette_range_neutral_pixel_preserved();
+        test_palette_range_direction();
+        test_palette_range_wrap_stability();
         test_palette_anchor_weights_gate_hue_shift();
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();

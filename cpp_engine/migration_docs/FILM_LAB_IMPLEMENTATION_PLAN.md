@@ -51,7 +51,7 @@ table.
 
 | ID | Task | Native behavior | Status |
 | --- | --- | --- | --- |
-| M7-003A | Define profile and request schema | Add neutral, bounded fields (`−100..+100`) for `highlight_color_hold`, `shadow_color_retention`, `palette_separation`, and `emulsion_color_density`. Parity guard rejects non-zero values under `parity_v1`. | Done |
+| M7-003A | Define profile and request schema | Add neutral, bounded fields (`−100..+100`) for `highlight_color_hold`, `shadow_color_retention`, `palette_range`, and `emulsion_color_density`. Parity guard rejects non-zero values under `parity_v1`. | Done |
 | M7-003B | Implement highlight color hold | Scales the stock's resolved highlight chroma rolloff and highlight desaturation. High-zone only; never touches lightness. | Done |
 | M7-003C | Implement shadow color retention | Scales the stock's resolved shadow chroma rolloff. Shadow-gated; no black lift. | Done |
 | M7-003D | Implement palette separation | Per-pixel hue-anchor attraction in OKLCh; chroma-gated (neutrals preserved); hue-wrap stable via `sin(delta)`. Default 6 perceptual anchors unless the stock overrides. | Done |

@@ -862,7 +862,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertIn("diagnostics", payload)
 
 
-    def test_preview_rejects_parity_v1_with_nonzero_palette_separation(self):
+    def test_preview_rejects_parity_v1_with_nonzero_palette_range(self):
         server.session.filename = "example.ARW"
         server.session.raw_preview_bytes = b"python-raw-preview"
 
@@ -874,7 +874,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
                         "filename": "example.ARW",
                         "stock": "portra_400",
                         "effect_pipeline_version": "parity_v1",
-                        "palette_separation": 50.0,
+                        "palette_range": 50.0,
                     },
                 )
 
@@ -896,7 +896,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
                         "effect_pipeline_version": "filmic_v2",
                         "highlight_color_hold": 150.0,
                         "shadow_color_retention": 150.0,
-                        "palette_separation": 150.0,
+                        "palette_range": 150.0,
                         "emulsion_color_density": 150.0,
                     },
                 )

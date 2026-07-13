@@ -141,7 +141,7 @@ struct ColorCharacterDefaults {
     float highlight_hold_sensitivity;
     float shadow_retention_sensitivity;
     float emulsion_density_sensitivity;
-    float palette_separation_sensitivity;
+    float palette_range_sensitivity;
 };
 
 [[nodiscard]] ColorCharacterDefaults color_character_defaults(const StockType type) {
@@ -427,7 +427,7 @@ RenderPlan RenderPlanSolver::solve(
         .film_color = controls.film_color,
         .highlight_color_hold = controls.highlight_color_hold,
         .shadow_color_retention = controls.shadow_color_retention,
-        .palette_separation = controls.palette_separation,
+        .palette_range = controls.palette_range,
         .emulsion_color_density = controls.emulsion_color_density,
     };
 
@@ -441,9 +441,9 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response.emulsion_density_sensitivity = get_numeric(
         stock_profile.numeric_values, "color_character.emulsion_density_sensitivity",
         cc_defaults.emulsion_density_sensitivity);
-    plan.film_response.palette_separation_sensitivity = get_numeric(
-        stock_profile.numeric_values, "color_character.palette.separation_sensitivity",
-        cc_defaults.palette_separation_sensitivity);
+    plan.film_response.palette_range_sensitivity = get_numeric(
+        stock_profile.numeric_values, "color_character.palette.range_sensitivity",
+        cc_defaults.palette_range_sensitivity);
     plan.film_response.palette_anchors = get_numeric_vector(
         stock_profile.numeric_arrays, "color_character.palette.anchors");
     plan.film_response.palette_anchor_weights = get_numeric_vector(

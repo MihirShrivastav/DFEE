@@ -627,7 +627,7 @@ class PreviewRequest(BaseModel):
     film_color: float = 100.0   # 0-200, scales film color personality
     highlight_color_hold: float = 0.0
     shadow_color_retention: float = 0.0
-    palette_separation: float = 0.0
+    palette_range: float = 0.0
     emulsion_color_density: float = 0.0
     print_stock: str = "none"   # print stock id or "none"
     print_strength: float = 1.0  # 0.0-2.0
@@ -1097,7 +1097,7 @@ def get_preview(
     film_color: float = 100.0,
     highlight_color_hold: float = 0.0,
     shadow_color_retention: float = 0.0,
-    palette_separation: float = 0.0,
+    palette_range: float = 0.0,
     emulsion_color_density: float = 0.0,
     print_stock: str = "none",
     print_strength: float = 1.0,
@@ -1166,7 +1166,7 @@ def get_preview(
         "film_color": film_color,
         "highlight_color_hold": highlight_color_hold,
         "shadow_color_retention": shadow_color_retention,
-        "palette_separation": palette_separation,
+        "palette_range": palette_range,
         "emulsion_color_density": emulsion_color_density,
         "print_stock": print_stock,
         "print_strength": print_strength,
@@ -1204,13 +1204,13 @@ def get_preview(
     for _cc_name, _cc_val in (
         ("highlight_color_hold", highlight_color_hold),
         ("shadow_color_retention", shadow_color_retention),
-        ("palette_separation", palette_separation),
+        ("palette_range", palette_range),
         ("emulsion_color_density", emulsion_color_density),
     ):
         if _cc_val < -100.0 or _cc_val > 100.0:
             raise HTTPException(status_code=400, detail=f"{_cc_name} must be between -100 and 100")
     if (effect_pipeline_version or "parity_v1").strip() == "parity_v1" and any(
-        v != 0.0 for v in (highlight_color_hold, shadow_color_retention, palette_separation, emulsion_color_density)
+        v != 0.0 for v in (highlight_color_hold, shadow_color_retention, palette_range, emulsion_color_density)
     ):
         raise HTTPException(status_code=400, detail="Color Character requires filmic_v2")
     logger.info(
@@ -1289,7 +1289,7 @@ def get_preview(
             "film_color": film_color,
             "highlight_color_hold": highlight_color_hold,
             "shadow_color_retention": shadow_color_retention,
-            "palette_separation": palette_separation,
+            "palette_range": palette_range,
             "emulsion_color_density": emulsion_color_density,
             "print_stock": _load_print_stock_profile(print_stock),
             "print_strength": print_strength,
@@ -1381,13 +1381,13 @@ def export_file(req: ExportRequest):
     for _cc_name, _cc_val in (
         ("highlight_color_hold", req.highlight_color_hold),
         ("shadow_color_retention", req.shadow_color_retention),
-        ("palette_separation", req.palette_separation),
+        ("palette_range", req.palette_range),
         ("emulsion_color_density", req.emulsion_color_density),
     ):
         if _cc_val < -100.0 or _cc_val > 100.0:
             raise HTTPException(status_code=400, detail=f"{_cc_name} must be between -100 and 100")
     if (req.effect_pipeline_version or "parity_v1").strip() == "parity_v1" and any(
-        v != 0.0 for v in (req.highlight_color_hold, req.shadow_color_retention, req.palette_separation, req.emulsion_color_density)
+        v != 0.0 for v in (req.highlight_color_hold, req.shadow_color_retention, req.palette_range, req.emulsion_color_density)
     ):
         raise HTTPException(status_code=400, detail="Color Character requires filmic_v2")
     native_export_supported, native_export_reason = _native_export_request_supported(req)
@@ -1516,7 +1516,7 @@ def export_file(req: ExportRequest):
                 "film_color": req.film_color,
                 "highlight_color_hold": req.highlight_color_hold,
                 "shadow_color_retention": req.shadow_color_retention,
-                "palette_separation": req.palette_separation,
+                "palette_range": req.palette_range,
                 "emulsion_color_density": req.emulsion_color_density,
                 "print_stock": print_stock_profile,
                 "print_strength": req.print_strength,

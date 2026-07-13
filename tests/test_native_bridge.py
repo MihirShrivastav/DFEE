@@ -1157,7 +1157,7 @@ class TestNativeBridge(unittest.TestCase):
         cc_inputs = dict(
             highlight_color_hold=30.0,
             shadow_color_retention=-20.0,
-            palette_separation=50.0,
+            palette_range=50.0,
             emulsion_color_density=10.0,
         )
         preview_req = dfee_native_bridge.NativePreviewRenderRequest(
@@ -1176,13 +1176,13 @@ class TestNativeBridge(unittest.TestCase):
         # All four CC fields must agree between preview and export request
         self.assertEqual(preview_req.highlight_color_hold, export_req.highlight_color_hold)
         self.assertEqual(preview_req.shadow_color_retention, export_req.shadow_color_retention)
-        self.assertEqual(preview_req.palette_separation, export_req.palette_separation)
+        self.assertEqual(preview_req.palette_range, export_req.palette_range)
         self.assertEqual(preview_req.emulsion_color_density, export_req.emulsion_color_density)
 
         # Values must match what we set
         self.assertAlmostEqual(preview_req.highlight_color_hold, 30.0)
         self.assertAlmostEqual(preview_req.shadow_color_retention, -20.0)
-        self.assertAlmostEqual(preview_req.palette_separation, 50.0)
+        self.assertAlmostEqual(preview_req.palette_range, 50.0)
         self.assertAlmostEqual(preview_req.emulsion_color_density, 10.0)
 
         # Export inherits all preview fields
@@ -1196,10 +1196,10 @@ def test_color_character_fields_default_zero_and_round_trip():
     req = NativePreviewRenderRequest(filename="x.ARW", stock="none")
     assert req.highlight_color_hold == 0.0
     assert req.shadow_color_retention == 0.0
-    assert req.palette_separation == 0.0
+    assert req.palette_range == 0.0
     assert req.emulsion_color_density == 0.0
-    exp = NativeExportRequest(filename="x.ARW", stock="none", palette_separation=25.0)
-    assert exp.palette_separation == 25.0
+    exp = NativeExportRequest(filename="x.ARW", stock="none", palette_range=25.0)
+    assert exp.palette_range == 25.0
 
 
 if __name__ == "__main__":

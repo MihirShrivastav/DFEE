@@ -249,7 +249,7 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
         "color_character.highlight_hold_sensitivity",
         "color_character.shadow_retention_sensitivity",
         "color_character.emulsion_density_sensitivity",
-        "color_character.palette.separation_sensitivity",
+        "color_character.palette.range_sensitivity",
     };
     static const std::unordered_set<std::string> kArrayFields{
         "tone_response.channel_toe_mult", "tone_response.channel_shoulder_mult", "tone_response.channel_midtone_mult",

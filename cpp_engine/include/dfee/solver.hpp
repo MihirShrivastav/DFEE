@@ -37,7 +37,7 @@ struct SolverControls {
     float film_color = 100.0F;
     float highlight_color_hold = 0.0F;
     float shadow_color_retention = 0.0F;
-    float palette_separation = 0.0F;
+    float palette_range = 0.0F;
     float emulsion_color_density = 0.0F;
     float print_strength = 1.0F;
     float print_c = 0.0F;
@@ -98,12 +98,12 @@ struct FilmResponsePlan {
     float film_color = 100.0F;
     float highlight_color_hold = 0.0F;
     float shadow_color_retention = 0.0F;
-    float palette_separation = 0.0F;
+    float palette_range = 0.0F;
     float emulsion_color_density = 0.0F;
     float highlight_hold_sensitivity = 0.0F;
     float shadow_retention_sensitivity = 0.0F;
     float emulsion_density_sensitivity = 0.0F;
-    float palette_separation_sensitivity = 0.0F;
+    float palette_range_sensitivity = 0.0F;
     std::vector<float> palette_anchors;
     std::vector<float> palette_anchor_weights;
 };

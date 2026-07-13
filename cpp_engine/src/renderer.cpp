@@ -909,8 +909,8 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     sh_comp = std::max(sh_comp * (1.0F - kShadowRetentionGain * n_ret), 0.0F);
 
     // Palette Separation (M7-003D): resolve anchors and weights once before the per-pixel loop.
-    const float n_sep = std::clamp(response.palette_separation / 100.0F, -1.0F, 1.0F)
-        * response.palette_separation_sensitivity;
+    const float n_range = std::clamp(response.palette_range / 100.0F, -1.0F, 1.0F)
+        * response.palette_range_sensitivity;
     const std::vector<float> palette_anchors = response.palette_anchors.empty()
         ? std::vector<float>{
             0.0F,
@@ -1020,13 +1020,13 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
         // Palette Separation sub-pass (M7-003D): chroma-gated, wrap-stable hue-anchor attraction.
         // Applied after coupling stage updates lch.c and lch.h, before final OKLab conversion.
-        // Gated by n_sep != 0 so a zero-value is a true no-op (neutral pixel pass-through).
+        // Gated by n_range != 0 so a zero-value is a true no-op (neutral pixel pass-through).
         // The nearest anchor's weight gates the shift: weight=0 suppresses it, weight=1.0 is full.
-        if (n_sep != 0.0F) {
+        if (n_range != 0.0F) {
             const float g_c = smoothstep01(kPaletteChromaLo, kPaletteChromaHi, lch.c);
             const auto [delta, nearest_idx] = nearest_anchor_delta(h_new, palette_anchors);
             const float anchor_weight = palette_weights[nearest_idx];
-            h_new = wrap_angle_positive(h_new + kPaletteSepGain * n_sep * g_c * anchor_weight * std::sin(delta));
+            h_new = wrap_angle_positive(h_new + kPaletteSepGain * n_range * g_c * anchor_weight * std::sin(delta));
         }
 
         adjusted = oklch_to_oklab_pixel({

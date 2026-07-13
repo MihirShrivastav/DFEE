@@ -97,4 +97,4 @@ color_character:
   shadow_retention_sensitivity: 0.65
   emulsion_density_sensitivity: 0.60
   palette:
-    separation_sensitivity: 0.55
+    range_sensitivity: 0.55

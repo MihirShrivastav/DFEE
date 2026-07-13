@@ -34,7 +34,7 @@ sensitivity to `0` regardless of what is written here.
 | `highlight_hold_sensitivity` | `0.0`–`1.0` | How strongly the stock responds to `highlight_color_hold`. `1.0` = full intended range; `0.0` = effectively disabled. |
 | `shadow_retention_sensitivity` | `0.0`–`1.0` | How strongly the stock responds to `shadow_color_retention`. |
 | `emulsion_density_sensitivity` | `0.0`–`1.0` | How strongly the stock responds to `emulsion_color_density`. |
-| `palette.separation_sensitivity` | `0.0`–`1.0` | How strongly the stock responds to `palette_separation`. |
+| `palette.range_sensitivity` | `0.0`–`1.0` | How strongly the stock responds to `palette_range`. |
 | `palette.anchors` | variable-length array of radians | Hue anchors (OKLCh h, in radians) used by the palette separation algorithm. Overrides the engine default of 6 evenly spaced anchors. |
 | `palette.anchor_weights` | variable-length array, same length as `palette.anchors` | Per-anchor strength weights. Omit to use uniform weights. |
 

@@ -62,7 +62,7 @@ reproducible.
 | --- | --- |
 | `highlight_color_hold` | Scales the stock's resolved highlight chroma rolloff and highlight desaturation so colour survives further into bright zones. High-zone only; never touches lightness. |
 | `shadow_color_retention` | Scales the stock's resolved shadow chroma rolloff. Shadow-gated; no black lift. Chroma only. |
-| `palette_separation` | Per-pixel hue-anchor attraction in OKLCh. Chroma-gated so near-neutral pixels are preserved. Hue-wrap is stable via `sin(delta)`. Default 6 perceptual anchors (radians) unless the stock YAML supplies a `palette.anchors` override. |
+| `palette_range` | Per-pixel hue-anchor attraction in OKLCh. Chroma-gated so near-neutral pixels are preserved. Hue-wrap is stable via `sin(delta)`. Default 6 perceptual anchors (radians) unless the stock YAML supplies a `palette.anchors` override. |
 | `emulsion_color_density` | Scales the stock's dye chroma body (`chroma_boost`). Distinct from the legacy `film_color` multiplier, which also scaled compressions and biases. `film_color` is retained as a legacy / Advanced control. |
 
 **Request contract.** All four fields are accepted on preview (query params)
@@ -72,7 +72,7 @@ and export (POST body). Omitting a field is equivalent to `0`. Values outside
 **Report JSON.** The report records both the four requested input values and
 the four resolved per-stock sensitivities (`highlight_hold_sensitivity`,
 `shadow_retention_sensitivity`, `emulsion_density_sensitivity`,
-`palette.separation_sensitivity`).
+`palette.range_sensitivity`).
 
 **Native application.** Color Character is applied only inside
 `apply_color_response_and_coupling_pipeline`, the sole live render path.
@@ -85,7 +85,7 @@ are filmic_v2 native-only and are a documented no-op on the legacy fallback.
 - **M7-001 / M7-002**: Exposure contract, React workflow reorganisation around
   Film Recipe / Film Exposure / Color Character / Material Finish.
 - **M7-003**: Color Character — all four controls shipped
-  (`highlight_color_hold`, `shadow_color_retention`, `palette_separation`,
+  (`highlight_color_hold`, `shadow_color_retention`, `palette_range`,
   `emulsion_color_density`), including YAML `color_character:` group, native
   solver, renderer, report, request contract, parity guard, and UI.
 
