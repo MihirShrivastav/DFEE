@@ -1966,6 +1966,98 @@ void test_palette_separation_wrap_stability() {
 }
 
 // ---------------------------------------------------------------------------
+// M7-003 final-review fix: palette anchor weights gate the hue shift
+// ---------------------------------------------------------------------------
+
+void test_palette_anchor_weights_gate_hue_shift() {
+    // Build a saturated pixel at a known hue so we know its nearest anchor.
+    // Use OKLCh → OKLab → RGB at L=0.60, C=0.15, h=0.30 rad.
+    // The nearest default anchor is 0 (distance 0.30 rad); next nearest is π/3 (distance 0.747 rad).
+    // We place a custom anchor at exactly h=0.30 rad to guarantee predictable nearest-anchor index.
+    // Two custom anchors: {0.30, 3.14} — nearest to our pixel is index 0 (distance 0).
+    // But we want delta != 0 to get a non-trivial shift, so place anchors at {0.0, 3.14}.
+    // Pixel hue ≈ 0.30 rad → nearest anchor = 0 (distance 0.30), index 0.
+    constexpr float kL = 0.60F;
+    constexpr float kC = 0.15F;
+    constexpr float kH = 0.30F;
+    const float a_in = kC * std::cos(kH);
+    const float b_in = kC * std::sin(kH);
+    const float lp0 = kL + 0.3963377774F * a_in + 0.2158017574F * b_in;
+    const float mp0 = kL - 0.1055613458F * a_in - 0.0638541728F * b_in;
+    const float sp0 = kL - 0.0894841775F * a_in - 1.2914855480F * b_in;
+    const float lv0 = lp0 * lp0 * lp0;
+    const float mv0 = mp0 * mp0 * mp0;
+    const float sv0 = sp0 * sp0 * sp0;
+    const float r_px = std::clamp(4.0767416621F * lv0 - 3.3077115913F * mv0 + 0.2309699292F * sv0, 0.0F, 1.0F);
+    const float g_px = std::clamp(-1.2684380046F * lv0 + 2.6097574011F * mv0 - 0.3413193965F * sv0, 0.0F, 1.0F);
+    const float b_px = std::clamp(-0.0041960863F * lv0 - 0.7034186147F * mv0 + 1.7076147010F * sv0, 0.0F, 1.0F);
+
+    dfee::Image rgb(1, 1, 3);
+    rgb.pixels = {r_px, g_px, b_px};
+
+    const auto zones = make_flat_zone_masks(rgb);
+
+    // Two custom anchors: 0.0 and π. Pixel hue ≈ 0.30 → nearest is index 0 (distance 0.30 rad).
+    constexpr float kPi = std::numbers::pi_v<float>;
+    const std::vector<float> two_anchors = {0.0F, kPi};
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.palette_separation_sensitivity = 1.0F;
+    response.palette_separation = 100.0F;
+    response.palette_anchors = two_anchors;
+
+    const dfee::FilmRenderer renderer;
+
+    // --- Case 1: weight = 1.0 for nearest anchor → full shift (clearly non-zero)
+    response.palette_anchor_weights = {1.0F, 1.0F};
+    const auto baseline_zero_sep = [&]() {
+        auto r = response;
+        r.palette_separation = 0.0F;
+        return renderer.apply_color_response_and_coupling(rgb, zones, r);
+    }();
+    const auto with_weight1 = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    const float h_base  = read_hue(baseline_zero_sep, 0);
+    const float h_w1    = read_hue(with_weight1, 0);
+    const float shift_w1 = std::fabs(hue_delta(h_w1, h_base));
+
+    if (shift_w1 < 1.0e-4F) {
+        throw std::runtime_error(
+            "palette_anchor_weights: weight=1.0 produced no hue shift; expected non-zero. "
+            "shift=" + std::to_string(shift_w1));
+    }
+
+    // --- Case 2: weight = 0.0 for nearest anchor → shift must be (near) zero
+    response.palette_anchor_weights = {0.0F, 1.0F};  // index 0 weight=0, index 1 weight=1
+    const auto with_weight0 = renderer.apply_color_response_and_coupling(rgb, zones, response);
+    const float h_w0 = read_hue(with_weight0, 0);
+    const float shift_w0 = std::fabs(hue_delta(h_w0, h_base));
+
+    if (shift_w0 > 1.0e-4F) {
+        throw std::runtime_error(
+            "palette_anchor_weights: weight=0.0 for nearest anchor did not suppress hue shift. "
+            "shift=" + std::to_string(shift_w0) +
+            " (expected < 1e-4). weight=1.0 shift was " + std::to_string(shift_w1));
+    }
+
+    // --- Case 3: empty weights vector → all-1.0 fallback → output must match Case 1 exactly
+    response.palette_anchor_weights.clear();
+    const auto with_empty_weights = renderer.apply_color_response_and_coupling(rgb, zones, response);
+    const float h_empty = read_hue(with_empty_weights, 0);
+    const float diff_vs_w1 = std::fabs(hue_delta(h_empty, h_w1));
+
+    if (diff_vs_w1 > 1.0e-5F) {
+        throw std::runtime_error(
+            "palette_anchor_weights: empty weights did not reproduce all-1.0 behaviour. "
+            "h_empty=" + std::to_string(h_empty) +
+            " h_weight1=" + std::to_string(h_w1) +
+            " diff=" + std::to_string(diff_vs_w1));
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Task 6: Emulsion Color Density + Solver family defaults
 // ---------------------------------------------------------------------------
 
@@ -2323,6 +2415,7 @@ int main() {
         test_palette_separation_neutral_pixel_preserved();
         test_palette_separation_direction();
         test_palette_separation_wrap_stability();
+        test_palette_anchor_weights_gate_hue_shift();
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
         test_color_character_synthetic_zone_hue_fixture();

@@ -303,21 +303,29 @@ constexpr float kPaletteChromaHi  = 0.06F;   // OKLCh chroma gate upper edge
     return t * t * (3.0F - 2.0F * t);
 }
 
+// Result type for nearest_anchor_delta: signed arc delta and index of nearest anchor.
+struct NearestAnchorResult {
+    float delta = 0.0F;    // signed shortest-arc delta in (-π, +π]
+    std::size_t index = 0; // index of the nearest anchor in the anchors vector
+};
+
 // Signed shortest-arc angular delta from h toward the nearest anchor in anchors.
-// Returns a value in (-π, +π]. Passing the result through std::sin() for the hue shift
-// gives smooth, wrap-stable behaviour at the 0°/360° seam.
-[[nodiscard]] inline float nearest_anchor_delta(const float h, const std::vector<float>& anchors) {
+// Returns delta in (-π, +π] and the index of the nearest anchor.
+// Passing delta through std::sin() for the hue shift gives smooth, wrap-stable behaviour.
+[[nodiscard]] inline NearestAnchorResult nearest_anchor_delta(const float h, const std::vector<float>& anchors) {
     float best = 0.0F;
     float best_abs = std::numeric_limits<float>::max();
-    for (const float a : anchors) {
-        const float d = std::fmod((a - h) + std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>)
+    std::size_t best_idx = 0U;
+    for (std::size_t i = 0U; i < anchors.size(); ++i) {
+        const float d = std::fmod((anchors[i] - h) + std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>)
             - std::numbers::pi_v<float>;
         if (std::abs(d) < best_abs) {
             best_abs = std::abs(d);
             best = d;
+            best_idx = i;
         }
     }
-    return best;
+    return {best, best_idx};
 }
 
 [[nodiscard]] cv::Mat roll_mat(const cv::Mat& source, const int shift_y, const int shift_x) {
@@ -900,7 +908,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         * response.shadow_retention_sensitivity;
     sh_comp = std::max(sh_comp * (1.0F - kShadowRetentionGain * n_ret), 0.0F);
 
-    // Palette Separation (M7-003D): resolve anchors once before the per-pixel loop.
+    // Palette Separation (M7-003D): resolve anchors and weights once before the per-pixel loop.
     const float n_sep = std::clamp(response.palette_separation / 100.0F, -1.0F, 1.0F)
         * response.palette_separation_sensitivity;
     const std::vector<float> palette_anchors = response.palette_anchors.empty()
@@ -913,6 +921,13 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
             5.0F * std::numbers::pi_v<float> / 3.0F,
           }
         : response.palette_anchors;
+    // Resolve per-anchor weights: use calibrated weights when present and size-matched,
+    // otherwise fall back to all-1.0 (neutral — byte-identical to the previous behaviour).
+    const std::vector<float> palette_weights =
+        (!response.palette_anchor_weights.empty() &&
+         response.palette_anchor_weights.size() == palette_anchors.size())
+        ? response.palette_anchor_weights
+        : std::vector<float>(palette_anchors.size(), 1.0F);
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
     const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);
@@ -1006,10 +1021,12 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         // Palette Separation sub-pass (M7-003D): chroma-gated, wrap-stable hue-anchor attraction.
         // Applied after coupling stage updates lch.c and lch.h, before final OKLab conversion.
         // Gated by n_sep != 0 so a zero-value is a true no-op (neutral pixel pass-through).
+        // The nearest anchor's weight gates the shift: weight=0 suppresses it, weight=1.0 is full.
         if (n_sep != 0.0F) {
             const float g_c = smoothstep01(kPaletteChromaLo, kPaletteChromaHi, lch.c);
-            const float delta = nearest_anchor_delta(h_new, palette_anchors);
-            h_new = wrap_angle_positive(h_new + kPaletteSepGain * n_sep * g_c * std::sin(delta));
+            const auto [delta, nearest_idx] = nearest_anchor_delta(h_new, palette_anchors);
+            const float anchor_weight = palette_weights[nearest_idx];
+            h_new = wrap_angle_positive(h_new + kPaletteSepGain * n_sep * g_c * anchor_weight * std::sin(delta));
         }
 
         adjusted = oklch_to_oklab_pixel({
