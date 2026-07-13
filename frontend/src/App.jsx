@@ -1502,8 +1502,8 @@ export default function App() {
                   },
                   {
                     key: 'palette_range',
-                    label: 'Palette Separation',
-                    tooltip: 'How distinctly different colours are held apart from one another.',
+                    label: 'Palette Range',
+                    tooltip: 'Drag left to merge similar colours into a harmonised, dreamy palette; right to separate them into distinct, punchy colours.',
                   },
                   {
                     key: 'emulsion_color_density',
