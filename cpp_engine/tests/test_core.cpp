@@ -1959,6 +1959,125 @@ void test_palette_separation_wrap_stability() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Task 6: Emulsion Color Density + Solver family defaults
+// ---------------------------------------------------------------------------
+
+void test_emulsion_color_density_increases_mid_saturation_chroma() {
+    // A mid-saturation pixel at moderate luminance.
+    // With emulsion_color_density=+100 and sensitivity=1, chroma_boost is multiplied by
+    // (1 + kEmulsionDensityGain * 1.0), raising output chroma vs density=0.
+    // chroma_boost is set to 1.0 (neutral) to isolate the density effect from base saturation.
+    dfee::Image rgb(1, 1, 3);
+    rgb.pixels = {0.50F, 0.30F, 0.20F};  // mid-saturation, mid-luminance
+
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    // Baseline: density = 0 (no effect)
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.chroma_boost = 1.0F;  // neutral — isolates density effect
+    response.emulsion_color_density = 0.0F;
+    response.emulsion_density_sensitivity = 1.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    // Active: density = +100
+    response.emulsion_color_density = 100.0F;
+    const auto active = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    const auto to_chroma = [](const dfee::Image& img, int x) -> float {
+        const auto oklab = dfee::rgb_to_oklab(img);
+        const float a = oklab.at(x, 0, 1);
+        const float b = oklab.at(x, 0, 2);
+        return std::sqrt(a * a + b * b);
+    };
+
+    const float baseline_chroma = to_chroma(baseline, 0);
+    const float active_chroma   = to_chroma(active,   0);
+
+    if (!(active_chroma > baseline_chroma)) {
+        throw std::runtime_error(
+            "emulsion_color_density=+100 (sensitivity=1) did not increase mid-saturation chroma: "
+            "active=" + std::to_string(active_chroma) +
+            " baseline=" + std::to_string(baseline_chroma));
+    }
+}
+
+void test_solver_color_character_family_defaults() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+
+    // Case 1: color_negative stock (portra_400) — no color_character YAML block.
+    // Solver must apply family defaults → all four sensitivities must be non-zero.
+    const auto color_stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_400.yaml");
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 11.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.highlight_headroom = 0.25F;
+    input.tonal_distribution.shadow_depth = 0.05F;
+    input.tonal_distribution.luma_p95 = 0.78F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+    input.raw_iso = 400;
+
+    dfee::SolverControls controls;
+    const dfee::RenderPlanSolver solver;
+    const auto color_plan = solver.solve(input, color_stock, controls);
+
+    if (!(color_plan.film_response.highlight_hold_sensitivity > 0.0F)) {
+        throw std::runtime_error(
+            "portra_400: highlight_hold_sensitivity must be > 0, got " +
+            std::to_string(color_plan.film_response.highlight_hold_sensitivity));
+    }
+    if (!(color_plan.film_response.shadow_retention_sensitivity > 0.0F)) {
+        throw std::runtime_error(
+            "portra_400: shadow_retention_sensitivity must be > 0, got " +
+            std::to_string(color_plan.film_response.shadow_retention_sensitivity));
+    }
+    if (!(color_plan.film_response.emulsion_density_sensitivity > 0.0F)) {
+        throw std::runtime_error(
+            "portra_400: emulsion_density_sensitivity must be > 0, got " +
+            std::to_string(color_plan.film_response.emulsion_density_sensitivity));
+    }
+    if (!(color_plan.film_response.palette_separation_sensitivity > 0.0F)) {
+        throw std::runtime_error(
+            "portra_400: palette_separation_sensitivity must be > 0, got " +
+            std::to_string(color_plan.film_response.palette_separation_sensitivity));
+    }
+
+    // Case 2: monochrome stock (tri_x_400) — all four sensitivities must be 0.
+    const auto mono_stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "tri_x_400.yaml");
+    const auto mono_plan = solver.solve(input, mono_stock, controls);
+
+    if (std::fabs(mono_plan.film_response.highlight_hold_sensitivity) > 1.0e-6F) {
+        throw std::runtime_error(
+            "tri_x_400: highlight_hold_sensitivity must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.highlight_hold_sensitivity));
+    }
+    if (std::fabs(mono_plan.film_response.shadow_retention_sensitivity) > 1.0e-6F) {
+        throw std::runtime_error(
+            "tri_x_400: shadow_retention_sensitivity must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.shadow_retention_sensitivity));
+    }
+    if (std::fabs(mono_plan.film_response.emulsion_density_sensitivity) > 1.0e-6F) {
+        throw std::runtime_error(
+            "tri_x_400: emulsion_density_sensitivity must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.emulsion_density_sensitivity));
+    }
+    if (std::fabs(mono_plan.film_response.palette_separation_sensitivity) > 1.0e-6F) {
+        throw std::runtime_error(
+            "tri_x_400: palette_separation_sensitivity must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.palette_separation_sensitivity));
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1999,6 +2118,8 @@ int main() {
         test_palette_separation_neutral_pixel_preserved();
         test_palette_separation_direction();
         test_palette_separation_wrap_stability();
+        test_emulsion_color_density_increases_mid_saturation_chroma();
+        test_solver_color_character_family_defaults();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

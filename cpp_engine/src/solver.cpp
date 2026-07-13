@@ -137,6 +137,37 @@ struct GrainFamilyDefaults {
     return {};
 }
 
+struct ColorCharacterDefaults {
+    float highlight_hold_sensitivity;
+    float shadow_retention_sensitivity;
+    float emulsion_density_sensitivity;
+    float palette_separation_sensitivity;
+};
+
+[[nodiscard]] ColorCharacterDefaults color_character_defaults(const StockType type) {
+    switch (type) {
+        case StockType::ColorReversal:  return {0.85F, 0.55F, 0.70F, 0.70F};
+        case StockType::ColorNegative:  return {0.70F, 0.65F, 0.60F, 0.55F};
+        case StockType::Monochrome:     return {0.0F, 0.0F, 0.0F, 0.0F};
+    }
+    return {0.60F, 0.60F, 0.55F, 0.50F};
+}
+
+[[nodiscard]] std::vector<float> get_numeric_vector(
+    const std::unordered_map<std::string, std::vector<double>>& values,
+    const std::string& key) {
+    const auto it = values.find(key);
+    if (it == values.end()) {
+        return {};
+    }
+    std::vector<float> out;
+    out.reserve(it->second.size());
+    for (const double v : it->second) {
+        out.push_back(static_cast<float>(v));
+    }
+    return out;
+}
+
 [[nodiscard]] std::array<float, 3> get_array3(
     const std::unordered_map<std::string, std::vector<double>>& values,
     const std::string& key,
@@ -399,6 +430,24 @@ RenderPlan RenderPlanSolver::solve(
         .palette_separation = controls.palette_separation,
         .emulsion_color_density = controls.emulsion_color_density,
     };
+
+    const ColorCharacterDefaults cc_defaults = color_character_defaults(stock_profile.stock_type);
+    plan.film_response.highlight_hold_sensitivity = get_numeric(
+        stock_profile.numeric_values, "color_character.highlight_hold_sensitivity",
+        cc_defaults.highlight_hold_sensitivity);
+    plan.film_response.shadow_retention_sensitivity = get_numeric(
+        stock_profile.numeric_values, "color_character.shadow_retention_sensitivity",
+        cc_defaults.shadow_retention_sensitivity);
+    plan.film_response.emulsion_density_sensitivity = get_numeric(
+        stock_profile.numeric_values, "color_character.emulsion_density_sensitivity",
+        cc_defaults.emulsion_density_sensitivity);
+    plan.film_response.palette_separation_sensitivity = get_numeric(
+        stock_profile.numeric_values, "color_character.palette.separation_sensitivity",
+        cc_defaults.palette_separation_sensitivity);
+    plan.film_response.palette_anchors = get_numeric_vector(
+        stock_profile.numeric_arrays, "color_character.palette.anchors");
+    plan.film_response.palette_anchor_weights = get_numeric_vector(
+        stock_profile.numeric_arrays, "color_character.palette.anchor_weights");
 
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);

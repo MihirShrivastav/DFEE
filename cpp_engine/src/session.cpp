@@ -1559,7 +1559,11 @@ std::string serialize_feature_report_json(
         << "\"highlight_color_hold\": " << json_number(render_plan.film_response.highlight_color_hold) << ",\n"
         << "\"shadow_color_retention\": " << json_number(render_plan.film_response.shadow_color_retention) << ",\n"
         << "\"palette_separation\": " << json_number(render_plan.film_response.palette_separation) << ",\n"
-        << "\"emulsion_color_density\": " << json_number(render_plan.film_response.emulsion_color_density)
+        << "\"emulsion_color_density\": " << json_number(render_plan.film_response.emulsion_color_density) << ",\n"
+        << "\"highlight_hold_sensitivity\": " << json_number(render_plan.film_response.highlight_hold_sensitivity) << ",\n"
+        << "\"shadow_retention_sensitivity\": " << json_number(render_plan.film_response.shadow_retention_sensitivity) << ",\n"
+        << "\"emulsion_density_sensitivity\": " << json_number(render_plan.film_response.emulsion_density_sensitivity) << ",\n"
+        << "\"palette_separation_sensitivity\": " << json_number(render_plan.film_response.palette_separation_sensitivity)
         << "},\n";
     out << "    \"material_effects\": {"
         << "\"grain_strength\": " << json_number(render_plan.material_effects.grain_strength) << ","

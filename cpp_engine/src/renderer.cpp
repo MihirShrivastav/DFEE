@@ -21,6 +21,7 @@ namespace {
 constexpr float kHoldGainHi = 0.6F;
 constexpr float kHoldGainDesat = 0.6F;
 constexpr float kShadowRetentionGain = 0.6F;
+constexpr float kEmulsionDensityGain = 0.5F;
 
 [[nodiscard]] float clampf(const float value, const float low, const float high) {
     return std::clamp(value, low, high);
@@ -843,7 +844,9 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
     const float fc = response.film_color / 100.0F;
     constexpr float kBiasScale = 0.004F;
-    const float chroma_boost = 1.0F + (response.chroma_boost - 1.0F) * fc;
+    const float n_dens = std::clamp(response.emulsion_color_density / 100.0F, -1.0F, 1.0F)
+        * response.emulsion_density_sensitivity;
+    const float chroma_boost = (1.0F + (response.chroma_boost - 1.0F) * fc) * (1.0F + kEmulsionDensityGain * n_dens);
     const float red_comp = response.red_orange_compression * fc;
     const float blue_comp = response.blue_cyan_compression * fc;
     const float yellow_green_muting = response.yellow_green_muting * fc;
