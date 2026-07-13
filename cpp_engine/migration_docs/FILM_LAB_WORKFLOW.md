@@ -62,7 +62,7 @@ reproducible.
 | --- | --- |
 | `highlight_color_hold` | Scales the stock's resolved highlight chroma rolloff and highlight desaturation so colour survives further into bright zones. High-zone only; never touches lightness. |
 | `shadow_color_retention` | Scales the stock's resolved shadow chroma rolloff. Shadow-gated; no black lift. Chroma only. |
-| `palette_range` | Per-pixel hue-anchor attraction in OKLCh. Chroma-gated so near-neutral pixels are preserved. Hue-wrap is stable via `sin(delta)`. Default 6 perceptual anchors (radians) unless the stock YAML supplies a `palette.anchors` override. |
+| `palette_range` | Bipolar OKLCh hue-anchor control. Negative (merge): pulls each pixel's hue toward its nearest dominant anchor and desaturates proportionally to the pull, collapsing similar colours into a harmonised, ethereal limited palette. Positive (separate): pushes hue away from the anchor toward the midpoint and lifts chroma for a distinct, punchy palette. Chroma-gated so near-neutral pixels are preserved; hue-wrap stable via `sin(delta)`. Default 6 perceptual anchors (radians) unless the stock YAML supplies a `palette.anchors` override. |
 | `emulsion_color_density` | Scales the stock's dye chroma body (`chroma_boost`). Distinct from the legacy `film_color` multiplier, which also scaled compressions and biases. `film_color` is retained as a legacy / Advanced control. |
 
 **Request contract.** All four fields are accepted on preview (query params)

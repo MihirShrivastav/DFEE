@@ -54,10 +54,24 @@ table.
 | M7-003A | Define profile and request schema | Add neutral, bounded fields (`−100..+100`) for `highlight_color_hold`, `shadow_color_retention`, `palette_range`, and `emulsion_color_density`. Parity guard rejects non-zero values under `parity_v1`. | Done |
 | M7-003B | Implement highlight color hold | Scales the stock's resolved highlight chroma rolloff and highlight desaturation. High-zone only; never touches lightness. | Done |
 | M7-003C | Implement shadow color retention | Scales the stock's resolved shadow chroma rolloff. Shadow-gated; no black lift. | Done |
-| M7-003D | Implement palette separation | Per-pixel hue-anchor attraction in OKLCh; chroma-gated (neutrals preserved); hue-wrap stable via `sin(delta)`. Default 6 perceptual anchors unless the stock overrides. | Done |
+| M7-003D | Implement palette separation | Per-pixel hue-anchor attraction in OKLCh; chroma-gated (neutrals preserved); hue-wrap stable via `sin(delta)`. Default 6 perceptual anchors unless the stock overrides. Later evolved into the bipolar **Palette Range** (see Primary Film Look Slice 1 below). | Done |
 | M7-003E | Build the Color Character UI | Generic labels, concise tooltips, neutral/reset states, mono-disabled states, `film_color` relocated to Advanced. | Done |
 | M7-003F (human) | Calibrate and validate | Visual acceptance pass on representative RAWs (reversal, negative, B&W) + preview/export timing probe. | **Outstanding — not yet run** |
 | M7-003G (added) | Implement emulsion color density | Scales the stock's dye chroma body (`chroma_boost`). Distinct from legacy `film_color` multiplier. | Done |
+
+### Primary Film Look Redesign — Slice 1: Palette Range — DONE (code)
+
+Spec: `docs/superpowers/specs/2026-07-13-primary-film-look-controls-design.md`.
+`palette_separation` was renamed to `palette_range` and evolved into a bipolar
+control: negative merges hues toward dominant anchors with coupled
+desaturation (harmonised/ethereal limited palette), positive separates hues and
+lifts chroma. Calibrated to a plausibly-real ceiling (6-anchor default keeps
+merge desaturation ~27.5%; `velvia_50` uses 4 tuned anchors for a stronger
+signature). Outstanding human steps: visual-acceptance pass on representative
+RAWs and a preview/export timing probe (shared with the M7-003F item above,
+since both exercise the same colour pipeline). Remaining redesign slices:
+Film Color Density, Highlight Rolloff + Film Contrast, Halation (numeric) +
+Bloom, Grain finer controls, panel consolidation.
 
 ### M7-004: Process
 

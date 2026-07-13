@@ -174,7 +174,7 @@ bipolar `−100` to `+100`, with `0` as the neutral no-op default:
 | --- | --- |
 | `highlight_color_hold` | Scales the stock's highlight chroma rolloff and highlight desaturation so colour survives into bright zones. High-zone only; never touches lightness. |
 | `shadow_color_retention` | Scales the stock's shadow chroma rolloff. Shadow-gated; no black lift. |
-| `palette_range` | Per-pixel hue-anchor attraction in OKLCh; neutrals preserved; hue-wrap stable. |
+| `palette_range` | Bipolar OKLCh hue-anchor control: negative merges hues toward dominant anchors and desaturates them (harmonised, ethereal limited palette), positive separates hues and lifts chroma (distinct, punchy palette). Neutrals preserved; hue-wrap stable. |
 | `emulsion_color_density` | Scales the stock's dye chroma body (`chroma_boost`), distinct from the legacy `film_color` multiplier. |
 
 Sending any non-zero Color Character value under `parity_v1` is rejected with
