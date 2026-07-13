@@ -187,6 +187,7 @@ void validate_profile_fields(
     const std::unordered_set<std::string>& numeric_fields,
     const std::unordered_set<std::string>& array_fields,
     const std::unordered_set<std::string>& string_fields,
+    const std::unordered_set<std::string>& variable_array_fields,
     const std::string& kind) {
     for (const auto& [key, value] : profile.numeric_values) {
         if (!numeric_fields.contains(key)) {
@@ -197,11 +198,16 @@ void validate_profile_fields(
         }
     }
     for (const auto& [key, values] : profile.numeric_arrays) {
-        if (!array_fields.contains(key)) {
+        const bool is_fixed3 = array_fields.contains(key);
+        const bool is_variable = variable_array_fields.contains(key);
+        if (!is_fixed3 && !is_variable) {
             throw std::runtime_error(kind + " profile contains an unsupported array field: '" + key + "'.");
         }
-        if (values.size() != 3U) {
+        if (is_fixed3 && values.size() != 3U) {
             throw std::runtime_error(kind + " profile array field must contain exactly three values: '" + key + "'.");
+        }
+        if (values.empty()) {
+            throw std::runtime_error(kind + " profile array field must not be empty: '" + key + "'.");
         }
         for (const double value : values) {
             if (!std::isfinite(value)) {
@@ -240,6 +246,10 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
         "chroma_coupling.hi_hue_conv_str",
         "dye_contamination.r_to_g", "dye_contamination.g_to_r", "dye_contamination.b_to_g",
         "dye_contamination.b_to_r", "dye_contamination.r_to_b", "dye_contamination.g_to_b",
+        "color_character.highlight_hold_sensitivity",
+        "color_character.shadow_retention_sensitivity",
+        "color_character.emulsion_density_sensitivity",
+        "color_character.palette.separation_sensitivity",
     };
     static const std::unordered_set<std::string> kArrayFields{
         "tone_response.channel_toe_mult", "tone_response.channel_shoulder_mult", "tone_response.channel_midtone_mult",
@@ -249,7 +259,11 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
     static const std::unordered_set<std::string> kStringFields{
         "stock_id", "stock_name", "stock_type", "grain.family", "grain.peak_zone", "halation.trigger",
     };
-    validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, "Film stock");
+    static const std::unordered_set<std::string> kVariableArrayFields{
+        "color_character.palette.anchors",
+        "color_character.palette.anchor_weights",
+    };
+    validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, kVariableArrayFields, "Film stock");
 }
 
 void validate_native_print_stock_contract(const PrintStockProfile& profile) {
@@ -264,7 +278,7 @@ void validate_native_print_stock_contract(const PrintStockProfile& profile) {
     static const std::unordered_set<std::string> kStringFields{
         "print_stock_id", "print_stock_name",
     };
-    validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, "Print stock");
+    validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, {}, "Print stock");
 }
 
 template <typename TProfile>

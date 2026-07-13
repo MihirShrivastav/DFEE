@@ -1322,6 +1322,135 @@ void test_color_character_request_fields_default_to_neutral_zero() {
     require_close(controls.highlight_color_hold, 0.0F, 1.0e-6F);
 }
 
+void test_loader_accepts_optional_color_character_group() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const std::filesystem::path stocks_dir = repo_root / "profiles" / "stocks";
+    const std::filesystem::path temp_path = stocks_dir / "native_cc_test_stock.yaml";
+    struct CleanupGuard {
+        std::filesystem::path path;
+        ~CleanupGuard() { std::filesystem::remove(path); }
+    } cleanup_guard{temp_path};
+
+    {
+        std::ofstream out(temp_path, std::ios::binary);
+        // Base content mirrors astia_100.yaml so all required sections are present
+        out << "stock_id: native_cc_test_stock\n";
+        out << "stock_name: Native CC Test Stock\n";
+        out << "stock_type: color_negative\n";
+        out << "adaptation:\n";
+        out << "  base_iso: 400\n";
+        out << "  default_strength: 0.85\n";
+        out << "  camera_cast_compensation_sensitivity: 0.5\n";
+        out << "  highlight_stress_sensitivity: 0.6\n";
+        out << "  shadow_noise_sensitivity: 0.4\n";
+        out << "tone_response:\n";
+        out << "  toe_strength: 0.40\n";
+        out << "  toe_length: 0.28\n";
+        out << "  midtone_contrast: 1.0\n";
+        out << "  shoulder_strength: 0.60\n";
+        out << "  highlight_rolloff_start: 0.72\n";
+        out << "  black_density_floor: 0.01\n";
+        out << "  channel_toe_mult: [1.0, 1.0, 1.0]\n";
+        out << "  channel_shoulder_mult: [1.0, 1.0, 1.0]\n";
+        out << "  channel_midtone_mult: [1.0, 1.0, 1.0]\n";
+        out << "color_response:\n";
+        out << "  shadow_bias_lab: [0.0, 0.0, 0.0]\n";
+        out << "  midtone_bias_lab: [0.0, 0.0, 0.0]\n";
+        out << "  highlight_bias_lab: [0.0, 0.0, 0.0]\n";
+        out << "  blue_cast_suppression: 0.1\n";
+        out << "  green_magenta_stabilization: 0.1\n";
+        out << "  pan_weight_r: 0.299\n";
+        out << "  pan_weight_g: 0.587\n";
+        out << "  pan_weight_b: 0.114\n";
+        out << "hue_saturation_response:\n";
+        out << "  saturation_boost: 1.0\n";
+        out << "  red_orange_midtone_compression: 0.2\n";
+        out << "  yellow_green_muting: 0.1\n";
+        out << "  cyan_blue_highlight_compression: 0.2\n";
+        out << "  neon_compression: 0.5\n";
+        out << "  highlight_desaturation: 0.4\n";
+        out << "grain:\n";
+        out << "  size: 0.40\n";
+        out << "  strength: 0.40\n";
+        out << "  roughness: 0.35\n";
+        out << "  chroma_strength: 0.1\n";
+        out << "  peak_zone: midtones_heavy\n";
+        out << "  texture_masking: 0.7\n";
+        out << "  family: modern_color_negative\n";
+        out << "  target_pgi_35mm_4x6: 55\n";
+        out << "  clumpiness: 0.5\n";
+        out << "  micro_grit: 0.3\n";
+        out << "  layer_correlation: 0.6\n";
+        out << "  shadow_response: 1.0\n";
+        out << "  midtone_response: 1.0\n";
+        out << "  highlight_response: 0.3\n";
+        out << "  underexposure_coarsening: 0.4\n";
+        out << "  overexposure_smoothing: 0.2\n";
+        out << "halation:\n";
+        out << "  trigger: specular_only\n";
+        out << "  strength: 0.1\n";
+        out << "  radius_inner: 4\n";
+        out << "  radius_outer: 12\n";
+        out << "  warm_core: [1.0, 0.5, 0.2]\n";
+        out << "  red_fringe: [1.0, 0.1, 0.0]\n";
+        out << "chroma_coupling:\n";
+        out << "  hi_rolloff_start: 0.75\n";
+        out << "  hi_rolloff_rate: 1.5\n";
+        out << "  hi_compression: 0.5\n";
+        out << "  sh_rolloff_start: 0.18\n";
+        out << "  sh_compression: 0.4\n";
+        out << "  hi_hue_conv_rad: 0.2\n";
+        out << "  hi_hue_conv_str: 0.1\n";
+        out << "dye_contamination:\n";
+        out << "  r_to_g: 0.0\n";
+        out << "  g_to_r: 0.0\n";
+        out << "  b_to_g: 0.0\n";
+        out << "  b_to_r: 0.0\n";
+        out << "  r_to_b: 0.0\n";
+        out << "  g_to_b: 0.0\n";
+        // Append the new optional color_character group with variable-length anchors
+        out << "color_character:\n";
+        out << "  highlight_hold_sensitivity: 0.6\n";
+        out << "  shadow_retention_sensitivity: 0.5\n";
+        out << "  emulsion_density_sensitivity: 0.4\n";
+        out << "  palette:\n";
+        out << "    separation_sensitivity: 0.7\n";
+        out << "    anchors: [30, 90, 150, 210, 270, 330]\n";
+        out << "    anchor_weights: [1.0, 0.8, 0.6, 0.6, 0.8, 1.0]\n";
+    }
+
+    // Must not throw — let any exception propagate to main()'s catch so the test fails correctly
+    const dfee::FilmStockProfile profile = dfee::load_film_stock_profile(temp_path);
+
+    // Verify numeric leaves are present
+    if (!profile.numeric_values.contains("color_character.highlight_hold_sensitivity")) {
+        throw std::runtime_error("color_character.highlight_hold_sensitivity not found in profile");
+    }
+    if (!profile.numeric_values.contains("color_character.shadow_retention_sensitivity")) {
+        throw std::runtime_error("color_character.shadow_retention_sensitivity not found in profile");
+    }
+    if (!profile.numeric_values.contains("color_character.emulsion_density_sensitivity")) {
+        throw std::runtime_error("color_character.emulsion_density_sensitivity not found in profile");
+    }
+    if (!profile.numeric_values.contains("color_character.palette.separation_sensitivity")) {
+        throw std::runtime_error("color_character.palette.separation_sensitivity not found in profile");
+    }
+
+    // Verify variable-length arrays
+    if (!profile.numeric_arrays.contains("color_character.palette.anchors")) {
+        throw std::runtime_error("color_character.palette.anchors not found in profile");
+    }
+    if (profile.numeric_arrays.at("color_character.palette.anchors").size() != 6U) {
+        throw std::runtime_error("color_character.palette.anchors does not have 6 elements");
+    }
+    if (!profile.numeric_arrays.contains("color_character.palette.anchor_weights")) {
+        throw std::runtime_error("color_character.palette.anchor_weights not found in profile");
+    }
+    if (profile.numeric_arrays.at("color_character.palette.anchor_weights").size() != 6U) {
+        throw std::runtime_error("color_character.palette.anchor_weights does not have 6 elements");
+    }
+}
+
 void test_raw_failure_paths() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const std::filesystem::path raw_dir = repo_root / "raw_files";
@@ -1410,6 +1539,7 @@ int main() {
         test_profile_loading();
         test_raw_failure_paths();
         test_color_character_request_fields_default_to_neutral_zero();
+        test_loader_accepts_optional_color_character_group();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {
