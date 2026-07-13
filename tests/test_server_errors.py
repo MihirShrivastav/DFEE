@@ -902,6 +902,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
                 )
 
         self.assertEqual(response.status_code, 400)
+        self.assertIn("between -100 and 100", response.json()["detail"])
         native_mock.assert_not_called()
 
 

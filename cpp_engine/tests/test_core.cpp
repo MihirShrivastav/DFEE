@@ -1710,6 +1710,12 @@ static float read_chroma(const dfee::Image& img, int x) {
     return std::sqrt(a * a + b * b);
 }
 
+// Helper: read OKLab L (lightness) from pixel x of a 1-row image
+static float read_lightness(const dfee::Image& img, int x) {
+    const auto oklab = dfee::rgb_to_oklab(img);
+    return oklab.at(x, 0, 0);
+}
+
 // Helper: signed shortest-arc delta from h toward anchor a (radians)
 static float hue_delta(float h, float a) {
     constexpr float kPi = std::numbers::pi_v<float>;
@@ -2211,6 +2217,16 @@ void test_color_character_synthetic_zone_hue_fixture() {
             throw std::runtime_error(
                 "synthetic fixture (b): SCR locality failed: sh_delta=" +
                 std::to_string(sh_delta) + " must be >10x hi_delta=" + std::to_string(hi_delta));
+        }
+
+        // No black lift: shadow pixel lightness must not change
+        const float baseline_shadow_L = read_lightness(baseline, 5);
+        const float active_shadow_L   = read_lightness(retained, 5);
+        if (std::fabs(active_shadow_L - baseline_shadow_L) >= 1.0e-5F) {
+            throw std::runtime_error(
+                "synthetic fixture (b): SCR=+100 changed shadow lightness (black lift!): "
+                "active_L=" + std::to_string(active_shadow_L) +
+                " baseline_L=" + std::to_string(baseline_shadow_L));
         }
     }
 
