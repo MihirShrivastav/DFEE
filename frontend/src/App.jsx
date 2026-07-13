@@ -55,6 +55,10 @@ const DEFAULT_PARAMS = {
   sharpness: 0.0,
   sharpness_mask: 0.5,
   film_color: 100,
+  highlight_color_hold: 0,
+  shadow_color_retention: 0,
+  palette_separation: 0,
+  emulsion_color_density: 0,
   print_stock: 'none',
   print_strength: 1.0,
   print_c: 0.0,
@@ -209,7 +213,7 @@ export default function App() {
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
     Profile: true, 'Film Exposure': true, 'Color Character': true, Print: false, 'Material Finish': false,
-    Curves: true, HSL: false,
+    'Film Color Legacy': false, Curves: true, HSL: false,
     Light: true, Color: true, Detail: false,
     Diagnostics: false, History: true,
   };
@@ -454,7 +458,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_separation', 'emulsion_color_density'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -618,6 +622,10 @@ export default function App() {
         sharpness: String(params.sharpness),
         sharpness_mask: String(params.sharpness_mask),
         film_color: String(params.film_color),
+        highlight_color_hold: String(params.highlight_color_hold),
+        shadow_color_retention: String(params.shadow_color_retention),
+        palette_separation: String(params.palette_separation),
+        emulsion_color_density: String(params.emulsion_color_density),
         print_stock: params.print_stock,
         print_strength: String(params.print_strength),
         print_c: String(params.print_c),
@@ -891,6 +899,10 @@ export default function App() {
           sharpness: params.sharpness,
           sharpness_mask: params.sharpness_mask,
           film_color: params.film_color,
+          highlight_color_hold: params.highlight_color_hold,
+          shadow_color_retention: params.shadow_color_retention,
+          palette_separation: params.palette_separation,
+          emulsion_color_density: params.emulsion_color_density,
           print_stock: params.print_stock,
           print_strength: params.print_strength,
           print_c: params.print_c,
@@ -1473,14 +1485,85 @@ export default function App() {
                 <span>Color Character</span>
                 <span className={`chevron ${openSections['Color Character'] ? 'open' : ''}`}>›</span>
               </div>
-              {openSections['Color Character'] && (
+              {openSections['Color Character'] && (() => {
+                const selectedStockObj = profiles.stocks.find(s => s.id === params.stock);
+                const isMonochrome = selectedStockObj ? selectedStockObj.type === 'monochrome' : false;
+                const monoTitle = 'Not available for black & white stocks.';
+                const colorCharSliders = [
+                  {
+                    key: 'highlight_color_hold',
+                    label: 'Highlight Color Hold',
+                    tooltip: 'How much colour survives in the brightest areas before they wash toward white.',
+                  },
+                  {
+                    key: 'shadow_color_retention',
+                    label: 'Shadow Color Retention',
+                    tooltip: 'How much colour is kept in the deep shadows.',
+                  },
+                  {
+                    key: 'palette_separation',
+                    label: 'Palette Separation',
+                    tooltip: 'How distinctly different colours are held apart from one another.',
+                  },
+                  {
+                    key: 'emulsion_color_density',
+                    label: 'Emulsion Color Density',
+                    tooltip: "Overall strength of the stock's colour dyes.",
+                  },
+                ];
+                return (
+                  <div className="section-body">
+                    {colorCharSliders.map(({ key, label, tooltip }) => {
+                      const isDirty = params[key] !== 0;
+                      return (
+                        <div className={`slider-row${isMonochrome ? ' disabled' : ''}`} key={key}>
+                          <div className="slider-header">
+                            <span className="slider-label" title={isMonochrome ? monoTitle : tooltip}>{label}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {isDirty && !isMonochrome && (
+                                <button
+                                  className="revert-btn"
+                                  title={`Reset ${label}`}
+                                  onClick={() => setParams(p => ({ ...p, [key]: 0 }))}
+                                >↺</button>
+                              )}
+                              <span className={`slider-value${isDirty && !isMonochrome ? ' slider-value--dirty' : ''}`}>
+                                {isMonochrome ? '—' : (params[key] > 0 ? '+' : '') + params[key]}
+                              </span>
+                            </div>
+                          </div>
+                          <input
+                            type="range" min={-100} max={100} step={1}
+                            value={params[key]}
+                            onChange={set(key)}
+                            disabled={isMonochrome}
+                            title={isMonochrome ? monoTitle : tooltip}
+                            className={`slider${isDirty && !isMonochrome ? ' slider--dirty' : ''}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="advanced-workflow-label"><span>Advanced Correction</span></div>
+
+            {/* Film Color (legacy) */}
+            <div className="control-group advanced-correction">
+              <div className="group-title collapsible" onClick={() => toggleSection('Film Color Legacy')}>
+                <span>Film Color (legacy)</span>
+                <span className={`chevron ${openSections['Film Color Legacy'] ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections['Film Color Legacy'] && (
                 <div className="section-body">
                   <div className="slider-row">
                     <div className="slider-header">
-                      <span className="slider-label" title="Scales the selected stock's dye, colour coupling, and crossover character. 100 keeps the calibrated stock response.">Emulsion Density</span>
+                      <span className="slider-label" title="Scales the selected stock's dye, colour coupling, and crossover character. 100 keeps the calibrated stock response.">Film Color (legacy)</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {params.film_color !== DEFAULT_PARAMS.film_color && (
-                          <button className="revert-btn" title="Reset Emulsion Density" onClick={() => setParams(p => ({ ...p, film_color: DEFAULT_PARAMS.film_color }))}>↺</button>
+                          <button className="revert-btn" title="Reset Film Color" onClick={() => setParams(p => ({ ...p, film_color: DEFAULT_PARAMS.film_color }))}>↺</button>
                         )}
                         <span className={`slider-value${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider-value--dirty' : ''}`}>{Math.round(params.film_color)}</span>
                       </div>
@@ -1493,8 +1576,6 @@ export default function App() {
                 </div>
               )}
             </div>
-
-            <div className="advanced-workflow-label"><span>Advanced Correction</span></div>
 
             {/* Curves */}
             <div className="control-group advanced-correction">
