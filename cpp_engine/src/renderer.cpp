@@ -292,10 +292,13 @@ void append_timing_metric(
     return t * t * (3.0F - 2.0F * t);
 }
 
-// --- Palette Separation helpers (Task 5, M7-003D) ---
-constexpr float kPaletteSepGain   = 0.35F;   // max radians of hue pull at full strength
-constexpr float kPaletteChromaLo  = 0.02F;   // OKLCh chroma gate lower edge
-constexpr float kPaletteChromaHi  = 0.06F;   // OKLCh chroma gate upper edge
+// --- Palette Range helpers (Task 5, M7-003D; Task 2 bipolar update) ---
+constexpr float kPaletteMergeHueGain = 0.90F; // max radians pulled toward anchor at full merge
+constexpr float kPaletteSepHueGain   = 0.60F; // max radians pushed away from anchor at full separate
+constexpr float kPaletteMergeDesat   = 0.55F; // max fractional chroma reduction at full merge
+constexpr float kPaletteSepChroma    = 0.25F; // max fractional chroma gain at full separate
+constexpr float kPaletteChromaLo     = 0.02F; // neutral-preserving chroma gate lower edge
+constexpr float kPaletteChromaHi     = 0.06F; // gate upper edge
 
 // Smoothstep with explicit [lo, hi] range → [0, 1]. Distinct signature from the single-arg overload.
 [[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
@@ -1018,15 +1021,30 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
             std::numbers::pi_v<float>;
         float h_new = wrap_angle_positive(lch.h + d_h * hi_mask * hi_hue_strength);
 
-        // Palette Separation sub-pass (M7-003D): chroma-gated, wrap-stable hue-anchor attraction.
-        // Applied after coupling stage updates lch.c and lch.h, before final OKLab conversion.
+        // Palette Range sub-pass (M7-003D; Task 2 bipolar): chroma-gated, wrap-stable bipolar hue+chroma.
+        // Negative n_range MERGES: pull hue toward nearest anchor + desaturate proportional to pull.
+        // Positive n_range SEPARATES: push hue away from nearest anchor + slight chroma gain.
         // Gated by n_range != 0 so a zero-value is a true no-op (neutral pixel pass-through).
-        // The nearest anchor's weight gates the shift: weight=0 suppresses it, weight=1.0 is full.
+        // The nearest anchor's weight gates the effect: weight=0 suppresses it, weight=1.0 is full.
         if (n_range != 0.0F) {
             const float g_c = smoothstep01(kPaletteChromaLo, kPaletteChromaHi, lch.c);
             const auto [delta, nearest_idx] = nearest_anchor_delta(h_new, palette_anchors);
             const float anchor_weight = palette_weights[nearest_idx];
-            h_new = wrap_angle_positive(h_new + kPaletteSepGain * n_range * g_c * anchor_weight * std::sin(delta));
+            if (n_range < 0.0F) {
+                // MERGE: pull hue toward nearest anchor; desaturate proportional to the pull.
+                const float merge = -n_range;                     // 0..1
+                h_new = wrap_angle_positive(
+                    h_new + kPaletteMergeHueGain * merge * g_c * anchor_weight * std::sin(delta));
+                const float pull_frac = std::abs(std::sin(delta)); // 0 at anchor, 1 at quadrature
+                c_new = std::max(
+                    c_new * (1.0F - kPaletteMergeDesat * merge * g_c * pull_frac), 0.0F);
+            } else {
+                // SEPARATE: push hue away from nearest anchor (toward the midpoint); slight chroma gain.
+                const float sep = n_range;                        // 0..1
+                h_new = wrap_angle_positive(
+                    h_new - kPaletteSepHueGain * sep * g_c * anchor_weight * std::sin(delta));
+                c_new = c_new * (1.0F + kPaletteSepChroma * sep * g_c);
+            }
         }
 
         adjusted = oklch_to_oklab_pixel({
