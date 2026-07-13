@@ -18,6 +18,9 @@
 namespace dfee {
 namespace {
 
+constexpr float kHoldGainHi = 0.6F;
+constexpr float kHoldGainDesat = 0.6F;
+
 [[nodiscard]] float clampf(const float value, const float low, const float high) {
     return std::clamp(value, low, high);
 }
@@ -855,6 +858,12 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float hi_a_scale = response.highlight_bias_lab[1] * kBiasScale * fc;
     const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc;
 
+    const float n_hold = std::clamp(response.highlight_color_hold / 100.0F, -1.0F, 1.0F)
+        * response.highlight_hold_sensitivity;
+    hi_comp = std::max(hi_comp * (1.0F - kHoldGainHi * n_hold), 0.0F);
+    const float highlight_desat_effective =
+        std::max(highlight_desat * (1.0F - kHoldGainDesat * n_hold), 0.0F);
+
     Image out(rgb_linear.width, rgb_linear.height, 3);
     const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);
     std::size_t gamut_reentry_count = 0U;
@@ -904,7 +913,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
             c_new = c_new * (1.0F - knee_w) + c_neon * knee_w;
         }
 
-        const float c_final = c_new * (1.0F - highlight_desat * z5);
+        const float c_final = c_new * (1.0F - highlight_desat_effective * z5);
         OklabPixel adjusted = oklch_to_oklab_pixel({base_oklab.l, std::max(c_final, 0.0F), hue});
         adjusted.a += a_bias;
         adjusted.b += b_bias;

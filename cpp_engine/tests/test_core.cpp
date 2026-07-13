@@ -1505,6 +1505,75 @@ void test_raw_failure_paths() {
 
 }
 
+void test_highlight_color_hold_increases_only_highlight_chroma() {
+    // Two pixels: bright chromatic (highlight zone) and midtone chromatic
+    dfee::Image rgb(2, 1, 3);
+    rgb.pixels = {
+        // bright highlight pixel: high luminance, clearly chromatic
+        0.95F, 0.70F, 0.55F,
+        // shadow/lower-midtone pixel: low luminance, chromatic — well below highlight zones
+        0.18F, 0.10F, 0.06F,
+    };
+
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    // Build a response plan with meaningful highlight desaturation and hi_comp
+    // so that the control has something to modulate
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.highlight_desaturation = 0.6F;
+    response.chroma_coupling = {
+        {"hi_rolloff_start", 0.70F},
+        {"hi_rolloff_rate", 2.0F},
+        {"hi_compression", 0.55F},
+        {"sh_rolloff_start", 0.18F},
+        {"sh_compression", 0.40F},
+        {"hi_hue_conv_rad", 0.28F},
+        {"hi_hue_conv_str", 0.18F},
+    };
+    // highlight_color_hold = 0 → baseline (no effect)
+    response.highlight_color_hold = 0.0F;
+    response.highlight_hold_sensitivity = 1.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    // Now apply with hold = +100
+    response.highlight_color_hold = 100.0F;
+    const auto held = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    // Measure OKLab chroma (c = sqrt(a^2 + b^2)) for each pixel
+    const auto to_chroma = [](const dfee::Image& img, int x) -> float {
+        const auto oklab = dfee::rgb_to_oklab(img);
+        const float a = oklab.at(x, 0, 1);
+        const float b = oklab.at(x, 0, 2);
+        return std::sqrt(a * a + b * b);
+    };
+
+    const float baseline_hi_chroma  = to_chroma(baseline, 0);
+    const float held_hi_chroma      = to_chroma(held,     0);
+    const float baseline_mid_chroma = to_chroma(baseline, 1);
+    const float held_mid_chroma     = to_chroma(held,     1);
+
+    // Hold=+100 must preserve MORE chroma in highlights than hold=0
+    if (!(held_hi_chroma > baseline_hi_chroma)) {
+        throw std::runtime_error(
+            "highlight_color_hold=+100 did not increase highlight chroma: "
+            "held=" + std::to_string(held_hi_chroma) +
+            " baseline=" + std::to_string(baseline_hi_chroma));
+    }
+
+    // Midtone chroma must be unchanged (within 1e-4)
+    if (std::fabs(held_mid_chroma - baseline_mid_chroma) >= 1.0e-4F) {
+        throw std::runtime_error(
+            "highlight_color_hold=+100 affected midtone chroma unexpectedly: "
+            "delta=" + std::to_string(std::fabs(held_mid_chroma - baseline_mid_chroma)));
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1540,6 +1609,7 @@ int main() {
         test_raw_failure_paths();
         test_color_character_request_fields_default_to_neutral_zero();
         test_loader_accepts_optional_color_character_group();
+        test_highlight_color_hold_increases_only_highlight_chroma();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {
