@@ -8,11 +8,13 @@
 #include "dfee/solver.hpp"
 #include "dfee/version.hpp"
 
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 
@@ -1677,6 +1679,286 @@ void test_shadow_color_retention_increases_shadow_chroma_without_lifting_blacks(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Task 5: Palette Separation tests
+// ---------------------------------------------------------------------------
+
+// Helper: build a minimal ZoneMasks for a 1×N image (all midtone weight)
+static dfee::ZoneMasks make_flat_zone_masks(const dfee::Image& rgb) {
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    return analyzer.generate_zone_masks(luminance, 0.18F);
+}
+
+// Helper: read OKLCh hue from pixel x of a 1-row image
+static float read_hue(const dfee::Image& img, int x) {
+    const auto oklab = dfee::rgb_to_oklab(img);
+    const float a = oklab.at(x, 0, 1);
+    const float b = oklab.at(x, 0, 2);
+    float h = std::atan2(b, a);
+    if (h < 0.0F) {
+        h += 2.0F * std::numbers::pi_v<float>;
+    }
+    return h;
+}
+
+// Helper: read OKLCh chroma from pixel x of a 1-row image
+static float read_chroma(const dfee::Image& img, int x) {
+    const auto oklab = dfee::rgb_to_oklab(img);
+    const float a = oklab.at(x, 0, 1);
+    const float b = oklab.at(x, 0, 2);
+    return std::sqrt(a * a + b * b);
+}
+
+// Helper: signed shortest-arc delta from h toward anchor a (radians)
+static float hue_delta(float h, float a) {
+    constexpr float kPi = std::numbers::pi_v<float>;
+    float d = std::fmod((a - h) + kPi, 2.0F * kPi) - kPi;
+    return d;
+}
+
+void test_palette_separation_neutral_pixel_preserved() {
+    // A near-gray pixel (very low chroma) must be byte-unchanged when palette_separation=+100.
+    // Use equal R=G=B: perfectly neutral, OKLCh c == 0.
+    dfee::Image rgb(1, 1, 3);
+    rgb.pixels = {0.45F, 0.45F, 0.45F};
+
+    const auto zones = make_flat_zone_masks(rgb);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.palette_separation = 100.0F;
+    response.palette_separation_sensitivity = 1.0F;
+    // palette_anchors left empty → default six anchors
+
+    const dfee::FilmRenderer renderer;
+    const auto out = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    // Neutral pixel: chroma is exactly 0, so g_c == 0. Hue shift must be 0.
+    // The output pixel must be indistinguishable from the baseline (palette_separation=0).
+    response.palette_separation = 0.0F;
+    const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    const float delta_r = std::fabs(out.at(0, 0, 0) - baseline.at(0, 0, 0));
+    const float delta_g = std::fabs(out.at(0, 0, 1) - baseline.at(0, 0, 1));
+    const float delta_b = std::fabs(out.at(0, 0, 2) - baseline.at(0, 0, 2));
+
+    if (delta_r > 1.0e-5F || delta_g > 1.0e-5F || delta_b > 1.0e-5F) {
+        throw std::runtime_error(
+            "palette_separation=+100 changed a neutral pixel: dR=" + std::to_string(delta_r) +
+            " dG=" + std::to_string(delta_g) + " dB=" + std::to_string(delta_b));
+    }
+}
+
+void test_palette_separation_direction() {
+    // A saturated pixel at a hue clearly offset between two default anchors (0 and π/3 ≈ 1.047).
+    // We need h_baseline comfortably closer to one anchor than the other so the nearest is unambiguous.
+    // We place the pixel at h ≈ 0.3 rad (between 0 and π/3), nearest anchor = 0.
+    // That means delta_to_nearest < 0 (anchor is clockwise), sin(delta) < 0, n_sep=+1 → h decreases.
+    // For n_sep = -1 → h increases (away from 0 toward π/3).
+    //
+    // Build the pixel via OKLCh → OKLab → RGB at L=0.60, C=0.15, h=0.30 rad.
+    const float kL = 0.60F;
+    const float kC = 0.15F;
+    const float kH = 0.30F;  // radians — nearest default anchor is 0 (distance 0.30), π/3 is 0.747 away
+    const float a_in = kC * std::cos(kH);
+    const float b_in = kC * std::sin(kH);
+    // oklab → linear rgb (same matrix as renderer)
+    const float lp = kL + 0.3963377774F * a_in + 0.2158017574F * b_in;
+    const float mp = kL - 0.1055613458F * a_in - 0.0638541728F * b_in;
+    const float sp = kL - 0.0894841775F * a_in - 1.2914855480F * b_in;
+    const float lv = lp * lp * lp;
+    const float mv = mp * mp * mp;
+    const float sv = sp * sp * sp;
+    const float r_px = std::clamp(4.0767416621F * lv - 3.3077115913F * mv + 0.2309699292F * sv, 0.0F, 1.0F);
+    const float g_px = std::clamp(-1.2684380046F * lv + 2.6097574011F * mv - 0.3413193965F * sv, 0.0F, 1.0F);
+    const float b_px = std::clamp(-0.0041960863F * lv - 0.7034186147F * mv + 1.7076147010F * sv, 0.0F, 1.0F);
+
+    dfee::Image rgb(1, 1, 3);
+    rgb.pixels = {r_px, g_px, b_px};
+
+    const auto zones = make_flat_zone_masks(rgb);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.palette_separation_sensitivity = 1.0F;
+    // palette_anchors empty → default 0, π/3, 2π/3, π, 4π/3, 5π/3
+
+    // Baseline
+    response.palette_separation = 0.0F;
+    const dfee::FilmRenderer renderer;
+    const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
+    const float h_baseline = read_hue(baseline, 0);
+
+    // The pixel must have enough chroma to be affected (well above kPaletteChromaHi=0.06)
+    const float chroma = read_chroma(baseline, 0);
+    if (chroma < 0.06F) {
+        throw std::runtime_error(
+            "direction test pixel has too little chroma to trigger palette separation: c=" + std::to_string(chroma));
+    }
+
+    // Find nearest default anchor to the baseline hue
+    constexpr float kPi = std::numbers::pi_v<float>;
+    const std::array<float, 6> default_anchors = {
+        0.0F, kPi / 3.0F, 2.0F * kPi / 3.0F, kPi, 4.0F * kPi / 3.0F, 5.0F * kPi / 3.0F
+    };
+    float nearest_anchor = default_anchors[0];
+    float nearest_dist = std::fabs(hue_delta(h_baseline, default_anchors[0]));
+    for (const float anchor : default_anchors) {
+        const float dist = std::fabs(hue_delta(h_baseline, anchor));
+        if (dist < nearest_dist) {
+            nearest_dist = dist;
+            nearest_anchor = anchor;
+        }
+    }
+
+    if (nearest_dist < 0.1F) {
+        throw std::runtime_error(
+            "direction test: baseline hue " + std::to_string(h_baseline) +
+            " is too close to nearest anchor " + std::to_string(nearest_anchor) +
+            " (dist=" + std::to_string(nearest_dist) + "); test premise broken");
+    }
+
+    // At +100: should attract toward nearest anchor
+    response.palette_separation = 100.0F;
+    const auto attracted = renderer.apply_color_response_and_coupling(rgb, zones, response);
+    const float h_attracted = read_hue(attracted, 0);
+
+    // At −100: should repel from nearest anchor
+    response.palette_separation = -100.0F;
+    const auto repelled = renderer.apply_color_response_and_coupling(rgb, zones, response);
+    const float h_repelled = read_hue(repelled, 0);
+
+    const float dist_attracted = std::fabs(hue_delta(h_attracted, nearest_anchor));
+    const float dist_repelled  = std::fabs(hue_delta(h_repelled,  nearest_anchor));
+
+    // +100 must move hue closer to the nearest anchor
+    if (!(dist_attracted < nearest_dist - 1.0e-5F)) {
+        throw std::runtime_error(
+            "palette_separation=+100 did not attract hue toward nearest anchor: "
+            "h_base=" + std::to_string(h_baseline) +
+            " h_attracted=" + std::to_string(h_attracted) +
+            " nearest_anchor=" + std::to_string(nearest_anchor) +
+            " dist_baseline=" + std::to_string(nearest_dist) +
+            " dist_attracted=" + std::to_string(dist_attracted));
+    }
+
+    // −100 must move hue further from the nearest anchor
+    if (!(dist_repelled > nearest_dist + 1.0e-5F)) {
+        throw std::runtime_error(
+            "palette_separation=-100 did not repel hue away from anchor: "
+            "h_base=" + std::to_string(h_baseline) +
+            " h_repelled=" + std::to_string(h_repelled) +
+            " nearest_anchor=" + std::to_string(nearest_anchor) +
+            " dist_baseline=" + std::to_string(nearest_dist) +
+            " dist_repelled=" + std::to_string(dist_repelled));
+    }
+}
+
+void test_palette_separation_wrap_stability() {
+    // Two saturated pixels: one at hue just below 0 (≈ 359°) and one just above (≈ 1°).
+    // Anchor at 0 rad. Both must move TOWARD 0 — no sign flip or large jump at the seam.
+    //
+    // To construct pixels at known hues, we use OKLCh → OKLab → RGB.
+    // Pixel A: hue = 359° = 2π - π/90 ≈ 6.2134 rad  (just clockwise of 0)
+    // Pixel B: hue = 1°  = π/180  ≈ 0.01745 rad     (just counter-clockwise of 0)
+    // We need enough chroma (c > kPaletteChromaHi = 0.06) for g_c to be near 1.
+
+    // Build pixels via OKLCh at L=0.65, C=0.15
+    const float kL = 0.65F;
+    const float kC = 0.15F;
+    constexpr float kPi = std::numbers::pi_v<float>;
+    const float hue_A = 2.0F * kPi - kPi / 90.0F;  // ≈ 359°
+    const float hue_B = kPi / 180.0F;               // ≈ 1°
+
+    // OKLab from OKLCh
+    const auto oklch_to_rgb = [](float l, float c, float h) -> std::array<float, 3> {
+        const float a = c * std::cos(h);
+        const float b = c * std::sin(h);
+        // oklab_to_rgb (inverse of renderer's internal fn):
+        const float lp = l + 0.3963377774F * a + 0.2158017574F * b;
+        const float mp = l - 0.1055613458F * a - 0.0638541728F * b;
+        const float sp = l - 0.0894841775F * a - 1.2914855480F * b;
+        const float lv = lp * lp * lp;
+        const float mv = mp * mp * mp;
+        const float sv = sp * sp * sp;
+        return {
+            std::clamp(4.0767416621F * lv - 3.3077115913F * mv + 0.2309699292F * sv, 0.0F, 1.0F),
+            std::clamp(-1.2684380046F * lv + 2.6097574011F * mv - 0.3413193965F * sv, 0.0F, 1.0F),
+            std::clamp(-0.0041960863F * lv - 0.7034186147F * mv + 1.7076147010F * sv, 0.0F, 1.0F),
+        };
+    };
+
+    const auto rgb_A = oklch_to_rgb(kL, kC, hue_A);
+    const auto rgb_B = oklch_to_rgb(kL, kC, hue_B);
+
+    dfee::Image img(2, 1, 3);
+    img.pixels = {
+        rgb_A[0], rgb_A[1], rgb_A[2],
+        rgb_B[0], rgb_B[1], rgb_B[2],
+    };
+
+    const auto zones = make_flat_zone_masks(img);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.palette_separation = 100.0F;
+    response.palette_separation_sensitivity = 1.0F;
+    // Default anchors: 0, π/3, 2π/3, π, 4π/3, 5π/3 — nearest to both pixels is 0 rad.
+
+    const dfee::FilmRenderer renderer;
+    const auto baseline = renderer.apply_color_response_and_coupling(img, zones,
+        [&]() { auto r = response; r.palette_separation = 0.0F; return r; }());
+    const auto out = renderer.apply_color_response_and_coupling(img, zones, response);
+
+    const float h_base_A = read_hue(baseline, 0);
+    const float h_base_B = read_hue(baseline, 1);
+    const float h_out_A  = read_hue(out, 0);
+    const float h_out_B  = read_hue(out, 1);
+
+    // Pixel A is at ≈359°: nearest anchor is 0° = 360°. Attraction increases hue toward 2π.
+    // After wrap: if h_out_A wraps to near 0, that's fine — we check via shortest-arc distance.
+    // The absolute distance |delta_to_anchor| must DECREASE for both pixels.
+    const float delta_A_before = std::fabs(hue_delta(h_base_A, 0.0F));
+    const float delta_B_before = std::fabs(hue_delta(h_base_B, 0.0F));
+    const float delta_A_after  = std::fabs(hue_delta(h_out_A,  0.0F));
+    const float delta_B_after  = std::fabs(hue_delta(h_out_B,  0.0F));
+
+    if (!(delta_A_after < delta_A_before - 1.0e-4F)) {
+        throw std::runtime_error(
+            "wrap stability: pixel A (hue≈359°) did not move toward anchor 0: "
+            "h_before=" + std::to_string(h_base_A * 180.0F / std::numbers::pi_v<float>) + "° "
+            "h_after=" + std::to_string(h_out_A * 180.0F / std::numbers::pi_v<float>) + "° "
+            "delta_before=" + std::to_string(delta_A_before) +
+            " delta_after=" + std::to_string(delta_A_after));
+    }
+
+    if (!(delta_B_after < delta_B_before - 1.0e-4F)) {
+        throw std::runtime_error(
+            "wrap stability: pixel B (hue≈1°) did not move toward anchor 0: "
+            "h_before=" + std::to_string(h_base_B * 180.0F / std::numbers::pi_v<float>) + "° "
+            "h_after=" + std::to_string(h_out_B * 180.0F / std::numbers::pi_v<float>) + "° "
+            "delta_before=" + std::to_string(delta_B_before) +
+            " delta_after=" + std::to_string(delta_B_after));
+    }
+
+    // Neither pixel must have jumped more than π radians (sign flip / large jump).
+    const float jump_A = std::fabs(hue_delta(h_out_A, h_base_A));
+    const float jump_B = std::fabs(hue_delta(h_out_B, h_base_B));
+    constexpr float kMaxJump = 0.5F;  // well under π; max expected shift is kPaletteSepGain=0.35 rad
+    if (jump_A > kMaxJump) {
+        throw std::runtime_error(
+            "wrap stability: pixel A had a large hue jump: " + std::to_string(jump_A) + " rad");
+    }
+    if (jump_B > kMaxJump) {
+        throw std::runtime_error(
+            "wrap stability: pixel B had a large hue jump: " + std::to_string(jump_B) + " rad");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1714,6 +1996,9 @@ int main() {
         test_loader_accepts_optional_color_character_group();
         test_highlight_color_hold_increases_only_highlight_chroma();
         test_shadow_color_retention_increases_shadow_chroma_without_lifting_blacks();
+        test_palette_separation_neutral_pixel_preserved();
+        test_palette_separation_direction();
+        test_palette_separation_wrap_stability();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

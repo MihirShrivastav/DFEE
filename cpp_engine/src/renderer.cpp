@@ -291,6 +291,34 @@ void append_timing_metric(
     return t * t * (3.0F - 2.0F * t);
 }
 
+// --- Palette Separation helpers (Task 5, M7-003D) ---
+constexpr float kPaletteSepGain   = 0.35F;   // max radians of hue pull at full strength
+constexpr float kPaletteChromaLo  = 0.02F;   // OKLCh chroma gate lower edge
+constexpr float kPaletteChromaHi  = 0.06F;   // OKLCh chroma gate upper edge
+
+// Smoothstep with explicit [lo, hi] range → [0, 1]. Distinct signature from the single-arg overload.
+[[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
+    const float t = std::clamp((x - lo) / std::max(hi - lo, 1.0e-6F), 0.0F, 1.0F);
+    return t * t * (3.0F - 2.0F * t);
+}
+
+// Signed shortest-arc angular delta from h toward the nearest anchor in anchors.
+// Returns a value in (-π, +π]. Passing the result through std::sin() for the hue shift
+// gives smooth, wrap-stable behaviour at the 0°/360° seam.
+[[nodiscard]] inline float nearest_anchor_delta(const float h, const std::vector<float>& anchors) {
+    float best = 0.0F;
+    float best_abs = std::numeric_limits<float>::max();
+    for (const float a : anchors) {
+        const float d = std::fmod((a - h) + std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>)
+            - std::numbers::pi_v<float>;
+        if (std::abs(d) < best_abs) {
+            best_abs = std::abs(d);
+            best = d;
+        }
+    }
+    return best;
+}
+
 [[nodiscard]] cv::Mat roll_mat(const cv::Mat& source, const int shift_y, const int shift_x) {
     cv::Mat out(source.rows, source.cols, source.type());
     const int rows = source.rows;
@@ -869,6 +897,20 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         * response.shadow_retention_sensitivity;
     sh_comp = std::max(sh_comp * (1.0F - kShadowRetentionGain * n_ret), 0.0F);
 
+    // Palette Separation (M7-003D): resolve anchors once before the per-pixel loop.
+    const float n_sep = std::clamp(response.palette_separation / 100.0F, -1.0F, 1.0F)
+        * response.palette_separation_sensitivity;
+    const std::vector<float> palette_anchors = response.palette_anchors.empty()
+        ? std::vector<float>{
+            0.0F,
+            std::numbers::pi_v<float> / 3.0F,
+            2.0F * std::numbers::pi_v<float> / 3.0F,
+            std::numbers::pi_v<float>,
+            4.0F * std::numbers::pi_v<float> / 3.0F,
+            5.0F * std::numbers::pi_v<float> / 3.0F,
+          }
+        : response.palette_anchors;
+
     Image out(rgb_linear.width, rgb_linear.height, 3);
     const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);
     std::size_t gamut_reentry_count = 0U;
@@ -956,7 +998,16 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
         const float d_h = std::fmod((hi_hue_target - lch.h) + std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>) -
             std::numbers::pi_v<float>;
-        const float h_new = wrap_angle_positive(lch.h + d_h * hi_mask * hi_hue_strength);
+        float h_new = wrap_angle_positive(lch.h + d_h * hi_mask * hi_hue_strength);
+
+        // Palette Separation sub-pass (M7-003D): chroma-gated, wrap-stable hue-anchor attraction.
+        // Applied after coupling stage updates lch.c and lch.h, before final OKLab conversion.
+        // Gated by n_sep != 0 so a zero-value is a true no-op (neutral pixel pass-through).
+        if (n_sep != 0.0F) {
+            const float g_c = smoothstep01(kPaletteChromaLo, kPaletteChromaHi, lch.c);
+            const float delta = nearest_anchor_delta(h_new, palette_anchors);
+            h_new = wrap_angle_positive(h_new + kPaletteSepGain * n_sep * g_c * std::sin(delta));
+        }
 
         adjusted = oklch_to_oklab_pixel({
             lch.l,
