@@ -320,8 +320,7 @@ struct NearestAnchorResult {
     float best_abs = std::numeric_limits<float>::max();
     std::size_t best_idx = 0U;
     for (std::size_t i = 0U; i < anchors.size(); ++i) {
-        const float d = std::fmod((anchors[i] - h) + std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>)
-            - std::numbers::pi_v<float>;
+        const float d = std::atan2(std::sin(anchors[i] - h), std::cos(anchors[i] - h));
         if (std::abs(d) < best_abs) {
             best_abs = std::abs(d);
             best = d;
