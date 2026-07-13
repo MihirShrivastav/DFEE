@@ -31,7 +31,7 @@
 - `cpp_engine/src/session.cpp` — map request → `SolverControls`; serialize inputs into report JSON; parity-version guard.
 - `cpp_engine/src/solver.cpp` — read `color_character:` YAML, infer family defaults, populate `FilmResponsePlan`.
 - `cpp_engine/src/profile.cpp` — register `color_character:` leaf fields; add variable-length whitelisted arrays.
-- `cpp_engine/src/renderer.cpp` — apply modulation + palette sub-pass in both colour-response paths.
+- `cpp_engine/src/renderer.cpp` — apply modulation + palette sub-pass in `apply_color_response_and_coupling_pipeline` (the sole live render path; the non-coupling `apply_color_response` is test-only and left untouched). Monochrome stocks skip the colour stage entirely in `render()`, so the controls are structurally no-op on B&W.
 - `cpp_engine/bindings/python/dfee_native_module.cpp` — parse 4 request fields.
 - `dfee_native_bridge.py` — add 4 dataclass fields.
 - `server.py` — preview query params + export Pydantic model, range + parity validation, forward to native dict.
@@ -415,7 +415,7 @@ In `apply_color_response_and_coupling_pipeline`, after `highlight_desat` and `hi
         std::max(highlight_desat * (1.0F - kHoldGainDesat * n_hold), 0.0F);
 ```
 
-Replace subsequent uses of `highlight_desat` in this function with `highlight_desat_effective`. Apply the identical modulation in `apply_color_response` (the non-coupling path) for its `highlight_desat`/`hi_comp` equivalents.
+Replace subsequent uses of `highlight_desat` in this function with `highlight_desat_effective`. Apply **only** in `apply_color_response_and_coupling_pipeline` (the sole live path); do not touch the test-only `apply_color_response`.
 
 - [ ] **Step 4: Run the test** — Expected: PASS.
 
@@ -529,7 +529,7 @@ Provide default anchors when `response.palette_anchors` is empty: six evenly spa
     }
 ```
 
-Resolve `anchors`/weights once before the loop. Mirror the same block in `apply_color_response`. (Anchor-weighted chroma differentiation is deferred to Task 8 calibration; keep this task hue-only to isolate the behaviour.)
+Resolve `anchors`/weights once before the loop. Apply **only** in `apply_color_response_and_coupling_pipeline`; do not touch `apply_color_response`. (Anchor-weighted chroma differentiation is deferred to Task 8 calibration; keep this task hue-only to isolate the behaviour.)
 
 - [ ] **Step 5: Run the palette tests** — Expected: PASS (neutral preserved, direction correct, wrap-stable).
 
@@ -571,7 +571,7 @@ Implement the density control and wire the solver to read YAML + infer family se
     const float chroma_boost = (1.0F + (response.chroma_boost - 1.0F) * fc) * (1.0F + kEmulsionDensityGain * n_dens);
 ```
 
-Apply in both colour paths. Do not alter `red_comp`/`blue_comp`/biases.
+Apply only in `apply_color_response_and_coupling_pipeline`. Do not alter `red_comp`/`blue_comp`/biases.
 
 - [ ] **Step 5: Add a family-defaults helper** in `solver.cpp`, mirroring `grain_family_defaults`:
 
