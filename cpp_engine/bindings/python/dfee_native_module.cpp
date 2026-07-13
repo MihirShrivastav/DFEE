@@ -316,6 +316,10 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     request.grain_roughness = dict_float(dict, "grain_roughness", -1.0F);
     request.halation = dict_string(dict, "halation", "Auto");
     request.film_color = dict_float(dict, "film_color", 100.0F);
+    request.highlight_color_hold = dict_float(dict, "highlight_color_hold");
+    request.shadow_color_retention = dict_float(dict, "shadow_color_retention");
+    request.palette_separation = dict_float(dict, "palette_separation");
+    request.emulsion_color_density = dict_float(dict, "emulsion_color_density");
     request.print_stock = dict_string(dict, "print_stock", "none");
     request.print_strength = dict_float(dict, "print_strength", 1.0F);
     request.print_c = dict_float(dict, "print_c");

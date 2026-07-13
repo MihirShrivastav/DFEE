@@ -1307,6 +1307,21 @@ void test_profile_loading() {
 #endif
 }
 
+void test_color_character_request_fields_default_to_neutral_zero() {
+    dfee::NativePreviewRenderRequest request;
+    require_close(request.highlight_color_hold, 0.0F, 1.0e-6F);
+    require_close(request.shadow_color_retention, 0.0F, 1.0e-6F);
+    require_close(request.palette_separation, 0.0F, 1.0e-6F);
+    require_close(request.emulsion_color_density, 0.0F, 1.0e-6F);
+
+    dfee::SolverControls controls;
+    controls.highlight_color_hold = request.highlight_color_hold;
+    controls.shadow_color_retention = request.shadow_color_retention;
+    controls.palette_separation = request.palette_separation;
+    controls.emulsion_color_density = request.emulsion_color_density;
+    require_close(controls.highlight_color_hold, 0.0F, 1.0e-6F);
+}
+
 void test_raw_failure_paths() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const std::filesystem::path raw_dir = repo_root / "raw_files";
@@ -1394,6 +1409,7 @@ int main() {
         test_print_finish();
         test_profile_loading();
         test_raw_failure_paths();
+        test_color_character_request_fields_default_to_neutral_zero();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

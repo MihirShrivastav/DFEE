@@ -35,6 +35,10 @@ struct SolverControls {
     float sharpness = 0.0F;
     float sharpness_mask = 0.5F;
     float film_color = 100.0F;
+    float highlight_color_hold = 0.0F;
+    float shadow_color_retention = 0.0F;
+    float palette_separation = 0.0F;
+    float emulsion_color_density = 0.0F;
     float print_strength = 1.0F;
     float print_c = 0.0F;
     float print_m = 0.0F;
@@ -92,6 +96,16 @@ struct FilmResponsePlan {
     std::unordered_map<std::string, float> dye_contamination;
     std::string stock_type = "color_negative";
     float film_color = 100.0F;
+    float highlight_color_hold = 0.0F;
+    float shadow_color_retention = 0.0F;
+    float palette_separation = 0.0F;
+    float emulsion_color_density = 0.0F;
+    float highlight_hold_sensitivity = 0.0F;
+    float shadow_retention_sensitivity = 0.0F;
+    float emulsion_density_sensitivity = 0.0F;
+    float palette_separation_sensitivity = 0.0F;
+    std::vector<float> palette_anchors;
+    std::vector<float> palette_anchor_weights;
 };
 
 struct MaterialEffectsPlan {

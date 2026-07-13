@@ -394,6 +394,10 @@ RenderPlan RenderPlanSolver::solve(
         .dye_contamination = get_prefixed_numeric_map(stock_profile.numeric_values, "dye_contamination"),
         .stock_type = to_string(stock_profile.stock_type),
         .film_color = controls.film_color,
+        .highlight_color_hold = controls.highlight_color_hold,
+        .shadow_color_retention = controls.shadow_color_retention,
+        .palette_separation = controls.palette_separation,
+        .emulsion_color_density = controls.emulsion_color_density,
     };
 
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);

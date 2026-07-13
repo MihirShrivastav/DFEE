@@ -1152,5 +1152,16 @@ class TestNativeBridge(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
 
 
+def test_color_character_fields_default_zero_and_round_trip():
+    from dfee_native_bridge import NativePreviewRenderRequest, NativeExportRequest
+    req = NativePreviewRenderRequest(filename="x.ARW", stock="none")
+    assert req.highlight_color_hold == 0.0
+    assert req.shadow_color_retention == 0.0
+    assert req.palette_separation == 0.0
+    assert req.emulsion_color_density == 0.0
+    exp = NativeExportRequest(filename="x.ARW", stock="none", palette_separation=25.0)
+    assert exp.palette_separation == 25.0
+
+
 if __name__ == "__main__":
     unittest.main()

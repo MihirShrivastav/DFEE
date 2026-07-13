@@ -232,6 +232,10 @@ struct NativePreviewRenderRequest {
     float grain_roughness = -1.0F;
     std::string halation = "Auto";
     float film_color = 100.0F;
+    float highlight_color_hold = 0.0F;
+    float shadow_color_retention = 0.0F;
+    float palette_separation = 0.0F;
+    float emulsion_color_density = 0.0F;
     std::string print_stock = "none";
     float print_strength = 1.0F;
     float print_c = 0.0F;

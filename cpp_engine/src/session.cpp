@@ -930,6 +930,10 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.sharpness = request.sharpness;
     controls.sharpness_mask = request.sharpness_mask;
     controls.film_color = request.film_color;
+    controls.highlight_color_hold = request.highlight_color_hold;
+    controls.shadow_color_retention = request.shadow_color_retention;
+    controls.palette_separation = request.palette_separation;
+    controls.emulsion_color_density = request.emulsion_color_density;
     controls.print_strength = request.print_strength;
     controls.print_c = request.print_c;
     controls.print_m = request.print_m;
@@ -1551,7 +1555,11 @@ std::string serialize_feature_report_json(
         << "\"chroma_coupling\": " << json_float_map(render_plan.film_response.chroma_coupling) << ","
         << "\"dye_contamination\": " << json_float_map(render_plan.film_response.dye_contamination) << ","
         << "\"stock_type\": \"" << escape_json_string(render_plan.film_response.stock_type) << "\","
-        << "\"film_color\": " << json_number(render_plan.film_response.film_color)
+        << "\"film_color\": " << json_number(render_plan.film_response.film_color) << ",\n"
+        << "\"highlight_color_hold\": " << json_number(render_plan.film_response.highlight_color_hold) << ",\n"
+        << "\"shadow_color_retention\": " << json_number(render_plan.film_response.shadow_color_retention) << ",\n"
+        << "\"palette_separation\": " << json_number(render_plan.film_response.palette_separation) << ",\n"
+        << "\"emulsion_color_density\": " << json_number(render_plan.film_response.emulsion_color_density)
         << "},\n";
     out << "    \"material_effects\": {"
         << "\"grain_strength\": " << json_number(render_plan.material_effects.grain_strength) << ","
@@ -2002,6 +2010,17 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 finalize_engine_metadata(response.engine);
                 return response;
             }
+            {
+                const bool has_color_character =
+                    request.highlight_color_hold != 0.0F ||
+                    request.shadow_color_retention != 0.0F ||
+                    request.palette_separation != 0.0F ||
+                    request.emulsion_color_density != 0.0F;
+                if (has_color_character && request.effect_pipeline_version == "parity_v1") {
+                    throw std::invalid_argument(
+                        "Color Character controls require effect_pipeline_version=filmic_v2");
+                }
+            }
         }
 
         if (request.stock == "none") {
@@ -2088,6 +2107,10 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.sharpness = request.sharpness;
             controls.sharpness_mask = request.sharpness_mask;
             controls.film_color = request.film_color;
+            controls.highlight_color_hold = request.highlight_color_hold;
+            controls.shadow_color_retention = request.shadow_color_retention;
+            controls.palette_separation = request.palette_separation;
+            controls.emulsion_color_density = request.emulsion_color_density;
             controls.print_strength = request.print_strength;
             controls.print_c = request.print_c;
             controls.print_m = request.print_m;
@@ -2254,6 +2277,17 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 response.error = *version_error;
                 finalize_engine_metadata(response.engine);
                 return response;
+            }
+            {
+                const bool has_color_character =
+                    request.highlight_color_hold != 0.0F ||
+                    request.shadow_color_retention != 0.0F ||
+                    request.palette_separation != 0.0F ||
+                    request.emulsion_color_density != 0.0F;
+                if (has_color_character && request.effect_pipeline_version == "parity_v1") {
+                    throw std::invalid_argument(
+                        "Color Character controls require effect_pipeline_version=filmic_v2");
+                }
             }
             append_export_trace(project_root_, "export_image:resolve_session:done");
         }

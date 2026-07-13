@@ -213,6 +213,10 @@ class NativePreviewRenderRequest:
     grain_roughness: float = -1.0
     halation: str = "Auto"
     film_color: float = 100.0
+    highlight_color_hold: float = 0.0
+    shadow_color_retention: float = 0.0
+    palette_separation: float = 0.0
+    emulsion_color_density: float = 0.0
     print_stock: str = "none"
     print_strength: float = 1.0
     print_c: float = 0.0
