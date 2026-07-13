@@ -154,7 +154,7 @@ values are rejected instead of silently rendering through the wrong effect
 implementation. The export request model also carries photographer-facing export options:
 `jpeg_quality`, `export_dpi`, `embed_metadata`, and `export_color_space`.
 
-Film Lab preview and export controls use two additional stock-relative fields:
+Film Lab preview and export controls use additional stock-relative fields:
 
 - `exposure_placement`: `auto_balanced` asks the solver for a stock-aware
   scene placement; `as_shot` retains the captured RAW placement. Missing API
@@ -166,6 +166,21 @@ Film Lab preview and export controls use two additional stock-relative fields:
 Unsupported placement values and out-of-range film exposure offsets are
 rejected with HTTP `400`. The React Film Lab explicitly sends
 `exposure_placement=auto_balanced` as its default starting point.
+
+Four **Color Character** controls are available under `filmic_v2`. Each is
+bipolar `−100` to `+100`, with `0` as the neutral no-op default:
+
+| Field | Effect |
+| --- | --- |
+| `highlight_color_hold` | Scales the stock's highlight chroma rolloff and highlight desaturation so colour survives into bright zones. High-zone only; never touches lightness. |
+| `shadow_color_retention` | Scales the stock's shadow chroma rolloff. Shadow-gated; no black lift. |
+| `palette_separation` | Per-pixel hue-anchor attraction in OKLCh; neutrals preserved; hue-wrap stable. |
+| `emulsion_color_density` | Scales the stock's dye chroma body (`chroma_boost`), distinct from the legacy `film_color` multiplier. |
+
+Sending any non-zero Color Character value under `parity_v1` is rejected with
+HTTP `400` — never a silent render. `parity_v1` remains bit-for-bit
+reproducible. Report JSON records both the four requested inputs and the four
+resolved per-stock sensitivities.
 
 Current native export support:
 - `jpeg` / `jpg`: native final export supports `jpeg_quality`, writes `.jpg`,

@@ -44,18 +44,20 @@ subject.
 
 ## Delivery Order
 
-### M7-003: Color Character
+### M7-003: Color Character — DONE
 
-Build real stock-relative color controls before adding more appearance knobs.
+All code subtasks are merged. Outstanding human steps are listed after the
+table.
 
-| ID | Task | Native behavior | Acceptance criteria |
+| ID | Task | Native behavior | Status |
 | --- | --- | --- | --- |
-| M7-003A | Define profile and request schema | Add neutral, bounded fields for `highlight_color_hold`, `shadow_color_retention`, and `palette_separation`. | Defaults are no-op; bridge, FastAPI, report JSON, and React pass the same values. |
-| M7-003B | Implement highlight color hold | Alter only stock color compression/convergence in high exposure zones. | It is visibly distinct from global saturation and respects monochrome stocks. |
-| M7-003C | Implement shadow color retention | Alter only low-exposure chroma retention after film toe behavior. | It does not lift blacks, fake exposure, or add chroma to neutral highlights. |
-| M7-003D | Implement palette separation | Adjust bounded stock-relative hue/chroma separation in perceptual color space. | It is distinct from HSL, stable around hue boundaries, and preserves neutral pixels. |
-| M7-003E | Build the Color Character UI | Expose generic labels, concise tooltips, neutral/reset states, and stock-aware disabled states. | No primary label names a subject, color channel, or assumed scene element. |
-| M7-003F | Calibrate and validate | Add synthetic zone/hue fixtures plus representative RAW visual review. | Tests prove neutral/no-op behavior, zone locality, determinism, and export-preview agreement. |
+| M7-003A | Define profile and request schema | Add neutral, bounded fields (`−100..+100`) for `highlight_color_hold`, `shadow_color_retention`, `palette_separation`, and `emulsion_color_density`. Parity guard rejects non-zero values under `parity_v1`. | Done |
+| M7-003B | Implement highlight color hold | Scales the stock's resolved highlight chroma rolloff and highlight desaturation. High-zone only; never touches lightness. | Done |
+| M7-003C | Implement shadow color retention | Scales the stock's resolved shadow chroma rolloff. Shadow-gated; no black lift. | Done |
+| M7-003D | Implement palette separation | Per-pixel hue-anchor attraction in OKLCh; chroma-gated (neutrals preserved); hue-wrap stable via `sin(delta)`. Default 6 perceptual anchors unless the stock overrides. | Done |
+| M7-003E | Build the Color Character UI | Generic labels, concise tooltips, neutral/reset states, mono-disabled states, `film_color` relocated to Advanced. | Done |
+| M7-003F (human) | Calibrate and validate | Visual acceptance pass on representative RAWs (reversal, negative, B&W) + preview/export timing probe. | **Outstanding — not yet run** |
+| M7-003G (added) | Implement emulsion color density | Scales the stock's dye chroma body (`chroma_boost`). Distinct from legacy `film_color` multiplier. | Done |
 
 ### M7-004: Process
 
