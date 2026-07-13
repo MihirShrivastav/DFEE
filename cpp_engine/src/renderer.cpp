@@ -20,6 +20,7 @@ namespace {
 
 constexpr float kHoldGainHi = 0.6F;
 constexpr float kHoldGainDesat = 0.6F;
+constexpr float kShadowRetentionGain = 0.6F;
 
 [[nodiscard]] float clampf(const float value, const float low, const float high) {
     return std::clamp(value, low, high);
@@ -863,6 +864,10 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     hi_comp = std::max(hi_comp * (1.0F - kHoldGainHi * n_hold), 0.0F);
     const float highlight_desat_effective =
         std::max(highlight_desat * (1.0F - kHoldGainDesat * n_hold), 0.0F);
+
+    const float n_ret = std::clamp(response.shadow_color_retention / 100.0F, -1.0F, 1.0F)
+        * response.shadow_retention_sensitivity;
+    sh_comp = std::max(sh_comp * (1.0F - kShadowRetentionGain * n_ret), 0.0F);
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
     const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);

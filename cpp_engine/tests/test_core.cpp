@@ -1589,6 +1589,94 @@ void test_highlight_color_hold_increases_only_highlight_chroma() {
     }
 }
 
+void test_shadow_color_retention_increases_shadow_chroma_without_lifting_blacks() {
+    // Two pixels: deep shadow chromatic, bright highlight chromatic.
+    // Pixel 0: OKLab l ≈ 0.150 (below sh_rolloff_start=0.18) — sh_mask is active.
+    //   Computed: l_xyz ≈ 0.0044, cbrt ≈ 0.164 → OKLab l ≈ 0.150 → t_sh ≈ 0.167, sh_mask ≈ 0.068.
+    //   This pixel is in the shadow zone so shadow chroma rolloff applies; retention will reduce it.
+    // Pixel 1: OKLab l >> sh_start — sh_mask ≈ 0, so shadow retention has no effect.
+    dfee::Image rgb(2, 1, 3);
+    rgb.pixels = {
+        // pixel 0 — deep shadow chromatic: OKLab l ≈ 0.150 < sh_start=0.18
+        0.008F, 0.002F, 0.001F,
+        // pixel 1 — bright highlight chromatic: OKLab l >> sh_start
+        0.92F, 0.70F, 0.50F,
+    };
+
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.chroma_coupling = {
+        {"hi_rolloff_start", 0.75F},
+        {"hi_rolloff_rate", 1.8F},
+        {"hi_compression", 0.50F},
+        {"sh_rolloff_start", 0.18F},
+        {"sh_compression", 0.45F},
+        {"hi_hue_conv_rad", 0.28F},
+        {"hi_hue_conv_str", 0.18F},
+    };
+
+    // baseline: shadow_color_retention = 0 → identity
+    response.shadow_color_retention = 0.0F;
+    response.shadow_retention_sensitivity = 1.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    // held: shadow_color_retention = +100 → should preserve MORE chroma in shadows
+    response.shadow_color_retention = 100.0F;
+    const auto retained = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    const auto to_chroma = [](const dfee::Image& img, int x) -> float {
+        const auto oklab = dfee::rgb_to_oklab(img);
+        const float a = oklab.at(x, 0, 1);
+        const float b = oklab.at(x, 0, 2);
+        return std::sqrt(a * a + b * b);
+    };
+
+    const auto to_lightness = [](const dfee::Image& img, int x) -> float {
+        const auto oklab = dfee::rgb_to_oklab(img);
+        return oklab.at(x, 0, 0);
+    };
+
+    const float baseline_shadow_chroma  = to_chroma(baseline, 0);
+    const float retained_shadow_chroma  = to_chroma(retained, 0);
+    const float baseline_hi_chroma      = to_chroma(baseline, 1);
+    const float retained_hi_chroma      = to_chroma(retained, 1);
+
+    const float baseline_shadow_L       = to_lightness(baseline, 0);
+    const float retained_shadow_L       = to_lightness(retained, 0);
+
+    // retention=+100 must yield higher shadow chroma than retention=0
+    if (!(retained_shadow_chroma > baseline_shadow_chroma)) {
+        throw std::runtime_error(
+            "shadow_color_retention=+100 did not increase shadow chroma: "
+            "retained=" + std::to_string(retained_shadow_chroma) +
+            " baseline=" + std::to_string(baseline_shadow_chroma));
+    }
+
+    // Lightness of the shadow pixel must NOT change (no black lift)
+    if (std::fabs(retained_shadow_L - baseline_shadow_L) >= 1.0e-5F) {
+        throw std::runtime_error(
+            "shadow_color_retention=+100 changed shadow lightness (black lift!): "
+            "delta=" + std::to_string(std::fabs(retained_shadow_L - baseline_shadow_L)));
+    }
+
+    // Highlight chroma must be unchanged (sh_mask is ~0 in bright highlights)
+    // Use a 10x ratio bound: shadow chroma gain must dwarf any highlight leakage
+    const float shadow_delta    = retained_shadow_chroma - baseline_shadow_chroma;
+    const float hi_delta        = std::fabs(retained_hi_chroma - baseline_hi_chroma);
+    if (!(shadow_delta > hi_delta * 10.0F)) {
+        throw std::runtime_error(
+            "shadow_color_retention locality failed: shadow delta=" + std::to_string(shadow_delta) +
+            " must be >10x highlight delta=" + std::to_string(hi_delta));
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -1625,6 +1713,7 @@ int main() {
         test_color_character_request_fields_default_to_neutral_zero();
         test_loader_accepts_optional_color_character_group();
         test_highlight_color_hold_increases_only_highlight_chroma();
+        test_shadow_color_retention_increases_shadow_chroma_without_lifting_blacks();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {
