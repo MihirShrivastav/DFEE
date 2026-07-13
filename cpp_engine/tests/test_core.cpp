@@ -1506,13 +1506,15 @@ void test_raw_failure_paths() {
 }
 
 void test_highlight_color_hold_increases_only_highlight_chroma() {
-    // Two pixels: bright chromatic (highlight zone) and midtone chromatic
-    dfee::Image rgb(2, 1, 3);
+    // Three pixels: bright chromatic (highlight zone), deep shadow chromatic, and midtone chromatic
+    dfee::Image rgb(3, 1, 3);
     rgb.pixels = {
-        // bright highlight pixel: high luminance, clearly chromatic
+        // pixel 0 — bright highlight: high luminance, clearly chromatic
         0.95F, 0.70F, 0.55F,
-        // shadow/lower-midtone pixel: low luminance, chromatic — well below highlight zones
+        // pixel 1 — deep shadow: very low luminance, chromatic — well below highlight zones
         0.18F, 0.10F, 0.06F,
+        // pixel 2 — midtone: moderate luminance, chromatic — zone-5 mask bleed is ~3.9e-4 (measurable but small)
+        0.42F, 0.28F, 0.18F,
     };
 
     const auto luminance = dfee::compute_luminance(rgb);
@@ -1553,10 +1555,12 @@ void test_highlight_color_hold_increases_only_highlight_chroma() {
         return std::sqrt(a * a + b * b);
     };
 
-    const float baseline_hi_chroma  = to_chroma(baseline, 0);
-    const float held_hi_chroma      = to_chroma(held,     0);
-    const float baseline_mid_chroma = to_chroma(baseline, 1);
-    const float held_mid_chroma     = to_chroma(held,     1);
+    const float baseline_hi_chroma     = to_chroma(baseline, 0);
+    const float held_hi_chroma         = to_chroma(held,     0);
+    const float baseline_shadow_chroma = to_chroma(baseline, 1);
+    const float held_shadow_chroma     = to_chroma(held,     1);
+    const float baseline_mid_chroma    = to_chroma(baseline, 2);
+    const float held_mid_chroma        = to_chroma(held,     2);
 
     // Hold=+100 must preserve MORE chroma in highlights than hold=0
     if (!(held_hi_chroma > baseline_hi_chroma)) {
@@ -1566,11 +1570,22 @@ void test_highlight_color_hold_increases_only_highlight_chroma() {
             " baseline=" + std::to_string(baseline_hi_chroma));
     }
 
-    // Midtone chroma must be unchanged (within 1e-4)
-    if (std::fabs(held_mid_chroma - baseline_mid_chroma) >= 1.0e-4F) {
+    // Deep-shadow pixel must be byte-unchanged (no zone-5 mask weight at this luminance)
+    if (std::fabs(held_shadow_chroma - baseline_shadow_chroma) >= 1.0e-4F) {
         throw std::runtime_error(
-            "highlight_color_hold=+100 affected midtone chroma unexpectedly: "
-            "delta=" + std::to_string(std::fabs(held_mid_chroma - baseline_mid_chroma)));
+            "highlight_color_hold=+100 affected deep-shadow chroma unexpectedly: "
+            "delta=" + std::to_string(std::fabs(held_shadow_chroma - baseline_shadow_chroma)));
+    }
+
+    // Midtone locality: the highlight chroma gain must dwarf any midtone leakage by 10x.
+    // A true zone-5 midtone has ~3.9e-4 mask bleed, so we use a ratio bound rather than
+    // an absolute tolerance. This proves highlight-locality without over-tight thresholds.
+    const float hi_delta  = held_hi_chroma - baseline_hi_chroma;
+    const float mid_delta = std::fabs(held_mid_chroma - baseline_mid_chroma);
+    if (!(hi_delta > mid_delta * 10.0F)) {
+        throw std::runtime_error(
+            "highlight_color_hold locality failed: highlight delta=" + std::to_string(hi_delta) +
+            " must be >10x midtone delta=" + std::to_string(mid_delta));
     }
 }
 
