@@ -2388,6 +2388,163 @@ void test_palette_anchor_weights_gate_hue_shift() {
 }
 
 // ---------------------------------------------------------------------------
+// Task 3: Palette Range plausibility bounds
+// ---------------------------------------------------------------------------
+
+void test_palette_range_stays_plausible() {
+    // Build a 9-pixel image: 1 neutral + 8 saturated pixels spread across the hue wheel
+    // at high-but-plausible chroma (C=0.18, L=0.60).  The saturated pixels are well above
+    // the chroma gate (kPaletteChromaHi=0.06) so the palette sub-pass fires fully.
+    //
+    // Invariants checked:
+    //   AT -100 (MERGE):
+    //     a) mean chroma of saturated pixels drops vs baseline — merge happened
+    //     b) mean chroma stays > 0.25 * baseline — not collapsed to gray
+    //     c) no output channel is NaN
+    //     d) no output channel is < 0
+    //   AT +100 (SEPARATE):
+    //     e) mean chroma of saturated pixels rises vs baseline
+    //     f) all output channels in [0, 1] (gamut clamp in pipeline guarantees this)
+    //     g) no output channel is NaN
+
+    constexpr float kL = 0.60F;
+    constexpr float kC = 0.18F;
+    constexpr float kPi = std::numbers::pi_v<float>;
+
+    const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
+        const float a = c * std::cos(h);
+        const float bv = c * std::sin(h);
+        const float lp = l + 0.3963377774F * a + 0.2158017574F * bv;
+        const float mp = l - 0.1055613458F * a - 0.0638541728F * bv;
+        const float sp = l - 0.0894841775F * a - 1.2914855480F * bv;
+        const float lv = lp * lp * lp;
+        const float mv = mp * mp * mp;
+        const float sv = sp * sp * sp;
+        return {
+            std::clamp(4.0767416621F * lv - 3.3077115913F * mv + 0.2309699292F * sv, 0.0F, 1.0F),
+            std::clamp(-1.2684380046F * lv + 2.6097574011F * mv - 0.3413193965F * sv, 0.0F, 1.0F),
+            std::clamp(-0.0041960863F * lv - 0.7034186147F * mv + 1.7076147010F * sv, 0.0F, 1.0F),
+        };
+    };
+
+    // 8 saturated pixels uniformly spread across the hue circle (every 45°)
+    const std::array<float, 8> sat_hues = {
+        0.0F,           kPi / 4.0F,     kPi / 2.0F,     3.0F * kPi / 4.0F,
+        kPi,            5.0F * kPi / 4.0F, 3.0F * kPi / 2.0F, 7.0F * kPi / 4.0F,
+    };
+
+    // Build 9-pixel image: pixel 0 = neutral, pixels 1–8 = saturated
+    dfee::Image rgb(9, 1, 3);
+    // pixel 0: neutral gray
+    rgb.at(0, 0, 0) = 0.45F;
+    rgb.at(0, 0, 1) = 0.45F;
+    rgb.at(0, 0, 2) = 0.45F;
+    for (int i = 0; i < 8; ++i) {
+        const auto px = oklch_to_rgb_arr(kL, kC, sat_hues[static_cast<std::size_t>(i)]);
+        rgb.at(i + 1, 0, 0) = px[0];
+        rgb.at(i + 1, 0, 1) = px[1];
+        rgb.at(i + 1, 0, 2) = px[2];
+    }
+
+    const auto zones = make_flat_zone_masks(rgb);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.film_color = 100.0F;
+    response.palette_range_sensitivity = 1.0F;
+    // default 6-anchor set
+
+    const dfee::FilmRenderer renderer;
+
+    // Baseline (range=0)
+    response.palette_range = 0.0F;
+    const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    float baseline_chroma_sum = 0.0F;
+    for (int i = 1; i <= 8; ++i) {
+        baseline_chroma_sum += read_chroma(baseline, i);
+    }
+    const float baseline_mean_chroma = baseline_chroma_sum / 8.0F;
+
+    // --- Merge pole (-100) ---
+    response.palette_range = -100.0F;
+    const auto merged = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    float merged_chroma_sum = 0.0F;
+    for (int i = 1; i <= 8; ++i) {
+        merged_chroma_sum += read_chroma(merged, i);
+    }
+    const float merged_mean_chroma = merged_chroma_sum / 8.0F;
+
+    // (a) Merge must reduce mean chroma
+    if (!(merged_mean_chroma < baseline_mean_chroma - 1.0e-5F)) {
+        throw std::runtime_error(
+            "plausibility: palette_range=-100 did not reduce mean chroma of saturated pixels: "
+            "baseline=" + std::to_string(baseline_mean_chroma) +
+            " merged=" + std::to_string(merged_mean_chroma));
+    }
+
+    // (b) Residual chroma must stay > 25% of baseline — not collapsed
+    const float residual_threshold = 0.25F * baseline_mean_chroma;
+    if (!(merged_mean_chroma > residual_threshold)) {
+        throw std::runtime_error(
+            "plausibility: palette_range=-100 collapsed chroma below 25% of baseline "
+            "(too much desaturation): "
+            "baseline=" + std::to_string(baseline_mean_chroma) +
+            " merged=" + std::to_string(merged_mean_chroma) +
+            " threshold=" + std::to_string(residual_threshold));
+    }
+
+    // (c,d) No NaN or negative outputs
+    for (std::size_t k = 0; k < merged.value_count(); ++k) {
+        const float v = merged.pixels[k];
+        if (std::isnan(v)) {
+            throw std::runtime_error(
+                "plausibility: palette_range=-100 produced NaN at pixel value index " +
+                std::to_string(k));
+        }
+        if (v < 0.0F) {
+            throw std::runtime_error(
+                "plausibility: palette_range=-100 produced negative value " +
+                std::to_string(v) + " at pixel value index " + std::to_string(k));
+        }
+    }
+
+    // --- Separate pole (+100) ---
+    response.palette_range = 100.0F;
+    const auto separated = renderer.apply_color_response_and_coupling(rgb, zones, response);
+
+    float sep_chroma_sum = 0.0F;
+    for (int i = 1; i <= 8; ++i) {
+        sep_chroma_sum += read_chroma(separated, i);
+    }
+    const float sep_mean_chroma = sep_chroma_sum / 8.0F;
+
+    // (e) Separate must increase mean chroma
+    if (!(sep_mean_chroma > baseline_mean_chroma + 1.0e-5F)) {
+        throw std::runtime_error(
+            "plausibility: palette_range=+100 did not increase mean chroma of saturated pixels: "
+            "baseline=" + std::to_string(baseline_mean_chroma) +
+            " separated=" + std::to_string(sep_mean_chroma));
+    }
+
+    // (f,g) All outputs in [0, 1] and no NaN
+    for (std::size_t k = 0; k < separated.value_count(); ++k) {
+        const float v = separated.pixels[k];
+        if (std::isnan(v)) {
+            throw std::runtime_error(
+                "plausibility: palette_range=+100 produced NaN at pixel value index " +
+                std::to_string(k));
+        }
+        if (v < 0.0F || v > 1.0F) {
+            throw std::runtime_error(
+                "plausibility: palette_range=+100 produced out-of-gamut value " +
+                std::to_string(v) + " at pixel value index " + std::to_string(k));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Task 6: Emulsion Color Density + Solver family defaults
 // ---------------------------------------------------------------------------
 
@@ -2749,6 +2906,7 @@ int main() {
         test_palette_range_separate_increases_hue_spread();
         test_palette_range_merge_wrap_stability();
         test_palette_anchor_weights_gate_hue_shift();
+        test_palette_range_stays_plausible();
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
         test_color_character_synthetic_zone_hue_fixture();
