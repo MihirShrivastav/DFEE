@@ -2078,6 +2078,195 @@ void test_solver_color_character_family_defaults() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Task 8: M7-003F — Synthetic zone/hue fixture (multi-control integration)
+// ---------------------------------------------------------------------------
+
+void test_color_character_synthetic_zone_hue_fixture() {
+    // 12-pixel 1-row image:
+    //   pixel 0         — neutral gray (palette separation neutrality)
+    //   pixels 1–4     — hue wheel at midtone luminance (saturated R, G, B, cyan-ish)
+    //   pixels 5–6     — shadow-zone chromatic pixels (OKLab L ≈ 0.15)
+    //   pixels 7–8     — midtone chromatic pixels (moderate luminance)
+    //   pixels 9–10    — highlight-zone chromatic pixels (high luminance)
+    //   pixels 11      — extra chromatic pixel (mid-high luminance)
+    //
+    // pixel 5/6 are set so OKLab L < sh_rolloff_start=0.18 (shadow zone active).
+    // pixel 9/10 are set so OKLab L >> hi_rolloff_start=0.70 (highlight zone active).
+
+    dfee::Image rgb(12, 1, 3);
+    rgb.pixels = {
+        // pixel 0 — neutral gray
+        0.45F, 0.45F, 0.45F,
+        // pixel 1 — saturated red at midtone
+        0.70F, 0.30F, 0.25F,
+        // pixel 2 — saturated green at midtone
+        0.25F, 0.70F, 0.30F,
+        // pixel 3 — saturated blue at midtone
+        0.25F, 0.30F, 0.70F,
+        // pixel 4 — saturated cyan-ish at midtone
+        0.25F, 0.65F, 0.65F,
+        // pixel 5 — shadow chromatic (very low luminance — below sh_rolloff_start)
+        0.008F, 0.004F, 0.002F,
+        // pixel 6 — shadow chromatic (very low luminance — below sh_rolloff_start)
+        0.006F, 0.002F, 0.004F,
+        // pixel 7 — midtone chromatic
+        0.42F, 0.28F, 0.18F,
+        // pixel 8 — midtone chromatic
+        0.38F, 0.22F, 0.35F,
+        // pixel 9 — highlight chromatic (high luminance — above hi_rolloff_start=0.70)
+        0.95F, 0.72F, 0.55F,
+        // pixel 10 — highlight chromatic (high luminance)
+        0.92F, 0.80F, 0.60F,
+        // pixel 11 — mid-high chromatic
+        0.60F, 0.45F, 0.30F,
+    };
+
+    const auto luminance = dfee::compute_luminance(rgb);
+    const dfee::ImageStateAnalyzer analyzer;
+    const auto zones = analyzer.generate_zone_masks(luminance, 0.18F);
+
+    // Build a reusable response plan with all color character sensitivities active
+    dfee::FilmResponsePlan base_response;
+    base_response.stock_type = "color_negative";
+    base_response.film_color = 100.0F;
+    base_response.highlight_desaturation = 0.6F;
+    base_response.highlight_hold_sensitivity = 1.0F;
+    base_response.shadow_retention_sensitivity = 1.0F;
+    base_response.emulsion_density_sensitivity = 1.0F;
+    base_response.palette_separation_sensitivity = 1.0F;
+    base_response.chroma_coupling = {
+        {"hi_rolloff_start", 0.70F},
+        {"hi_rolloff_rate", 2.0F},
+        {"hi_compression", 0.55F},
+        {"sh_rolloff_start", 0.18F},
+        {"sh_compression", 0.45F},
+        {"hi_hue_conv_rad", 0.28F},
+        {"hi_hue_conv_str", 0.18F},
+    };
+    base_response.chroma_boost = 1.0F;
+
+    const dfee::FilmRenderer renderer;
+
+    // -----------------------------------------------------------------------
+    // (a) Highlight Color Hold: HCH=+100 must increase highlight chroma more
+    //     than shadow chroma (locality: highlight gain > 10x shadow leakage)
+    // -----------------------------------------------------------------------
+    {
+        dfee::FilmResponsePlan resp = base_response;
+        resp.highlight_color_hold = 0.0F;
+        const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        resp.highlight_color_hold = 100.0F;
+        const auto held = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        const float hi_chroma_base  = read_chroma(baseline, 9);
+        const float hi_chroma_held  = read_chroma(held,     9);
+        const float sh_chroma_base  = read_chroma(baseline, 5);
+        const float sh_chroma_held  = read_chroma(held,     5);
+
+        const float hi_delta = hi_chroma_held - hi_chroma_base;
+        const float sh_delta = std::fabs(sh_chroma_held - sh_chroma_base);
+
+        if (!(hi_delta > 0.0F)) {
+            throw std::runtime_error(
+                "synthetic fixture (a): HCH=+100 did not increase highlight chroma: "
+                "held=" + std::to_string(hi_chroma_held) +
+                " baseline=" + std::to_string(hi_chroma_base));
+        }
+        if (!(hi_delta > sh_delta * 10.0F)) {
+            throw std::runtime_error(
+                "synthetic fixture (a): HCH locality failed: hi_delta=" +
+                std::to_string(hi_delta) + " must be >10x sh_delta=" + std::to_string(sh_delta));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // (b) Shadow Color Retention: SCR=+100 must increase shadow chroma more
+    //     than highlight chroma (locality: shadow gain > 10x highlight leakage)
+    // -----------------------------------------------------------------------
+    {
+        dfee::FilmResponsePlan resp = base_response;
+        resp.shadow_color_retention = 0.0F;
+        const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        resp.shadow_color_retention = 100.0F;
+        const auto retained = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        const float sh_chroma_base = read_chroma(baseline, 5);
+        const float sh_chroma_ret  = read_chroma(retained, 5);
+        const float hi_chroma_base = read_chroma(baseline, 9);
+        const float hi_chroma_ret  = read_chroma(retained, 9);
+
+        const float sh_delta = sh_chroma_ret - sh_chroma_base;
+        const float hi_delta = std::fabs(hi_chroma_ret - hi_chroma_base);
+
+        if (!(sh_delta > 0.0F)) {
+            throw std::runtime_error(
+                "synthetic fixture (b): SCR=+100 did not increase shadow chroma: "
+                "retained=" + std::to_string(sh_chroma_ret) +
+                " baseline=" + std::to_string(sh_chroma_base));
+        }
+        if (!(sh_delta > hi_delta * 10.0F)) {
+            throw std::runtime_error(
+                "synthetic fixture (b): SCR locality failed: sh_delta=" +
+                std::to_string(sh_delta) + " must be >10x hi_delta=" + std::to_string(hi_delta));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // (c) Palette Separation: neutral gray pixel (pixel 0) must be unchanged
+    //     (chroma == 0, so hue shift gain is 0)
+    // -----------------------------------------------------------------------
+    {
+        dfee::FilmResponsePlan resp = base_response;
+        resp.palette_separation = 0.0F;
+        const auto baseline = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        resp.palette_separation = 100.0F;
+        const auto separated = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        const float dr = std::fabs(separated.at(0, 0, 0) - baseline.at(0, 0, 0));
+        const float dg = std::fabs(separated.at(0, 0, 1) - baseline.at(0, 0, 1));
+        const float db = std::fabs(separated.at(0, 0, 2) - baseline.at(0, 0, 2));
+
+        if (dr > 1.0e-5F || dg > 1.0e-5F || db > 1.0e-5F) {
+            throw std::runtime_error(
+                "synthetic fixture (c): palette_separation=+100 changed neutral gray pixel: "
+                "dR=" + std::to_string(dr) + " dG=" + std::to_string(dg) +
+                " dB=" + std::to_string(db));
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // (d) Determinism: same render with all four controls at 50.0 → byte-identical
+    // -----------------------------------------------------------------------
+    {
+        dfee::FilmResponsePlan resp = base_response;
+        resp.highlight_color_hold      = 50.0F;
+        resp.shadow_color_retention    = 50.0F;
+        resp.palette_separation        = 50.0F;
+        resp.emulsion_color_density    = 50.0F;
+
+        const auto first  = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+        const auto second = renderer.apply_color_response_and_coupling(rgb, zones, resp);
+
+        if (first.pixels.size() != second.pixels.size()) {
+            throw std::runtime_error(
+                "synthetic fixture (d): determinism check — output size mismatch");
+        }
+        for (std::size_t i = 0; i < first.pixels.size(); ++i) {
+            if (first.pixels[i] != second.pixels[i]) {
+                throw std::runtime_error(
+                    "synthetic fixture (d): determinism check failed at pixel element " +
+                    std::to_string(i) +
+                    ": first=" + std::to_string(first.pixels[i]) +
+                    " second=" + std::to_string(second.pixels[i]));
+            }
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -2120,6 +2309,7 @@ int main() {
         test_palette_separation_wrap_stability();
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
+        test_color_character_synthetic_zone_hue_fixture();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

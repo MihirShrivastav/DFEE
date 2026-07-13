@@ -92,3 +92,9 @@ dye_contamination:
   b_to_r: 0.006
   r_to_b: 0.0
   g_to_b: 0.006
+color_character:
+  highlight_hold_sensitivity: 0.70
+  shadow_retention_sensitivity: 0.65
+  emulsion_density_sensitivity: 0.60
+  palette:
+    separation_sensitivity: 0.55

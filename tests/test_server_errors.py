@@ -862,5 +862,48 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertIn("diagnostics", payload)
 
 
+    def test_preview_rejects_parity_v1_with_nonzero_palette_separation(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview") as native_mock:
+                response = self.client.get(
+                    "/api/preview",
+                    params={
+                        "filename": "example.ARW",
+                        "stock": "portra_400",
+                        "effect_pipeline_version": "parity_v1",
+                        "palette_separation": 50.0,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Color Character", response.json()["detail"])
+        native_mock.assert_not_called()
+
+    def test_preview_rejects_color_character_out_of_range(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview") as native_mock:
+                response = self.client.get(
+                    "/api/preview",
+                    params={
+                        "filename": "example.ARW",
+                        "stock": "portra_400",
+                        "effect_pipeline_version": "filmic_v2",
+                        "highlight_color_hold": 150.0,
+                        "shadow_color_retention": 150.0,
+                        "palette_separation": 150.0,
+                        "emulsion_color_density": 150.0,
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        native_mock.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

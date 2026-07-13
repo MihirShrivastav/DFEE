@@ -1152,6 +1152,45 @@ class TestNativeBridge(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "LIBRAW_UNAVAILABLE")
 
 
+    def test_color_character_preview_export_request_field_agreement(self):
+        """Same Color Character inputs produce matching resolved fields on preview and export requests."""
+        cc_inputs = dict(
+            highlight_color_hold=30.0,
+            shadow_color_retention=-20.0,
+            palette_separation=50.0,
+            emulsion_color_density=10.0,
+        )
+        preview_req = dfee_native_bridge.NativePreviewRenderRequest(
+            filename="x.ARW",
+            stock="portra_400",
+            effect_pipeline_version="filmic_v2",
+            **cc_inputs,
+        )
+        export_req = dfee_native_bridge.NativeExportRequest(
+            filename="x.ARW",
+            stock="portra_400",
+            effect_pipeline_version="filmic_v2",
+            **cc_inputs,
+        )
+
+        # All four CC fields must agree between preview and export request
+        self.assertEqual(preview_req.highlight_color_hold, export_req.highlight_color_hold)
+        self.assertEqual(preview_req.shadow_color_retention, export_req.shadow_color_retention)
+        self.assertEqual(preview_req.palette_separation, export_req.palette_separation)
+        self.assertEqual(preview_req.emulsion_color_density, export_req.emulsion_color_density)
+
+        # Values must match what we set
+        self.assertAlmostEqual(preview_req.highlight_color_hold, 30.0)
+        self.assertAlmostEqual(preview_req.shadow_color_retention, -20.0)
+        self.assertAlmostEqual(preview_req.palette_separation, 50.0)
+        self.assertAlmostEqual(preview_req.emulsion_color_density, 10.0)
+
+        # Export inherits all preview fields
+        self.assertEqual(preview_req.filename, export_req.filename)
+        self.assertEqual(preview_req.stock, export_req.stock)
+        self.assertEqual(preview_req.effect_pipeline_version, export_req.effect_pipeline_version)
+
+
 def test_color_character_fields_default_zero_and_round_trip():
     from dfee_native_bridge import NativePreviewRenderRequest, NativeExportRequest
     req = NativePreviewRenderRequest(filename="x.ARW", stock="none")

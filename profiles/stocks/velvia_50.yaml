@@ -92,3 +92,23 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+color_character:
+  highlight_hold_sensitivity: 0.90
+  shadow_retention_sensitivity: 0.50
+  emulsion_density_sensitivity: 0.80
+  palette:
+    separation_sensitivity: 0.80
+    anchors:
+    - 0.0
+    - 1.0472
+    - 2.0944
+    - 3.1416
+    - 4.1888
+    - 5.2360
+    anchor_weights:
+    - 1.0
+    - 0.9
+    - 0.7
+    - 0.5
+    - 0.7
+    - 0.9
