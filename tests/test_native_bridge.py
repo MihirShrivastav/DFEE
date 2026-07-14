@@ -786,13 +786,14 @@ class TestNativeBridge(unittest.TestCase):
             self.skipTest("LibRaw not available")
         self.session.select_file(raw_filename)
 
-        def _render(version, density):
+        def _render(version, density, compression=0.0):
             return self.session.render_preview(
                 dfee_native_bridge.NativePreviewRenderRequest(
                     filename=raw_filename,
                     stock="portra_400",
                     effect_pipeline_version=version,
                     film_color_density=density,
+                    film_color_compression=compression,  # off, to isolate density
                 )
             ).jpeg_bytes
 
@@ -803,10 +804,35 @@ class TestNativeBridge(unittest.TestCase):
 
         # density is applied under filmic_v3 (differs from filmic_v2)
         self.assertNotEqual(v3_default, v2)
-        # density=0 isolates to the same colour path as filmic_v2 (no density)
+        # with density AND compression off, filmic_v3 equals filmic_v2
         self.assertEqual(v3_off, v2)
         # more density => different (stronger) render
         self.assertNotEqual(v3_strong, v3_default)
+
+    def test_filmic_v3_color_compression_changes_render(self):
+        raw_filename = self._raw_filename()
+        if not self.session.list_profiles().engine.libraw_enabled:
+            self.skipTest("LibRaw not available")
+        self.session.select_file(raw_filename)
+
+        def _render(compression):
+            return self.session.render_preview(
+                dfee_native_bridge.NativePreviewRenderRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    effect_pipeline_version="filmic_v3",
+                    film_color_density=0.0,        # isolate compression from density
+                    film_color_compression=compression,
+                )
+            ).jpeg_bytes
+
+        off = _render(0.0)
+        default = _render(100.0)
+        strong = _render(200.0)
+        # compression is applied at default (differs from off)
+        self.assertNotEqual(default, off)
+        # more compression => different render
+        self.assertNotEqual(strong, default)
 
     def test_render_preview_rejects_unsupported_effect_pipeline_version(self):
         raw_filename = self._raw_filename()

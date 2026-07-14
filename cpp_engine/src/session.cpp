@@ -2194,6 +2194,11 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_density");
                 rendered = renderer.apply_subtractive_density(rendered, render_plan.film_response);
             }
+            if (render_plan.stock_type != "monochrome" &&
+                is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                ScopedStageTimer substage(response.engine, "render_preview_film_stage_compression");
+                rendered = renderer.apply_color_compression(rendered, render_plan.film_response);
+            }
             {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_acutance");
                 rendered = renderer.apply_acutance_shaping(rendered, render_plan.material_effects);
@@ -2570,6 +2575,11 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_density");
                         rendered = renderer.apply_subtractive_density(rendered, render_plan->film_response);
+                    }
+                    if (render_plan->stock_type != "monochrome" &&
+                        is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_compression");
+                        rendered = renderer.apply_color_compression(rendered, render_plan->film_response);
                     }
                     {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_acutance");
