@@ -16,6 +16,13 @@ Canonical home for DFEE product, architecture, and design documentation.
   components, how each film stock gets its character, the user controls, and the
   delivery roadmap.
 
+## Planning
+
+- [Film Lab v1 Project Plan](planning/film-lab-v1-project-plan.md) — the v1
+  delivery program for the subtractive film-lab framework: slices (scope, native
+  behaviour, stock params, controls, acceptance criteria), sequencing,
+  definition of done, risks, and execution model.
+
 ## Related engine docs
 
 - Migration / engine notes live under `cpp_engine/migration_docs/`
