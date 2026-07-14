@@ -60,6 +60,7 @@ const DEFAULT_PARAMS = {
   palette_range: 0,
   emulsion_color_density: 0,
   film_color_density: 100,
+  film_color_compression: 100,
   print_stock: 'none',
   print_strength: 1.0,
   print_c: 0.0,
@@ -459,7 +460,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -628,6 +629,7 @@ export default function App() {
         palette_range: String(params.palette_range),
         emulsion_color_density: String(params.emulsion_color_density),
         film_color_density: String(params.film_color_density),
+        film_color_compression: String(params.film_color_compression),
         print_stock: params.print_stock,
         print_strength: String(params.print_strength),
         print_c: String(params.print_c),
@@ -906,6 +908,7 @@ export default function App() {
           palette_range: params.palette_range,
           emulsion_color_density: params.emulsion_color_density,
           film_color_density: params.film_color_density,
+          film_color_compression: params.film_color_compression,
           print_stock: params.print_stock,
           print_strength: params.print_strength,
           print_c: params.print_c,
@@ -1504,11 +1507,6 @@ export default function App() {
                     tooltip: 'How much colour is kept in the deep shadows.',
                   },
                   {
-                    key: 'palette_range',
-                    label: 'Palette Range',
-                    tooltip: 'Drag left to merge similar colours into a harmonised, dreamy palette; right to separate them into distinct, punchy colours.',
-                  },
-                  {
                     key: 'emulsion_color_density',
                     label: 'Emulsion Color Density',
                     tooltip: "Overall strength of the stock's colour dyes.",
@@ -1546,10 +1544,18 @@ export default function App() {
                         </div>
                       );
                     })}
-                    {(() => {
-                      const key = 'film_color_density';
-                      const label = 'Film Color Density';
-                      const tooltip = "How dense and matte the film's colours are — forward for richer, deeper, more film-like colour.";
+                    {[
+                      {
+                        key: 'film_color_density',
+                        label: 'Film Color Density',
+                        tooltip: "How dense and matte the film's colours are — forward for richer, deeper, more film-like colour.",
+                      },
+                      {
+                        key: 'film_color_compression',
+                        label: 'Color Compression',
+                        tooltip: 'How much the palette is compressed into cohesive, film-like colour — forward for a more harmonised, less digital look.',
+                      },
+                    ].map(({ key, label, tooltip }) => {
                       const isDirty = params[key] !== 100;
                       return (
                         <div className={`slider-row${isMonochrome ? ' disabled' : ''}`} key={key}>
@@ -1578,7 +1584,7 @@ export default function App() {
                           />
                         </div>
                       );
-                    })()}
+                    })}
                   </div>
                 );
               })()}
