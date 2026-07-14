@@ -292,14 +292,6 @@ void append_timing_metric(
     return t * t * (3.0F - 2.0F * t);
 }
 
-// --- Palette Range helpers (Task 5, M7-003D; Task 2 bipolar update) ---
-constexpr float kPaletteMergeHueGain = 0.90F; // max radians pulled toward anchor at full merge
-constexpr float kPaletteSepHueGain   = 0.60F; // max radians pushed away from anchor at full separate
-constexpr float kPaletteMergeDesat   = 0.55F; // max fractional chroma reduction at full merge
-constexpr float kPaletteSepChroma    = 0.25F; // max fractional chroma gain at full separate
-constexpr float kPaletteChromaLo     = 0.02F; // neutral-preserving chroma gate lower edge
-constexpr float kPaletteChromaHi     = 0.06F; // gate upper edge
-
 // filmic_v3 subtractive density.
 constexpr float kOklabChromaRef   = 0.35F; // chroma normalization reference (OKLCh C)
 constexpr float kDensityLumaMax   = 0.55F; // max fractional L reduction at full density
@@ -317,30 +309,6 @@ constexpr float kLeanBlueSign     = -1.0F;  // sign chosen so blue leans toward 
 [[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
     const float t = std::clamp((x - lo) / std::max(hi - lo, 1.0e-6F), 0.0F, 1.0F);
     return t * t * (3.0F - 2.0F * t);
-}
-
-// Result type for nearest_anchor_delta: signed arc delta and index of nearest anchor.
-struct NearestAnchorResult {
-    float delta = 0.0F;    // signed shortest-arc delta in (-π, +π]
-    std::size_t index = 0; // index of the nearest anchor in the anchors vector
-};
-
-// Signed shortest-arc angular delta from h toward the nearest anchor in anchors.
-// Returns delta in (-π, +π] and the index of the nearest anchor.
-// Passing delta through std::sin() for the hue shift gives smooth, wrap-stable behaviour.
-[[nodiscard]] inline NearestAnchorResult nearest_anchor_delta(const float h, const std::vector<float>& anchors) {
-    float best = 0.0F;
-    float best_abs = std::numeric_limits<float>::max();
-    std::size_t best_idx = 0U;
-    for (std::size_t i = 0U; i < anchors.size(); ++i) {
-        const float d = std::atan2(std::sin(anchors[i] - h), std::cos(anchors[i] - h));
-        if (std::abs(d) < best_abs) {
-            best_abs = std::abs(d);
-            best = d;
-            best_idx = i;
-        }
-    }
-    return {best, best_idx};
 }
 
 [[nodiscard]] cv::Mat roll_mat(const cv::Mat& source, const int shift_y, const int shift_x) {
@@ -923,26 +891,9 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         * response.shadow_retention_sensitivity;
     sh_comp = std::max(sh_comp * (1.0F - kShadowRetentionGain * n_ret), 0.0F);
 
-    // Palette Separation (M7-003D): resolve anchors and weights once before the per-pixel loop.
-    const float n_range = std::clamp(response.palette_range / 100.0F, -1.0F, 1.0F)
-        * response.palette_range_sensitivity;
-    const std::vector<float> palette_anchors = response.palette_anchors.empty()
-        ? std::vector<float>{
-            0.0F,
-            std::numbers::pi_v<float> / 3.0F,
-            2.0F * std::numbers::pi_v<float> / 3.0F,
-            std::numbers::pi_v<float>,
-            4.0F * std::numbers::pi_v<float> / 3.0F,
-            5.0F * std::numbers::pi_v<float> / 3.0F,
-          }
-        : response.palette_anchors;
-    // Resolve per-anchor weights: use calibrated weights when present and size-matched,
-    // otherwise fall back to all-1.0 (neutral — byte-identical to the previous behaviour).
-    const std::vector<float> palette_weights =
-        (!response.palette_anchor_weights.empty() &&
-         response.palette_anchor_weights.size() == palette_anchors.size())
-        ? response.palette_anchor_weights
-        : std::vector<float>(palette_anchors.size(), 1.0F);
+    // NOTE: the M7-003 palette_range anchor pass was retired in Film Lab v1
+    // Slice 3; palette separation is superseded by the filmic_v3 Color
+    // Compression stage (neighbour-lean crosstalk + saturation compression).
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
     const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);
@@ -1032,32 +983,6 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         const float d_h = std::fmod((hi_hue_target - lch.h) + std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>) -
             std::numbers::pi_v<float>;
         float h_new = wrap_angle_positive(lch.h + d_h * hi_mask * hi_hue_strength);
-
-        // Palette Range sub-pass (M7-003D; Task 2 bipolar): chroma-gated, wrap-stable bipolar hue+chroma.
-        // Negative n_range MERGES: pull hue toward nearest anchor + desaturate proportional to pull.
-        // Positive n_range SEPARATES: push hue away from nearest anchor + slight chroma gain.
-        // Gated by n_range != 0 so a zero-value is a true no-op (neutral pixel pass-through).
-        // The nearest anchor's weight gates the effect: weight=0 suppresses it, weight=1.0 is full.
-        if (n_range != 0.0F) {
-            const float g_c = smoothstep01(kPaletteChromaLo, kPaletteChromaHi, lch.c);
-            const auto [delta, nearest_idx] = nearest_anchor_delta(h_new, palette_anchors);
-            const float anchor_weight = palette_weights[nearest_idx];
-            if (n_range < 0.0F) {
-                // MERGE: pull hue toward nearest anchor; desaturate proportional to the pull.
-                const float merge = -n_range;                     // 0..1
-                h_new = wrap_angle_positive(
-                    h_new + kPaletteMergeHueGain * merge * g_c * anchor_weight * std::sin(delta));
-                const float pull_frac = std::abs(std::sin(delta)); // 0 at anchor, 1 at quadrature
-                c_new = std::max(
-                    c_new * (1.0F - kPaletteMergeDesat * merge * g_c * pull_frac), 0.0F);
-            } else {
-                // SEPARATE: push hue away from nearest anchor (toward the midpoint); slight chroma gain.
-                const float sep = n_range;                        // 0..1
-                h_new = wrap_angle_positive(
-                    h_new - kPaletteSepHueGain * sep * g_c * anchor_weight * std::sin(delta));
-                c_new = c_new * (1.0F + kPaletteSepChroma * sep * g_c);
-            }
-        }
 
         adjusted = oklch_to_oklab_pixel({
             lch.l,
