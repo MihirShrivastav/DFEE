@@ -57,6 +57,14 @@ public:
         const Image& rgb_linear,
         const FilmResponsePlan& response) const;
 
+    // filmic_v3 colour compression: a chroma shoulder that soft-compresses high
+    // chroma toward a ceiling (reduced colour dynamic range), plus a bounded,
+    // chroma-gated neighbour-lean (red->orange, blue->cyan). Hue-honest;
+    // neutrals preserved; no-op when the effective amounts are zero.
+    [[nodiscard]] Image apply_color_compression(
+        const Image& rgb_linear,
+        const FilmResponsePlan& response) const;
+
     [[nodiscard]] Image apply_acutance_shaping(
         const Image& rgb_linear,
         const MaterialEffectsPlan& effects) const;

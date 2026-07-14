@@ -2705,6 +2705,130 @@ void test_solver_density_defaults() {
     }
 }
 
+void test_color_compression_compresses_high_chroma_preserves_neutral() {
+    const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
+        const float a = c * std::cos(h);
+        const float b = c * std::sin(h);
+        const dfee::Image tmp = dfee::oklab_to_rgb([&]() {
+            dfee::Image lab(1, 1, 3);
+            lab.at(0, 0, 0) = l; lab.at(0, 0, 1) = a; lab.at(0, 0, 2) = b;
+            return lab;
+        }());
+        return {tmp.at(0, 0, 0), tmp.at(0, 0, 1), tmp.at(0, 0, 2)};
+    };
+    dfee::Image rgb(3, 1, 3);
+    const auto p0 = oklch_to_rgb_arr(0.60F, 0.22F, 0.5F); // high chroma
+    const auto p1 = oklch_to_rgb_arr(0.60F, 0.08F, 0.5F); // mid/low chroma (below threshold)
+    const auto p2 = oklch_to_rgb_arr(0.60F, 0.00F, 0.0F); // neutral
+    for (int k = 0; k < 3; ++k) { rgb.at(0, 0, k) = p0[static_cast<std::size_t>(k)]; }
+    for (int k = 0; k < 3; ++k) { rgb.at(1, 0, k) = p1[static_cast<std::size_t>(k)]; }
+    for (int k = 0; k < 3; ++k) { rgb.at(2, 0, k) = p2[static_cast<std::size_t>(k)]; }
+
+    const auto lch_of = [](const dfee::Image& img) {
+        return dfee::oklab_to_oklch(dfee::rgb_to_oklab(img));
+    };
+    const auto base = lch_of(rgb);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.compression_strength = 0.6F;
+    response.compression_threshold = 0.45F;
+    response.compression_crosstalk = 0.0F; // isolate the shoulder
+    const dfee::FilmRenderer renderer;
+
+    response.film_color_compression = 0.0F;
+    const auto out0 = renderer.apply_color_compression(rgb, response);
+    for (std::size_t i = 0; i < rgb.pixels.size(); ++i) {
+        if (out0.pixels[i] != rgb.pixels[i]) {
+            throw std::runtime_error("film_color_compression=0 must be a byte-identical no-op");
+        }
+    }
+
+    response.film_color_compression = 100.0F;
+    const auto out100 = renderer.apply_color_compression(rgb, response);
+    const auto lch100 = lch_of(out100);
+    // high-chroma pixel is compressed (chroma decreases)
+    if (!(lch100.at(0, 0, 1) < base.at(0, 0, 1) - 1.0e-3F)) {
+        throw std::runtime_error("high-chroma pixel must be compressed by the shoulder");
+    }
+    // mid/low-chroma pixel below threshold ~unchanged
+    if (std::fabs(lch100.at(1, 0, 1) - base.at(1, 0, 1)) > 2.0e-3F) {
+        throw std::runtime_error("below-threshold chroma must be ~unchanged");
+    }
+    // neutral pixel unchanged
+    for (int k = 0; k < 3; ++k) {
+        if (std::fabs(out100.at(2, 0, k) - rgb.at(2, 0, k)) > 1.0e-4F) {
+            throw std::runtime_error("neutral pixel must be unchanged by compression");
+        }
+    }
+    // hue of high-chroma pixel unchanged (crosstalk off)
+    if (std::fabs(lch100.at(0, 0, 2) - base.at(0, 0, 2)) > 3.0e-3F) {
+        throw std::runtime_error("shoulder must not shift hue");
+    }
+    // 200 compresses more than 100
+    response.film_color_compression = 200.0F;
+    const auto lch200 = lch_of(renderer.apply_color_compression(rgb, response));
+    if (!(lch200.at(0, 0, 1) < lch100.at(0, 0, 1) - 1.0e-3F)) {
+        throw std::runtime_error("film_color_compression=200 must compress more than 100");
+    }
+}
+
+void test_color_compression_leans_neighbours_preserves_neutral() {
+    const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
+        const float a = c * std::cos(h);
+        const float b = c * std::sin(h);
+        const dfee::Image tmp = dfee::oklab_to_rgb([&]() {
+            dfee::Image lab(1, 1, 3);
+            lab.at(0, 0, 0) = l; lab.at(0, 0, 1) = a; lab.at(0, 0, 2) = b;
+            return lab;
+        }());
+        return {tmp.at(0, 0, 0), tmp.at(0, 0, 1), tmp.at(0, 0, 2)};
+    };
+    dfee::Image rgb(3, 1, 3);
+    const auto pr = oklch_to_rgb_arr(0.55F, 0.14F, 0.5F);  // saturated red-ish
+    const auto pb = oklch_to_rgb_arr(0.55F, 0.14F, 4.0F);  // saturated blue-ish
+    const auto pn = oklch_to_rgb_arr(0.55F, 0.005F, 0.5F); // near-neutral
+    for (int k = 0; k < 3; ++k) { rgb.at(0, 0, k) = pr[static_cast<std::size_t>(k)]; }
+    for (int k = 0; k < 3; ++k) { rgb.at(1, 0, k) = pb[static_cast<std::size_t>(k)]; }
+    for (int k = 0; k < 3; ++k) { rgb.at(2, 0, k) = pn[static_cast<std::size_t>(k)]; }
+
+    const auto lch_of = [](const dfee::Image& img) {
+        return dfee::oklab_to_oklch(dfee::rgb_to_oklab(img));
+    };
+    const auto base = lch_of(rgb);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.compression_strength = 0.0F;   // isolate crosstalk
+    response.compression_crosstalk = 1.0F;
+    response.film_color_compression = 100.0F;
+    const dfee::FilmRenderer renderer;
+
+    // crosstalk = 0 -> hue unchanged
+    response.compression_crosstalk = 0.0F;
+    const auto lch_off = lch_of(renderer.apply_color_compression(rgb, response));
+    if (std::fabs(lch_off.at(0, 0, 2) - base.at(0, 0, 2)) > 1.0e-4F) {
+        throw std::runtime_error("crosstalk=0 must not shift hue");
+    }
+
+    response.compression_crosstalk = 1.0F;
+    const auto lch1 = lch_of(renderer.apply_color_compression(rgb, response));
+    // red leans toward orange => hue increases (toward yellow), bounded
+    const float dr = lch1.at(0, 0, 2) - base.at(0, 0, 2);
+    if (!(dr > 1.0e-3F) || dr > 0.30F) {
+        throw std::runtime_error("red must lean a small bounded amount toward orange, got dh=" + std::to_string(dr));
+    }
+    // blue leans toward cyan => hue decreases, bounded
+    const float db = lch1.at(1, 0, 2) - base.at(1, 0, 2);
+    if (!(db < -1.0e-3F) || db < -0.30F) {
+        throw std::runtime_error("blue must lean a small bounded amount toward cyan, got dh=" + std::to_string(db));
+    }
+    // near-neutral hue unchanged (chroma gate)
+    if (std::fabs(lch1.at(2, 0, 2) - base.at(2, 0, 2)) > 5.0e-3F) {
+        throw std::runtime_error("near-neutral pixel hue must be preserved by the chroma gate");
+    }
+}
+
 void test_solver_compression_defaults() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     dfee::SolverInput input;
@@ -3090,6 +3214,8 @@ int main() {
         test_solver_color_character_family_defaults();
         test_solver_density_defaults();
         test_solver_compression_defaults();
+        test_color_compression_compresses_high_chroma_preserves_neutral();
+        test_color_compression_leans_neighbours_preserves_neutral();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
         test_color_character_synthetic_zone_hue_fixture();
         std::cout << "dfee_tests passed\n";

@@ -305,6 +305,14 @@ constexpr float kOklabChromaRef   = 0.35F; // chroma normalization reference (OK
 constexpr float kDensityLumaMax   = 0.55F; // max fractional L reduction at full density
 constexpr float kDensityLimitSoft = 0.06F; // soft width of the low-luma limiter
 
+// filmic_v3 colour compression.
+constexpr float kCompressK        = 3.0F;   // chroma-shoulder hardness scale
+constexpr float kCompressCrossLo  = 0.05F;  // neutral gate lower edge (OKLCh C) for crosstalk
+constexpr float kCompressCrossHi  = 0.10F;  // neutral gate upper edge
+constexpr float kCompressLeanGain = 0.20F;  // max radians of neighbour lean at full crosstalk
+constexpr float kLeanRedSign      = 1.0F;   // sign chosen so red leans toward orange
+constexpr float kLeanBlueSign     = -1.0F;  // sign chosen so blue leans toward cyan
+
 // Smoothstep with explicit [lo, hi] range → [0, 1]. Distinct signature from the single-arg overload.
 [[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
     const float t = std::clamp((x - lo) / std::max(hi - lo, 1.0e-6F), 0.0F, 1.0F);
@@ -1291,6 +1299,51 @@ Image FilmRenderer::apply_subtractive_density(
         const float l_new = std::max(lch.l * (1.0F - reduce), 0.0F);
         const OklabPixel adjusted = oklch_to_oklab_pixel({l_new, lch.c, lch.h});
         const auto rgb = oklab_to_rgb_pixel(adjusted);
+        out.pixels[i * 3 + 0] = rgb[0];
+        out.pixels[i * 3 + 1] = rgb[1];
+        out.pixels[i * 3 + 2] = rgb[2];
+    }
+    return out;
+}
+
+Image FilmRenderer::apply_color_compression(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_color_compression expects a 3-channel RGB image");
+    }
+    const float ctl = std::clamp(response.film_color_compression / 100.0F, 0.0F, 2.0F);
+    const float eff_strength = std::max(response.compression_strength, 0.0F) * ctl;
+    const float eff_cross = std::max(response.compression_crosstalk, 0.0F) * ctl;
+    const float t0 = std::clamp(response.compression_threshold, 0.0F, 1.0F);
+    Image out(rgb_linear.width, rgb_linear.height, 3);
+    if (eff_strength <= 0.0F && eff_cross <= 0.0F) {
+        out.pixels = rgb_linear.pixels;
+        return out;
+    }
+    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+        const OklabPixel lab = rgb_to_oklab_pixel(
+            rgb_linear.pixels[i * 3 + 0], rgb_linear.pixels[i * 3 + 1], rgb_linear.pixels[i * 3 + 2]);
+        const OklchPixel lch = oklab_to_oklch_pixel(lab);
+        float cn = lch.c / kOklabChromaRef;                 // normalized chroma
+        if (eff_strength > 0.0F && cn > t0) {               // soft chroma shoulder above threshold
+            const float excess = cn - t0;
+            const float k = kCompressK * eff_strength;
+            cn = t0 + excess / (1.0F + k * excess);
+        }
+        const float c_new = std::max(cn * kOklabChromaRef, 0.0F);
+        float h_new = lch.h;
+        if (eff_cross > 0.0F) {                             // bounded, chroma-gated neighbour lean
+            const float g_c = smoothstep01(kCompressCrossLo, kCompressCrossHi, lch.c);
+            const float red_cos = clampf(std::cos(lch.h - 0.6F), 0.0F, 1.0F);
+            const float blue_cos = clampf(std::cos(lch.h - 4.0F), 0.0F, 1.0F);
+            const float w_red = red_cos * red_cos;
+            const float w_blue = blue_cos * blue_cos;
+            const float lean = kLeanRedSign * w_red + kLeanBlueSign * w_blue;
+            h_new = wrap_angle_positive(lch.h + kCompressLeanGain * eff_cross * g_c * lean);
+        }
+        const OklabPixel adj = oklch_to_oklab_pixel({lch.l, c_new, h_new});
+        const auto rgb = oklab_to_rgb_pixel(adj);
         out.pixels[i * 3 + 0] = rgb[0];
         out.pixels[i * 3 + 1] = rgb[1];
         out.pixels[i * 3 + 2] = rgb[2];
