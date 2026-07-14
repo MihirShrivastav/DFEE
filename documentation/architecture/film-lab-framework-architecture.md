@@ -50,9 +50,14 @@ magenta).
 - **Plausibly-real ceiling.** Control extremes map to a bounded envelope around
   the stock's authored physics — "that film pushed hard," never broken. No
   hyper-stylized headroom (that is a later, explicit stylistic mode if ever).
-- **Neutral = stock default.** Every control at its neutral value renders the
-  stock's authored look; a fresh recipe already looks right. Controls push
-  within the realistic envelope, with one-click reset.
+- **The film look is on by default; controls intensify it.** Every stock ships
+  **calibrated default values** for every control, so a fresh recipe already
+  renders the full, authentic film look — the user never has to move a control
+  to get the film effect. The control default is the stock's calibrated amount
+  (a real effect, not a no-op), and **"forward = more filmic"**: increasing a
+  control intensifies that film behaviour, decreasing it moves back toward a
+  neutral/digital rendering. One-click reset returns to the **stock default**
+  (the calibrated look), not to zero-effect.
 - **Analysis steers, it does not gate authenticity.** The subtractive core is
   correct on its own; analysis parameterizes it per image. Turning analysis off
   must still yield an authentic (if non-adaptive) film render.
@@ -96,8 +101,8 @@ Working space: **OKLab/OKLCh** (perceptual, hue-stable) is the pragmatic home �
 density = lower `L` ∝ `C` (hue `h` preserved), crosstalk = bounded `h` lean by
 saturation, compression = `C` shoulder. A fuller spectral/Beer's-law dye model
 is explicitly out of scope for v1 (heavy, and perceptual approximation in OKLab
-gets the look without the cost). Decision to confirm: **principled-perceptual in
-OKLab, not full spectral.**
+gets the look without the cost). **Confirmed: principled-perceptual in OKLab,
+not full spectral.**
 
 ### 3.3 Print stage
 A second characteristic curve (the print stock) adding highlight separation,
@@ -196,14 +201,21 @@ speed, consumer negative, colour reversal, B&W cubic/tabular) provide sensible
 values; per-stock YAML overrides tune the personality; calibration references
 real scans / known looks. The native loader keeps its strict contract (reject
 unknown/unconsumed fields; every field consumed by loader→solver→renderer→report
-→tests). Neutral defaults mean the stock's authored values render its true look
-with all user controls at neutral.
+→tests). Crucially, **every stock supplies calibrated default values for every
+user control**, so the stock's authored look renders in full with the controls
+untouched at their (stock-specific) defaults — the film effect is on by default,
+and the controls tune it up or down from there.
 
 ## 7. User Controls (the primary panel)
 
-Each control is an exposed, effect-named parameter of the core, bipolar
-`−100..+100` (neutral 0 = stock default) unless noted, plausibly-real bounded,
-with one-click reset and monochrome-aware disabling of colour controls.
+Each control is an exposed, effect-named parameter of the core. **Every control
+ships a per-stock calibrated default**, so at rest the film look is already fully
+present — the user need not move anything. Direction is **"forward = more
+filmic"**: increasing intensifies that film behaviour, decreasing moves back
+toward a neutral/digital rendering. One-click reset returns to the stock default
+(the calibrated look), not to a no-effect zero. Ranges are plausibly-real
+bounded; colour controls disable on monochrome stocks. Names are chosen to
+reflect the effect and its purpose.
 
 **Exposure** (before the film): Scene Placement (Auto Balanced / As Shot), Film
 Exposure (EV).
@@ -211,12 +223,14 @@ Exposure (EV).
 **Tone:** Highlight Rolloff (shoulder glow vs clip), Film Contrast (stock
 S-curve punch — not the generic digital contrast).
 
-**Colour (core parameters):**
+**Colour (core parameters):** (forward = more filmic)
 - **Film Color Density** — the subtractive density (saturation→darker, matte,
-  weighty), with its low-luminance limiter. The headline film-colour control.
-- **Colour Compression / Palette** — saturation-range compression + the amount
-  of content-aware harmonization (leaning the scene toward its own palette). The
-  corrected successor to "Palette Range" (no hue-snap artifacts).
+  weighty), with its low-luminance limiter. Forward = denser, more matte,
+  more filmic colour. The headline film-colour control.
+- **Color Compression** — saturation-range compression + neighbour-lean
+  crosstalk + the amount of content-aware harmonization (leaning the scene
+  toward its own palette). Forward = a more compressed, cohesive, filmic
+  palette. The corrected successor to "Palette Range" (no hue-snap artifacts).
 - **Colour Cast** — the stock's temperature/tint personality. (Own future
   brainstorm; deferred but named here.)
 
@@ -235,19 +249,22 @@ film control.
 
 ## 8. Defaults & the "just works" experience
 
-Pick a stock → it renders its authentic look immediately (neutral controls +
-adaptive-on develops the image sensibly). The user nudges effect sliders within
-a plausibly-real envelope; every control has a one-click neutral reset; smart
-seeding can propose a starting recipe or stock match. The goal: great by
-default, deep on demand.
+Pick a stock → it renders its authentic look immediately: every control sits at
+the stock's calibrated default (already a real film effect), and adaptive-on
+develops the image sensibly — the user does not touch anything to get the film
+look. From there they push controls **forward for more film character** or back
+toward neutral; every control resets to the stock default; smart seeding can
+propose a starting recipe or stock match. The goal: great by default, deep on
+demand.
 
 ## 9. Versioning, determinism, contract
 
 The subtractive core is a new named pipeline version (e.g. `filmic_v3`);
 `parity_v1` and `filmic_v2` remain reproducible. Native C++ is the render path;
 preview/export share the parameter model and stage order; every parameter has a
-neutral default, valid range, native request field, report field, and versioned
-behaviour statement; the profile loader rejects unconsumed YAML.
+**stock-calibrated default value** (not a no-op zero), valid range, native
+request field, report field, and versioned behaviour statement; the profile
+loader rejects unconsumed YAML.
 
 ## 10. Migration from the current engine
 
@@ -262,21 +279,34 @@ behaviour statement; the profile loader rejects unconsumed YAML.
 - **Add:** the analysis-steering sub-module; the Film Color Density (subtractive)
   stage; the Adaptive control plane.
 
-## 11. Open Decisions (confirm during review)
+## 11. Resolved Decisions
 
 1. **Adaptive default:** adaptive-on with manual overrides + a global Adaptive
-   switch (recommended) vs manual-first.
-2. **Colour model fidelity:** principled-perceptual in OKLab (recommended for
-   v1) vs a fuller spectral/Beer's-law dye model (heavier, later if ever).
-3. **v1 scope:** how much of the analysis-steering (A/C as backbone, B as
-   signature) lands in v1 vs fast-follow.
-4. **Control taxonomy final names** for the colour-core controls (Film Color
-   Density; Colour Compression/Palette).
+   switch. Manual touches override the adaptive value. (Confirmed.)
+2. **Colour model fidelity:** principled-perceptual in OKLab. A fuller
+   spectral/Beer's-law dye model is out of scope (later, if ever). (Confirmed.)
+3. **v1 scope — no stubs.** v1 implements **every fundamental pipeline stage for
+   real** — subtractive density, characteristic curve, neighbour-lean crosstalk +
+   saturation compression, print-stage baseline, halation, bloom, grain, and the
+   analysis-steering backbone (scene-referred + region-aware, adaptive plane).
+   Nothing fundamental ships as a stub or placeholder. Content-aware
+   harmonization (B) and the deferred controls (Cast, Process, dedicated Print)
+   are the only things that may follow after v1. (Confirmed.)
+4. **Control naming & semantics.** Names reflect effect and purpose; the
+   palette/compression control is **Color Compression** (not "Palette Range").
+   All controls follow **forward = more filmic**, and every control carries a
+   **per-stock calibrated default** so the film effect is present without the
+   user moving anything. (Confirmed.)
 
 ## 12. Delivery Roadmap (re-sliced)
 
-Each slice: filmic_v3, plausibly-real, neutral=stock-default, TDD +
-subagent review, visual acceptance on representative RAWs.
+v1 ships **every fundamental stage implemented for real — no stubs** (slices 1-4,
+6, 7 plus the working baselines of every stage). Content-aware harmonization
+(slice 5, capability B) is the signature enhancement layered on the already-real
+compression stage and may land in v1 or as a fast-follow — it enhances a working
+stage rather than replacing a stub. Each slice: filmic_v3, plausibly-real,
+**stock-calibrated defaults (forward = more filmic)**, TDD + subagent review,
+visual acceptance on representative RAWs.
 
 1. **Subtractive Density core** — saturation→luminance density with low-luma
    limiter, in OKLab; the backbone and the biggest piece of the look. Stock
