@@ -4,7 +4,7 @@ import CurvesPanel, { DEFAULT_POINTS as DEFAULT_CURVES } from './CurvesPanel';
 import HslPanel from './HslPanel';
 
 const API = 'http://localhost:8000';
-const EFFECT_PIPELINE_VERSION = 'filmic_v2';
+const EFFECT_PIPELINE_VERSION = 'filmic_v3';
 
 const RefreshIcon = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -59,6 +59,7 @@ const DEFAULT_PARAMS = {
   shadow_color_retention: 0,
   palette_range: 0,
   emulsion_color_density: 0,
+  film_color_density: 100,
   print_stock: 'none',
   print_strength: 1.0,
   print_c: 0.0,
@@ -458,7 +459,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -626,6 +627,7 @@ export default function App() {
         shadow_color_retention: String(params.shadow_color_retention),
         palette_range: String(params.palette_range),
         emulsion_color_density: String(params.emulsion_color_density),
+        film_color_density: String(params.film_color_density),
         print_stock: params.print_stock,
         print_strength: String(params.print_strength),
         print_c: String(params.print_c),
@@ -903,6 +905,7 @@ export default function App() {
           shadow_color_retention: params.shadow_color_retention,
           palette_range: params.palette_range,
           emulsion_color_density: params.emulsion_color_density,
+          film_color_density: params.film_color_density,
           print_stock: params.print_stock,
           print_strength: params.print_strength,
           print_c: params.print_c,
@@ -1543,6 +1546,39 @@ export default function App() {
                         </div>
                       );
                     })}
+                    {(() => {
+                      const key = 'film_color_density';
+                      const label = 'Film Color Density';
+                      const tooltip = "How dense and matte the film's colours are — forward for richer, deeper, more film-like colour.";
+                      const isDirty = params[key] !== 100;
+                      return (
+                        <div className={`slider-row${isMonochrome ? ' disabled' : ''}`} key={key}>
+                          <div className="slider-header">
+                            <span className="slider-label" title={isMonochrome ? monoTitle : tooltip}>{label}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {isDirty && !isMonochrome && (
+                                <button
+                                  className="revert-btn"
+                                  title={`Reset ${label}`}
+                                  onClick={() => setParams(p => ({ ...p, [key]: 100 }))}
+                                >↺</button>
+                              )}
+                              <span className={`slider-value${isDirty && !isMonochrome ? ' slider-value--dirty' : ''}`}>
+                                {isMonochrome ? '—' : Math.round(params[key])}
+                              </span>
+                            </div>
+                          </div>
+                          <input
+                            type="range" min={0} max={200} step={1}
+                            value={params[key]}
+                            onChange={set(key)}
+                            disabled={isMonochrome}
+                            title={isMonochrome ? monoTitle : tooltip}
+                            className={`slider${isDirty && !isMonochrome ? ' slider--dirty' : ''}`}
+                          />
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
