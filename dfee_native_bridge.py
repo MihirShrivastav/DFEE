@@ -218,6 +218,7 @@ class NativePreviewRenderRequest:
     palette_range: float = 0.0
     emulsion_color_density: float = 0.0
     film_color_density: float = 100.0
+    film_color_compression: float = 100.0
     print_stock: str = "none"
     print_strength: float = 1.0
     print_c: float = 0.0

@@ -167,6 +167,21 @@ struct DensityDefaults {
     return {0.55F, 0.10F};
 }
 
+struct CompressionDefaults {
+    float strength;
+    float threshold;
+    float crosstalk;
+};
+
+[[nodiscard]] CompressionDefaults compression_defaults(const StockType type) {
+    switch (type) {
+        case StockType::ColorReversal:  return {0.70F, 0.45F, 0.35F};
+        case StockType::ColorNegative:  return {0.55F, 0.45F, 0.30F};
+        case StockType::Monochrome:     return {0.0F, 0.45F, 0.0F};
+    }
+    return {0.50F, 0.45F, 0.25F};
+}
+
 [[nodiscard]] std::vector<float> get_numeric_vector(
     const std::unordered_map<std::string, std::vector<double>>& values,
     const std::string& key) {
@@ -469,6 +484,15 @@ RenderPlan RenderPlanSolver::solve(
         stock_profile.numeric_values, "density.strength", dens.strength);
     plan.film_response.density_low_luma_limit = get_numeric(
         stock_profile.numeric_values, "density.low_luma_limit", dens.low_luma_limit);
+
+    const CompressionDefaults comp = compression_defaults(stock_profile.stock_type);
+    plan.film_response.film_color_compression = controls.film_color_compression;
+    plan.film_response.compression_strength = get_numeric(
+        stock_profile.numeric_values, "compression.strength", comp.strength);
+    plan.film_response.compression_threshold = get_numeric(
+        stock_profile.numeric_values, "compression.threshold", comp.threshold);
+    plan.film_response.compression_crosstalk = get_numeric(
+        stock_profile.numeric_values, "compression.crosstalk", comp.crosstalk);
 
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);

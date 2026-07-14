@@ -2705,6 +2705,45 @@ void test_solver_density_defaults() {
     }
 }
 
+void test_solver_compression_defaults() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 11.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.highlight_headroom = 0.25F;
+    input.tonal_distribution.shadow_depth = 0.05F;
+    input.tonal_distribution.luma_p95 = 0.78F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+    input.raw_iso = 400;
+
+    dfee::SolverControls controls;  // film_color_compression default 100
+    const dfee::RenderPlanSolver solver;
+
+    const auto color_stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const auto color_plan = solver.solve(input, color_stock, controls);
+    if (std::fabs(color_plan.film_response.film_color_compression - 100.0F) > 1.0e-4F) {
+        throw std::runtime_error(
+            "portra_400: film_color_compression default must be 100, got " +
+            std::to_string(color_plan.film_response.film_color_compression));
+    }
+    if (!(color_plan.film_response.compression_strength > 0.0F)) {
+        throw std::runtime_error(
+            "portra_400: compression_strength must be > 0, got " +
+            std::to_string(color_plan.film_response.compression_strength));
+    }
+
+    const auto mono_stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "tri_x_400.yaml");
+    const auto mono_plan = solver.solve(input, mono_stock, controls);
+    if (std::fabs(mono_plan.film_response.compression_strength) > 1.0e-6F) {
+        throw std::runtime_error(
+            "tri_x_400: compression_strength must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.compression_strength));
+    }
+}
+
 void test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals() {
     const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
         const float a = c * std::cos(h);
@@ -3050,6 +3089,7 @@ int main() {
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
         test_solver_density_defaults();
+        test_solver_compression_defaults();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
         test_color_character_synthetic_zone_hue_fixture();
         std::cout << "dfee_tests passed\n";

@@ -1238,5 +1238,13 @@ def test_film_color_density_defaults_and_round_trip():
     assert exp.film_color_density == 140.0
 
 
+def test_film_color_compression_defaults_and_round_trip():
+    from dfee_native_bridge import NativePreviewRenderRequest, NativeExportRequest
+    req = NativePreviewRenderRequest(filename="x.ARW", stock="none")
+    assert req.film_color_compression == 100.0
+    exp = NativeExportRequest(filename="x.ARW", stock="none", film_color_compression=130.0)
+    assert exp.film_color_compression == 130.0
+
+
 if __name__ == "__main__":
     unittest.main()

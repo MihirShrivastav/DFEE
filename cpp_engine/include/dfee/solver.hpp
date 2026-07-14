@@ -40,6 +40,7 @@ struct SolverControls {
     float palette_range = 0.0F;
     float emulsion_color_density = 0.0F;
     float film_color_density = 100.0F;
+    float film_color_compression = 100.0F;
     float print_strength = 1.0F;
     float print_c = 0.0F;
     float print_m = 0.0F;
@@ -110,6 +111,10 @@ struct FilmResponsePlan {
     float film_color_density = 100.0F;    // control value (0..200), 100 = stock default
     float density_strength = 0.0F;        // stock authored subtractive-density strength
     float density_low_luma_limit = 0.10F; // OKLab L below which density is suppressed
+    float film_color_compression = 100.0F; // control value (0..200), 100 = stock default
+    float compression_strength = 0.0F;     // chroma-shoulder amount
+    float compression_threshold = 0.45F;   // normalized chroma where the shoulder starts
+    float compression_crosstalk = 0.0F;    // neighbour-lean amount
 };
 
 struct MaterialEffectsPlan {

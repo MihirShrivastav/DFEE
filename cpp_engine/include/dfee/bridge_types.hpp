@@ -237,6 +237,7 @@ struct NativePreviewRenderRequest {
     float palette_range = 0.0F;
     float emulsion_color_density = 0.0F;
     float film_color_density = 100.0F;
+    float film_color_compression = 100.0F;
     std::string print_stock = "none";
     float print_strength = 1.0F;
     float print_c = 0.0F;
