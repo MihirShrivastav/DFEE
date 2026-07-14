@@ -98,3 +98,6 @@ color_character:
   emulsion_density_sensitivity: 0.60
   palette:
     range_sensitivity: 0.55
+density:
+  strength: 0.55
+  low_luma_limit: 0.10

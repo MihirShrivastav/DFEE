@@ -108,3 +108,6 @@ color_character:
     - 1.0
     - 0.80
     - 0.90
+density:
+  strength: 0.90
+  low_luma_limit: 0.12
