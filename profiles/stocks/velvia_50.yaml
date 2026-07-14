@@ -111,3 +111,7 @@ color_character:
 density:
   strength: 0.90
   low_luma_limit: 0.12
+compression:
+  strength: 0.75
+  threshold: 0.42
+  crosstalk: 0.40
