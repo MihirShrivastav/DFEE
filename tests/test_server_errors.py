@@ -382,6 +382,31 @@ class TestServerRawFailureHandling(unittest.TestCase):
         payload = native_mock.call_args.args[0]
         self.assertEqual(payload["effect_pipeline_version"], "filmic_v2")
 
+    def test_preview_accepts_filmic_v3_effect_pipeline_version(self):
+        server.session.filename = "example.ARW"
+        server.session.raw_preview_bytes = b"python-raw-preview"
+
+        native_preview = SimpleNamespace(
+            jpeg_bytes=b"native-preview-jpeg",
+            content_type="image/jpeg",
+            engine=self._fake_engine_info(),
+        )
+        with mock.patch.dict(server.os.environ, {"DFEE_USE_NATIVE_PREVIEW": "1"}, clear=False):
+            with mock.patch.object(server, "_get_native_rendered_preview", return_value=native_preview) as native_mock:
+                response = self.client.get(
+                    "/api/preview",
+                    params={
+                        "filename": "example.ARW",
+                        "stock": "portra_400",
+                        "effect_pipeline_version": "filmic_v3",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 200)
+        native_mock.assert_called_once()
+        payload = native_mock.call_args.args[0]
+        self.assertEqual(payload["effect_pipeline_version"], "filmic_v3")
+
     def test_preview_falls_back_to_python_pipeline_when_native_render_fails(self):
         server.session.filename = "example.ARW"
         server.session.preview_rgb_linear = mock.Mock(copy=mock.Mock(return_value=np.zeros((2, 2, 3), dtype=np.float32)))

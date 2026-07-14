@@ -2862,6 +2862,21 @@ void test_color_character_synthetic_zone_hue_fixture() {
     }
 }
 
+void test_filmic_v3_version_is_supported_and_subtractive() {
+    if (dfee::EngineSession::is_effect_pipeline_supported("filmic_v3") != true) {
+        throw std::runtime_error("filmic_v3 must be a supported effect_pipeline_version");
+    }
+    if (dfee::EngineSession::is_effect_pipeline_supported("filmic_v2") != true) {
+        throw std::runtime_error("filmic_v2 must remain supported");
+    }
+    if (dfee::EngineSession::is_effect_pipeline_supported("parity_v1") != true) {
+        throw std::runtime_error("parity_v1 must remain supported");
+    }
+    if (dfee::EngineSession::is_effect_pipeline_supported("bogus_v9") != false) {
+        throw std::runtime_error("unknown effect_pipeline_version must be rejected");
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -2907,6 +2922,7 @@ int main() {
         test_palette_range_merge_wrap_stability();
         test_palette_anchor_weights_gate_hue_shift();
         test_palette_range_stays_plausible();
+        test_filmic_v3_version_is_supported_and_subtractive();
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
         test_color_character_synthetic_zone_hue_fixture();

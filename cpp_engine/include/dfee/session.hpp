@@ -30,6 +30,11 @@ public:
     [[nodiscard]] NativeSessionCacheStateResponse cache_state() const;
     [[nodiscard]] CudaStatus cuda_status() const noexcept;
 
+    // Returns true when the given effect_pipeline_version is accepted by this
+    // native engine build (parity_v1, filmic_v2, filmic_v3). Empty resolves to
+    // the default (parity_v1).
+    [[nodiscard]] static bool is_effect_pipeline_supported(const std::string& version);
+
 private:
     struct CachedDecode {
         std::string filename;

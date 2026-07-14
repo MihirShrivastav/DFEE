@@ -549,7 +549,7 @@ def _run_native_export(request_payload: dict) -> dict:
 def _native_export_request_supported(request: "ExportRequest") -> tuple[bool, str]:
     fmt = (request.export_format or "tiff").lower().strip()
     effect_pipeline_version = (request.effect_pipeline_version or "parity_v1").strip()
-    if effect_pipeline_version not in {"parity_v1", "filmic_v2"}:
+    if effect_pipeline_version not in {"parity_v1", "filmic_v2", "filmic_v3"}:
         return False, f"effect_pipeline_version={effect_pipeline_version}"
     if request.exposure_placement not in {"auto_balanced", "as_shot"}:
         return False, f"exposure_placement={request.exposure_placement}"
@@ -1177,7 +1177,7 @@ def get_preview(
         "print_black_point": print_black_point,
     }
     request_fp = _request_fingerprint(native_payload)
-    if (effect_pipeline_version or "parity_v1").strip() not in {"parity_v1", "filmic_v2"}:
+    if (effect_pipeline_version or "parity_v1").strip() not in {"parity_v1", "filmic_v2", "filmic_v3"}:
         logger.warning(
             "Preview failed fp=%s file=%s reason=unsupported_effect_pipeline_version value=%s",
             request_fp,

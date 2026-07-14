@@ -43,6 +43,7 @@ namespace {
 
 constexpr const char* kDefaultEffectPipelineVersion = "parity_v1";
 constexpr const char* kFilmicEffectPipelineVersion = "filmic_v2";
+constexpr const char* kSubtractiveEffectPipelineVersion = "filmic_v3";
 
 NativeEngineMetadata build_engine_metadata() {
     NativeEngineMetadata metadata;
@@ -62,18 +63,24 @@ NativeEngineMetadata build_engine_metadata() {
 }
 
 [[nodiscard]] bool is_filmic_effect_pipeline(const std::string& value) {
-    return normalized_effect_pipeline_version(value) == kFilmicEffectPipelineVersion;
+    const std::string normalized = normalized_effect_pipeline_version(value);
+    return normalized == kFilmicEffectPipelineVersion || normalized == kSubtractiveEffectPipelineVersion;
+}
+
+[[nodiscard]] bool is_subtractive_effect_pipeline(const std::string& value) {
+    return normalized_effect_pipeline_version(value) == kSubtractiveEffectPipelineVersion;
 }
 
 [[nodiscard]] std::optional<NativeError> validate_effect_pipeline_version(const std::string& value) {
     const std::string normalized = normalized_effect_pipeline_version(value);
-    if (normalized == kDefaultEffectPipelineVersion || normalized == kFilmicEffectPipelineVersion) {
+    if (normalized == kDefaultEffectPipelineVersion || normalized == kFilmicEffectPipelineVersion ||
+        normalized == kSubtractiveEffectPipelineVersion) {
         return std::nullopt;
     }
     return NativeError{
         .code = "UNSUPPORTED_EFFECT_PIPELINE_VERSION",
         .user_message = "The requested effect pipeline version is not supported by this native engine build.",
-        .detail = "Supported effect_pipeline_version values: parity_v1, filmic_v2. Requested: " + normalized,
+        .detail = "Supported effect_pipeline_version values: parity_v1, filmic_v2, filmic_v3. Requested: " + normalized,
     };
 }
 
@@ -2781,6 +2788,10 @@ NativeSessionCacheStateResponse EngineSession::cache_state() const {
 
 CudaStatus EngineSession::cuda_status() const noexcept {
     return query_cuda_status();
+}
+
+bool EngineSession::is_effect_pipeline_supported(const std::string& version) {
+    return !validate_effect_pipeline_version(version).has_value();
 }
 
 std::string EngineSession::resolve_filename(const std::string& filename) const {
