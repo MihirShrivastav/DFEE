@@ -65,7 +65,15 @@ Each slice below is an independently shippable increment ending in a working,
 tested deliverable. "Native behavior", "Stock params", "Control(s)", and
 "Acceptance" are the contract for that slice.
 
-### Slice 1 — Subtractive Film Color Density core + `filmic_v3`
+### Slice 1 — Subtractive Film Color Density core + `filmic_v3` — DONE (code)
+- **Status:** code-complete on `new-approach`. `filmic_v3` pipeline added
+  (inherits filmic_v2 optical/grain); `apply_subtractive_density` reduces OKLab L
+  ∝ chroma with a low-luma limiter, wired into preview+export gated to
+  filmic_v3; `film_color_density` (0..200, 100 = stock default) plumbed full
+  stack; `density.*` YAML + family defaults; UI control + pipeline defaulted to
+  filmic_v3. Native + bridge + route tests green; end-to-end probe confirms
+  filmic_v3 density=0 == filmic_v2 and density>0 differs. Outstanding: human
+  visual acceptance + timing probe.
 - **Goal:** the backbone of the look — saturated colours gain density and get
   darker (matte, weighty), with a low-luminance limiter protecting shadows.
 - **Native behavior:** in OKLab, reduce `L` by an amount ∝ chroma `C`, gated by a

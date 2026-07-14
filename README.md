@@ -176,6 +176,7 @@ bipolar `−100` to `+100`, with `0` as the neutral no-op default:
 | `shadow_color_retention` | Scales the stock's shadow chroma rolloff. Shadow-gated; no black lift. |
 | `palette_range` | Bipolar OKLCh hue-anchor control: negative merges hues toward dominant anchors and desaturates them (harmonised, ethereal limited palette), positive separates hues and lifts chroma (distinct, punchy palette). Neutrals preserved; hue-wrap stable. |
 | `emulsion_color_density` | Scales the stock's dye chroma body (`chroma_boost`), distinct from the legacy `film_color` multiplier. |
+| `film_color_density` | Subtractive film density (`effect_pipeline_version=filmic_v3`): saturated colours are darkened proportional to chroma (matte, weighty, print-like), hue preserved, with a low-luminance limiter protecting shadows. Range `0..200`, `100` = the stock's calibrated default; forward = more filmic. |
 
 Sending any non-zero Color Character value under `parity_v1` is rejected with
 HTTP `400` — never a silent render. `parity_v1` remains bit-for-bit
