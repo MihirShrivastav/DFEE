@@ -300,6 +300,11 @@ constexpr float kPaletteSepChroma    = 0.25F; // max fractional chroma gain at f
 constexpr float kPaletteChromaLo     = 0.02F; // neutral-preserving chroma gate lower edge
 constexpr float kPaletteChromaHi     = 0.06F; // gate upper edge
 
+// filmic_v3 subtractive density.
+constexpr float kOklabChromaRef   = 0.35F; // chroma normalization reference (OKLCh C)
+constexpr float kDensityLumaMax   = 0.55F; // max fractional L reduction at full density
+constexpr float kDensityLimitSoft = 0.06F; // soft width of the low-luma limiter
+
 // Smoothstep with explicit [lo, hi] range → [0, 1]. Distinct signature from the single-arg overload.
 [[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
     const float t = std::clamp((x - lo) / std::max(hi - lo, 1.0e-6F), 0.0F, 1.0F);
@@ -1258,6 +1263,39 @@ Image FilmRenderer::apply_luminance_chroma_coupling(
     const Image& rgb_linear,
     const FilmResponsePlan& response) const {
     return apply_color_pipeline(rgb_linear, nullptr, response, false, true);
+}
+
+Image FilmRenderer::apply_subtractive_density(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_subtractive_density expects a 3-channel RGB image");
+    }
+    const float amt = std::max(response.density_strength, 0.0F)
+        * std::clamp(response.film_color_density / 100.0F, 0.0F, 2.0F);
+    Image out(rgb_linear.width, rgb_linear.height, 3);
+    if (amt <= 0.0F) {
+        out.pixels = rgb_linear.pixels;
+        return out;
+    }
+    const float lo = response.density_low_luma_limit;
+    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+        const OklabPixel lab = rgb_to_oklab_pixel(
+            rgb_linear.pixels[i * 3 + 0],
+            rgb_linear.pixels[i * 3 + 1],
+            rgb_linear.pixels[i * 3 + 2]);
+        const OklchPixel lch = oklab_to_oklch_pixel(lab);
+        const float c_norm = std::clamp(lch.c / kOklabChromaRef, 0.0F, 1.0F);
+        const float limiter = smoothstep01(lo, lo + kDensityLimitSoft, lch.l); // 0 deep shadow -> 1 above
+        const float reduce = kDensityLumaMax * amt * c_norm * limiter;         // fractional L reduction
+        const float l_new = std::max(lch.l * (1.0F - reduce), 0.0F);
+        const OklabPixel adjusted = oklch_to_oklab_pixel({l_new, lch.c, lch.h});
+        const auto rgb = oklab_to_rgb_pixel(adjusted);
+        out.pixels[i * 3 + 0] = rgb[0];
+        out.pixels[i * 3 + 1] = rgb[1];
+        out.pixels[i * 3 + 2] = rgb[2];
+    }
+    return out;
 }
 
 Image FilmRenderer::apply_acutance_shaping(

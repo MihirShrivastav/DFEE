@@ -49,6 +49,14 @@ public:
         const Image& rgb_linear,
         const FilmResponsePlan& response) const;
 
+    // filmic_v3 subtractive density: reduce OKLab L proportional to normalized
+    // chroma (saturated colours get denser/darker), hue and chroma preserved, a
+    // low-luminance limiter protects deep shadows. No-op when the effective
+    // amount is zero (monochrome / neutral / film_color_density == 0).
+    [[nodiscard]] Image apply_subtractive_density(
+        const Image& rgb_linear,
+        const FilmResponsePlan& response) const;
+
     [[nodiscard]] Image apply_acutance_shaping(
         const Image& rgb_linear,
         const MaterialEffectsPlan& effects) const;

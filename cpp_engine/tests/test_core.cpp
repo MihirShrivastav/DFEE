@@ -2705,6 +2705,88 @@ void test_solver_density_defaults() {
     }
 }
 
+void test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals() {
+    const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
+        const float a = c * std::cos(h);
+        const float b = c * std::sin(h);
+        const dfee::Image tmp = dfee::oklab_to_rgb([&]() {
+            dfee::Image lab(1, 1, 3);
+            lab.at(0, 0, 0) = l; lab.at(0, 0, 1) = a; lab.at(0, 0, 2) = b;
+            return lab;
+        }());
+        return {tmp.at(0, 0, 0), tmp.at(0, 0, 1), tmp.at(0, 0, 2)};
+    };
+
+    // pixel 0: saturated (bright), pixel 1: saturated deep-shadow (below limiter),
+    // pixel 2: neutral gray.
+    dfee::Image rgb(3, 1, 3);
+    const auto p0 = oklch_to_rgb_arr(0.60F, 0.20F, 0.5F);
+    const auto p1 = oklch_to_rgb_arr(0.08F, 0.05F, 0.5F); // in-gamut dark pixel below the limiter
+    const auto p2 = oklch_to_rgb_arr(0.60F, 0.00F, 0.0F);
+    for (int k = 0; k < 3; ++k) { rgb.at(0, 0, k) = p0[static_cast<std::size_t>(k)]; }
+    for (int k = 0; k < 3; ++k) { rgb.at(1, 0, k) = p1[static_cast<std::size_t>(k)]; }
+    for (int k = 0; k < 3; ++k) { rgb.at(2, 0, k) = p2[static_cast<std::size_t>(k)]; }
+
+    const auto lch_of = [](const dfee::Image& img) {
+        return dfee::oklab_to_oklch(dfee::rgb_to_oklab(img));
+    };
+    const auto base = lch_of(rgb);
+
+    dfee::FilmResponsePlan response;
+    response.stock_type = "color_negative";
+    response.density_strength = 0.6F;
+    response.density_low_luma_limit = 0.10F;
+
+    const dfee::FilmRenderer renderer;
+
+    // density = 0 -> byte-identical no-op
+    response.film_color_density = 0.0F;
+    const auto out0 = renderer.apply_subtractive_density(rgb, response);
+    for (std::size_t i = 0; i < rgb.pixels.size(); ++i) {
+        if (out0.pixels[i] != rgb.pixels[i]) {
+            throw std::runtime_error("film_color_density=0 must be a byte-identical no-op");
+        }
+    }
+
+    // density = 100 (stock default effect)
+    response.film_color_density = 100.0F;
+    const auto out100 = renderer.apply_subtractive_density(rgb, response);
+    const auto lch100 = lch_of(out100);
+
+    // saturated pixel 0 must darken; hue and chroma preserved
+    if (!(lch100.at(0, 0, 0) < base.at(0, 0, 0) - 1.0e-3F)) {
+        throw std::runtime_error("saturated pixel L must decrease under density");
+    }
+    // Chroma is preserved in OKLCh intent; sRGB round-trip may clamp slightly at
+    // the darker luminance, so require density does not *desaturate* (chroma
+    // stays within 12% of baseline) rather than exact equality.
+    if (!(lch100.at(0, 0, 1) > base.at(0, 0, 1) * 0.88F) ||
+        !(lch100.at(0, 0, 1) < base.at(0, 0, 1) * 1.12F)) {
+        throw std::runtime_error("density must not desaturate the saturated pixel");
+    }
+    if (std::fabs(lch100.at(0, 0, 2) - base.at(0, 0, 2)) > 3.0e-3F) {
+        throw std::runtime_error("density must preserve hue of the saturated pixel");
+    }
+    // deep-shadow pixel 1 protected by the limiter (L ~ unchanged)
+    if (std::fabs(lch100.at(1, 0, 0) - base.at(1, 0, 0)) > 5.0e-4F) {
+        throw std::runtime_error("low-luma limiter must protect deep-shadow L");
+    }
+    // neutral pixel 2 unchanged
+    for (int k = 0; k < 3; ++k) {
+        if (std::fabs(out100.at(2, 0, k) - rgb.at(2, 0, k)) > 1.0e-4F) {
+            throw std::runtime_error("neutral pixel must be unchanged by density");
+        }
+    }
+
+    // density = 200 darkens the saturated pixel more than 100
+    response.film_color_density = 200.0F;
+    const auto out200 = renderer.apply_subtractive_density(rgb, response);
+    const auto lch200 = lch_of(out200);
+    if (!(lch200.at(0, 0, 0) < lch100.at(0, 0, 0) - 1.0e-3F)) {
+        throw std::runtime_error("film_color_density=200 must darken more than 100");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Task 8: M7-003F — Synthetic zone/hue fixture (multi-control integration)
 // ---------------------------------------------------------------------------
@@ -2968,6 +3050,7 @@ int main() {
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
         test_solver_density_defaults();
+        test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
         test_color_character_synthetic_zone_hue_fixture();
         std::cout << "dfee_tests passed\n";
         return 0;
