@@ -780,6 +780,34 @@ class TestNativeBridge(unittest.TestCase):
                     )
                 )
 
+    def test_filmic_v3_subtractive_density_changes_render(self):
+        raw_filename = self._raw_filename()
+        if not self.session.list_profiles().engine.libraw_enabled:
+            self.skipTest("LibRaw not available")
+        self.session.select_file(raw_filename)
+
+        def _render(version, density):
+            return self.session.render_preview(
+                dfee_native_bridge.NativePreviewRenderRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    effect_pipeline_version=version,
+                    film_color_density=density,
+                )
+            ).jpeg_bytes
+
+        v2 = _render("filmic_v2", 100.0)
+        v3_default = _render("filmic_v3", 100.0)
+        v3_off = _render("filmic_v3", 0.0)
+        v3_strong = _render("filmic_v3", 200.0)
+
+        # density is applied under filmic_v3 (differs from filmic_v2)
+        self.assertNotEqual(v3_default, v2)
+        # density=0 isolates to the same colour path as filmic_v2 (no density)
+        self.assertEqual(v3_off, v2)
+        # more density => different (stronger) render
+        self.assertNotEqual(v3_strong, v3_default)
+
     def test_render_preview_rejects_unsupported_effect_pipeline_version(self):
         raw_filename = self._raw_filename()
         if self.session.list_profiles().engine.libraw_enabled:
