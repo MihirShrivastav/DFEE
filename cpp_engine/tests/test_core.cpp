@@ -2663,6 +2663,48 @@ void test_solver_color_character_family_defaults() {
     }
 }
 
+void test_solver_density_defaults() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 11.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.highlight_headroom = 0.25F;
+    input.tonal_distribution.shadow_depth = 0.05F;
+    input.tonal_distribution.luma_p95 = 0.78F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+    input.raw_iso = 400;
+
+    dfee::SolverControls controls;  // defaults: film_color_density == 100
+    const dfee::RenderPlanSolver solver;
+
+    // Color negative: control defaults to 100, family density strength non-zero.
+    const auto color_stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const auto color_plan = solver.solve(input, color_stock, controls);
+    if (std::fabs(color_plan.film_response.film_color_density - 100.0F) > 1.0e-4F) {
+        throw std::runtime_error(
+            "portra_400: film_color_density control default must be 100, got " +
+            std::to_string(color_plan.film_response.film_color_density));
+    }
+    if (!(color_plan.film_response.density_strength > 0.0F)) {
+        throw std::runtime_error(
+            "portra_400: density_strength must be > 0, got " +
+            std::to_string(color_plan.film_response.density_strength));
+    }
+
+    // Monochrome: density strength must be 0.
+    const auto mono_stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "tri_x_400.yaml");
+    const auto mono_plan = solver.solve(input, mono_stock, controls);
+    if (std::fabs(mono_plan.film_response.density_strength) > 1.0e-6F) {
+        throw std::runtime_error(
+            "tri_x_400: density_strength must be 0 for monochrome, got " +
+            std::to_string(mono_plan.film_response.density_strength));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Task 8: M7-003F — Synthetic zone/hue fixture (multi-control integration)
 // ---------------------------------------------------------------------------
@@ -2925,6 +2967,7 @@ int main() {
         test_filmic_v3_version_is_supported_and_subtractive();
         test_emulsion_color_density_increases_mid_saturation_chroma();
         test_solver_color_character_family_defaults();
+        test_solver_density_defaults();
         test_color_character_synthetic_zone_hue_fixture();
         std::cout << "dfee_tests passed\n";
         return 0;

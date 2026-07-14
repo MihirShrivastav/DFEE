@@ -629,6 +629,7 @@ class PreviewRequest(BaseModel):
     shadow_color_retention: float = 0.0
     palette_range: float = 0.0
     emulsion_color_density: float = 0.0
+    film_color_density: float = 100.0   # 0-200, subtractive density (filmic_v3); 100 = stock default
     print_stock: str = "none"   # print stock id or "none"
     print_strength: float = 1.0  # 0.0-2.0
     print_c: float = 0.0         # -100 to +100
@@ -1099,6 +1100,7 @@ def get_preview(
     shadow_color_retention: float = 0.0,
     palette_range: float = 0.0,
     emulsion_color_density: float = 0.0,
+    film_color_density: float = 100.0,
     print_stock: str = "none",
     print_strength: float = 1.0,
     print_c: float = 0.0,
@@ -1168,6 +1170,7 @@ def get_preview(
         "shadow_color_retention": shadow_color_retention,
         "palette_range": palette_range,
         "emulsion_color_density": emulsion_color_density,
+        "film_color_density": film_color_density,
         "print_stock": print_stock,
         "print_strength": print_strength,
         "print_c": print_c,
@@ -1291,6 +1294,7 @@ def get_preview(
             "shadow_color_retention": shadow_color_retention,
             "palette_range": palette_range,
             "emulsion_color_density": emulsion_color_density,
+            "film_color_density": film_color_density,
             "print_stock": _load_print_stock_profile(print_stock),
             "print_strength": print_strength,
             "print_c": print_c,
@@ -1518,6 +1522,7 @@ def export_file(req: ExportRequest):
                 "shadow_color_retention": req.shadow_color_retention,
                 "palette_range": req.palette_range,
                 "emulsion_color_density": req.emulsion_color_density,
+                "film_color_density": req.film_color_density,
                 "print_stock": print_stock_profile,
                 "print_strength": req.print_strength,
                 "print_c": req.print_c,

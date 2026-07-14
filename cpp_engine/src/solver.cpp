@@ -153,6 +153,20 @@ struct ColorCharacterDefaults {
     return {0.60F, 0.60F, 0.55F, 0.50F};
 }
 
+struct DensityDefaults {
+    float strength;
+    float low_luma_limit;
+};
+
+[[nodiscard]] DensityDefaults density_defaults(const StockType type) {
+    switch (type) {
+        case StockType::ColorReversal:  return {0.85F, 0.12F};
+        case StockType::ColorNegative:  return {0.60F, 0.10F};
+        case StockType::Monochrome:     return {0.0F, 0.10F};
+    }
+    return {0.55F, 0.10F};
+}
+
 [[nodiscard]] std::vector<float> get_numeric_vector(
     const std::unordered_map<std::string, std::vector<double>>& values,
     const std::string& key) {
@@ -448,6 +462,13 @@ RenderPlan RenderPlanSolver::solve(
         stock_profile.numeric_arrays, "color_character.palette.anchors");
     plan.film_response.palette_anchor_weights = get_numeric_vector(
         stock_profile.numeric_arrays, "color_character.palette.anchor_weights");
+
+    const DensityDefaults dens = density_defaults(stock_profile.stock_type);
+    plan.film_response.film_color_density = controls.film_color_density;
+    plan.film_response.density_strength = get_numeric(
+        stock_profile.numeric_values, "density.strength", dens.strength);
+    plan.film_response.density_low_luma_limit = get_numeric(
+        stock_profile.numeric_values, "density.low_luma_limit", dens.low_luma_limit);
 
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);

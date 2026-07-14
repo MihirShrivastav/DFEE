@@ -320,6 +320,7 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     request.shadow_color_retention = dict_float(dict, "shadow_color_retention");
     request.palette_range = dict_float(dict, "palette_range");
     request.emulsion_color_density = dict_float(dict, "emulsion_color_density");
+    request.film_color_density = dict_float(dict, "film_color_density", 100.0F);
     request.print_stock = dict_string(dict, "print_stock", "none");
     request.print_strength = dict_float(dict, "print_strength", 1.0F);
     request.print_c = dict_float(dict, "print_c");

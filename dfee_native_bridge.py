@@ -217,6 +217,7 @@ class NativePreviewRenderRequest:
     shadow_color_retention: float = 0.0
     palette_range: float = 0.0
     emulsion_color_density: float = 0.0
+    film_color_density: float = 100.0
     print_stock: str = "none"
     print_strength: float = 1.0
     print_c: float = 0.0

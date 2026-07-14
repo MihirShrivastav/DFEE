@@ -941,6 +941,7 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.shadow_color_retention = request.shadow_color_retention;
     controls.palette_range = request.palette_range;
     controls.emulsion_color_density = request.emulsion_color_density;
+    controls.film_color_density = request.film_color_density;
     controls.print_strength = request.print_strength;
     controls.print_c = request.print_c;
     controls.print_m = request.print_m;
@@ -1570,7 +1571,10 @@ std::string serialize_feature_report_json(
         << "\"highlight_hold_sensitivity\": " << json_number(render_plan.film_response.highlight_hold_sensitivity) << ",\n"
         << "\"shadow_retention_sensitivity\": " << json_number(render_plan.film_response.shadow_retention_sensitivity) << ",\n"
         << "\"emulsion_density_sensitivity\": " << json_number(render_plan.film_response.emulsion_density_sensitivity) << ",\n"
-        << "\"palette_range_sensitivity\": " << json_number(render_plan.film_response.palette_range_sensitivity)
+        << "\"palette_range_sensitivity\": " << json_number(render_plan.film_response.palette_range_sensitivity) << ",\n"
+        << "\"film_color_density\": " << json_number(render_plan.film_response.film_color_density) << ",\n"
+        << "\"density_strength\": " << json_number(render_plan.film_response.density_strength) << ",\n"
+        << "\"density_low_luma_limit\": " << json_number(render_plan.film_response.density_low_luma_limit)
         << "},\n";
     out << "    \"material_effects\": {"
         << "\"grain_strength\": " << json_number(render_plan.material_effects.grain_strength) << ","
@@ -2122,6 +2126,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.shadow_color_retention = request.shadow_color_retention;
             controls.palette_range = request.palette_range;
             controls.emulsion_color_density = request.emulsion_color_density;
+            controls.film_color_density = request.film_color_density;
             controls.print_strength = request.print_strength;
             controls.print_c = request.print_c;
             controls.print_m = request.print_m;

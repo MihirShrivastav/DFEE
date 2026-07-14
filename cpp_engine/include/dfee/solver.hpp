@@ -39,6 +39,7 @@ struct SolverControls {
     float shadow_color_retention = 0.0F;
     float palette_range = 0.0F;
     float emulsion_color_density = 0.0F;
+    float film_color_density = 100.0F;
     float print_strength = 1.0F;
     float print_c = 0.0F;
     float print_m = 0.0F;
@@ -106,6 +107,9 @@ struct FilmResponsePlan {
     float palette_range_sensitivity = 0.0F;
     std::vector<float> palette_anchors;
     std::vector<float> palette_anchor_weights;
+    float film_color_density = 100.0F;    // control value (0..200), 100 = stock default
+    float density_strength = 0.0F;        // stock authored subtractive-density strength
+    float density_low_luma_limit = 0.10F; // OKLab L below which density is suppressed
 };
 
 struct MaterialEffectsPlan {
