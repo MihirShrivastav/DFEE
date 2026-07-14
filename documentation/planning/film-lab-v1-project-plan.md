@@ -105,7 +105,17 @@ tested deliverable. "Native behavior", "Stock params", "Control(s)", and
   monochrome still tonally affected (these are tonal, not colour); determinism.
 - **Depends on:** Slice 1 (version + convention).
 
-### Slice 3 — Neighbour-lean crosstalk + saturation compression (Color Compression)
+### Slice 3 — Neighbour-lean crosstalk + saturation compression (Color Compression) — DONE (code)
+- **Status:** code-complete on `new-approach`. `apply_color_compression`
+  (filmic_v3) applies a chroma shoulder (compress high chroma) + a bounded,
+  chroma-gated neighbour-lean (red→orange, blue→cyan); wired into preview+export;
+  `film_color_compression` (0..200, 100 = stock default) plumbed full stack;
+  `compression.*` YAML + family defaults; UI **Color Compression** control added
+  and the **Palette Range** slider + anchor render pass retired (`palette_range`
+  request field kept as an accepted no-op pending Slice 8 removal). Native +
+  bridge + route tests green (79 pytest); end-to-end probe confirms compression
+  applies and is stronger on velvia. Outstanding: human visual acceptance +
+  timing probe.
 - **Goal:** re-found the colour stage as the subtractive-cohesion model; retire
   the anchor/zone-tweak approach that caused hue artifacts.
 - **Native behavior:** saturated hues lean toward their *neighbour* (bounded,

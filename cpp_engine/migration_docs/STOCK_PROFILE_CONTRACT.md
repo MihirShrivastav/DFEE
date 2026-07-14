@@ -21,6 +21,7 @@ silently carry configuration that the native renderer does not consume.
 | `dye_contamination` | Drives cross-channel dye-layer interaction before the main colour-response stage. |
 | `color_character` | Optional. Per-stock sensitivity calibration and palette anchor configuration for the Color Character controls. See section below. |
 | `density` | Optional. Subtractive colour density (`effect_pipeline_version=filmic_v3`): `density.strength` (0..1, how strongly saturated colours are darkened) and `density.low_luma_limit` (OKLab L below which density is suppressed to protect shadows). Absent → inferred from stock family (reversal strongest, monochrome 0). Drives the **Film Color Density** control (`film_color_density`, 0..200, 100 = stock default). |
+| `compression` | Optional. Colour compression (`effect_pipeline_version=filmic_v3`): `compression.strength` (0..1, chroma-shoulder amount that compresses high chroma toward a ceiling), `compression.threshold` (0..1 normalized OKLCh chroma where the shoulder starts), `compression.crosstalk` (0..1, bounded neighbour-lean — red→orange, blue→cyan, chroma-gated). Absent → inferred from stock family (monochrome 0). Drives the **Color Compression** control (`film_color_compression`, 0..200, 100 = stock default). Supersedes the retired `palette_range` anchor pass. |
 
 ## `color_character` YAML Group (Camera Stocks)
 
