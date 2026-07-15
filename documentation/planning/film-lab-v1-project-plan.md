@@ -90,7 +90,17 @@ tested deliverable. "Native behavior", "Stock params", "Control(s)", and
 - **Depends on:** nothing (foundation). Establishes `filmic_v3` + parameter-model
   convention.
 
-### Slice 2 — Characteristic-curve controls (Highlight Rolloff + Film Contrast)
+### Slice 2 — Characteristic-curve controls (Highlight Rolloff + Film Contrast) — DONE (code)
+- **Status:** code-complete on `new-approach`. `film_contrast` + `highlight_rolloff`
+  (0..200, 100 = stock default) resolved in the **solver** from stock tone_response
+  × manual control × a scene-referred **adaptive factor** (flat/high-DR/log-like
+  files auto-gain filmic contrast + earlier rolloff). Introduced the **Adaptive**
+  flag (default on) — its first use, ahead of Slice 4's full steering plane.
+  Gated to filmic_v3 via `SolverControls.subtractive_pipeline`; renderer tone
+  stage unchanged. No new stock YAML (modulates existing tone_response). UI: Film
+  Tone group with the two sliders + Adaptive toggle. Native + bridge + route
+  tests green (82 pytest); v3==v2 isolation holds with `adaptive=false` + neutral
+  controls. Outstanding: human visual acceptance + timing.
 - **Goal:** the tonal "not-digital" tells: gentle highlight shoulder + stock
   S-curve punch.
 - **Native behavior:** on the tone stage (`apply_film_tone_response`), coordinate

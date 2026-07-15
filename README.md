@@ -178,6 +178,9 @@ bipolar `−100` to `+100`, with `0` as the neutral no-op default:
 | `emulsion_color_density` | Scales the stock's dye chroma body (`chroma_boost`), distinct from the legacy `film_color` multiplier. |
 | `film_color_density` | Subtractive film density (`effect_pipeline_version=filmic_v3`): saturated colours are darkened proportional to chroma (matte, weighty, print-like), hue preserved, with a low-luminance limiter protecting shadows. Range `0..200`, `100` = the stock's calibrated default; forward = more filmic. |
 | `film_color_compression` | Colour compression (`effect_pipeline_version=filmic_v3`): a chroma shoulder compresses high saturation toward a ceiling (reduced colour dynamic range) and a bounded, chroma-gated neighbour-lean nudges saturated hues toward their film neighbour (red→orange, blue→cyan); neutrals preserved. Range `0..200`, `100` = stock default; forward = more filmic. Supersedes the retired `palette_range`. |
+| `film_contrast` | Film tone contrast (`effect_pipeline_version=filmic_v3`): shapes the stock's tone curve (toe depth + midtone punch). Range `0..200`, `100` = stock default; forward = more contrasty/filmic, less flat. Resolved in the solver from stock × control × scene-adaptive factor. |
+| `highlight_rolloff` | Highlight rolloff (`effect_pipeline_version=filmic_v3`): how early/gently the film shoulder compresses highlights (glow vs clip). Range `0..200`, `100` = stock default; forward = softer, more filmic highlights. |
+| `adaptive` | Scene-referred tone steering on/off (`effect_pipeline_version=filmic_v3`, default `true`). When on, the solver reads the scene's dynamic range and auto-strengthens Film Contrast + Highlight Rolloff for flat / high-DR / log-like files; the manual controls ride on top. Off = fixed, predictable tone (stock × control only). |
 
 Sending any non-zero Color Character value under `parity_v1` is rejected with
 HTTP `400` — never a silent render. `parity_v1` remains bit-for-bit
