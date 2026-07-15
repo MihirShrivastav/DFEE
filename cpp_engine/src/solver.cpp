@@ -182,6 +182,12 @@ struct CompressionDefaults {
     return {0.50F, 0.45F, 0.25F};
 }
 
+// filmic_v3 tone steering (Slice 2) gains.
+constexpr float kToeContrast     = 0.40F; // Film Contrast -> toe deepening
+constexpr float kMidContrast     = 0.45F; // Film Contrast -> midtone punch
+constexpr float kRolloffStart    = 0.10F; // Highlight Rolloff -> earlier shoulder start
+constexpr float kShoulderRolloff = 0.30F; // Highlight Rolloff -> firmer shoulder
+
 [[nodiscard]] std::vector<float> get_numeric_vector(
     const std::unordered_map<std::string, std::vector<double>>& values,
     const std::string& key) {
@@ -420,6 +426,35 @@ RenderPlan RenderPlanSolver::solve(
         shoulder_strength = std::min(shoulder_strength + 0.1F, 0.95F);
     }
 
+    float midtone_density = get_numeric(stock_profile.numeric_values, "tone_response.midtone_contrast", 0.0F);
+
+    // filmic_v3 tone steering (Slice 2): Film Contrast + Highlight Rolloff, resolved
+    // from stock defaults x manual controls x a scene-referred adaptive factor.
+    float tone_adaptive_factor = 1.0F;
+    if (controls.subtractive_pipeline) {
+        if (controls.adaptive) {
+            // Flat / high-DR / log-like scenes get stronger filmic tone; contrasty scenes less.
+            float adapt = 1.0F;
+            if (tonal.dynamic_range_stops > 10.0F) {
+                adapt += std::min((tonal.dynamic_range_stops - 10.0F) * 0.08F, 0.40F);
+            }
+            if (tonal.dynamic_range_stops < 6.0F) {
+                adapt -= std::min((6.0F - tonal.dynamic_range_stops) * 0.05F, 0.20F);
+            }
+            tone_adaptive_factor = std::clamp(adapt, 0.80F, 1.40F);
+        }
+        const float contrast_gain = std::clamp(controls.film_contrast / 100.0F, 0.0F, 2.0F) * tone_adaptive_factor;
+        const float rolloff_gain = std::clamp(controls.highlight_rolloff / 100.0F, 0.0F, 2.0F) * tone_adaptive_factor;
+        // Film Contrast: deepen toe + punch midtones.
+        toe_strength = std::clamp(toe_strength * (1.0F + kToeContrast * (contrast_gain - 1.0F)), 0.0F, 1.5F);
+        midtone_density = std::clamp(midtone_density * (1.0F + kMidContrast * (contrast_gain - 1.0F)), 0.0F, 2.0F);
+        // Highlight Rolloff: earlier shoulder start + firmer shoulder.
+        highlight_rolloff_start = std::clamp(
+            highlight_rolloff_start - kRolloffStart * (rolloff_gain - 1.0F), 0.35F, 1.0F);
+        shoulder_strength = std::clamp(
+            shoulder_strength * (1.0F + kShoulderRolloff * (rolloff_gain - 1.0F)), 0.0F, 0.98F);
+    }
+
     float highlight_desaturation = get_numeric(
         stock_profile.numeric_values,
         "hue_saturation_response.highlight_desaturation",
@@ -431,7 +466,7 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response = {
         .toe_strength = toe_strength,
         .toe_length = get_numeric(stock_profile.numeric_values, "tone_response.toe_length", 0.0F),
-        .midtone_density = get_numeric(stock_profile.numeric_values, "tone_response.midtone_contrast", 0.0F),
+        .midtone_density = midtone_density,
         .shoulder_strength = shoulder_strength,
         .highlight_rolloff_start = highlight_rolloff_start,
         .black_density_floor = black_density,
@@ -493,6 +528,10 @@ RenderPlan RenderPlanSolver::solve(
         stock_profile.numeric_values, "compression.threshold", comp.threshold);
     plan.film_response.compression_crosstalk = get_numeric(
         stock_profile.numeric_values, "compression.crosstalk", comp.crosstalk);
+
+    plan.film_response.highlight_rolloff = controls.highlight_rolloff;
+    plan.film_response.film_contrast = controls.film_contrast;
+    plan.film_response.tone_adaptive_factor = tone_adaptive_factor;
 
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);

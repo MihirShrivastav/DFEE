@@ -2048,6 +2048,73 @@ void test_solver_compression_defaults() {
     }
 }
 
+void test_solver_tone_steering() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const dfee::RenderPlanSolver solver;
+
+    auto make_input = [](float dr) {
+        dfee::SolverInput in;
+        in.tonal_distribution.tonal_skew = "normal";
+        in.tonal_distribution.dynamic_range_stops = dr;
+        in.tonal_distribution.midtone_anchor = 0.18F;
+        in.tonal_distribution.highlight_headroom = 0.25F;
+        in.tonal_distribution.shadow_depth = 0.05F;
+        in.tonal_distribution.luma_p95 = 0.72F;
+        in.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+        in.raw_iso = 400;
+        return in;
+    };
+    const auto input_normal = make_input(8.0F);   // normal DR
+    const auto input_flat = make_input(13.0F);    // flat / high-DR / log-like
+
+    dfee::SolverControls sub;  // filmic_v3, adaptive, controls neutral
+    sub.subtractive_pipeline = true;
+    sub.adaptive = true;
+    sub.film_contrast = 100.0F;
+    sub.highlight_rolloff = 100.0F;
+
+    const auto plan_normal = solver.solve(input_normal, stock, sub);
+    const auto plan_flat = solver.solve(input_flat, stock, sub);
+
+    // Normal DR -> adaptive factor ~1.0; flat -> factor > 1 (more filmic contrast).
+    if (std::fabs(plan_normal.film_response.tone_adaptive_factor - 1.0F) > 0.02F) {
+        throw std::runtime_error("normal-DR tone_adaptive_factor must be ~1.0, got " +
+            std::to_string(plan_normal.film_response.tone_adaptive_factor));
+    }
+    if (!(plan_flat.film_response.tone_adaptive_factor > 1.05F)) {
+        throw std::runtime_error("flat/high-DR tone_adaptive_factor must be > 1, got " +
+            std::to_string(plan_flat.film_response.tone_adaptive_factor));
+    }
+    // Flat scene resolves higher midtone contrast than normal (adaptive strengthens it).
+    if (!(plan_flat.film_response.midtone_density > plan_normal.film_response.midtone_density + 1.0e-4F)) {
+        throw std::runtime_error("flat scene must resolve higher midtone_density under adaptive tone");
+    }
+
+    // parity/filmic_v2 (subtractive_pipeline=false): no steering even on a flat scene.
+    dfee::SolverControls parity = sub;
+    parity.subtractive_pipeline = false;
+    const auto plan_flat_parity = solver.solve(input_flat, stock, parity);
+    if (std::fabs(plan_flat_parity.film_response.tone_adaptive_factor - 1.0F) > 1.0e-6F) {
+        throw std::runtime_error("parity tone_adaptive_factor must be exactly 1.0");
+    }
+    if (std::fabs(plan_flat_parity.film_response.midtone_density - plan_normal.film_response.midtone_density) > 1.0e-5F) {
+        throw std::runtime_error("parity midtone_density must equal the unmodulated stock value");
+    }
+
+    // filmic_v3 with adaptive off + controls neutral: tone == stock (no steering).
+    dfee::SolverControls noadapt = sub;
+    noadapt.adaptive = false;
+    const auto plan_flat_noadapt = solver.solve(input_flat, stock, noadapt);
+    if (std::fabs(plan_flat_noadapt.film_response.tone_adaptive_factor - 1.0F) > 1.0e-6F) {
+        throw std::runtime_error("adaptive-off tone_adaptive_factor must be 1.0");
+    }
+    if (std::fabs(plan_flat_noadapt.film_response.midtone_density - plan_flat_parity.film_response.midtone_density) > 1.0e-5F) {
+        throw std::runtime_error("adaptive-off + neutral controls must equal stock midtone_density");
+    }
+}
+
 void test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals() {
     const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
         const float a = c * std::cos(h);
@@ -2386,6 +2453,7 @@ int main() {
         test_solver_color_character_family_defaults();
         test_solver_density_defaults();
         test_solver_compression_defaults();
+        test_solver_tone_steering();
         test_color_compression_compresses_high_chroma_preserves_neutral();
         test_color_compression_leans_neighbours_preserves_neutral();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
