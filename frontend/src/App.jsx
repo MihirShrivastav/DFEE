@@ -61,6 +61,9 @@ const DEFAULT_PARAMS = {
   emulsion_color_density: 0,
   film_color_density: 100,
   film_color_compression: 100,
+  highlight_rolloff: 100,
+  film_contrast: 100,
+  adaptive: true,
   print_stock: 'none',
   print_strength: 1.0,
   print_c: 0.0,
@@ -214,7 +217,7 @@ export default function App() {
 
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
-    Profile: true, 'Film Exposure': true, 'Color Character': true, Print: false, 'Material Finish': false,
+    Profile: true, 'Film Exposure': true, 'Film Tone': true, 'Color Character': true, Print: false, 'Material Finish': false,
     'Film Color Legacy': false, Curves: true, HSL: false,
     Light: true, Color: true, Detail: false,
     Diagnostics: false, History: true,
@@ -460,7 +463,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -630,6 +633,9 @@ export default function App() {
         emulsion_color_density: String(params.emulsion_color_density),
         film_color_density: String(params.film_color_density),
         film_color_compression: String(params.film_color_compression),
+        highlight_rolloff: String(params.highlight_rolloff),
+        film_contrast: String(params.film_contrast),
+        adaptive: params.adaptive ? '1' : '0',
         print_stock: params.print_stock,
         print_strength: String(params.print_strength),
         print_c: String(params.print_c),
@@ -909,6 +915,9 @@ export default function App() {
           emulsion_color_density: params.emulsion_color_density,
           film_color_density: params.film_color_density,
           film_color_compression: params.film_color_compression,
+          highlight_rolloff: params.highlight_rolloff,
+          film_contrast: params.film_contrast,
+          adaptive: params.adaptive,
           print_stock: params.print_stock,
           print_strength: params.print_strength,
           print_c: params.print_c,
@@ -1482,6 +1491,55 @@ export default function App() {
                       className={`slider slider-film-exposure${params.film_exposure_ev !== 0 ? ' slider--dirty' : ''}`}
                     />
                   </div>
+                </div>
+              )}
+            </div>
+
+            <div className="control-group film-lab-group film-lab-tone">
+              <div className="group-title collapsible" onClick={() => toggleSection('Film Tone')}>
+                <span>Film Tone</span>
+                <span className={`chevron ${openSections['Film Tone'] ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections['Film Tone'] && (
+                <div className="section-body">
+                  <label className="slider-row" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} title="Let the film read the scene and auto-adjust tone for flat, high-dynamic-range files. Turn off for a fixed, predictable look.">
+                    <input type="checkbox" checked={params.adaptive} onChange={(e) => setParams(p => ({ ...p, adaptive: e.target.checked }))} />
+                    <span className="slider-label">Adaptive (scene-aware tone)</span>
+                  </label>
+                  {[
+                    {
+                      key: 'highlight_rolloff',
+                      label: 'Highlight Rolloff',
+                      tooltip: 'How gently the brightest areas roll off and glow instead of clipping — forward for softer, more filmic highlights.',
+                    },
+                    {
+                      key: 'film_contrast',
+                      label: 'Film Contrast',
+                      tooltip: "The punch of the film's tone curve — forward for a deeper, more contrasty, less flat look.",
+                    },
+                  ].map(({ key, label, tooltip }) => {
+                    const isDirty = params[key] !== 100;
+                    return (
+                      <div className="slider-row" key={key}>
+                        <div className="slider-header">
+                          <span className="slider-label" title={tooltip}>{label}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {isDirty && (
+                              <button className="revert-btn" title={`Reset ${label}`} onClick={() => setParams(p => ({ ...p, [key]: 100 }))}>↺</button>
+                            )}
+                            <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>{Math.round(params[key])}</span>
+                          </div>
+                        </div>
+                        <input
+                          type="range" min={0} max={200} step={1}
+                          value={params[key]}
+                          onChange={set(key)}
+                          title={tooltip}
+                          className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
