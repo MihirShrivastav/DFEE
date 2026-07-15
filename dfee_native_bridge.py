@@ -219,6 +219,9 @@ class NativePreviewRenderRequest:
     emulsion_color_density: float = 0.0
     film_color_density: float = 100.0
     film_color_compression: float = 100.0
+    highlight_rolloff: float = 100.0
+    film_contrast: float = 100.0
+    adaptive: bool = True
     print_stock: str = "none"
     print_strength: float = 1.0
     print_c: float = 0.0

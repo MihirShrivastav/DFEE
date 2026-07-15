@@ -631,6 +631,9 @@ class PreviewRequest(BaseModel):
     emulsion_color_density: float = 0.0
     film_color_density: float = 100.0   # 0-200, subtractive density (filmic_v3); 100 = stock default
     film_color_compression: float = 100.0   # 0-200, colour compression (filmic_v3); 100 = stock default
+    highlight_rolloff: float = 100.0   # 0-200, tone highlight rolloff (filmic_v3); 100 = stock default
+    film_contrast: float = 100.0   # 0-200, film tone contrast (filmic_v3); 100 = stock default
+    adaptive: bool = True   # scene-referred tone steering on/off (filmic_v3)
     print_stock: str = "none"   # print stock id or "none"
     print_strength: float = 1.0  # 0.0-2.0
     print_c: float = 0.0         # -100 to +100
@@ -1103,6 +1106,9 @@ def get_preview(
     emulsion_color_density: float = 0.0,
     film_color_density: float = 100.0,
     film_color_compression: float = 100.0,
+    highlight_rolloff: float = 100.0,
+    film_contrast: float = 100.0,
+    adaptive: bool = True,
     print_stock: str = "none",
     print_strength: float = 1.0,
     print_c: float = 0.0,
@@ -1174,6 +1180,9 @@ def get_preview(
         "emulsion_color_density": emulsion_color_density,
         "film_color_density": max(0.0, min(200.0, film_color_density)),
         "film_color_compression": max(0.0, min(200.0, film_color_compression)),
+        "highlight_rolloff": max(0.0, min(200.0, highlight_rolloff)),
+        "film_contrast": max(0.0, min(200.0, film_contrast)),
+        "adaptive": bool(adaptive),
         "print_stock": print_stock,
         "print_strength": print_strength,
         "print_c": print_c,
@@ -1299,6 +1308,9 @@ def get_preview(
             "emulsion_color_density": emulsion_color_density,
             "film_color_density": max(0.0, min(200.0, film_color_density)),
         "film_color_compression": max(0.0, min(200.0, film_color_compression)),
+        "highlight_rolloff": max(0.0, min(200.0, highlight_rolloff)),
+        "film_contrast": max(0.0, min(200.0, film_contrast)),
+        "adaptive": bool(adaptive),
             "print_stock": _load_print_stock_profile(print_stock),
             "print_strength": print_strength,
             "print_c": print_c,
@@ -1528,6 +1540,9 @@ def export_file(req: ExportRequest):
                 "emulsion_color_density": req.emulsion_color_density,
                 "film_color_density": max(0.0, min(200.0, req.film_color_density)),
                 "film_color_compression": max(0.0, min(200.0, req.film_color_compression)),
+                "highlight_rolloff": max(0.0, min(200.0, req.highlight_rolloff)),
+                "film_contrast": max(0.0, min(200.0, req.film_contrast)),
+                "adaptive": bool(req.adaptive),
                 "print_stock": print_stock_profile,
                 "print_strength": req.print_strength,
                 "print_c": req.print_c,

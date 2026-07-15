@@ -1272,5 +1272,16 @@ def test_film_color_compression_defaults_and_round_trip():
     assert exp.film_color_compression == 130.0
 
 
+def test_tone_controls_defaults_and_round_trip():
+    from dfee_native_bridge import NativePreviewRenderRequest, NativeExportRequest
+    req = NativePreviewRenderRequest(filename="x.ARW", stock="none")
+    assert req.highlight_rolloff == 100.0
+    assert req.film_contrast == 100.0
+    assert req.adaptive is True
+    exp = NativeExportRequest(filename="x.ARW", stock="none", film_contrast=130.0, adaptive=False)
+    assert exp.film_contrast == 130.0
+    assert exp.adaptive is False
+
+
 if __name__ == "__main__":
     unittest.main()
