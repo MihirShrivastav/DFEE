@@ -794,6 +794,7 @@ class TestNativeBridge(unittest.TestCase):
                     effect_pipeline_version=version,
                     film_color_density=density,
                     film_color_compression=compression,  # off, to isolate density
+                    adaptive=False,  # neutralize scene-referred tone so filmic_v3==filmic_v2 when off
                 )
             ).jpeg_bytes
 
@@ -833,6 +834,33 @@ class TestNativeBridge(unittest.TestCase):
         self.assertNotEqual(default, off)
         # more compression => different render
         self.assertNotEqual(strong, default)
+
+    def test_filmic_v3_tone_controls_change_render(self):
+        raw_filename = self._raw_filename()
+        if not self.session.list_profiles().engine.libraw_enabled:
+            self.skipTest("LibRaw not available")
+        self.session.select_file(raw_filename)
+
+        def _render(contrast=100.0, rolloff=100.0, adaptive=True):
+            return self.session.render_preview(
+                dfee_native_bridge.NativePreviewRenderRequest(
+                    filename=raw_filename,
+                    stock="portra_400",
+                    effect_pipeline_version="filmic_v3",
+                    film_color_density=0.0,
+                    film_color_compression=0.0,
+                    film_contrast=contrast,
+                    highlight_rolloff=rolloff,
+                    adaptive=adaptive,
+                )
+            ).jpeg_bytes
+
+        base = _render(adaptive=False)
+        strong_contrast = _render(contrast=160.0, adaptive=False)
+        strong_rolloff = _render(rolloff=160.0, adaptive=False)
+        # manual contrast / rolloff changes alter the render
+        self.assertNotEqual(strong_contrast, base)
+        self.assertNotEqual(strong_rolloff, base)
 
     def test_render_preview_rejects_unsupported_effect_pipeline_version(self):
         raw_filename = self._raw_filename()
