@@ -53,11 +53,19 @@ strongest in the mids — exactly like film and the Photoshop soft-light techniq
 noise field with a small per-channel decorrelation gives the colour-grain
 character (chroma controlled by the stock/grain family).
 
-**Uniform across the frame.** Remove the detail-based `grain_receptivity_mask`
-suppression. Grain is emulsion-uniform; keep only a gentle **density/tone weight**
-(a touch more presence in mids/upper-mids per the emulsion model) — but the
-Soft-Light blend already provides most of the tonal taper. This kills the
-blotchiness.
+**Spatially uniform, tonally modulated.** This is the anti-blotch invariant, and
+it must not be violated:
+- **Remove the detail-based `grain_receptivity_mask` suppression.** Grain must
+  NOT be weighted by *local image detail/edges/texture*. That spatial gating is
+  what concentrated grain into uneven "oil-blotch" patches. Grain is
+  emulsion-uniform in space.
+- **Keep tone/density modulation** — grain strength IS a smooth function of the
+  pixel's own **luminance** (per-tone), which is authentic and cannot blotch
+  (tone varies smoothly, so grain visibility varies smoothly). Two sources: the
+  Soft-Light blend provides the primary taper (weak toward pure black/white,
+  strongest in mids); and the stock's `grain_shadow_response` /
+  `grain_midtone_response` / `grain_highlight_response` apply a smooth per-stock
+  luminance weight on top. No spatial (neighbourhood) term.
 
 **Real amplitude.** Raise the base amplitude so `strength`/"High" is clearly
 visible (the prototype used `amp ≈ 0.10–0.13` in the soft-light layer). Map the
