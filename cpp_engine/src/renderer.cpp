@@ -305,6 +305,16 @@ constexpr float kCompressLeanGain = 0.20F;  // max radians of neighbour lean at 
 constexpr float kLeanRedSign      = 1.0F;   // sign chosen so red leans toward orange
 constexpr float kLeanBlueSign     = -1.0F;  // sign chosen so blue leans toward cyan
 
+// filmic_v3 grain: soft-light blend amplitude (maps grain_strength to a visible amount).
+constexpr float kGrainSoftLightAmp = 0.20F;
+
+// Pegtop soft-light blend: base a, blend layer b, both in [0,1]. Grain built as a
+// neutral-grey layer (0.5 +/- noise) composited this way interacts with the tones
+// (tapers toward black/white, strongest in mids) instead of being a flat overlay.
+[[nodiscard]] inline float soft_light(const float a, const float b) {
+    return (1.0F - 2.0F * b) * a * a + 2.0F * b * a;
+}
+
 // Smoothstep with explicit [lo, hi] range → [0, 1]. Distinct signature from the single-arg overload.
 [[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
     const float t = std::clamp((x - lo) / std::max(hi - lo, 1.0e-6F), 0.0F, 1.0F);
@@ -1820,70 +1830,48 @@ Image FilmRenderer::apply_filmic_grain(
         noise_b = filmic_grain_noise_cache->noise_b;
     } else {
         std::mt19937_64 rng(static_cast<std::uint64_t>(grain_seed) ^ 0xD1B54A32D192ED03ULL);
-        cv::Mat fine_master = make_standard_normal_mat(h, w, rng);
-        cv::Mat clump_master = make_standard_normal_mat(h, w, rng);
+        // Fine, resolution-scaled grain: grain_size drives a small blur setting the physical
+        // grain cell; roughness shapes particle hardness. No sparse-impulse clumps (those
+        // produced the "blurred oil-blotch" look).
+        const float grain_cell = std::clamp(effects.grain_size, 0.05F, 1.5F) * std::max(scale_factor, 0.35F);
+        const float grain_sigma = std::clamp(0.30F + grain_cell * 0.75F, 0.30F, 3.0F);
+        const float roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
 
-        const float family_size = std::clamp(effects.grain_size, 0.05F, 1.5F);
-        const float family_roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
-        const float clump_scale = std::clamp(0.88F + effects.grain_clumpiness * 0.24F, 0.82F, 1.18F);
-        const float v2_roughness = family_roughness;
-        const float mono_size_mult = 0.92F + effects.grain_clumpiness * 0.12F;
+        auto make_fine = [&](std::mt19937_64& r) {
+            cv::Mat m = make_standard_normal_mat(h, w, r);
+            if (grain_sigma > 0.35F) {
+                cv::GaussianBlur(m, m, cv::Size(0, 0), grain_sigma);
+            }
+            normalize_zero_mean_unit_variance(m);
+            if (roughness > 0.0F) {
+                const float p = 1.0F / (0.65F + roughness * 0.9F);
+                for (int yy = 0; yy < m.rows; ++yy) {
+                    float* row = m.ptr<float>(yy);
+                    for (int xx = 0; xx < m.cols; ++xx) {
+                        const float v = row[xx];
+                        row[xx] = std::copysign(std::pow(std::fabs(v), p), v);
+                    }
+                }
+                normalize_zero_mean_unit_variance(m);
+            }
+            return m;
+        };
 
+        cv::Mat mono = make_fine(rng);
         if (is_mono) {
-            noise_g = generate_filmic_grain_noise_channel(
-                fine_master,
-                clump_master,
-                family_size * clump_scale,
-                mono_size_mult,
-                scale_factor,
-                v2_roughness,
-                effects.grain_clumpiness,
-                effects.grain_micro_grit);
-            noise_r = noise_g;
-            noise_b = noise_g;
+            noise_r = mono;
+            noise_g = mono;
+            noise_b = mono;
         } else {
-            const cv::Mat fine_r = fine_master;
-            const cv::Mat fine_g = roll_mat(fine_master, 17, 0);
-            const cv::Mat fine_b = roll_mat(fine_master, 0, 29);
-            const cv::Mat clump_r = clump_master;
-            const cv::Mat clump_g = roll_mat(clump_master, 17, 0);
-            const cv::Mat clump_b = roll_mat(clump_master, 0, 29);
-
-            const cv::Mat noise_r_ind = generate_filmic_grain_noise_channel(
-                fine_r,
-                clump_r,
-                family_size * clump_scale,
-                0.94F,
-                scale_factor,
-                v2_roughness,
-                effects.grain_clumpiness,
-                effects.grain_micro_grit);
-            noise_g = generate_filmic_grain_noise_channel(
-                fine_g,
-                clump_g,
-                family_size * clump_scale,
-                1.00F,
-                scale_factor,
-                v2_roughness,
-                effects.grain_clumpiness,
-                effects.grain_micro_grit);
-            const cv::Mat noise_b_ind = generate_filmic_grain_noise_channel(
-                fine_b,
-                clump_b,
-                family_size * clump_scale,
-                1.05F + effects.grain_micro_grit * 0.18F,
-                scale_factor,
-                v2_roughness,
-                effects.grain_clumpiness,
-                effects.grain_micro_grit);
-
             const float base_chroma = clampf(effects.grain_chroma_strength * 2.2F, 0.0F, 1.0F);
             const float layer_correlation = std::clamp(effects.grain_layer_correlation, 0.0F, 1.0F);
             const float chroma_mix = base_chroma * std::clamp(0.18F + (1.0F - layer_correlation) * 0.55F, 0.12F, 0.65F);
-            noise_r = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_r_ind;
-            noise_b = (1.0F - chroma_mix) * noise_g + chroma_mix * noise_b_ind;
+            cv::Mat ind_r = make_fine(rng);
+            cv::Mat ind_b = make_fine(rng);
+            noise_g = mono;
+            noise_r = (1.0F - chroma_mix) * mono + chroma_mix * ind_r;
+            noise_b = (1.0F - chroma_mix) * mono + chroma_mix * ind_b;
             normalize_zero_mean_unit_variance(noise_r);
-            normalize_zero_mean_unit_variance(noise_g);
             normalize_zero_mean_unit_variance(noise_b);
         }
 
@@ -1896,15 +1884,12 @@ Image FilmRenderer::apply_filmic_grain(
     }
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
-    constexpr std::array<float, 3> kStrengthMults{0.86F, 0.94F, 1.06F};
+    constexpr std::array<float, 3> kAmpMults{0.94F, 1.00F, 1.08F};
     const float pgi_visibility = std::clamp(effects.grain_target_pgi / 40.0F, 0.55F, 1.55F);
     const float stock_visibility = pgi_visibility * std::clamp(0.82F + effects.grain_midtone_response * 0.18F, 0.65F, 1.25F);
-    const float strength_base = effects.grain_strength * 0.022F * stock_visibility;
-    const float strength_r = strength_base * kStrengthMults[0];
-    const float strength_g = strength_base * kStrengthMults[1];
-    const float strength_b = strength_base * kStrengthMults[2];
-    const auto& grain_receptivity = spatial_masks.grain_receptivity_mask.values;
-    const float texture_masking = clampf(effects.grain_texture_masking, 0.0F, 1.0F);
+    // Soft-light grain amplitude. Spatially UNIFORM: no receptivity / texture-detail term
+    // (that spatial gating caused the blotches). Modulated only per-luminance below.
+    const float amp_base = std::max(0.0F, effects.grain_strength) * kGrainSoftLightAmp * stock_visibility;
     static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
     static const auto kGammaDecodeLut = build_power_lut(2.2F);
 
@@ -1915,7 +1900,6 @@ Image FilmRenderer::apply_filmic_grain(
         for (int x = 0; x < w; ++x) {
             const std::size_t pixel_index = static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
             const std::size_t base = pixel_index * 3U;
-            const float smooth_mod = grain_receptivity[pixel_index];
 
             const float gamma_r = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 0]);
             const float gamma_g = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 1]);
@@ -1959,16 +1943,17 @@ Image FilmRenderer::apply_filmic_grain(
             const float density_mod =
                 (0.35F + shadow_response * 0.55F * lifted_shadow + lower_mid_response * 0.95F * lower_mid + midtone_response * 0.55F * midtone) *
                 (1.0F - (0.70F - highlight_response) * highlight);
-            const float texture_mod = (1.0F - texture_masking) + texture_masking * smooth_mod;
-            const float exposure_mod = std::max(0.0F, density_mod) * texture_mod;
+            // Tonal (per-luminance) modulation only — smooth, cannot blotch. No spatial term.
+            const float exposure_mod = std::max(0.0F, density_mod);
 
-            const float gamma_out_r = clamp01(gamma_r + noise_r_row[x] * strength_r * exposure_mod);
-            const float gamma_out_g = clamp01(gamma_g + noise_g_row[x] * strength_g * exposure_mod);
-            const float gamma_out_b = clamp01(gamma_b + noise_b_row[x] * strength_b * exposure_mod);
+            // Soft-light composite of a neutral-grey grain layer (0.5 +/- noise*amp).
+            const float bl_r = clamp01(0.5F + noise_r_row[x] * amp_base * kAmpMults[0] * exposure_mod);
+            const float bl_g = clamp01(0.5F + noise_g_row[x] * amp_base * kAmpMults[1] * exposure_mod);
+            const float bl_b = clamp01(0.5F + noise_b_row[x] * amp_base * kAmpMults[2] * exposure_mod);
 
-            out.pixels[base + 0] = sample_unit_lut(kGammaDecodeLut, gamma_out_r);
-            out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, gamma_out_g);
-            out.pixels[base + 2] = sample_unit_lut(kGammaDecodeLut, gamma_out_b);
+            out.pixels[base + 0] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_r, bl_r)));
+            out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_g, bl_g)));
+            out.pixels[base + 2] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_b, bl_b)));
         }
     }
 

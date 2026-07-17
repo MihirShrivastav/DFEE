@@ -2048,6 +2048,77 @@ void test_solver_compression_defaults() {
     }
 }
 
+void test_filmic_grain_uniform_softlight() {
+    const int w = 96, h = 90;
+    dfee::Image img(w, h, 3);
+    // three horizontal bands: near-black, mid-gray, near-white (linear)
+    for (int y = 0; y < h; ++y) {
+        const float v = (y < 30) ? 0.02F : (y < 60 ? 0.22F : 0.90F);
+        for (int x = 0; x < w; ++x) {
+            img.at(x, y, 0) = v; img.at(x, y, 1) = v; img.at(x, y, 2) = v;
+        }
+    }
+    // deliberately non-uniform receptivity mask: left half 0, right half 1.
+    dfee::SpatialMasks masks;
+    masks.grain_receptivity_mask = dfee::LuminanceImage(w, h);
+    masks.halation_source_mask = dfee::LuminanceImage(w, h);
+    masks.halation_receiver_mask = dfee::LuminanceImage(w, h);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            masks.grain_receptivity_mask.values[static_cast<std::size_t>(y) * w + x] = (x < w / 2) ? 0.0F : 1.0F;
+        }
+    }
+    dfee::MaterialEffectsPlan fx;
+    fx.grain_strength = 1.0F;
+    fx.grain_size = 0.5F;
+    fx.grain_roughness = 0.3F;
+    fx.grain_chroma_strength = 0.0F; // mono
+    fx.grain_seed = 12345U;
+    fx.grain_target_pgi = 37.0F;
+    fx.grain_shadow_response = 0.72F;
+    fx.grain_midtone_response = 1.0F;
+    fx.grain_highlight_response = 0.28F;
+    fx.grain_peak_zone = "lower_mid_to_mid";
+
+    const dfee::FilmRenderer renderer;
+    const auto out = renderer.apply_filmic_grain(img, masks, fx);
+
+    auto variance = [&](const dfee::Image& im, int x0, int x1, int y0, int y1) {
+        double mean = 0.0; int n = 0;
+        for (int y = y0; y < y1; ++y) for (int x = x0; x < x1; ++x) { mean += im.at(x, y, 0); ++n; }
+        mean /= std::max(1, n);
+        double var = 0.0;
+        for (int y = y0; y < y1; ++y) for (int x = x0; x < x1; ++x) { const double d = im.at(x, y, 0) - mean; var += d * d; }
+        return var / std::max(1, n);
+    };
+    const double var_mid_left = variance(out, 0, w / 2, 30, 60);
+    const double var_mid_right = variance(out, w / 2, w, 30, 60);
+    const double var_black = variance(out, 0, w, 0, 30);
+    const double var_white = variance(out, 0, w, 60, 90);
+
+    // (a) visible
+    if (!(var_mid_right > 1.0e-5)) {
+        throw std::runtime_error("filmic grain must be visible on mid-gray, var=" + std::to_string(var_mid_right));
+    }
+    // (b) spatially uniform: grain must NOT be gated by the receptivity mask (anti-blotch)
+    const double denom = std::max(var_mid_left, var_mid_right);
+    if (std::fabs(var_mid_left - var_mid_right) / std::max(denom, 1e-12) > 0.25) {
+        throw std::runtime_error("grain must be spatially uniform (ignore receptivity): left=" +
+            std::to_string(var_mid_left) + " right=" + std::to_string(var_mid_right));
+    }
+    // (c) soft-light taper: grain weaker in extremes than mid
+    if (!(var_mid_right > var_black * 1.5) || !(var_mid_right > var_white * 1.5)) {
+        throw std::runtime_error("grain must taper in shadows/highlights vs mid");
+    }
+    // (d) determinism
+    const auto out2 = renderer.apply_filmic_grain(img, masks, fx);
+    for (std::size_t i = 0; i < out.pixels.size(); ++i) {
+        if (out.pixels[i] != out2.pixels[i]) {
+            throw std::runtime_error("filmic grain must be deterministic for a fixed seed");
+        }
+    }
+}
+
 void test_solver_tone_steering() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(
@@ -2454,6 +2525,7 @@ int main() {
         test_solver_density_defaults();
         test_solver_compression_defaults();
         test_solver_tone_steering();
+        test_filmic_grain_uniform_softlight();
         test_color_compression_compresses_high_chroma_preserves_neutral();
         test_color_compression_leans_neighbours_preserves_neutral();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
