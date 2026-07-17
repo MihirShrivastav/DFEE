@@ -172,6 +172,29 @@ RAW_DIR = os.path.join(BASE_DIR, "raw_files")
 STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "stocks")
 PRINT_STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "print_stocks")
 
+# Major camera RAW formats. LibRaw (the native decoder) identifies format by file
+# content, so any of these decode natively — the listing filter is the only gate.
+RAW_EXTENSIONS = frozenset({
+    ".arw", ".srf", ".sr2",           # Sony
+    ".cr2", ".cr3", ".crw",           # Canon
+    ".nef", ".nrw",                   # Nikon
+    ".raf",                           # Fujifilm
+    ".orf",                           # Olympus / OM System
+    ".rw2",                           # Panasonic
+    ".pef",                           # Pentax
+    ".dng",                           # Adobe / Leica / Google / others
+    ".rwl",                           # Leica
+    ".srw",                           # Samsung
+    ".x3f",                           # Sigma
+    ".3fr", ".fff",                   # Hasselblad
+    ".iiq",                           # Phase One
+    ".erf",                           # Epson
+    ".mef",                           # Mamiya
+    ".mrw",                           # Minolta / Konica Minolta
+    ".dcr", ".kdc",                   # Kodak
+    ".nrw",                           # Nikon (compact)
+})
+
 # Ensure directories exist
 os.makedirs(RAW_DIR, exist_ok=True)
 
@@ -760,16 +783,21 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
 @app.get("/api/files")
 def list_files():
     logger.info("Listing RAW files from %s", RAW_DIR)
-    # Scan raw files folder for .ARW
-    files = glob.glob(os.path.join(RAW_DIR, "*.[aA][rR][wW]"))
+    # Scan the raw-files folder for any supported camera RAW format (see RAW_EXTENSIONS).
     results = []
-    for f in files:
-        stat = os.stat(f)
-        results.append({
-            "filename": os.path.basename(f),
-            "size_mb": round(stat.st_size / (1024 * 1024), 2),
-            "modified": stat.st_mtime
-        })
+    if os.path.isdir(RAW_DIR):
+        for entry in os.scandir(RAW_DIR):
+            if not entry.is_file():
+                continue
+            if os.path.splitext(entry.name)[1].lower() not in RAW_EXTENSIONS:
+                continue
+            stat = entry.stat()
+            results.append({
+                "filename": entry.name,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                "modified": stat.st_mtime,
+            })
+    results.sort(key=lambda item: item["filename"].lower())
     return results
 
 @app.get("/api/profiles")
