@@ -657,6 +657,8 @@ class PreviewRequest(BaseModel):
     highlight_rolloff: float = 100.0   # 0-200, tone highlight rolloff (filmic_v3); 100 = stock default
     film_contrast: float = 100.0   # 0-200, film tone contrast (filmic_v3); 100 = stock default
     adaptive: bool = True   # scene-referred tone steering on/off (filmic_v3)
+    halation_strength: float = 100.0   # 0-200, halation glow strength (filmic_v3); 100 = stock default, 0 = off
+    halation_threshold: float = 50.0   # 0-100, halation highlight threshold (filmic_v3); lower = more highlights bloom
     print_stock: str = "none"   # print stock id or "none"
     print_strength: float = 1.0  # 0.0-2.0
     print_c: float = 0.0         # -100 to +100
@@ -1137,6 +1139,8 @@ def get_preview(
     highlight_rolloff: float = 100.0,
     film_contrast: float = 100.0,
     adaptive: bool = True,
+    halation_strength: float = 100.0,
+    halation_threshold: float = 50.0,
     print_stock: str = "none",
     print_strength: float = 1.0,
     print_c: float = 0.0,
@@ -1211,6 +1215,8 @@ def get_preview(
         "highlight_rolloff": max(0.0, min(200.0, highlight_rolloff)),
         "film_contrast": max(0.0, min(200.0, film_contrast)),
         "adaptive": bool(adaptive),
+        "halation_strength": max(0.0, min(200.0, halation_strength)),
+        "halation_threshold": max(0.0, min(100.0, halation_threshold)),
         "print_stock": print_stock,
         "print_strength": print_strength,
         "print_c": print_c,
@@ -1339,6 +1345,8 @@ def get_preview(
         "highlight_rolloff": max(0.0, min(200.0, highlight_rolloff)),
         "film_contrast": max(0.0, min(200.0, film_contrast)),
         "adaptive": bool(adaptive),
+            "halation_strength": max(0.0, min(200.0, halation_strength)),
+            "halation_threshold": max(0.0, min(100.0, halation_threshold)),
             "print_stock": _load_print_stock_profile(print_stock),
             "print_strength": print_strength,
             "print_c": print_c,
@@ -1571,6 +1579,8 @@ def export_file(req: ExportRequest):
                 "highlight_rolloff": max(0.0, min(200.0, req.highlight_rolloff)),
                 "film_contrast": max(0.0, min(200.0, req.film_contrast)),
                 "adaptive": bool(req.adaptive),
+                "halation_strength": max(0.0, min(200.0, req.halation_strength)),
+                "halation_threshold": max(0.0, min(100.0, req.halation_threshold)),
                 "print_stock": print_stock_profile,
                 "print_strength": req.print_strength,
                 "print_c": req.print_c,

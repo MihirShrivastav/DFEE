@@ -1567,12 +1567,20 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     cv::Mat bloom_source(rgb.rows, rgb.cols, CV_32FC3);
     cv::Mat halation_source(rgb.rows, rgb.cols, CV_32F);
     const bool specular_only = effects.halation_trigger == "specular_only";
+    // filmic_v3 halation: threshold-driven, ungated (the threshold defines the source),
+    // so the glow is a real, controllable effect. parity/filmic_v2 keep the old behaviour.
+    const bool subtractive_hal = effects.halation_subtractive;
+    const float hal_thresh = std::clamp(effects.halation_threshold, 0.30F, 0.80F);
 
     for (int y = 0; y < rgb.rows; ++y) {
         for (int x = 0; x < rgb.cols; ++x) {
             const float y_luma = luminance.at<float>(y, x);
-            const float highlight = smoothstep01((y_luma - 0.66F) / 0.28F);
-            const float excess = std::max(0.0F, y_luma - 0.58F);
+            const float highlight = subtractive_hal
+                ? smoothstep01((y_luma - hal_thresh) / 0.20F)
+                : smoothstep01((y_luma - 0.66F) / 0.28F);
+            const float excess = subtractive_hal
+                ? std::max(0.0F, y_luma - (hal_thresh - 0.08F))
+                : std::max(0.0F, y_luma - 0.58F);
             const float source = clamp01(std::max(highlight, z5.at<float>(y, x)) * (0.35F + excess));
             source_mask.at<float>(y, x) = source;
 
@@ -1582,7 +1590,11 @@ Image FilmRenderer::apply_filmic_halation_bloom(
             bloom[0] = src[0] * bloom_weight;
             bloom[1] = src[1] * bloom_weight;
             bloom[2] = src[2] * bloom_weight;
-            const float halation_trigger = specular_only ? halation_mask.at<float>(y, x) : source;
+            // filmic_v3: threshold defines the source (ungated). Older paths keep the
+            // specular gate so their behaviour is unchanged.
+            const float halation_trigger = (specular_only && !subtractive_hal)
+                ? halation_mask.at<float>(y, x)
+                : source;
             halation_source.at<float>(y, x) = halation_trigger * (0.40F + 0.60F * source);
         }
     }
@@ -1617,6 +1629,9 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     const float halation_strength = std::max(0.0F, effects.halation_strength);
     const float bloom_strength = std::max(0.0F, effects.bloom_strength);
     const float combined_strength = std::clamp(halation_strength + bloom_strength, 0.0F, 1.8F);
+    // filmic_v3 halation reads as a real glow -> higher apply gains; older paths unchanged.
+    const float hal_core_gain = subtractive_hal ? 0.62F : 0.42F;
+    const float hal_fringe_gain = subtractive_hal ? 0.30F : 0.18F;
 
     for (int y = 0; y < rgb.rows; ++y) {
         for (int x = 0; x < rgb.cols; ++x) {
@@ -1631,8 +1646,8 @@ Image FilmRenderer::apply_filmic_halation_bloom(
             pixel[2] *= 1.0F - shoulder_loss;
 
             const float receiver = receiver_mask.at<float>(y, x);
-            const float halation_core_energy = halation_tight.at<float>(y, x) * receiver * halation_strength * 0.42F;
-            const float halation_fringe_energy = halation_wide.at<float>(y, x) * receiver * halation_strength * 0.18F;
+            const float halation_core_energy = halation_tight.at<float>(y, x) * receiver * halation_strength * hal_core_gain;
+            const float halation_fringe_energy = halation_wide.at<float>(y, x) * receiver * halation_strength * hal_fringe_gain;
             for (int channel = 0; channel < 3; ++channel) {
                 pixel[channel] += halation_core_energy * effects.halation_warm_core[static_cast<std::size_t>(channel)];
                 pixel[channel] += halation_fringe_energy * effects.halation_red_fringe[static_cast<std::size_t>(channel)];
@@ -1887,7 +1902,10 @@ Image FilmRenderer::apply_filmic_grain(
     }
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
-    constexpr std::array<float, 3> kAmpMults{0.94F, 1.00F, 1.08F};
+    // Per-dye-layer amplitude (blue layer slightly grainier) for colour grain only.
+    // Monochrome grain must stay truly neutral across channels, so use uniform amplitude.
+    constexpr std::array<float, 3> kColorAmpMults{0.94F, 1.00F, 1.08F};
+    const std::array<float, 3> kAmpMults = is_mono ? std::array<float, 3>{1.0F, 1.0F, 1.0F} : kColorAmpMults;
     const float pgi_visibility = std::clamp(effects.grain_target_pgi / 40.0F, 0.55F, 1.55F);
     const float stock_visibility = pgi_visibility * std::clamp(0.82F + effects.grain_midtone_response * 0.18F, 0.65F, 1.25F);
     // Soft-light grain amplitude. Spatially UNIFORM: no receptivity / texture-detail term

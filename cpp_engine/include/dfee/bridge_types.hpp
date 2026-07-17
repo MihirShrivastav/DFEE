@@ -241,6 +241,8 @@ struct NativePreviewRenderRequest {
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
     bool adaptive = true;
+    float halation_strength = 100.0F;
+    float halation_threshold = 50.0F;
     std::string print_stock = "none";
     float print_strength = 1.0F;
     float print_c = 0.0F;

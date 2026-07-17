@@ -611,6 +611,13 @@ RenderPlan RenderPlanSolver::solve(
         halation_strength *= 0.3F;
         bloom_strength *= 1.2F;
     }
+    // filmic_v3 halation: scale by the strength control and resolve a luminance threshold.
+    // Left untouched for parity_v1 / filmic_v2 (controls default; subtractive flag off).
+    float halation_threshold = 0.58F;
+    if (controls.subtractive_pipeline) {
+        halation_strength *= std::clamp(controls.halation_strength / 100.0F, 0.0F, 2.0F);
+        halation_threshold = std::clamp(0.72F - (controls.halation_threshold / 100.0F) * 0.34F, 0.35F, 0.75F);
+    }
 
     plan.material_effects = {
         .grain_strength = grain_strength,
@@ -630,6 +637,8 @@ RenderPlan RenderPlanSolver::solve(
         .grain_peak_zone = get_string(stock_profile.string_values, "grain.peak_zone", "lower_mid_to_mid"),
         .grain_texture_masking = get_numeric(stock_profile.numeric_values, "grain.texture_masking", 1.0F),
         .halation_strength = halation_strength,
+        .halation_threshold = halation_threshold,
+        .halation_subtractive = controls.subtractive_pipeline,
         .halation_trigger = get_string(stock_profile.string_values, "halation.trigger", "specular_only"),
         .halation_radius_inner = get_numeric(stock_profile.numeric_values, "halation.radius_inner", 5.0F),
         .halation_radius_outer = get_numeric(stock_profile.numeric_values, "halation.radius_outer", 20.0F),

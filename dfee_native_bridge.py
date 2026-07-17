@@ -222,6 +222,8 @@ class NativePreviewRenderRequest:
     highlight_rolloff: float = 100.0
     film_contrast: float = 100.0
     adaptive: bool = True
+    halation_strength: float = 100.0
+    halation_threshold: float = 50.0
     print_stock: str = "none"
     print_strength: float = 1.0
     print_c: float = 0.0

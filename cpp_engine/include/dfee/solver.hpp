@@ -45,6 +45,8 @@ struct SolverControls {
     float film_contrast = 100.0F;
     bool adaptive = true;              // scene-referred steering on/off
     bool subtractive_pipeline = false; // set true for filmic_v3 (gates v3 tone steering)
+    float halation_strength = 100.0F;  // 0..200, 100 = stock default (0 = off)
+    float halation_threshold = 50.0F;  // 0..100, lower = more highlights bloom
     float print_strength = 1.0F;
     float print_c = 0.0F;
     float print_m = 0.0F;
@@ -143,6 +145,8 @@ struct MaterialEffectsPlan {
     std::string grain_peak_zone = "lower_mid_to_mid";
     float grain_texture_masking = 1.0F;
     float halation_strength = 0.0F;
+    float halation_threshold = 0.58F;  // luminance threshold where highlights begin to bloom (filmic_v3)
+    bool halation_subtractive = false; // filmic_v3 threshold+strength halation model
     std::string halation_trigger = "specular_only";
     float halation_radius_inner = 5.0F;
     float halation_radius_outer = 20.0F;

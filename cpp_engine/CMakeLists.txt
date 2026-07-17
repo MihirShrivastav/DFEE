@@ -119,6 +119,13 @@ if(DFEE_BUILD_TESTS)
     target_link_libraries(dfee_tests PRIVATE dfee_core)
     target_compile_definitions(dfee_tests PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
     add_test(NAME dfee_tests COMMAND dfee_tests)
+    # When built against vcpkg, some dependency DLLs (e.g. LibRaw's raw_r.dll) are not
+    # applocal-deployed next to the exe, so ctest cannot find them. Prepend the vcpkg
+    # bin directories to PATH for the test run.
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        set_tests_properties(dfee_tests PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin")
+    endif()
 endif()
 
 if(DFEE_BUILD_PYTHON)

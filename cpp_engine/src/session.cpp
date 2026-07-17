@@ -495,8 +495,10 @@ Image resize_image_to_max_edge(const Image& source, const int max_edge) {
     }
 
     const float scale = static_cast<float>(max_edge) / static_cast<float>(current_max);
-    const int target_width = std::max(1, static_cast<int>(source.width * scale));
-    const int target_height = std::max(1, static_cast<int>(source.height * scale));
+    // Round (not truncate) target dims to match cv2.resize(fx,fy) and the codebase's
+    // other resize helper, so native preview/analysis sizing matches the reference.
+    const int target_width = std::max(1, static_cast<int>(std::lround(source.width * scale)));
+    const int target_height = std::max(1, static_cast<int>(std::lround(source.height * scale)));
 #if DFEE_HAS_OPENCV
     cv::Mat source_mat(source.height, source.width, CV_32FC3);
     for (int y = 0; y < source.height; ++y) {
@@ -947,6 +949,8 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.film_contrast = request.film_contrast;
     controls.adaptive = request.adaptive;
     controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
+    controls.halation_strength = request.halation_strength;
+    controls.halation_threshold = request.halation_threshold;
     controls.print_strength = request.print_strength;
     controls.print_c = request.print_c;
     controls.print_m = request.print_m;
@@ -2144,6 +2148,8 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.film_contrast = request.film_contrast;
             controls.adaptive = request.adaptive;
             controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
+            controls.halation_strength = request.halation_strength;
+            controls.halation_threshold = request.halation_threshold;
             controls.print_strength = request.print_strength;
             controls.print_c = request.print_c;
             controls.print_m = request.print_m;
