@@ -1833,8 +1833,11 @@ Image FilmRenderer::apply_filmic_grain(
         // Fine, resolution-scaled grain: grain_size drives a small blur setting the physical
         // grain cell; roughness shapes particle hardness. No sparse-impulse clumps (those
         // produced the "blurred oil-blotch" look).
-        const float grain_cell = std::clamp(effects.grain_size, 0.05F, 1.5F) * std::max(scale_factor, 0.35F);
-        const float grain_sigma = std::clamp(0.30F + grain_cell * 0.75F, 0.30F, 3.0F);
+        // Gentler size response: allow the full slider range and grow grain size more slowly
+        // so low/mid sizes are subtle and the top is not oversized.
+        const float grain_cell = std::clamp(effects.grain_size, 0.05F, 2.0F) * std::max(scale_factor, 0.35F);
+        const float grain_sigma = std::clamp(0.30F + grain_cell * 0.55F, 0.30F, 3.0F);
+        // Gentler roughness/crispness response (less extreme at the top).
         const float roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
 
         auto make_fine = [&](std::mt19937_64& r) {
@@ -1844,7 +1847,7 @@ Image FilmRenderer::apply_filmic_grain(
             }
             normalize_zero_mean_unit_variance(m);
             if (roughness > 0.0F) {
-                const float p = 1.0F / (0.65F + roughness * 0.9F);
+                const float p = 1.0F / (0.70F + roughness * 0.55F);
                 for (int yy = 0; yy < m.rows; ++yy) {
                     float* row = m.ptr<float>(yy);
                     for (int xx = 0; xx < m.cols; ++xx) {
@@ -1889,7 +1892,11 @@ Image FilmRenderer::apply_filmic_grain(
     const float stock_visibility = pgi_visibility * std::clamp(0.82F + effects.grain_midtone_response * 0.18F, 0.65F, 1.25F);
     // Soft-light grain amplitude. Spatially UNIFORM: no receptivity / texture-detail term
     // (that spatial gating caused the blotches). Modulated only per-luminance below.
-    const float amp_base = std::max(0.0F, effects.grain_strength) * kGrainSoftLightAmp * stock_visibility;
+    // Soft-saturating response: the 0..2 strength slider eases in (more control in the
+    // low/mid range) and its high end is scaled back so max is strong-but-tasteful, not extreme.
+    const float gs = std::max(0.0F, effects.grain_strength);
+    const float strength_shaped = gs / (1.0F + 0.6F * gs);   // 0.5->0.38, 1.0->0.63, 2.0->0.91
+    const float amp_base = strength_shaped * kGrainSoftLightAmp * stock_visibility;
     static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
     static const auto kGammaDecodeLut = build_power_lut(2.2F);
 

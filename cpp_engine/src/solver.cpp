@@ -572,7 +572,9 @@ RenderPlan RenderPlanSolver::solve(
             if (push_stops > 0.0F) {
                 grain_strength *= 1.0F + 0.20F * push_stops;
             } else if (push_stops < 0.0F) {
-                grain_strength *= std::max(0.6F, 1.0F + 0.08F * push_stops);
+                // Low-ISO shots (below the stock's box speed) read much finer — reduce grain
+                // meaningfully, not just marginally. ISO 100 on a 400 stock -> ~0.56x.
+                grain_strength *= std::max(0.35F, 1.0F + 0.22F * push_stops);
             }
         }
     }
