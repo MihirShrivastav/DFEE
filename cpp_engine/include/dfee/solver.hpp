@@ -124,6 +124,8 @@ struct FilmResponsePlan {
     float highlight_rolloff = 100.0F;      // control value (0..200), 100 = stock default
     float film_contrast = 100.0F;          // control value (0..200), 100 = stock default
     float tone_adaptive_factor = 1.0F;     // resolved scene-referred factor (report/diagnostic)
+    float highlight_rolloff_knee = 1.0F;   // renderer highlight-shoulder knee (>=1.0 = off, filmic_v3)
+    float highlight_rolloff_amount = 0.0F; // renderer highlight-shoulder strength (0 = off, filmic_v3)
 };
 
 struct MaterialEffectsPlan {

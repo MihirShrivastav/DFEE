@@ -187,6 +187,8 @@ constexpr float kToeContrast     = 0.40F; // Film Contrast -> toe deepening
 constexpr float kMidContrast     = 0.45F; // Film Contrast -> midtone punch
 constexpr float kRolloffStart    = 0.10F; // Highlight Rolloff -> earlier shoulder start
 constexpr float kShoulderRolloff = 0.30F; // Highlight Rolloff -> firmer shoulder
+constexpr float kRolloffBase     = 0.60F; // Highlight Rolloff -> renderer shoulder at control 100
+constexpr float kRolloffMax      = 1.50F; // Highlight Rolloff -> renderer shoulder cap
 
 [[nodiscard]] std::vector<float> get_numeric_vector(
     const std::unordered_map<std::string, std::vector<double>>& values,
@@ -324,6 +326,18 @@ RenderPlan RenderPlanSolver::solve(
     }
     exposure_comp = clampf(exposure_comp * adaptation_mult, -2.5F, 2.5F);
 
+    // filmic_v3 highlight-priority metering: a scene-referred auto exposure that only
+    // targets the midtone anchor will brighten a high-key scene until the highlights
+    // clip. Cap the UPWARD push so the brightest tones (p99) stay under a soft ceiling,
+    // leaving the tone shoulder + highlight rolloff room to render them with detail.
+    // Gated to the subtractive pipeline so parity_v1/filmic_v2 stay byte-identical.
+    if (controls.subtractive_pipeline && exposure_comp > 0.0F) {
+        constexpr float kAutoHighlightCeiling = 0.82F;
+        const float highlights = std::max(tonal.luma_p99, 1.0e-4F);
+        const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
+        exposure_comp = std::min(exposure_comp, std::max(headroom_up, 0.0F));
+    }
+
     const float neutral_conf = bias.has_value() ? bias->neutral_confidence : 0.8F;
     const float comp_sensitivity = get_numeric(
         stock_profile.numeric_values,
@@ -431,6 +445,8 @@ RenderPlan RenderPlanSolver::solve(
     // filmic_v3 tone steering (Slice 2): Film Contrast + Highlight Rolloff, resolved
     // from stock defaults x manual controls x a scene-referred adaptive factor.
     float tone_adaptive_factor = 1.0F;
+    float highlight_rolloff_knee = 1.0F;    // >=1.0 keeps the renderer shoulder off (filmic_v2/parity)
+    float highlight_rolloff_amount = 0.0F;  // 0 keeps the renderer shoulder off
     if (controls.subtractive_pipeline) {
         if (controls.adaptive) {
             // Flat / high-DR / log-like scenes get stronger filmic tone; contrasty scenes less.
@@ -453,6 +469,11 @@ RenderPlan RenderPlanSolver::solve(
             highlight_rolloff_start - kRolloffStart * (rolloff_gain - 1.0F), 0.35F, 1.0F);
         shoulder_strength = std::clamp(
             shoulder_strength * (1.0F + kShoulderRolloff * (rolloff_gain - 1.0F)), 0.0F, 0.98F);
+        // Real highlight shoulder for the renderer: a knee (where highlights begin to
+        // roll off) plus a compression strength. On by default at control 100 (gain ~1),
+        // stronger as the control moves forward, off at control 0.
+        highlight_rolloff_knee = std::clamp(highlight_rolloff_start, 0.35F, 0.95F);
+        highlight_rolloff_amount = std::clamp(kRolloffBase * rolloff_gain, 0.0F, kRolloffMax);
     }
 
     float highlight_desaturation = get_numeric(
@@ -532,6 +553,8 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response.highlight_rolloff = controls.highlight_rolloff;
     plan.film_response.film_contrast = controls.film_contrast;
     plan.film_response.tone_adaptive_factor = tone_adaptive_factor;
+    plan.film_response.highlight_rolloff_knee = highlight_rolloff_knee;
+    plan.film_response.highlight_rolloff_amount = highlight_rolloff_amount;
 
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);

@@ -1,4 +1,5 @@
 #include "dfee/session.hpp"
+#include "dfee/tone_controls.hpp"
 
 #include "dfee/analyzer.hpp"
 #include "dfee/bias.hpp"
@@ -1044,21 +1045,12 @@ void append_export_trace(const std::filesystem::path& project_root, const std::s
     out << line << "\n";
 }
 
-Image apply_pre_film_preview_sliders(
-    const Image& rgb_input,
-    const NativePreviewRenderRequest& request,
-    RenderPlan& plan) {
-    Image adjusted = rgb_input;
-
-    plan.pre_film_normalization.exposure_compensation_stops +=
-        request.exposure + std::clamp(request.film_exposure_ev, -3.0F, 3.0F);
-    const float contrast_value = request.contrast + plan.pre_film_normalization.contrast_compensation;
-    const float highlights_value = request.highlights + plan.pre_film_normalization.highlights_compensation;
-    const float shadows_value = request.shadows + plan.pre_film_normalization.shadows_compensation;
-    const float whites_value = request.whites + plan.pre_film_normalization.whites_compensation;
-    const float blacks_value = request.blacks + plan.pre_film_normalization.blacks_compensation;
-    const float midtones_value = request.midtones + plan.pre_film_normalization.midtones_compensation;
-
+// Legacy tone stage (parity_v1 / filmic_v2): additive shifts in gamma-2.2 space.
+// Kept byte-identical for reproducibility; filmic_v3 uses the scene-referred model below.
+void apply_gamma_additive_tone(
+    Image& adjusted,
+    float contrast_value, float highlights_value, float shadows_value,
+    float whites_value, float blacks_value, float midtones_value) {
     cv::Mat gamma_rgb = gamma_encode_image_22(adjusted);
 
     if (contrast_value != 0.0F) {
@@ -1144,6 +1136,30 @@ Image apply_pre_film_preview_sliders(
     }
 
     adjusted = gamma_decode_mat_22(gamma_rgb);
+}
+
+Image apply_pre_film_preview_sliders(
+    const Image& rgb_input,
+    const NativePreviewRenderRequest& request,
+    RenderPlan& plan) {
+    Image adjusted = rgb_input;
+
+    plan.pre_film_normalization.exposure_compensation_stops +=
+        request.exposure + std::clamp(request.film_exposure_ev, -3.0F, 3.0F);
+    const float contrast_value = request.contrast + plan.pre_film_normalization.contrast_compensation;
+    const float highlights_value = request.highlights + plan.pre_film_normalization.highlights_compensation;
+    const float shadows_value = request.shadows + plan.pre_film_normalization.shadows_compensation;
+    const float whites_value = request.whites + plan.pre_film_normalization.whites_compensation;
+    const float blacks_value = request.blacks + plan.pre_film_normalization.blacks_compensation;
+    const float midtones_value = request.midtones + plan.pre_film_normalization.midtones_compensation;
+
+    if (request.effect_pipeline_version == "filmic_v3") {
+        apply_scene_referred_tone(adjusted, contrast_value, highlights_value,
+                                  shadows_value, whites_value, blacks_value, midtones_value);
+    } else {
+        apply_gamma_additive_tone(adjusted, contrast_value, highlights_value,
+                                  shadows_value, whites_value, blacks_value, midtones_value);
+    }
 
     if (request.temp != 0.0F || request.tint != 0.0F) {
         Image oklab = rgb_to_oklab(adjusted);
@@ -1263,6 +1279,13 @@ Image apply_hsl(
         return rendered;
     }
 
+    // Calibration (Lightroom-like feel, less twitchy than raw degrees):
+    // Hue slider (-100..+100) maps to ~+/-50 deg of rotation; Luminance to a gentler
+    // OKLab-L swing; hue rotation is chroma-gated so near-neutral pixels don't shift.
+    constexpr float kHueDegPerPoint = 0.50F;  // +/-100 -> ~+/-50 deg
+    constexpr float kLumScale = 0.22F;        // was 0.40 (too strong)
+    constexpr float kChromaGateRef = 0.03F;   // OKLCh chroma above which hue shift is full
+
     Image oklab = rgb_to_oklab(rendered);
     Image oklch = oklab_to_oklch(oklab);
     for (std::size_t i = 0; i < oklch.pixel_count(); ++i) {
@@ -1295,9 +1318,11 @@ Image apply_hsl(
             light_delta += weight * luminance_adjustments[range_index];
         }
 
-        oklch.pixels[i * 3 + 2] = std::fmod(hue_rad + hue_delta * std::numbers::pi_v<float> / 180.0F + 2.0F * std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>);
+        const float chroma_gate = std::clamp(oklch.pixels[i * 3 + 1] / kChromaGateRef, 0.0F, 1.0F);
+        const float hue_rot_rad = hue_delta * kHueDegPerPoint * chroma_gate * std::numbers::pi_v<float> / 180.0F;
+        oklch.pixels[i * 3 + 2] = std::fmod(hue_rad + hue_rot_rad + 2.0F * std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>);
         oklch.pixels[i * 3 + 1] = std::max(0.0F, oklch.pixels[i * 3 + 1] * std::clamp(1.0F + sat_delta / 100.0F, 0.0F, 4.0F));
-        oklch.pixels[i * 3 + 0] = std::clamp(oklch.pixels[i * 3 + 0] + light_delta / 100.0F * 0.40F, 0.0F, 1.0F);
+        oklch.pixels[i * 3 + 0] = std::clamp(oklch.pixels[i * 3 + 0] + light_delta / 100.0F * kLumScale, 0.0F, 1.0F);
     }
 
     Image adjusted_oklab = oklch_to_oklab(oklch);
@@ -1700,6 +1725,75 @@ NativeRenderWorkResult render_native_image(
 #endif
 
 }  // namespace
+
+// Scene-referred EV-masked tone stage (filmic_v3). See tone_controls.hpp and
+// documentation/planning/tone-controls-rebuild-spec.md.
+void apply_scene_referred_tone(
+    Image& adjusted,
+    float contrast_value, float highlights_value, float shadows_value,
+    float whites_value, float blacks_value, float midtones_value) {
+    constexpr float kInvGamma = 1.0F / 2.2F;
+    constexpr float kRegionMaxEV = 1.15F; // Shadows/Midtones/Highlights EV at +/-100
+    constexpr float kWhiteMaxEV = 0.70F;  // Whites endpoint gain (EV, top-weighted)
+    constexpr float kBlackLift = 0.06F;   // Blacks endpoint lift (linear, bottom-weighted)
+    constexpr float kContrast = 0.50F;    // Contrast pivot-power strength
+    constexpr float kMidGrey = 0.18F;
+
+    const float sh_ev = std::clamp(shadows_value / 100.0F, -1.0F, 1.0F) * kRegionMaxEV;
+    const float mid_ev = std::clamp(midtones_value / 100.0F, -1.0F, 1.0F) * kRegionMaxEV;
+    const float hi_ev = std::clamp(highlights_value / 100.0F, -1.0F, 1.0F) * kRegionMaxEV;
+    const float white_ev = std::clamp(whites_value / 100.0F, -1.0F, 1.0F) * kWhiteMaxEV;
+    const float black_off = std::clamp(blacks_value / 100.0F, -1.0F, 1.0F) * kBlackLift;
+    const float contrast_gamma = 1.0F + std::clamp(contrast_value / 100.0F, -1.0F, 1.0F) * kContrast;
+
+    const bool any_region = sh_ev != 0.0F || mid_ev != 0.0F || hi_ev != 0.0F;
+    const bool any_endpoint = white_ev != 0.0F || black_off != 0.0F;
+    const bool any_contrast = std::fabs(contrast_gamma - 1.0F) > 1.0e-4F;
+    if (!any_region && !any_endpoint && !any_contrast) {
+        return;
+    }
+
+    const auto zone = [](float lp, float center, float sigma) {
+        const float d = (lp - center) / sigma;
+        return std::exp(-0.5F * d * d);
+    };
+
+    for (std::size_t i = 0; i < adjusted.pixel_count(); ++i) {
+        float r = adjusted.pixels[i * 3 + 0];
+        float g = adjusted.pixels[i * 3 + 1];
+        float b = adjusted.pixels[i * 3 + 2];
+        const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * g + 0.0722F * b);
+        const float lp = std::pow(std::min(luma, 1.0F), kInvGamma); // perceptual luminance for masks
+
+        if (any_region) {
+            const float total_ev =
+                sh_ev * zone(lp, 0.22F, 0.16F) +
+                mid_ev * zone(lp, 0.50F, 0.16F) +
+                hi_ev * zone(lp, 0.78F, 0.16F);
+            const float gain = std::exp2(total_ev);
+            r *= gain; g *= gain; b *= gain;
+        }
+        if (white_ev != 0.0F) {
+            const float top_weight = lp * lp * lp;
+            const float wmult = std::exp2(white_ev * top_weight);
+            r *= wmult; g *= wmult; b *= wmult;
+        }
+        if (black_off != 0.0F) {
+            const float bottom = 1.0F - lp;
+            const float off = black_off * bottom * bottom * bottom;
+            r += off; g += off; b += off;
+        }
+        r = std::max(0.0F, r); g = std::max(0.0F, g); b = std::max(0.0F, b);
+        if (any_contrast) {
+            r = kMidGrey * std::pow(std::max(r, 1.0e-8F) / kMidGrey, contrast_gamma);
+            g = kMidGrey * std::pow(std::max(g, 1.0e-8F) / kMidGrey, contrast_gamma);
+            b = kMidGrey * std::pow(std::max(b, 1.0e-8F) / kMidGrey, contrast_gamma);
+        }
+        adjusted.pixels[i * 3 + 0] = r;
+        adjusted.pixels[i * 3 + 1] = g;
+        adjusted.pixels[i * 3 + 2] = b;
+    }
+}
 
 EngineSession::EngineSession(std::filesystem::path project_root)
     : project_root_(std::filesystem::absolute(std::move(project_root))),

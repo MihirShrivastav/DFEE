@@ -6,6 +6,7 @@
 #include "dfee/renderer.hpp"
 #include "dfee/session.hpp"
 #include "dfee/solver.hpp"
+#include "dfee/tone_controls.hpp"
 #include "dfee/version.hpp"
 
 #include <array>
@@ -2227,6 +2228,170 @@ void test_halation_threshold_and_strength() {
     }
 }
 
+void test_scene_referred_tone_zones() {
+    // Neutral grays across the tonal range: shadow, mid, highlight, near-white.
+    dfee::Image img(4, 1, 3);
+    const auto set_px = [&](int x, float v) { img.at(x, 0, 0) = v; img.at(x, 0, 1) = v; img.at(x, 0, 2) = v; };
+    set_px(0, 0.05F); set_px(1, 0.18F); set_px(2, 0.60F); set_px(3, 0.90F);
+
+    // Shadows +100 lifts the shadow but leaves the highlight essentially untouched.
+    {
+        dfee::Image a = img;
+        dfee::apply_scene_referred_tone(a, 0, 0, 100, 0, 0, 0);
+        assert(a.at(0, 0, 1) > img.at(0, 0, 1) * 1.4F);
+        assert(std::fabs(a.at(2, 0, 1) - img.at(2, 0, 1)) < img.at(2, 0, 1) * 0.03F);
+    }
+    // Highlights +100 lifts the highlight but leaves the shadow essentially untouched.
+    {
+        dfee::Image a = img;
+        dfee::apply_scene_referred_tone(a, 0, 100, 0, 0, 0, 0);
+        assert(a.at(2, 0, 1) > img.at(2, 0, 1) * 1.2F);
+        assert(std::fabs(a.at(0, 0, 1) - img.at(0, 0, 1)) < img.at(0, 0, 1) * 0.05F);
+    }
+    // Whites (endpoint) moves the near-white far more than the mid.
+    {
+        dfee::Image a = img;
+        dfee::apply_scene_referred_tone(a, 0, 0, 0, 100, 0, 0);
+        const float d_white = a.at(3, 0, 1) / img.at(3, 0, 1);
+        const float d_mid = a.at(1, 0, 1) / img.at(1, 0, 1);
+        assert(d_white > 1.3F && d_mid < 1.1F && d_white > d_mid);
+    }
+    // Blacks (endpoint) lifts the shadow far more than the highlight.
+    {
+        dfee::Image a = img;
+        dfee::apply_scene_referred_tone(a, 0, 0, 0, 0, 100, 0);
+        const float lift_shadow = a.at(0, 0, 1) - img.at(0, 0, 1);
+        const float lift_high = a.at(2, 0, 1) - img.at(2, 0, 1);
+        assert(lift_shadow > 0.01F && lift_shadow > lift_high * 5.0F);
+    }
+}
+
+void test_scene_referred_tone_chroma_symmetry_noop() {
+    // No-op when every control is zero (byte-identical passthrough).
+    {
+        dfee::Image img(3, 1, 3);
+        for (int x = 0; x < 3; ++x) { img.at(x, 0, 0) = 0.2F + 0.1F * x; img.at(x, 0, 1) = 0.15F; img.at(x, 0, 2) = 0.05F; }
+        dfee::Image a = img;
+        dfee::apply_scene_referred_tone(a, 0, 0, 0, 0, 0, 0);
+        for (std::size_t i = 0; i < img.pixel_count() * 3U; ++i) {
+            assert(a.pixels[i] == img.pixels[i]);
+        }
+    }
+    // Chroma preserved: a uniform region dodge keeps channel ratios (hue + saturation).
+    {
+        dfee::Image img(1, 1, 3);
+        img.at(0, 0, 0) = 0.35F; img.at(0, 0, 1) = 0.12F; img.at(0, 0, 2) = 0.04F;
+        dfee::Image a = img;
+        dfee::apply_scene_referred_tone(a, 0, 0, 100, 0, 0, 0); // shadows dodge on a mid pixel
+        assert(a.at(0, 0, 1) > img.at(0, 0, 1)); // actually changed
+        const float rg_in = img.at(0, 0, 0) / img.at(0, 0, 1), rg_out = a.at(0, 0, 0) / a.at(0, 0, 1);
+        const float bg_in = img.at(0, 0, 2) / img.at(0, 0, 1), bg_out = a.at(0, 0, 2) / a.at(0, 0, 1);
+        assert(std::fabs(rg_in - rg_out) < 1.0e-4F && std::fabs(bg_in - bg_out) < 1.0e-4F);
+    }
+    // Symmetric EV response: +N and -N are opposite in log2 gain.
+    {
+        dfee::Image img(1, 1, 3);
+        img.at(0, 0, 0) = 0.05F; img.at(0, 0, 1) = 0.05F; img.at(0, 0, 2) = 0.05F;
+        dfee::Image up = img, dn = img;
+        dfee::apply_scene_referred_tone(up, 0, 0, 60, 0, 0, 0);
+        dfee::apply_scene_referred_tone(dn, 0, 0, -60, 0, 0, 0);
+        const float lu = std::log2(up.at(0, 0, 1) / img.at(0, 0, 1));
+        const float ld = std::log2(dn.at(0, 0, 1) / img.at(0, 0, 1));
+        assert(std::fabs(lu + ld) < 1.0e-3F);
+    }
+}
+
+void test_highlight_rolloff_compresses_highlights() {
+    const int w = 64;
+    dfee::Image ramp(w, 1, 3);
+    for (int x = 0; x < w; ++x) {
+        const float v = static_cast<float>(x) / static_cast<float>(w - 1);
+        ramp.at(x, 0, 0) = v; ramp.at(x, 0, 1) = v; ramp.at(x, 0, 2) = v;
+    }
+
+    dfee::FilmResponsePlan plan;
+    plan.toe_strength = 0.30F;
+    plan.shoulder_strength = 0.50F;
+    plan.midtone_density = 1.0F;          // neutral midtone gamma
+    plan.highlight_rolloff_knee = 0.70F;
+    const dfee::FilmRenderer renderer;
+
+    plan.highlight_rolloff_amount = 0.0F; // off
+    const auto off = renderer.apply_film_tone_response(ramp, plan);
+    plan.highlight_rolloff_amount = 0.8F; // on
+    const auto on = renderer.apply_film_tone_response(ramp, plan);
+
+    const int bright = w - 2; // ~0.98 -> maps above the knee
+    const int mid = w / 5;    // ~0.20 -> maps below the knee
+    // Highlights are compressed downward; shadows/mids are untouched.
+    if (!(on.at(bright, 0, 1) < off.at(bright, 0, 1) - 1.0e-4F)) {
+        throw std::runtime_error("highlight rolloff must compress bright values: on=" +
+            std::to_string(on.at(bright, 0, 1)) + " off=" + std::to_string(off.at(bright, 0, 1)));
+    }
+    if (!(std::fabs(on.at(mid, 0, 1) - off.at(mid, 0, 1)) < 1.0e-5F)) {
+        throw std::runtime_error("highlight rolloff must leave mid/shadow tones unchanged");
+    }
+    // Tone curve stays monotonic across the ramp with rolloff engaged.
+    for (int x = 1; x < w; ++x) {
+        assert(on.at(x, 0, 1) >= on.at(x - 1, 0, 1) - 1.0e-5F);
+    }
+    // amount 0 with a knee set is a no-op (filmic_v2/parity safety).
+    plan.highlight_rolloff_amount = 0.0F;
+    const auto off2 = renderer.apply_film_tone_response(ramp, plan);
+    assert(off2.at(bright, 0, 1) == off.at(bright, 0, 1));
+}
+
+void test_solver_auto_exposure_protects_highlights() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const dfee::RenderPlanSolver solver;
+
+    auto make_input = [](float midtone, float p99) {
+        dfee::SolverInput in;
+        in.tonal_distribution.tonal_skew = "normal";
+        in.tonal_distribution.dynamic_range_stops = 8.0F;
+        in.tonal_distribution.midtone_anchor = midtone;
+        in.tonal_distribution.highlight_headroom = 0.05F;
+        in.tonal_distribution.luma_p95 = std::max(0.0F, p99 - 0.03F);
+        in.tonal_distribution.luma_p99 = p99;
+        in.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+        in.raw_iso = 400;
+        return in;
+    };
+
+    dfee::SolverControls base;
+    base.exposure_intent = "Auto";
+    base.adaptive = false;
+    dfee::SolverControls v3 = base; v3.subtractive_pipeline = true;
+    dfee::SolverControls v2 = base; v2.subtractive_pipeline = false;
+
+    // High-key scene (dark mids wanting a big push, but highlights already near the
+    // ceiling) -> v3 caps the upward push; parity/filmic_v2 does not (byte-identical).
+    const auto bright = make_input(0.07F, 0.92F);
+    const float e_v3 = solver.solve(bright, stock, v3).pre_film_normalization.exposure_compensation_stops;
+    const float e_v2 = solver.solve(bright, stock, v2).pre_film_normalization.exposure_compensation_stops;
+    if (!(e_v2 > 0.2F)) {
+        throw std::runtime_error("v2 auto exposure should push a dark-mid scene up: " + std::to_string(e_v2));
+    }
+    if (!(e_v3 < e_v2 - 0.1F && e_v3 <= 0.05F)) {
+        throw std::runtime_error("v3 must cap the upward push when highlights are bright: v3=" +
+            std::to_string(e_v3) + " v2=" + std::to_string(e_v2));
+    }
+
+    // Modest push with real highlight headroom -> the cap does not bite (v3 == v2), so the
+    // protection only engages when highlights would actually clip.
+    const auto headroom = make_input(0.14F, 0.30F);
+    const float d_v3 = solver.solve(headroom, stock, v3).pre_film_normalization.exposure_compensation_stops;
+    const float d_v2 = solver.solve(headroom, stock, v2).pre_film_normalization.exposure_compensation_stops;
+    if (!(d_v3 > 0.05F)) {
+        throw std::runtime_error("v3 should still brighten a scene with highlight headroom: " + std::to_string(d_v3));
+    }
+    if (std::fabs(d_v3 - d_v2) > 1.0e-4F) {
+        throw std::runtime_error("highlight cap must not change exposure when highlights have headroom");
+    }
+}
+
 void test_solver_tone_steering() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(
@@ -2642,6 +2807,10 @@ int main() {
         test_solver_density_defaults();
         test_solver_compression_defaults();
         test_solver_tone_steering();
+        test_solver_auto_exposure_protects_highlights();
+        test_scene_referred_tone_zones();
+        test_scene_referred_tone_chroma_symmetry_noop();
+        test_highlight_rolloff_compresses_highlights();
         test_filmic_grain_uniform_softlight();
         test_halation_threshold_and_strength();
         test_color_compression_compresses_high_chroma_preserves_neutral();

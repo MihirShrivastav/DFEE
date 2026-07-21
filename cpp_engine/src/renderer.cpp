@@ -1150,6 +1150,20 @@ Image FilmRenderer::apply_film_tone_response(
                 s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
             }
 
+            // Highlight rolloff (filmic_v3): above the knee, compress highlights DOWN with a
+            // Reinhard shoulder so bright regions retain gradation and ease into a soft,
+            // creamy near-white instead of clipping to paper-white. Stronger amount pulls the
+            // white point lower (more protective). Off (amount 0 / knee >= 1) for
+            // filmic_v2/parity, so those stay byte-identical.
+            if (response.highlight_rolloff_amount > 0.0F && response.highlight_rolloff_knee < 1.0F &&
+                s_curve > response.highlight_rolloff_knee) {
+                const float knee = response.highlight_rolloff_knee;
+                const float range = 1.0F - knee;
+                const float t = (s_curve - knee) / range;
+                const float k = response.highlight_rolloff_amount;
+                s_curve = knee + range * (t / (1.0F + k * t));
+            }
+
             const float toe_fade = clampf(s_curve / 0.25F, 0.0F, 1.0F);
             const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
             lut[sample_index] = clamp01(s_curve + response.black_density_floor * shadow_weight);
