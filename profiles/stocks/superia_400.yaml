@@ -29,16 +29,16 @@ tone_response:
 color_response:
   shadow_bias_lab:
   - 0.0
-  - -1.8
-  - -1.0
+  - -2.6
+  - -1.2
   midtone_bias_lab:
   - 0.0
-  - -0.5
-  - 0.5
+  - -0.7
+  - 0.4
   highlight_bias_lab:
   - 0.0
-  - -0.2
-  - 1.2
+  - -1.2
+  - 1.0
   blue_cast_suppression: 0.3
   green_magenta_stabilization: 0.15
 hue_saturation_response:

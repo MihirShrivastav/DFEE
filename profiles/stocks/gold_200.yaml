@@ -33,12 +33,12 @@ color_response:
   - 2.5
   midtone_bias_lab:
   - 0.0
-  - 1.8
-  - 4.5
+  - 2.2
+  - 5.2
   highlight_bias_lab:
   - 0.5
-  - 1.2
-  - 3.5
+  - 1.6
+  - 4.2
   blue_cast_suppression: 0.45
   green_magenta_stabilization: 0.35
 hue_saturation_response:
@@ -47,7 +47,7 @@ hue_saturation_response:
   yellow_green_muting: 0.22
   cyan_blue_highlight_compression: 0.42
   neon_compression: 0.68
-  highlight_desaturation: 0.5
+  highlight_desaturation: 0.42
 grain:
   size: 0.45
   strength: 0.38
