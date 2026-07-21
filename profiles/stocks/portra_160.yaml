@@ -92,3 +92,16 @@ dye_contamination:
   b_to_r: 0.006
   r_to_b: 0.0
   g_to_b: 0.006
+color_character:
+  highlight_hold_sensitivity: 0.72
+  shadow_retention_sensitivity: 0.66
+  emulsion_density_sensitivity: 0.55
+  palette:
+    range_sensitivity: 0.52
+density:
+  strength: 0.52
+  low_luma_limit: 0.10
+compression:
+  strength: 0.52
+  threshold: 0.46
+  crosstalk: 0.28
