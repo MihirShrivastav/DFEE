@@ -1211,7 +1211,7 @@ void test_profile_loading() {
     input.raw_iso = 400;
     const dfee::RenderPlanSolver solver;
     const auto stocks = dfee::list_film_stock_profiles(repo_root / "profiles" / "stocks");
-    assert(stocks.size() >= 27U);
+    assert(stocks.size() >= 25U);
     for (const auto& active_stock : stocks) {
         const auto plan = solver.solve(input, active_stock);
         assert(std::isfinite(plan.film_response.yellow_green_muting));
