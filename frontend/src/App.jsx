@@ -1566,19 +1566,13 @@ export default function App() {
                     key: 'film_color_density',
                     label: 'Color Density',
                     def: 100, min: 0, max: 200, bipolar: false,
-                    tooltip: "How dense and matte the film's colours are — forward for richer, deeper, more film-like colour.",
-                  },
-                  {
-                    key: 'film_color_compression',
-                    label: 'Color Compression',
-                    def: 100, min: 0, max: 200, bipolar: false,
-                    tooltip: 'How much the palette is compressed into cohesive, film-like colour — forward for a more harmonised, less digital look.',
+                    tooltip: "How dense, matte and cohesive the film's colours are — forward makes colour richer and deeper and gently harmonises the palette into a more film-like, less digital look.",
                   },
                   {
                     key: 'emulsion_color_density',
-                    label: 'Emulsion Density',
+                    label: 'Color Boost',
                     def: 0, min: -100, max: 100, bipolar: true,
-                    tooltip: "Fine adjustment to the strength of the stock's colour dyes.",
+                    tooltip: "Overall saturation of the stock's colour dyes — forward for punchier colour, back for a muted look.",
                   },
                 ];
                 return (

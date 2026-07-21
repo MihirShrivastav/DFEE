@@ -542,7 +542,10 @@ RenderPlan RenderPlanSolver::solve(
         stock_profile.numeric_values, "density.low_luma_limit", dens.low_luma_limit);
 
     const CompressionDefaults comp = compression_defaults(stock_profile.stock_type);
-    plan.film_response.film_color_compression = controls.film_color_compression;
+    // Color Compression is folded into the Color Density control: one slider drives both
+    // the subtractive density (primary effect) and the palette-cohesion compression
+    // (subtle secondary effect), so there is no separate near-inert compression slider.
+    plan.film_response.film_color_compression = controls.film_color_density;
     plan.film_response.compression_strength = get_numeric(
         stock_profile.numeric_values, "compression.strength", comp.strength);
     plan.film_response.compression_threshold = get_numeric(

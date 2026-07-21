@@ -2082,6 +2082,18 @@ void test_solver_compression_defaults() {
             std::to_string(color_plan.film_response.compression_strength));
     }
 
+    // Color Compression is folded into the Color Density control: the plan's compression
+    // control follows film_color_density, and the separate film_color_compression is ignored.
+    dfee::SolverControls merged = controls;
+    merged.film_color_density = 150.0F;
+    merged.film_color_compression = 0.0F; // must have no effect now
+    const auto merged_plan = solver.solve(input, color_stock, merged);
+    if (std::fabs(merged_plan.film_response.film_color_compression - 150.0F) > 1.0e-4F) {
+        throw std::runtime_error(
+            "compression control must follow film_color_density (merged), got " +
+            std::to_string(merged_plan.film_response.film_color_compression));
+    }
+
     const auto mono_stock = dfee::load_film_stock_profile(
         repo_root / "profiles" / "stocks" / "tri_x_400.yaml");
     const auto mono_plan = solver.solve(input, mono_stock, controls);
