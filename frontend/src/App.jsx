@@ -52,6 +52,8 @@ const DEFAULT_PARAMS = {
   grain_size: -1.0,
   grain_roughness: -1.0,
   halation: 'Auto',
+  halation_strength: 100,
+  halation_threshold: 50,
   sharpness: 0.0,
   sharpness_mask: 0.5,
   film_color: 100,
@@ -217,8 +219,8 @@ export default function App() {
 
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
-    Profile: true, 'Film Exposure': true, 'Film Tone': true, 'Color Character': true, Print: false, 'Material Finish': false,
-    'Film Color Legacy': false, Curves: true, HSL: false,
+    Profile: true, 'Film Exposure': true, 'Film Tone': true, 'Film Color': true, Print: false, 'Material Finish': false,
+    Curves: true, HSL: false,
     Light: true, Color: true, Detail: false,
     Diagnostics: false, History: true,
   };
@@ -463,7 +465,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast', 'halation_strength', 'halation_threshold'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -624,6 +626,8 @@ export default function App() {
         grain_size: String(params.grain_size),
         grain_roughness: String(params.grain_roughness),
         halation: params.halation,
+        halation_strength: String(params.halation_strength),
+        halation_threshold: String(params.halation_threshold),
         sharpness: String(params.sharpness),
         sharpness_mask: String(params.sharpness_mask),
         film_color: String(params.film_color),
@@ -716,6 +720,8 @@ export default function App() {
         + `&grain_size=${params.grain_size}`
         + `&grain_roughness=${params.grain_roughness}`
         + `&halation=${encodeURIComponent(params.halation)}`
+        + `&halation_strength=${params.halation_strength}`
+        + `&halation_threshold=${params.halation_threshold}`
         + `&sharpness=${params.sharpness}`
         + `&sharpness_mask=${params.sharpness_mask}`
         + `&film_color=${params.film_color}`
@@ -906,6 +912,8 @@ export default function App() {
           grain_size: params.grain_size,
           grain_roughness: params.grain_roughness,
           halation: params.halation,
+          halation_strength: params.halation_strength,
+          halation_threshold: params.halation_threshold,
           sharpness: params.sharpness,
           sharpness_mask: params.sharpness_mask,
           film_color: params.film_color,
@@ -1315,7 +1323,7 @@ export default function App() {
           <div className="controls-header-bar">
             <span className="controls-header-title">Film Lab</span>
             <button className="reset-all-btn" onClick={handleResetAll} title="Reset all settings to defaults">
-              ↺ Reset All
+              Reset All
             </button>
           </div>
           <div className="controls-body">
@@ -1339,7 +1347,7 @@ export default function App() {
                   <div className="field">
                     <label className="field-label">Film Stock</label>
                     <select className="select" value={params.stock} onChange={set('stock')}>
-                      <option value="none">— None —</option>
+                      <option value="none">None</option>
                       <optgroup label="Color Negative">
                         {profiles.stocks.filter(p => p.type === 'color_negative').map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
@@ -1381,7 +1389,7 @@ export default function App() {
                               <button
                                 className="revert-btn"
                                 onClick={() => setParams(p => ({ ...p, print_strength: DEFAULT_PARAMS.print_strength }))}
-                              >↺</button>
+                              >Reset</button>
                             )}
                             <span className={`slider-value${params.print_strength !== DEFAULT_PARAMS.print_strength ? ' slider-value--dirty' : ''}`}>
                               {Math.round(params.print_strength * 100)}%
@@ -1479,7 +1487,7 @@ export default function App() {
                       <span className="slider-label" title="Changes the virtual exposure reaching the selected film stock before its tone and colour response.">Film Exposure</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {params.film_exposure_ev !== 0 && (
-                          <button className="revert-btn" title="Reset Film Exposure" onClick={() => setParams(p => ({ ...p, film_exposure_ev: 0 }))}>↺</button>
+                          <button className="revert-btn" title="Reset Film Exposure" onClick={() => setParams(p => ({ ...p, film_exposure_ev: 0 }))}>Reset</button>
                         )}
                         <span className={`slider-value${params.film_exposure_ev !== 0 ? ' slider-value--dirty' : ''}`}>
                           {params.film_exposure_ev === 0 && params.exposure_placement === 'auto_balanced' ? 'Auto' : fmtVal('film_exposure_ev', params.film_exposure_ev)}
@@ -1525,7 +1533,7 @@ export default function App() {
                           <span className="slider-label" title={tooltip}>{label}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             {isDirty && (
-                              <button className="revert-btn" title={`Reset ${label}`} onClick={() => setParams(p => ({ ...p, [key]: 100 }))}>↺</button>
+                              <button className="revert-btn" title={`Reset ${label}`} onClick={() => setParams(p => ({ ...p, [key]: 100 }))}>Reset</button>
                             )}
                             <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>{Math.round(params[key])}</span>
                           </div>
@@ -1545,100 +1553,66 @@ export default function App() {
             </div>
 
             <div className="control-group film-lab-group film-lab-color">
-              <div className="group-title collapsible" onClick={() => toggleSection('Color Character')}>
-                <span>Color Character</span>
-                <span className={`chevron ${openSections['Color Character'] ? 'open' : ''}`}>›</span>
+              <div className="group-title collapsible" onClick={() => toggleSection('Film Color')}>
+                <span>Film Color</span>
+                <span className={`chevron ${openSections['Film Color'] ? 'open' : ''}`}>›</span>
               </div>
-              {openSections['Color Character'] && (() => {
+              {openSections['Film Color'] && (() => {
                 const selectedStockObj = profiles.stocks.find(s => s.id === params.stock);
                 const isMonochrome = selectedStockObj ? selectedStockObj.type === 'monochrome' : false;
                 const monoTitle = 'Not available for black & white stocks.';
-                const colorCharSliders = [
+                const sliders = [
                   {
-                    key: 'highlight_color_hold',
-                    label: 'Highlight Color Hold',
-                    tooltip: 'How much colour survives in the brightest areas before they wash toward white.',
+                    key: 'film_color_density',
+                    label: 'Color Density',
+                    def: 100, min: 0, max: 200, bipolar: false,
+                    tooltip: "How dense and matte the film's colours are — forward for richer, deeper, more film-like colour.",
                   },
                   {
-                    key: 'shadow_color_retention',
-                    label: 'Shadow Color Retention',
-                    tooltip: 'How much colour is kept in the deep shadows.',
+                    key: 'film_color_compression',
+                    label: 'Color Compression',
+                    def: 100, min: 0, max: 200, bipolar: false,
+                    tooltip: 'How much the palette is compressed into cohesive, film-like colour — forward for a more harmonised, less digital look.',
                   },
                   {
                     key: 'emulsion_color_density',
-                    label: 'Emulsion Color Density',
-                    tooltip: "Overall strength of the stock's colour dyes.",
+                    label: 'Emulsion Density',
+                    def: 0, min: -100, max: 100, bipolar: true,
+                    tooltip: "Fine adjustment to the strength of the stock's colour dyes.",
                   },
                 ];
                 return (
                   <div className="section-body">
-                    {colorCharSliders.map(({ key, label, tooltip }) => {
-                      const isDirty = params[key] !== 0;
+                    {sliders.map(({ key, label, tooltip, def, min, max, bipolar }) => {
+                      const isDirty = params[key] !== def;
+                      const showDirty = isDirty && !isMonochrome;
+                      const display = bipolar
+                        ? (params[key] > 0 ? '+' : '') + params[key]
+                        : Math.round(params[key]);
                       return (
                         <div className={`slider-row${isMonochrome ? ' disabled' : ''}`} key={key}>
                           <div className="slider-header">
                             <span className="slider-label" title={isMonochrome ? monoTitle : tooltip}>{label}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {isDirty && !isMonochrome && (
+                            <div className="slider-controls">
+                              {showDirty && (
                                 <button
                                   className="revert-btn"
                                   title={`Reset ${label}`}
-                                  onClick={() => setParams(p => ({ ...p, [key]: 0 }))}
-                                >↺</button>
+                                  onClick={() => setParams(p => ({ ...p, [key]: def }))}
+                                >Reset</button>
                               )}
-                              <span className={`slider-value${isDirty && !isMonochrome ? ' slider-value--dirty' : ''}`}>
-                                {isMonochrome ? '—' : (params[key] > 0 ? '+' : '') + params[key]}
+                              <span className={`slider-value${showDirty ? ' slider-value--dirty' : ''}`}>
+                                {display}
                               </span>
                             </div>
                           </div>
                           <input
-                            type="range" min={-100} max={100} step={1}
+                            type="range" min={min} max={max} step={1}
                             value={params[key]}
                             onChange={set(key)}
                             disabled={isMonochrome}
                             title={isMonochrome ? monoTitle : tooltip}
-                            className={`slider${isDirty && !isMonochrome ? ' slider--dirty' : ''}`}
-                          />
-                        </div>
-                      );
-                    })}
-                    {[
-                      {
-                        key: 'film_color_density',
-                        label: 'Film Color Density',
-                        tooltip: "How dense and matte the film's colours are — forward for richer, deeper, more film-like colour.",
-                      },
-                      {
-                        key: 'film_color_compression',
-                        label: 'Color Compression',
-                        tooltip: 'How much the palette is compressed into cohesive, film-like colour — forward for a more harmonised, less digital look.',
-                      },
-                    ].map(({ key, label, tooltip }) => {
-                      const isDirty = params[key] !== 100;
-                      return (
-                        <div className={`slider-row${isMonochrome ? ' disabled' : ''}`} key={key}>
-                          <div className="slider-header">
-                            <span className="slider-label" title={isMonochrome ? monoTitle : tooltip}>{label}</span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {isDirty && !isMonochrome && (
-                                <button
-                                  className="revert-btn"
-                                  title={`Reset ${label}`}
-                                  onClick={() => setParams(p => ({ ...p, [key]: 100 }))}
-                                >↺</button>
-                              )}
-                              <span className={`slider-value${isDirty && !isMonochrome ? ' slider-value--dirty' : ''}`}>
-                                {isMonochrome ? '—' : Math.round(params[key])}
-                              </span>
-                            </div>
-                          </div>
-                          <input
-                            type="range" min={0} max={200} step={1}
-                            value={params[key]}
-                            onChange={set(key)}
-                            disabled={isMonochrome}
-                            title={isMonochrome ? monoTitle : tooltip}
-                            className={`slider${isDirty && !isMonochrome ? ' slider--dirty' : ''}`}
+                            className={`slider${showDirty ? ' slider--dirty' : ''}`}
                           />
                         </div>
                       );
@@ -1649,33 +1623,6 @@ export default function App() {
             </div>
 
             <div className="advanced-workflow-label"><span>Advanced Correction</span></div>
-
-            {/* Film Color (legacy) */}
-            <div className="control-group advanced-correction">
-              <div className="group-title collapsible" onClick={() => toggleSection('Film Color Legacy')}>
-                <span>Film Color (legacy)</span>
-                <span className={`chevron ${openSections['Film Color Legacy'] ? 'open' : ''}`}>›</span>
-              </div>
-              {openSections['Film Color Legacy'] && (
-                <div className="section-body">
-                  <div className="slider-row">
-                    <div className="slider-header">
-                      <span className="slider-label" title="Scales the selected stock's dye, colour coupling, and crossover character. 100 keeps the calibrated stock response.">Film Color (legacy)</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {params.film_color !== DEFAULT_PARAMS.film_color && (
-                          <button className="revert-btn" title="Reset Film Color" onClick={() => setParams(p => ({ ...p, film_color: DEFAULT_PARAMS.film_color }))}>↺</button>
-                        )}
-                        <span className={`slider-value${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider-value--dirty' : ''}`}>{Math.round(params.film_color)}</span>
-                      </div>
-                    </div>
-                    <input type="range" min={0} max={200} step={5}
-                      value={params.film_color} onChange={set('film_color')}
-                      className={`slider slider-film-color${params.film_color !== DEFAULT_PARAMS.film_color ? ' slider--dirty' : ''}`}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
 
             {/* Curves */}
             <div className="control-group advanced-correction">
@@ -1756,7 +1703,7 @@ export default function App() {
                                   className="revert-btn"
                                   title={`Reset ${label} to default`}
                                   onClick={() => setParams(p => ({ ...p, [key]: DEFAULT_PARAMS[key] }))}
-                                >↺</button>
+                                >Reset</button>
                               )}
                               <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>
                                 {fmtVal(key, params[key])}
@@ -1777,143 +1724,102 @@ export default function App() {
             ))}
 
             {/* Film material finish */}
-            <div className="control-group film-lab-material">
+            <div className="control-group film-lab-group film-lab-material">
               <div className="group-title collapsible" onClick={() => toggleSection('Material Finish')}>
                 <span>Material Finish</span>
                 <span className={`chevron ${openSections['Material Finish'] ? 'open' : ''}`}>›</span>
               </div>
               {openSections['Material Finish'] && (
                 <div className="section-body">
-                  {/* Custom Grain Controls */}
-                  <div style={{ marginTop: 12, marginBottom: 12 }}>
-                    <label className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        className="checkbox-input"
-                        checked={params.grain === 'Auto'}
-                        onChange={(e) => {
-                          const isAuto = e.target.checked;
-                          if (isAuto) {
-                            setParams(p => ({
-                              ...p,
-                              grain: 'Auto',
-                              grain_strength: -1.0,
-                              grain_size: -1.0,
-                              grain_roughness: -1.0
-                            }));
-                          } else {
-                            setParams(p => ({
-                              ...p,
-                              grain: 'Custom',
-                              grain_strength: 0.5,
-                              grain_size: 0.6,
-                              grain_roughness: 0.5
-                            }));
-                          }
-                        }}
-                      />
-                      <span className="checkbox-label">Auto (ISO-Adaptive) Grain</span>
-                    </label>
+                  {/* Grain */}
+                  <div className="material-subhead">Grain</div>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      className="checkbox-input"
+                      checked={params.grain === 'Auto'}
+                      onChange={(e) => {
+                        const isAuto = e.target.checked;
+                        setParams(p => isAuto
+                          ? { ...p, grain: 'Auto', grain_strength: -1.0, grain_size: -1.0, grain_roughness: -1.0 }
+                          : { ...p, grain: 'Custom', grain_strength: 0.5, grain_size: 0.6, grain_roughness: 0.5 });
+                      }}
+                    />
+                    <span className="checkbox-label">Match grain to film speed (ISO)</span>
+                  </label>
 
-                    {/* Grain Strength Slider */}
-                    <div className={`slider-row ${params.grain === 'Auto' ? 'disabled' : ''}`}>
-                      <div className="slider-header">
-                        <span className="slider-label">Grain Strength</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {params.grain !== 'Auto' && params.grain_strength !== 0.5 && (
-                            <button
-                              className="revert-btn"
-                              title="Reset Strength to default"
-                              onClick={() => setParams(p => ({ ...p, grain_strength: 0.5 }))}
-                            >↺</button>
-                          )}
-                          <span className={`slider-value ${params.grain !== 'Auto' && params.grain_strength !== 0.5 ? 'slider-value--dirty' : ''}`}>
-                            {params.grain === 'Auto' ? 'Auto' : params.grain_strength.toFixed(2)}
-                          </span>
+                  {[
+                    { key: 'grain_strength', label: 'Strength', def: 0.5, min: 0.0, max: 2.0, step: 0.05 },
+                    { key: 'grain_size', label: 'Size', def: 0.6, min: 0.1, max: 2.0, step: 0.05 },
+                    { key: 'grain_roughness', label: 'Roughness', def: 0.5, min: 0.0, max: 1.0, step: 0.05 },
+                  ].map(({ key, label, def, min, max, step }) => {
+                    const isAuto = params.grain === 'Auto';
+                    const isDirty = !isAuto && params[key] !== def;
+                    return (
+                      <div className={`slider-row${isAuto ? ' disabled' : ''}`} key={key}>
+                        <div className="slider-header">
+                          <span className="slider-label">{label}</span>
+                          <div className="slider-controls">
+                            {isDirty && (
+                              <button className="revert-btn" title={`Reset ${label}`} onClick={() => setParams(p => ({ ...p, [key]: def }))}>Reset</button>
+                            )}
+                            <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>
+                              {isAuto ? 'Auto' : params[key].toFixed(2)}
+                            </span>
+                          </div>
                         </div>
+                        <input
+                          type="range" min={min} max={max} step={step}
+                          value={params[key] === -1.0 ? def : params[key]}
+                          onChange={(e) => setParams(p => ({ ...p, [key]: parseFloat(e.target.value) }))}
+                          disabled={isAuto}
+                          className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                        />
                       </div>
-                      <input
-                        type="range" min={0.0} max={2.0} step={0.05}
-                        value={params.grain_strength === -1.0 ? 0.5 : params.grain_strength}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setParams(p => ({ ...p, grain_strength: val }));
-                        }}
-                        disabled={params.grain === 'Auto'}
-                        className={`slider ${params.grain !== 'Auto' && params.grain_strength !== 0.5 ? 'slider--dirty' : ''}`}
-                      />
-                    </div>
+                    );
+                  })}
 
-                    {/* Grain Size Slider */}
-                    <div className={`slider-row ${params.grain === 'Auto' ? 'disabled' : ''}`} style={{ marginTop: 8 }}>
-                      <div className="slider-header">
-                        <span className="slider-label">Grain Size</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {params.grain !== 'Auto' && params.grain_size !== 0.6 && (
-                            <button
-                              className="revert-btn"
-                              title="Reset Size to default"
-                              onClick={() => setParams(p => ({ ...p, grain_size: 0.6 }))}
-                            >↺</button>
-                          )}
-                          <span className={`slider-value ${params.grain !== 'Auto' && params.grain_size !== 0.6 ? 'slider-value--dirty' : ''}`}>
-                            {params.grain === 'Auto' ? 'Auto' : params.grain_size.toFixed(2)}
-                          </span>
+                  {/* Halation */}
+                  <div className="material-subhead">Halation</div>
+                  {[
+                    {
+                      key: 'halation_strength', label: 'Strength', def: 100, min: 0, max: 200,
+                      tooltip: 'Red-orange glow that blooms from bright highlights. 0 turns it off; 100 is the stock default.',
+                    },
+                    {
+                      key: 'halation_threshold', label: 'Threshold', def: 50, min: 0, max: 100,
+                      tooltip: 'How bright an area must be before it starts to bloom. Lower spreads the glow into more of the image.',
+                    },
+                  ].map(({ key, label, def, min, max, tooltip }) => {
+                    const isDirty = params[key] !== def;
+                    return (
+                      <div className="slider-row" key={key}>
+                        <div className="slider-header">
+                          <span className="slider-label" title={tooltip}>{label}</span>
+                          <div className="slider-controls">
+                            {isDirty && (
+                              <button className="revert-btn" title={`Reset ${label}`} onClick={() => setParams(p => ({ ...p, [key]: def }))}>Reset</button>
+                            )}
+                            <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>{Math.round(params[key])}</span>
+                          </div>
                         </div>
+                        <input
+                          type="range" min={min} max={max} step={1}
+                          value={params[key]} onChange={set(key)} title={tooltip}
+                          className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                        />
                       </div>
-                      <input
-                        type="range" min={0.1} max={2.0} step={0.05}
-                        value={params.grain_size === -1.0 ? 0.6 : params.grain_size}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setParams(p => ({ ...p, grain_size: val }));
-                        }}
-                        disabled={params.grain === 'Auto'}
-                        className={`slider ${params.grain !== 'Auto' && params.grain_size !== 0.6 ? 'slider--dirty' : ''}`}
-                      />
-                    </div>
+                    );
+                  })}
 
-                    {/* Grain Roughness Slider */}
-                    <div className={`slider-row ${params.grain === 'Auto' ? 'disabled' : ''}`} style={{ marginTop: 8 }}>
-                      <div className="slider-header">
-                        <span className="slider-label">Grain Roughness / Crispness</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          {params.grain !== 'Auto' && params.grain_roughness !== 0.5 && (
-                            <button
-                              className="revert-btn"
-                              title="Reset Roughness to default"
-                              onClick={() => setParams(p => ({ ...p, grain_roughness: 0.5 }))}
-                            >↺</button>
-                          )}
-                          <span className={`slider-value ${params.grain !== 'Auto' && params.grain_roughness !== 0.5 ? 'slider-value--dirty' : ''}`}>
-                            {params.grain === 'Auto' ? 'Auto' : params.grain_roughness.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                      <input
-                        type="range" min={0.0} max={1.0} step={0.05}
-                        value={params.grain_roughness === -1.0 ? 0.5 : params.grain_roughness}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setParams(p => ({ ...p, grain_roughness: val }));
-                        }}
-                        disabled={params.grain === 'Auto'}
-                        className={`slider ${params.grain !== 'Auto' && params.grain_roughness !== 0.5 ? 'slider--dirty' : ''}`}
-                      />
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label className="field-label">Halation</label>
-                    <select className="select" value={params.halation} onChange={set('halation')}>
-                      {['Auto','Off','Low','Medium','High'].map(v => <option key={v}>{v}</option>)}
-                    </select>
-                  </div>
-                  <div className="slider-row" style={{ marginTop: 12 }}>
+                  {/* Bloom */}
+                  <div className="material-subhead">Bloom</div>
+                  <div className="slider-row">
                     <div className="slider-header">
-                      <span className="slider-label" title="Adds stock-aware diffuse light response around bright source regions.">Bloom</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="slider-label" title="Soft diffuse glow around bright areas, like light scattering in the lens.">Amount</span>
+                      <div className="slider-controls">
                         {params.bloom !== 0 && (
-                          <button className="revert-btn" title="Reset Bloom" onClick={() => setParams(p => ({ ...p, bloom: 0 }))}>↺</button>
+                          <button className="revert-btn" title="Reset Bloom" onClick={() => setParams(p => ({ ...p, bloom: 0 }))}>Reset</button>
                         )}
                         <span className={`slider-value${params.bloom !== 0 ? ' slider-value--dirty' : ''}`}>{params.bloom}</span>
                       </div>

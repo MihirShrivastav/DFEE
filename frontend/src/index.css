@@ -837,8 +837,9 @@ body {
 
 .film-lab-recipe { order: 1; }
 .film-lab-exposure { order: 2; }
-.film-lab-color { order: 3; }
-.film-lab-material { order: 4; }
+.film-lab-tone { order: 3; }
+.film-lab-color { order: 4; }
+.film-lab-material { order: 5; }
 
 .advanced-workflow-label {
   order: 8;
@@ -1340,33 +1341,55 @@ optgroup option {
 }
 
 /* ─── Revert Button ──────────────────────────── */
+.slider-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .revert-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
+  padding: 1px 6px;
   background: transparent;
-  border: none;
-  border-radius: 3px;
+  border: 1px solid transparent;
+  border-radius: 4px;
   color: var(--accent);
-  font-size: 13px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   cursor: pointer;
-  line-height: 1;
-  opacity: 0.7;
-  transition: opacity 0.12s, color 0.12s, transform 0.15s;
+  line-height: 1.5;
+  opacity: 0.8;
+  transition: opacity 0.12s, color 0.12s, background 0.12s, border-color 0.12s;
   flex-shrink: 0;
 }
 
 .revert-btn:hover {
   opacity: 1;
   color: var(--accent-hover);
-  transform: rotate(-30deg);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .revert-btn:active {
-  transform: rotate(-60deg) scale(0.9);
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* Sub-group heading inside a section (Grain / Halation / Bloom) */
+.material-subhead {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 16px 0 8px;
+}
+.material-subhead:first-child {
+  margin-top: 4px;
 }
 
 /* Dirty (non-default) value highlight */

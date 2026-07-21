@@ -112,7 +112,8 @@ export default function HslPanel({ hsl, onChange }) {
           // Compute thumb color: match the resulting color based on slider position
           let thumbColor;
           if (activeTab === 'H') {
-            const resultHue = ((hue + val) + 360) % 360;
+            // Backend maps the -100..100 Hue slider to ~0.5 deg/point (see apply_hsl).
+            const resultHue = ((hue + val * 0.5) + 360) % 360;
             thumbColor = `hsl(${resultHue}, ${sat}%, ${lum}%)`;
           } else if (activeTab === 'S') {
             const resultSat = Math.max(0, Math.min(100, sat + val));
@@ -122,8 +123,8 @@ export default function HslPanel({ hsl, onChange }) {
             thumbColor = `hsl(${hue}, ${sat}%, ${resultLum}%)`;
           }
 
-          const min = activeTab === 'H' ? -180 : -100;
-          const max = activeTab === 'H' ?  180 :  100;
+          const min = -100;
+          const max = 100;
 
           return (
             <div className="hsl-row" key={key}>
