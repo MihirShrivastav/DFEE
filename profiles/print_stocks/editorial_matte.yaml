@@ -1,0 +1,26 @@
+print_stock_id: editorial_matte
+print_stock_name: Editorial Matte
+# The classic glossy-magazine "matte colour" finish - matte photographic paper has a low
+# D-max, so blacks sit as deep grey (open, not crushed), contrast is gentle, highlights are
+# creamy, and colour is muted and refined rather than punchy. Not a theatrical print stock;
+# an editorial paper-and-finishing look.
+
+tone:
+  shadow_lift: 0.085          # Open, lifted blacks - the defining matte trait (deep grey, not pure black)
+  contrast_boost: 0.93        # Gentle, low-contrast rendering
+  highlight_rolloff: 0.72     # Highlights start rolling off early -> soft, creamy whites
+  highlight_rolloff_rate: 1.6 # Gentle shoulder
+  toe_depth: 0.45             # Soft toe (shadows not deeply anchored - matte has no hard black)
+
+color:
+  shadow_bias_lab: [0.6, -0.2, -0.2]  # Slightly lifted, near-neutral (a touch cool) shadows
+  midtone_bias_lab: [0.0, 0.2, 0.5]   # Refined, faintly warm midtones (not golden)
+  highlight_bias_lab: [0.0, 0.0, 0.4] # Clean creamy highlights
+  blue_suppression: 0.0                # Neutral balance - no yellow cast
+  red_boost: 0.0
+  green_shift: 0.0
+  saturation_scale: 0.88               # Muted, refined "matte colour" - the magazine quality
+
+grain:
+  strength: 0.04              # Barely-there paper grain
+  size: 0.30
