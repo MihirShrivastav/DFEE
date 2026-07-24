@@ -18,9 +18,10 @@
 namespace dfee {
 namespace {
 
-constexpr float kHoldGainHi = 0.6F;
-constexpr float kHoldGainDesat = 0.6F;
-constexpr float kShadowRetentionGain = 0.6F;
+constexpr float kHoldGainHi = 0.6F;       // Highlight Saturation -> highlight chroma coupling
+constexpr float kHiSatDesatGain = 0.45F;  // Highlight Saturation -> highlight desaturation (additive authority)
+constexpr float kHiSatBiasCool = 0.80F;   // Highlight Saturation (bleach dir) cools the warm highlight bias
+constexpr float kShSatGain = 0.45F;       // Shadow Saturation -> shadow chroma (additive authority)
 constexpr float kEmulsionDensityGain = 0.5F;
 
 [[nodiscard]] float clampf(const float value, const float low, const float high) {
@@ -888,18 +889,25 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float shadow_b_scale = response.shadow_bias_lab[2] * kBiasScale * fc;
     const float mid_a_scale = response.midtone_bias_lab[1] * kBiasScale * fc;
     const float mid_b_scale = response.midtone_bias_lab[2] * kBiasScale * fc;
-    const float hi_a_scale = response.highlight_bias_lab[1] * kBiasScale * fc;
-    const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc;
 
-    const float n_hold = std::clamp(response.highlight_color_hold / 100.0F, -1.0F, 1.0F)
-        * response.highlight_hold_sensitivity;
-    hi_comp = std::max(hi_comp * (1.0F - kHoldGainHi * n_hold), 0.0F);
+    // Highlight Saturation control: + keeps colour in highlights, - bleaches toward clean
+    // white. Additive authority (works even when the stock's base desat is small), lightly
+    // trimmed by the per-stock sensitivity. The bleach direction also cools the warm
+    // highlight bias so blown areas wash to neutral white rather than saturated orange.
+    // 0 = stock default (byte-identical to before).
+    const float hi_sat = std::clamp(response.highlight_color_hold / 100.0F, -1.0F, 1.0F)
+        * (0.65F + 0.35F * std::clamp(response.highlight_hold_sensitivity, 0.0F, 1.0F));
+    const float hi_bias_cool = 1.0F - kHiSatBiasCool * std::max(0.0F, -hi_sat);
+    const float hi_a_scale = response.highlight_bias_lab[1] * kBiasScale * fc * hi_bias_cool;
+    const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc * hi_bias_cool;
+    hi_comp = std::max(hi_comp * (1.0F - kHoldGainHi * hi_sat), 0.0F);
     const float highlight_desat_effective =
-        std::max(highlight_desat * (1.0F - kHoldGainDesat * n_hold), 0.0F);
+        std::clamp(highlight_desat - kHiSatDesatGain * hi_sat, 0.0F, 0.95F);
 
-    const float n_ret = std::clamp(response.shadow_color_retention / 100.0F, -1.0F, 1.0F)
-        * response.shadow_retention_sensitivity;
-    sh_comp = std::max(sh_comp * (1.0F - kShadowRetentionGain * n_ret), 0.0F);
+    // Shadow Saturation control: + keeps colour in shadows, - mutes them. 0 = stock default.
+    const float sh_sat = std::clamp(response.shadow_color_retention / 100.0F, -1.0F, 1.0F)
+        * (0.65F + 0.35F * std::clamp(response.shadow_retention_sensitivity, 0.0F, 1.0F));
+    sh_comp = std::clamp(sh_comp - kShSatGain * sh_sat, 0.0F, 1.0F);
 
     // NOTE: the M7-003 palette_range anchor pass was retired in Film Lab v1
     // Slice 3; palette separation is superseded by the filmic_v3 Color

@@ -1574,6 +1574,18 @@ export default function App() {
                     def: 0, min: -100, max: 100, bipolar: true,
                     tooltip: "Overall saturation of the stock's colour dyes — forward for punchier colour, back for a muted look.",
                   },
+                  {
+                    key: 'highlight_color_hold',
+                    label: 'Highlight Saturation',
+                    def: 0, min: -100, max: 100, bipolar: true,
+                    tooltip: 'How much colour survives in the highlights — forward keeps bright areas colourful, back bleaches them toward clean white (rescues blown, over-warm highlights).',
+                  },
+                  {
+                    key: 'shadow_color_retention',
+                    label: 'Shadow Saturation',
+                    def: 0, min: -100, max: 100, bipolar: true,
+                    tooltip: 'How much colour survives in the shadows — forward keeps dark areas colourful, back mutes them toward neutral.',
+                  },
                 ];
                 return (
                   <div className="section-body">
