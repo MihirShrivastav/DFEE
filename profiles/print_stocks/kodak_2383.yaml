@@ -13,12 +13,12 @@ tone:
   toe_depth: 0.92             # Deeply anchored shadows
 
 color:
-  shadow_bias_lab: [0.4, 0.2, 0.8]    # Subtle warm amber base in shadows (cleaner projection look)
-  midtone_bias_lab: [0.0, 0.6, 1.8]   # Warm golden midtones — classic Kodak skin tone rendering
-  highlight_bias_lab: [0.0, 0.0, 0.5] # Nearly neutral highlights (matched RGB toe curves)
-  blue_suppression: 0.22               # Blue layer compression (warm bias, signature 2383 trait)
-  red_boost: 0.08                      # Red dye layer slight boost — warm reds/oranges
-  green_shift: 0.04                    # Subtle green-yellow foliage shift (known 2383 quirk)
+  shadow_bias_lab: [0.3, -0.1, -0.5]  # Cool-neutral shadows — separation vs warm highlights (depth, not a flat wash)
+  midtone_bias_lab: [0.0, 0.5, 1.1]   # Warm golden skin midtones (gentler)
+  highlight_bias_lab: [0.0, 0.2, 0.9] # Warm highlights — the signature 2383 trait
+  blue_suppression: 0.06               # Light blue trim (was 0.22 — the flat-yellow culprit)
+  red_boost: 0.05                      # Slight warm red/orange
+  green_shift: 0.03                    # Subtle green-yellow foliage shift
   saturation_scale: 1.08               # Print dye gamut — slightly richer than neutral
 
 grain:

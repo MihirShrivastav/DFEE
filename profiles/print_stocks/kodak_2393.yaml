@@ -12,13 +12,13 @@ tone:
   toe_depth: 0.96             # Extremely rich, deep shadow density
 
 color:
-  shadow_bias_lab: [0.5, 0.3, 0.8]    # Slightly cooler/cleaner shadows than 2383
-  midtone_bias_lab: [0.0, 0.8, 2.2]   # More vivid, saturated golden midtones
-  highlight_bias_lab: [0.0, 0.1, 0.4] # Near-neutral highlights (matched RGB curves)
-  blue_suppression: 0.18               # Slightly less blue suppression (cleaner blues)
-  red_boost: 0.12                      # Stronger red boost — more vibrant reds/oranges
-  green_shift: 0.03                    # Minimal green-yellow shift (cleaner than 2383)
-  saturation_scale: 1.16               # Richer, more vivid print dye saturation
+  shadow_bias_lab: [0.3, -0.1, -0.5]  # Cool-neutral shadows for print separation/depth
+  midtone_bias_lab: [0.0, 0.6, 1.3]   # Vivid warm golden midtones (gentler than before)
+  highlight_bias_lab: [0.0, 0.2, 0.8] # Warm highlights
+  blue_suppression: 0.05               # Light blue trim (was 0.18)
+  red_boost: 0.07                      # Vibrant reds/oranges
+  green_shift: 0.03                    # Minimal green-yellow shift
+  saturation_scale: 1.12               # Richer, more vivid print dye saturation
 
 grain:
   strength: 0.05              # Minimal print grain

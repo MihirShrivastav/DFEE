@@ -14,13 +14,13 @@ tone:
   toe_depth: 0.90             # Deep shadow density
 
 color:
-  shadow_bias_lab: [0.8, 0.6, 1.5]    # Warm orange-brown shadow cast
-  midtone_bias_lab: [0.0, 1.0, 3.5]   # Strong golden-orange midtones (Eastman Color signature)
-  highlight_bias_lab: [0.0, 0.5, 2.0] # Warm-orange highlights (characteristic vintage fade)
-  blue_suppression: 0.32               # Strong blue suppression (cyan dye age degradation)
-  red_boost: 0.15                      # Strong red boost — vintage warm reds
-  green_shift: 0.08                    # Yellow-green foliage shift
-  saturation_scale: 1.05               # Standard print saturation (slightly warm-biased)
+  shadow_bias_lab: [0.6, 0.2, 0.4]    # Gently warm-faded shadows (vintage lift, not orange-brown mud)
+  midtone_bias_lab: [0.0, 0.7, 1.6]   # Golden-orange Eastman midtones (much gentler)
+  highlight_bias_lab: [0.0, 0.4, 1.0] # Warm vintage highlights
+  blue_suppression: 0.10               # Modest blue trim (was 0.32 — the ochre culprit)
+  red_boost: 0.08                      # Vintage warm reds
+  green_shift: 0.05                    # Yellow-green foliage shift
+  saturation_scale: 1.02               # Slightly warm-biased print saturation
 
 grain:
   strength: 0.10              # Slightly more prominent vintage print grain
