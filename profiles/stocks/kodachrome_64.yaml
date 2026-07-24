@@ -106,7 +106,7 @@ compression:
   threshold: 0.42
   crosstalk: 0.40
 hue_chroma_gain:
-  red: 0.20
-  orange: 0.08
-  blue: 0.10
+  red: 0.09
+  orange: 0.03
+  blue: 0.08
   green: -0.05
