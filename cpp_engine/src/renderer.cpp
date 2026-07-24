@@ -2096,6 +2096,41 @@ Image FilmRenderer::apply_print_finish(
         }
     }
 
+    // Per-channel print tone curve (deeper print engine): a filmic S-curve per R/G/B whose
+    // per-channel toe/shoulder differences put the print's colour into the tone scale
+    // (warm highlights, dense/cool shadows, etc.). Identity when toe == shoulder == 0, so
+    // profiles without these fields are unchanged. Runs before the paper black-point lift
+    // so matte (open blacks) and contrasty (rich blacks) prints both behave correctly.
+    const float p_toe = std::max(0.0F, print_finish.print_toe) * strength;
+    const float p_shoulder = std::max(0.0F, print_finish.print_shoulder) * strength;
+    if (p_toe > 0.0F || p_shoulder > 0.0F) {
+        constexpr std::size_t kPrintCurveLut = 4096U;
+        std::array<std::vector<float>, 3> curve_luts;
+        for (int c = 0; c < 3; ++c) {
+            const float alpha = 1.0F + p_toe * print_finish.channel_toe_mult[static_cast<std::size_t>(c)];
+            const float beta = 1.0F + p_shoulder * print_finish.channel_shoulder_mult[static_cast<std::size_t>(c)];
+            curve_luts[static_cast<std::size_t>(c)].resize(kPrintCurveLut);
+            for (std::size_t i = 0; i < kPrintCurveLut; ++i) {
+                const float x = static_cast<float>(i) / static_cast<float>(kPrintCurveLut - 1U);
+                const float xs = clampf(x, 1.0e-6F, 1.0F - 1.0e-6F);
+                const float xa = std::pow(xs, alpha);
+                curve_luts[static_cast<std::size_t>(c)][i] =
+                    clamp01(xa / (xa + std::pow(1.0F - xs, beta)));
+            }
+        }
+        for (std::size_t i = 0; i < rgb.pixel_count(); ++i) {
+            for (int c = 0; c < 3; ++c) {
+                const auto& lut = curve_luts[static_cast<std::size_t>(c)];
+                const float scaled = clamp01(rgb.pixels[i * 3 + static_cast<std::size_t>(c)]) *
+                    static_cast<float>(kPrintCurveLut - 1U);
+                const std::size_t lo = static_cast<std::size_t>(scaled);
+                const std::size_t hi = std::min(lo + 1U, kPrintCurveLut - 1U);
+                const float t = scaled - static_cast<float>(lo);
+                rgb.pixels[i * 3 + static_cast<std::size_t>(c)] = lut[lo] * (1.0F - t) + lut[hi] * t;
+            }
+        }
+    }
+
     const float print_bp = print_finish.print_black_point / 100.0F;
     const float shadow_lift = clampf(print_finish.shadow_lift * strength + print_bp * 0.05F, 0.0F, 0.2F);
     for (float& value : rgb.pixels) {

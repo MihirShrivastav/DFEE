@@ -6,10 +6,15 @@ print_stock_name: Kodak Vision Premier 2393
 
 tone:
   shadow_lift: 0.004          # Clean, deep OLED-like blacks
-  contrast_boost: 1.25        # High print contrast — snappier, punchier
+  contrast_boost: 1.06        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.75     # Earlier highlight shoulder — compresses sooner
   highlight_rolloff_rate: 2.6 # Faster rolloff — more dramatic highlight compression
   toe_depth: 0.96             # Extremely rich, deep shadow density
+  # Punchier per-channel print curve than 2383: warmer highlights, denser shadows.
+  print_toe: 0.34
+  print_shoulder: 0.34
+  channel_toe_mult: [1.08, 1.0, 0.94]
+  channel_shoulder_mult: [1.02, 1.0, 0.90]
 
 color:
   shadow_bias_lab: [0.3, -0.1, -0.5]  # Cool-neutral shadows for print separation/depth

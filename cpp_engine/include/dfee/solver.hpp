@@ -173,6 +173,13 @@ struct PrintFinishPlan {
     float highlight_rolloff = 0.78F;
     float highlight_rolloff_rate = 2.0F;
     float toe_depth = 0.85F;
+    // Per-channel print tone curve (deeper print engine). 0/[1,1,1] = identity (no-op),
+    // so profiles without these fields render exactly as before. Per-channel toe/shoulder
+    // differences put the print's colour into the tone scale (see print-engine spec).
+    float print_toe = 0.0F;
+    float print_shoulder = 0.0F;
+    std::array<float, 3> channel_toe_mult{1.0F, 1.0F, 1.0F};
+    std::array<float, 3> channel_shoulder_mult{1.0F, 1.0F, 1.0F};
     std::array<float, 3> shadow_bias_lab{0.0F, 0.0F, 0.0F};
     std::array<float, 3> midtone_bias_lab{0.0F, 0.0F, 0.0F};
     std::array<float, 3> highlight_bias_lab{0.0F, 0.0F, 0.0F};

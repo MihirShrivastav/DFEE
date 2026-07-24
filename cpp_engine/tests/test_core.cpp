@@ -1135,6 +1135,45 @@ void test_filmic_grain_roughness_does_not_become_pixel_noise() {
     assert(rough_neighbor_energy < smooth_neighbor_energy * 1.45);
 }
 
+void test_print_per_channel_curve() {
+    dfee::Image img(3, 1, 3);
+    const auto set_gray = [&](int x, float v) { img.at(x, 0, 0) = v; img.at(x, 0, 1) = v; img.at(x, 0, 2) = v; };
+    set_gray(0, 0.10F); set_gray(1, 0.50F); set_gray(2, 0.90F);
+
+    // Neutral print plan: every other stage off, so only the per-channel curve acts.
+    const auto neutral_pf = [] {
+        dfee::PrintFinishPlan pf;
+        pf.strength = 1.0F;
+        pf.shadow_lift = 0.0F;
+        pf.contrast_boost = 1.0F;
+        pf.highlight_rolloff = 1.0F;   // nothing above 1.0 -> no rolloff
+        pf.toe_depth = 0.0F;
+        pf.saturation_scale = 1.0F;
+        return pf;
+    };
+    const dfee::FilmRenderer renderer;
+
+    // Identity (print_toe == print_shoulder == 0): a neutral ramp stays neutral.
+    {
+        auto pf = neutral_pf();
+        const auto out = renderer.apply_print_finish(img, pf);
+        for (int x = 0; x < 3; ++x) {
+            assert(std::fabs(out.at(x, 0, 0) - out.at(x, 0, 2)) < 2.0e-3F);
+        }
+    }
+    // A per-channel curve puts colour into the tone scale: a neutral input becomes
+    // non-neutral (R != B) where the blue channel's curve differs.
+    {
+        auto pf = neutral_pf();
+        pf.print_toe = 0.4F;
+        pf.print_shoulder = 0.5F;
+        pf.channel_shoulder_mult = {1.0F, 1.0F, 1.6F}; // blue differs
+        const auto out = renderer.apply_print_finish(img, pf);
+        assert(std::fabs(out.at(1, 0, 0) - out.at(1, 0, 2)) > 1.0e-2F); // mid gains colour
+        assert(std::fabs(out.at(2, 0, 0) - out.at(2, 0, 2)) > 5.0e-3F); // highlight too
+    }
+}
+
 void test_print_finish() {
     dfee::Image rgb(8, 8, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -2844,6 +2883,7 @@ int main() {
         test_filmic_grain_roughness_does_not_become_pixel_noise();
         test_filmic_grain_profile_placement_and_texture_masking();
         test_print_finish();
+        test_print_per_channel_curve();
         test_profile_loading();
         test_raw_failure_paths();
         test_color_character_request_fields_default_to_neutral_zero();

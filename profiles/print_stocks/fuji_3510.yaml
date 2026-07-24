@@ -6,10 +6,15 @@ print_stock_name: Fujifilm Eterna CP 3510
 
 tone:
   shadow_lift: 0.010          # Sophisticated soft shadow base
-  contrast_boost: 1.12        # Flatter, atmospheric grade but still punchy enough
+  contrast_boost: 1.02        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.80     # Later highlight rolloff — holds highlights longer
   highlight_rolloff_rate: 1.8 # Gentler shoulder — smooth, gradual highlight compression
   toe_depth: 0.88             # Cleaner, deep shadows
+  # Cool Fuji per-channel curve: cooler highlights (red compressed, blue held), teal shadows.
+  print_toe: 0.20
+  print_shoulder: 0.20
+  channel_toe_mult: [1.03, 1.0, 0.97]
+  channel_shoulder_mult: [0.94, 1.0, 1.03]
 
 color:
   shadow_bias_lab: [0.2, -0.6, -1.0]  # Subtle teal shadow bias

@@ -8,10 +8,15 @@ print_stock_name: Eastman Color Print 5381
 
 tone:
   shadow_lift: 0.018          # Vintage D-min
-  contrast_boost: 1.18        # High print contrast characteristic of older stocks
+  contrast_boost: 1.02        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.72     # Earlier rolloff — old prints compressed highlights faster
   highlight_rolloff_rate: 2.0 # Medium rolloff rate
   toe_depth: 0.90             # Deep shadow density
+  # Softer vintage per-channel curve: strongly warm highlights, gently warm shadows.
+  print_toe: 0.18
+  print_shoulder: 0.18
+  channel_toe_mult: [1.04, 1.0, 0.98]
+  channel_shoulder_mult: [1.06, 1.0, 0.85]
 
 color:
   shadow_bias_lab: [0.6, 0.2, 0.4]    # Gently warm-faded shadows (vintage lift, not orange-brown mud)

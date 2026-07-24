@@ -274,11 +274,13 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
 void validate_native_print_stock_contract(const PrintStockProfile& profile) {
     static const std::unordered_set<std::string> kNumericFields{
         "tone.shadow_lift", "tone.contrast_boost", "tone.highlight_rolloff", "tone.highlight_rolloff_rate", "tone.toe_depth",
+        "tone.print_toe", "tone.print_shoulder",
         "color.blue_suppression", "color.red_boost", "color.green_shift", "color.saturation_scale",
         "grain.strength", "grain.size",
     };
     static const std::unordered_set<std::string> kArrayFields{
         "color.shadow_bias_lab", "color.midtone_bias_lab", "color.highlight_bias_lab",
+        "tone.channel_toe_mult", "tone.channel_shoulder_mult",
     };
     static const std::unordered_set<std::string> kStringFields{
         "print_stock_id", "print_stock_name",
