@@ -1300,6 +1300,67 @@ Image FilmRenderer::apply_color_compression(
     return out;
 }
 
+Image FilmRenderer::apply_hue_saturation(
+    const Image& rgb_linear,
+    const FilmResponsePlan& response) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_hue_saturation expects a 3-channel RGB image");
+    }
+    Image out(rgb_linear.width, rgb_linear.height, 3);
+
+    const auto gain = [&](const char* key) {
+        const auto it = response.hue_chroma_gain.find(key);
+        return it != response.hue_chroma_gain.end() ? it->second : 0.0F;
+    };
+    // Hue-family centres in OKLCh radians (pure sRGB primaries/secondaries).
+    struct Family { float center; float gain; };
+    const std::array<Family, 7> families{{
+        {0.51F, gain("red")},    {1.05F, gain("orange")}, {1.92F, gain("yellow")},
+        {2.48F, gain("green")},  {3.40F, gain("cyan")},   {4.61F, gain("blue")},
+        {5.73F, gain("magenta")},
+    }};
+    bool any = false;
+    for (const auto& f : families) {
+        if (f.gain != 0.0F) { any = true; break; }
+    }
+    if (!any) {
+        out.pixels = rgb_linear.pixels;
+        return out;
+    }
+
+    // Smooth Gaussian hue weighting; total gain clamped so the boost stays realistic.
+    constexpr float kSigma = 0.55F;      // ~31 deg falloff -> smooth overlap, no bands
+    constexpr float kMaxTotal = 0.35F;   // hard ceiling on the per-pixel chroma multiply
+    const float inv_two_sigma_sq = 1.0F / (2.0F * kSigma * kSigma);
+    const float two_pi = 2.0F * std::numbers::pi_v<float>;
+    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+        const OklabPixel lab = rgb_to_oklab_pixel(
+            rgb_linear.pixels[i * 3 + 0], rgb_linear.pixels[i * 3 + 1], rgb_linear.pixels[i * 3 + 2]);
+        const OklchPixel lch = oklab_to_oklch_pixel(lab);
+        float total = 0.0F;
+        for (const auto& f : families) {
+            if (f.gain == 0.0F) {
+                continue;
+            }
+            float d = std::fmod(lch.h - f.center + std::numbers::pi_v<float>, two_pi);
+            if (d < 0.0F) {
+                d += two_pi;
+            }
+            d -= std::numbers::pi_v<float>;               // shortest circular distance
+            total += std::exp(-(d * d) * inv_two_sigma_sq) * f.gain;
+        }
+        total = clampf(total, -kMaxTotal, kMaxTotal);
+        // Chroma multiply: proportional to existing chroma, so neutrals are untouched.
+        const float c_new = std::max(lch.c * (1.0F + total), 0.0F);
+        const OklabPixel adj = oklch_to_oklab_pixel({lch.l, c_new, lch.h});
+        const auto rgb = oklab_to_rgb_pixel(adj);
+        out.pixels[i * 3 + 0] = rgb[0];
+        out.pixels[i * 3 + 1] = rgb[1];
+        out.pixels[i * 3 + 2] = rgb[2];
+    }
+    return out;
+}
+
 Image FilmRenderer::apply_acutance_shaping(
     const Image& rgb_linear,
     const MaterialEffectsPlan& effects) const {

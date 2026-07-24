@@ -65,6 +65,14 @@ public:
         const Image& rgb_linear,
         const FilmResponsePlan& response) const;
 
+    // filmic_v3 per-hue chroma gain: bounded, smooth per-hue-family chroma
+    // multiply (from the stock's hue_chroma_gain map) so a stock can emphasise
+    // its signature hues (e.g. Kodachrome reds) realistically. Proportional to
+    // existing chroma (neutrals untouched); total gain clamped; no-op if empty.
+    [[nodiscard]] Image apply_hue_saturation(
+        const Image& rgb_linear,
+        const FilmResponsePlan& response) const;
+
     [[nodiscard]] Image apply_acutance_shaping(
         const Image& rgb_linear,
         const MaterialEffectsPlan& effects) const;

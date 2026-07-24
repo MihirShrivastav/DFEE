@@ -105,3 +105,7 @@ compression:
   strength: 0.60
   threshold: 0.43
   crosstalk: 0.33
+hue_chroma_gain:
+  red: 0.12
+  yellow: 0.10
+  orange: 0.08

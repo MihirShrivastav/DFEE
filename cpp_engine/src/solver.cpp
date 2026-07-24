@@ -508,6 +508,7 @@ RenderPlan RenderPlanSolver::solve(
         .pan_weight_b = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_b", 0.20F),
         .chroma_coupling = get_prefixed_numeric_map(stock_profile.numeric_values, "chroma_coupling"),
         .dye_contamination = get_prefixed_numeric_map(stock_profile.numeric_values, "dye_contamination"),
+        .hue_chroma_gain = get_prefixed_numeric_map(stock_profile.numeric_values, "hue_chroma_gain"),
         .stock_type = to_string(stock_profile.stock_type),
         .film_color = controls.film_color,
         .highlight_color_hold = controls.highlight_color_hold,

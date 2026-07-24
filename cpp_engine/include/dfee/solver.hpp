@@ -102,6 +102,7 @@ struct FilmResponsePlan {
     float pan_weight_b = 0.20F;
     std::unordered_map<std::string, float> chroma_coupling;
     std::unordered_map<std::string, float> dye_contamination;
+    std::unordered_map<std::string, float> hue_chroma_gain; // per-hue-family chroma gain (filmic_v3), 0 = neutral
     std::string stock_type = "color_negative";
     float film_color = 100.0F;
     float highlight_color_hold = 0.0F;

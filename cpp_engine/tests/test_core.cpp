@@ -2240,6 +2240,43 @@ void test_halation_threshold_and_strength() {
     }
 }
 
+void test_hue_saturation_targets_hue_bounded() {
+    dfee::Image img(4, 1, 3);
+    // red, green, blue, neutral gray
+    img.at(0, 0, 0) = 0.55F; img.at(0, 0, 1) = 0.06F; img.at(0, 0, 2) = 0.06F;
+    img.at(1, 0, 0) = 0.06F; img.at(1, 0, 1) = 0.40F; img.at(1, 0, 2) = 0.06F;
+    img.at(2, 0, 0) = 0.06F; img.at(2, 0, 1) = 0.06F; img.at(2, 0, 2) = 0.40F;
+    img.at(3, 0, 0) = 0.30F; img.at(3, 0, 1) = 0.30F; img.at(3, 0, 2) = 0.30F;
+
+    const auto chroma = [](const dfee::Image& im, int x) {
+        const auto lab = dfee::rgb_to_oklab(im);
+        return std::hypot(lab.at(x, 0, 1), lab.at(x, 0, 2));
+    };
+    const float cr0 = chroma(img, 0), cg0 = chroma(img, 1), cb0 = chroma(img, 2), cn0 = chroma(img, 3);
+
+    dfee::FilmResponsePlan resp;
+    const dfee::FilmRenderer renderer;
+
+    // Boost reds only: red chroma rises; green/blue/neutral essentially unchanged.
+    resp.hue_chroma_gain = {{"red", 0.25F}};
+    const auto boosted = renderer.apply_hue_saturation(img, resp);
+    assert(chroma(boosted, 0) > cr0 * 1.15F);
+    assert(std::fabs(chroma(boosted, 1) - cg0) < cg0 * 0.05F);
+    assert(std::fabs(chroma(boosted, 2) - cb0) < cb0 * 0.05F);
+    assert(std::fabs(chroma(boosted, 3) - cn0) < 1.0e-4F); // neutrals untouched
+
+    // An absurd gain is clamped so it can never go garish (<= ~+35% chroma).
+    resp.hue_chroma_gain = {{"red", 10.0F}};
+    assert(chroma(renderer.apply_hue_saturation(img, resp), 0) <= cr0 * 1.36F);
+
+    // Empty map = byte-identical no-op.
+    resp.hue_chroma_gain.clear();
+    const auto noop = renderer.apply_hue_saturation(img, resp);
+    for (std::size_t i = 0; i < img.pixel_count() * 3U; ++i) {
+        assert(noop.pixels[i] == img.pixels[i]);
+    }
+}
+
 void test_scene_referred_tone_zones() {
     // Neutral grays across the tonal range: shadow, mid, highlight, near-white.
     dfee::Image img(4, 1, 3);
@@ -2820,6 +2857,7 @@ int main() {
         test_solver_compression_defaults();
         test_solver_tone_steering();
         test_solver_auto_exposure_protects_highlights();
+        test_hue_saturation_targets_hue_bounded();
         test_scene_referred_tone_zones();
         test_scene_referred_tone_chroma_symmetry_noop();
         test_highlight_rolloff_compresses_highlights();

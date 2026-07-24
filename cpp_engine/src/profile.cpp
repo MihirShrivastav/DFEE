@@ -252,6 +252,9 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
         "color_character.palette.range_sensitivity",
         "density.strength", "density.low_luma_limit",
         "compression.strength", "compression.threshold", "compression.crosstalk",
+        "hue_chroma_gain.red", "hue_chroma_gain.orange", "hue_chroma_gain.yellow",
+        "hue_chroma_gain.green", "hue_chroma_gain.cyan", "hue_chroma_gain.blue",
+        "hue_chroma_gain.magenta",
     };
     static const std::unordered_set<std::string> kArrayFields{
         "tone_response.channel_toe_mult", "tone_response.channel_shoulder_mult", "tone_response.channel_midtone_mult",

@@ -115,3 +115,8 @@ compression:
   strength: 0.75
   threshold: 0.42
   crosstalk: 0.40
+hue_chroma_gain:
+  green: 0.10
+  blue: 0.08
+  magenta: 0.08
+  red: 0.06
