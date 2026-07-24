@@ -1,5 +1,6 @@
 #include "dfee/session.hpp"
 #include "dfee/tone_controls.hpp"
+#include "dfee/color_grading.hpp"
 
 #include "dfee/analyzer.hpp"
 #include "dfee/bias.hpp"
@@ -1236,6 +1237,16 @@ Image apply_curves(
     return gamma_decode_mat_22(curved);
 }
 
+ColorGradeParams make_color_grade_params(const NativePreviewRenderRequest& r) {
+    return ColorGradeParams{
+        .shadow_hue = r.cg_shadow_hue, .shadow_sat = r.cg_shadow_sat, .shadow_lum = r.cg_shadow_lum,
+        .midtone_hue = r.cg_midtone_hue, .midtone_sat = r.cg_midtone_sat, .midtone_lum = r.cg_midtone_lum,
+        .highlight_hue = r.cg_highlight_hue, .highlight_sat = r.cg_highlight_sat, .highlight_lum = r.cg_highlight_lum,
+        .global_hue = r.cg_global_hue, .global_sat = r.cg_global_sat, .global_lum = r.cg_global_lum,
+        .balance = r.cg_balance, .blending = r.cg_blending, .crossbalance = r.cg_crossbalance,
+    };
+}
+
 Image apply_hsl(
     const Image& rendered,
     const NativePreviewRenderRequest& request) {
@@ -1793,6 +1804,70 @@ void apply_scene_referred_tone(
         adjusted.pixels[i * 3 + 1] = g;
         adjusted.pixels[i * 3 + 2] = b;
     }
+}
+
+// Perceptual 3-way + global colour grading. See dfee/color_grading.hpp and
+// documentation/planning/color-grading-spec.md.
+void apply_color_grading(Image& rendered, const ColorGradeParams& params) {
+    const bool any_color =
+        params.shadow_sat != 0.0F || params.midtone_sat != 0.0F ||
+        params.highlight_sat != 0.0F || params.global_sat != 0.0F ||
+        params.crossbalance != 0.0F;
+    const bool any_lum =
+        params.shadow_lum != 0.0F || params.midtone_lum != 0.0F ||
+        params.highlight_lum != 0.0F || params.global_lum != 0.0F;
+    if (!any_color && !any_lum) {
+        return;
+    }
+
+    constexpr float kSat = 0.10F;    // max OKLab a/b offset at sat = 100
+    constexpr float kLum = 0.15F;    // max OKLab L offset at lum = 100
+    constexpr float kCrossA = 0.05F; // crossbalance a (green/red)
+    constexpr float kCrossB = 0.06F; // crossbalance b (blue/yellow)
+    const float deg2rad = std::numbers::pi_v<float> / 180.0F;
+
+    const auto zone_offset = [&](float hue_deg, float sat, float& a_off, float& b_off) {
+        const float h = hue_deg * deg2rad;
+        const float mag = (sat / 100.0F) * kSat;
+        a_off = mag * std::cos(h);
+        b_off = mag * std::sin(h);
+    };
+    float a_sh, b_sh, a_mid, b_mid, a_hi, b_hi, a_g, b_g;
+    zone_offset(params.shadow_hue, params.shadow_sat, a_sh, b_sh);
+    zone_offset(params.midtone_hue, params.midtone_sat, a_mid, b_mid);
+    zone_offset(params.highlight_hue, params.highlight_sat, a_hi, b_hi);
+    zone_offset(params.global_hue, params.global_sat, a_g, b_g);
+
+    const float cross = std::clamp(params.crossbalance / 100.0F, -1.0F, 1.0F);
+    const float lum_sh = std::clamp(params.shadow_lum / 100.0F, -1.0F, 1.0F) * kLum;
+    const float lum_mid = std::clamp(params.midtone_lum / 100.0F, -1.0F, 1.0F) * kLum;
+    const float lum_hi = std::clamp(params.highlight_lum / 100.0F, -1.0F, 1.0F) * kLum;
+    const float lum_g = std::clamp(params.global_lum / 100.0F, -1.0F, 1.0F) * kLum;
+
+    // Smooth Gaussian luminance zones (balance shifts the midtone centre, blending widens).
+    const float mid_c = std::clamp(0.5F + 0.25F * std::clamp(params.balance / 100.0F, -1.0F, 1.0F), 0.25F, 0.75F);
+    const float sigma = 0.16F * (0.7F + 0.9F * std::clamp(params.blending / 100.0F, 0.0F, 1.0F));
+    const float inv_two_sigma_sq = 1.0F / (2.0F * sigma * sigma);
+    const auto gauss = [&](float lightness, float center) {
+        const float d = lightness - center;
+        return std::exp(-d * d * inv_two_sigma_sq);
+    };
+
+    Image oklab = rgb_to_oklab(rendered);
+    for (std::size_t i = 0; i < oklab.pixel_count(); ++i) {
+        const float l = oklab.pixels[i * 3 + 0]; // OKLab lightness = perceptual luminance
+        const float ws = gauss(l, 0.25F);
+        const float wm = gauss(l, mid_c);
+        const float wh = gauss(l, 0.75F);
+        float a = oklab.pixels[i * 3 + 1] + ws * a_sh + wm * a_mid + wh * a_hi + a_g;
+        float b = oklab.pixels[i * 3 + 2] + ws * b_sh + wm * b_mid + wh * b_hi + b_g;
+        a += (wh - ws) * cross * kCrossA; // highlights warm, shadows teal
+        b += (wh - ws) * cross * kCrossB;
+        oklab.pixels[i * 3 + 0] = std::clamp(l + ws * lum_sh + wm * lum_mid + wh * lum_hi + lum_g, 0.0F, 1.0F);
+        oklab.pixels[i * 3 + 1] = a;
+        oklab.pixels[i * 3 + 2] = b;
+    }
+    rendered = oklab_to_rgb(oklab);
 }
 
 EngineSession::EngineSession(std::filesystem::path project_root)
@@ -2353,6 +2428,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             ScopedStageTimer stage(response.engine, "render_preview_post_effects");
             rendered = apply_curves(rendered, request.curves);
             rendered = apply_hsl(rendered, request);
+            apply_color_grading(rendered, make_color_grade_params(request));
             {
                 ScopedStageTimer substage(response.engine, "render_preview_post_stage_clarity");
                 rendered = renderer.apply_clarity(rendered, request.clarity);
@@ -2743,6 +2819,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     rendered = apply_post_film_color(rendered, request);
                     rendered = apply_curves(rendered, request.curves);
                     rendered = apply_hsl(rendered, request);
+                    apply_color_grading(rendered, make_color_grade_params(request));
                     rendered = renderer.apply_clarity(rendered, request.clarity);
                     rendered = renderer.apply_texture(rendered, request.texture);
                     rendered = renderer.apply_dehaze(rendered, request.dehaze);

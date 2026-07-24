@@ -885,6 +885,41 @@ class TestNativeBridge(unittest.TestCase):
         self.assertEqual(custom.__dict__["halation_strength"], 180.0)
         self.assertEqual(custom.__dict__["halation_threshold"], 30.0)
 
+    def test_native_request_carries_color_grading(self):
+        # Color grading fields must serialize via request.__dict__ (dependency-free).
+        request = dfee_native_bridge.NativePreviewRenderRequest(filename="x.arw", stock="portra_400")
+        for key in ("cg_shadow_hue", "cg_shadow_sat", "cg_shadow_lum",
+                    "cg_highlight_hue", "cg_global_sat",
+                    "cg_balance", "cg_blending", "cg_crossbalance"):
+            self.assertEqual(getattr(request, key), 0.0)
+            self.assertIn(key, request.__dict__)
+        custom = dfee_native_bridge.NativePreviewRenderRequest(
+            filename="x.arw", stock="portra_400",
+            cg_shadow_hue=220.0, cg_shadow_sat=50.0, cg_crossbalance=60.0,
+        )
+        self.assertEqual(custom.__dict__["cg_shadow_hue"], 220.0)
+        self.assertEqual(custom.__dict__["cg_crossbalance"], 60.0)
+
+    def test_filmic_v3_color_grading_changes_render(self):
+        raw_filename = self._raw_filename()
+        if not self.session.list_profiles().engine.libraw_enabled:
+            self.skipTest("LibRaw not available")
+        self.session.select_file(raw_filename)
+
+        def _render(**cg):
+            return self.session.render_preview(
+                dfee_native_bridge.NativePreviewRenderRequest(
+                    filename=raw_filename, stock="portra_400",
+                    effect_pipeline_version="filmic_v3", **cg,
+                )
+            ).jpeg_bytes
+
+        base = _render()
+        graded = _render(cg_shadow_hue=225.0, cg_shadow_sat=80.0, cg_highlight_hue=40.0, cg_highlight_sat=60.0)
+        cross = _render(cg_crossbalance=90.0)
+        self.assertNotEqual(graded, base)  # a 3-way grade changes the render
+        self.assertNotEqual(cross, base)   # crossbalance changes the render
+
     def test_filmic_v3_halation_controls_change_render(self):
         raw_filename = self._raw_filename()
         if not self.session.list_profiles().engine.libraw_enabled:

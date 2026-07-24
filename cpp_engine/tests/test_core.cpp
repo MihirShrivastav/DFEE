@@ -7,6 +7,7 @@
 #include "dfee/session.hpp"
 #include "dfee/solver.hpp"
 #include "dfee/tone_controls.hpp"
+#include "dfee/color_grading.hpp"
 #include "dfee/version.hpp"
 
 #include <array>
@@ -2279,6 +2280,48 @@ void test_halation_threshold_and_strength() {
     }
 }
 
+void test_color_grading_zones() {
+    dfee::Image img(3, 1, 3);
+    const auto set_gray = [&](int x, float v) { img.at(x, 0, 0) = v; img.at(x, 0, 1) = v; img.at(x, 0, 2) = v; };
+    // Linear values chosen so their OKLab lightness lands in the shadow / mid / highlight zones.
+    set_gray(0, 0.02F); set_gray(1, 0.13F); set_gray(2, 0.50F);
+    const auto lab = [](const dfee::Image& im, int x, int ch) {
+        return dfee::rgb_to_oklab(im).at(x, 0, ch);
+    };
+
+    // Neutral params = byte no-op.
+    {
+        dfee::Image a = img;
+        dfee::apply_color_grading(a, dfee::ColorGradeParams{});
+        for (std::size_t i = 0; i < img.pixel_count() * 3U; ++i) {
+            assert(a.pixels[i] == img.pixels[i]);
+        }
+    }
+    // Shadow teal push (hue 225 -> a-,b-): shadow gains blue/teal, highlight ~unchanged.
+    {
+        dfee::Image a = img;
+        dfee::ColorGradeParams p; p.shadow_hue = 225.0F; p.shadow_sat = 100.0F;
+        dfee::apply_color_grading(a, p);
+        assert(lab(a, 0, 2) < lab(img, 0, 2) - 1.0e-3F);            // shadow b decreased
+        assert(std::fabs(lab(a, 2, 2) - lab(img, 2, 2)) < 5.0e-3F); // highlight ~unchanged
+    }
+    // Crossbalance +: shadows teal (b down), highlights warm (b up).
+    {
+        dfee::Image a = img;
+        dfee::ColorGradeParams p; p.crossbalance = 100.0F;
+        dfee::apply_color_grading(a, p);
+        assert(lab(a, 0, 2) < lab(img, 0, 2) - 1.0e-3F);
+        assert(lab(a, 2, 2) > lab(img, 2, 2) + 1.0e-3F);
+    }
+    // Colour push is luminance-preserving: a hue push barely changes OKLab L of the mid.
+    {
+        dfee::Image a = img;
+        dfee::ColorGradeParams p; p.midtone_hue = 30.0F; p.midtone_sat = 100.0F;
+        dfee::apply_color_grading(a, p);
+        assert(std::fabs(lab(a, 1, 0) - lab(img, 1, 0)) < 1.0e-2F);
+    }
+}
+
 void test_hue_saturation_targets_hue_bounded() {
     dfee::Image img(4, 1, 3);
     // red, green, blue, neutral gray
@@ -2898,6 +2941,7 @@ int main() {
         test_solver_tone_steering();
         test_solver_auto_exposure_protects_highlights();
         test_hue_saturation_targets_hue_bounded();
+        test_color_grading_zones();
         test_scene_referred_tone_zones();
         test_scene_referred_tone_chroma_symmetry_noop();
         test_highlight_rolloff_compresses_highlights();

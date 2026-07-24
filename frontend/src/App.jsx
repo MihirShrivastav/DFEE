@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import './index.css';
 import CurvesPanel, { DEFAULT_POINTS as DEFAULT_CURVES } from './CurvesPanel';
 import HslPanel from './HslPanel';
+import ColorGradingPanel from './ColorGradingPanel';
 
 const API = 'http://localhost:8000';
 const EFFECT_PIPELINE_VERSION = 'filmic_v3';
@@ -80,6 +81,13 @@ const DEFAULT_HSL = Object.fromEntries(
   HSL_RANGES_KEYS.flatMap(r => ['h','s','l'].map(p => [`${r}_${p}`, 0]))
 );
 
+// Color grading (perceptual 3-way + global). Keys mirror the cg_* backend fields.
+const CG_ZONES = ['shadow', 'midtone', 'highlight', 'global'];
+const DEFAULT_CG = {
+  ...Object.fromEntries(CG_ZONES.flatMap(z => ['hue','sat','lum'].map(p => [`${z}_${p}`, 0]))),
+  balance: 0, blending: 0, crossbalance: 0,
+};
+
 const BUILTIN_PRESETS = [
   {
     id: 'k64',
@@ -129,6 +137,7 @@ export default function App() {
   const [params, setParams] = useState(DEFAULT_PARAMS);
   const [curves, setCurves] = useState(DEFAULT_CURVES);
   const [hsl, setHsl] = useState(DEFAULT_HSL);
+  const [cg, setCg] = useState(DEFAULT_CG);
   const [metadata, setMetadata] = useState(null);
   const [showExif, setShowExif] = useState(true);
 
@@ -220,7 +229,7 @@ export default function App() {
   // ── Collapsible sections — persisted to localStorage ───────────────────
   const DEFAULT_OPEN = {
     Profile: true, 'Film Exposure': true, 'Film Tone': true, 'Film Color': true, Print: false, 'Material Finish': false,
-    Curves: true, HSL: false,
+    Curves: true, HSL: false, 'Color Grading': false,
     Light: true, Color: true, Detail: false,
     Diagnostics: false, History: true,
   };
@@ -245,6 +254,7 @@ export default function App() {
     setParams(DEFAULT_PARAMS);
     setCurves(DEFAULT_CURVES);
     setHsl(DEFAULT_HSL);
+    setCg(DEFAULT_CG);
   };
   const [previewUrl, setPreviewUrl] = useState('');
   const [rawUrl, setRawUrl] = useState('');
@@ -418,6 +428,7 @@ export default function App() {
     if (np.halation !== pp.halation) changes.push(`Halation → ${np.halation}`);
     if (next.curves !== prev.curves) changes.push('Curves adjusted');
     if (next.hsl    !== prev.hsl)    changes.push('HSL adjusted');
+    if (next.cg     !== prev.cg)     changes.push('Color grading adjusted');
     return changes.length > 0 ? changes.slice(0, 3).join(', ') : 'Settings changed';
   };
 
@@ -426,13 +437,14 @@ export default function App() {
     if (isRestoring.current) return; // don't re-push when we apply a history state
     if (historyDebRef.current) clearTimeout(historyDebRef.current);
     historyDebRef.current = setTimeout(() => {
-      const snap = { params, curves, hsl };
+      const snap = { params, curves, hsl, cg };
       const last = lastPushedRef.current;
       // Only push if something actually changed
       if (last &&
           JSON.stringify(last.params)  === JSON.stringify(snap.params) &&
           JSON.stringify(last.curves)  === JSON.stringify(snap.curves) &&
-          JSON.stringify(last.hsl)     === JSON.stringify(snap.hsl)) return;
+          JSON.stringify(last.hsl)     === JSON.stringify(snap.hsl) &&
+          JSON.stringify(last.cg)      === JSON.stringify(snap.cg)) return;
       const label = makeLabel(snap, last);
       const entry = { id: Date.now(), label, ...snap };
       lastPushedRef.current = snap;
@@ -440,13 +452,14 @@ export default function App() {
       setHistIdx(-1); // back to live
     }, 700);
     return () => clearTimeout(historyDebRef.current);
-  }, [params, curves, hsl]);
+  }, [params, curves, hsl, cg]);
 
   const applyHistoryEntry = useCallback((entry, idx) => {
     isRestoring.current = true;
     setParams(entry.params);
     setCurves(entry.curves);
     setHsl(entry.hsl);
+    if (entry.cg) setCg(entry.cg);
     setHistIdx(idx);
     // Let the state settle before re-enabling history tracking
     setTimeout(() => { isRestoring.current = false; }, 100);
@@ -587,7 +600,8 @@ export default function App() {
         effect_pipeline_version: EFFECT_PIPELINE_VERSION,
         params,
         curves,
-        hsl
+        hsl,
+        cg
       });
       if (requestKey === loadedPreviewKeyRef.current && previewUrl) {
         setPreviewReady(true);
@@ -647,6 +661,9 @@ export default function App() {
         print_y: String(params.print_y),
         print_contrast: String(params.print_contrast),
         print_black_point: String(params.print_black_point),
+      });
+      Object.entries(cg).forEach(([key, value]) => {
+        query.set(`cg_${key}`, String(value));
       });
       Object.entries(hsl).forEach(([key, value]) => {
         query.set(`hsl_${key}`, String(value));
@@ -757,7 +774,7 @@ export default function App() {
     return () => clearTimeout(debounceRef.current);
   }, [
     selectedFile, rawUrl, previewUrl, params,
-    curves, hsl, replaceObjectUrl, revokeObjectUrl, showToast,
+    curves, hsl, cg, replaceObjectUrl, revokeObjectUrl, showToast,
   ]);
 
   useEffect(() => {
@@ -902,6 +919,7 @@ export default function App() {
           vibrance: params.vibrance,
           curves: JSON.stringify(curves),
           ...Object.fromEntries(Object.entries(hsl).map(([k,v]) => [`hsl_${k}`, v])),
+          ...Object.fromEntries(Object.entries(cg).map(([k,v]) => [`cg_${k}`, v])),
           clarity: params.clarity,
           texture: params.texture,
           dehaze: params.dehaze,
@@ -950,6 +968,7 @@ export default function App() {
     setParams(p => ({ ...DEFAULT_PARAMS, ...p, ...preset.params, stock: preset.stock }));
     if (preset.curves) setCurves(preset.curves);
     if (preset.hsl) setHsl(preset.hsl);
+    if (preset.cg) setCg(preset.cg);
     showToast(`Applied preset "${preset.name}"`, 'success');
   };
 
@@ -971,6 +990,7 @@ export default function App() {
       params: { ...params },
       curves: [...curves],
       hsl: { ...hsl },
+      cg: { ...cg },
       isBuiltin: false
     };
     const updated = [...userPresets, newPreset];
@@ -1652,6 +1672,19 @@ export default function App() {
               {openSections.HSL && (
                 <div className="section-body">
                   <HslPanel hsl={hsl} onChange={setHsl} />
+                </div>
+              )}
+            </div>
+
+            {/* Color Grading */}
+            <div className="control-group advanced-correction">
+              <div className="group-title collapsible" onClick={() => toggleSection('Color Grading')}>
+                <span>Color Grading</span>
+                <span className={`chevron ${openSections['Color Grading'] ? 'open' : ''}`}>›</span>
+              </div>
+              {openSections['Color Grading'] && (
+                <div className="section-body">
+                  <ColorGradingPanel cg={cg} onChange={setCg} />
                 </div>
               )}
             </div>

@@ -633,6 +633,12 @@ class PreviewRequest(BaseModel):
     hsl_blue_h: float = 0.0;   hsl_blue_s: float = 0.0;   hsl_blue_l: float = 0.0
     hsl_purple_h: float = 0.0; hsl_purple_s: float = 0.0; hsl_purple_l: float = 0.0
     hsl_magenta_h: float = 0.0; hsl_magenta_s: float = 0.0; hsl_magenta_l: float = 0.0
+    # Color grading (perceptual 3-way + global); 0 = neutral
+    cg_shadow_hue: float = 0.0; cg_shadow_sat: float = 0.0; cg_shadow_lum: float = 0.0
+    cg_midtone_hue: float = 0.0; cg_midtone_sat: float = 0.0; cg_midtone_lum: float = 0.0
+    cg_highlight_hue: float = 0.0; cg_highlight_sat: float = 0.0; cg_highlight_lum: float = 0.0
+    cg_global_hue: float = 0.0; cg_global_sat: float = 0.0; cg_global_lum: float = 0.0
+    cg_balance: float = 0.0; cg_blending: float = 0.0; cg_crossbalance: float = 0.0
     # Detail
     clarity: float = 0.0    # -100 to +100
     texture: float = 0.0    # -100 to +100
@@ -1117,6 +1123,11 @@ def get_preview(
     hsl_blue_h: float = 0.0,   hsl_blue_s: float = 0.0,   hsl_blue_l: float = 0.0,
     hsl_purple_h: float = 0.0, hsl_purple_s: float = 0.0, hsl_purple_l: float = 0.0,
     hsl_magenta_h: float = 0.0,hsl_magenta_s: float = 0.0,hsl_magenta_l: float = 0.0,
+    cg_shadow_hue: float = 0.0, cg_shadow_sat: float = 0.0, cg_shadow_lum: float = 0.0,
+    cg_midtone_hue: float = 0.0, cg_midtone_sat: float = 0.0, cg_midtone_lum: float = 0.0,
+    cg_highlight_hue: float = 0.0, cg_highlight_sat: float = 0.0, cg_highlight_lum: float = 0.0,
+    cg_global_hue: float = 0.0, cg_global_sat: float = 0.0, cg_global_lum: float = 0.0,
+    cg_balance: float = 0.0, cg_blending: float = 0.0, cg_crossbalance: float = 0.0,
     clarity: float = 0.0,
     texture: float = 0.0,
     dehaze: float = 0.0,
@@ -1193,6 +1204,11 @@ def get_preview(
         "hsl_magenta_h": hsl_magenta_h,
         "hsl_magenta_s": hsl_magenta_s,
         "hsl_magenta_l": hsl_magenta_l,
+        "cg_shadow_hue": cg_shadow_hue, "cg_shadow_sat": cg_shadow_sat, "cg_shadow_lum": cg_shadow_lum,
+        "cg_midtone_hue": cg_midtone_hue, "cg_midtone_sat": cg_midtone_sat, "cg_midtone_lum": cg_midtone_lum,
+        "cg_highlight_hue": cg_highlight_hue, "cg_highlight_sat": cg_highlight_sat, "cg_highlight_lum": cg_highlight_lum,
+        "cg_global_hue": cg_global_hue, "cg_global_sat": cg_global_sat, "cg_global_lum": cg_global_lum,
+        "cg_balance": cg_balance, "cg_blending": cg_blending, "cg_crossbalance": cg_crossbalance,
         "clarity": clarity,
         "texture": texture,
         "dehaze": dehaze,
