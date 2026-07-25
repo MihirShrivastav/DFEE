@@ -1237,13 +1237,17 @@ Image apply_curves(
     return gamma_decode_mat_22(curved);
 }
 
-ColorGradeParams make_color_grade_params(const NativePreviewRenderRequest& r) {
+ColorGradeParams make_color_grade_params(const NativePreviewRenderRequest& r, const FilmResponsePlan& fr) {
     return ColorGradeParams{
         .shadow_hue = r.cg_shadow_hue, .shadow_sat = r.cg_shadow_sat, .shadow_lum = r.cg_shadow_lum,
         .midtone_hue = r.cg_midtone_hue, .midtone_sat = r.cg_midtone_sat, .midtone_lum = r.cg_midtone_lum,
         .highlight_hue = r.cg_highlight_hue, .highlight_sat = r.cg_highlight_sat, .highlight_lum = r.cg_highlight_lum,
         .global_hue = r.cg_global_hue, .global_sat = r.cg_global_sat, .global_lum = r.cg_global_lum,
         .balance = r.cg_balance, .blending = r.cg_blending, .crossbalance = r.cg_crossbalance,
+        .cross_shadow_a = fr.crossover_shadow_cast[0], .cross_shadow_b = fr.crossover_shadow_cast[1],
+        .cross_highlight_a = fr.crossover_highlight_cast[0], .cross_highlight_b = fr.crossover_highlight_cast[1],
+        .cross_exposure_sensitivity = fr.crossover_exposure_sensitivity,
+        .scene_exposure_key = fr.scene_exposure_key,
     };
 }
 
@@ -1820,11 +1824,22 @@ void apply_color_grading(Image& rendered, const ColorGradeParams& params) {
         return;
     }
 
-    constexpr float kSat = 0.10F;    // max OKLab a/b offset at sat = 100
-    constexpr float kLum = 0.15F;    // max OKLab L offset at lum = 100
-    constexpr float kCrossA = 0.05F; // crossbalance a (green/red)
-    constexpr float kCrossB = 0.06F; // crossbalance b (blue/yellow)
+    constexpr float kSat = 0.10F;      // max OKLab a/b offset at sat = 100
+    constexpr float kLum = 0.15F;      // max OKLab L offset at lum = 100
+    constexpr float kCrossover = 0.10F; // crossbalance cast scale
     const float deg2rad = std::numbers::pi_v<float> / 180.0F;
+
+    // Per-stock crossover cast directions (fall back to the classic warm-film crossover:
+    // teal shadows / warm highlights) + exposure modulation.
+    float cs_a = params.cross_shadow_a, cs_b = params.cross_shadow_b;
+    float ch_a = params.cross_highlight_a, ch_b = params.cross_highlight_b;
+    if (cs_a == 0.0F && cs_b == 0.0F && ch_a == 0.0F && ch_b == 0.0F) {
+        cs_a = -0.40F; cs_b = -0.60F; ch_a = 0.45F; ch_b = 0.60F;
+    }
+    const float cross = std::clamp(params.crossbalance / 100.0F, -1.0F, 1.0F);
+    const float key = std::clamp(params.scene_exposure_key, -1.0F, 1.0F);
+    const float sh_exp_gain = 1.0F + params.cross_exposure_sensitivity * std::max(0.0F, -key);
+    const float hi_exp_gain = 1.0F + params.cross_exposure_sensitivity * std::max(0.0F, key);
 
     const auto zone_offset = [&](float hue_deg, float sat, float& a_off, float& b_off) {
         const float h = hue_deg * deg2rad;
@@ -1838,7 +1853,6 @@ void apply_color_grading(Image& rendered, const ColorGradeParams& params) {
     zone_offset(params.highlight_hue, params.highlight_sat, a_hi, b_hi);
     zone_offset(params.global_hue, params.global_sat, a_g, b_g);
 
-    const float cross = std::clamp(params.crossbalance / 100.0F, -1.0F, 1.0F);
     const float lum_sh = std::clamp(params.shadow_lum / 100.0F, -1.0F, 1.0F) * kLum;
     const float lum_mid = std::clamp(params.midtone_lum / 100.0F, -1.0F, 1.0F) * kLum;
     const float lum_hi = std::clamp(params.highlight_lum / 100.0F, -1.0F, 1.0F) * kLum;
@@ -1861,8 +1875,9 @@ void apply_color_grading(Image& rendered, const ColorGradeParams& params) {
         const float wh = gauss(l, 0.75F);
         float a = oklab.pixels[i * 3 + 1] + ws * a_sh + wm * a_mid + wh * a_hi + a_g;
         float b = oklab.pixels[i * 3 + 2] + ws * b_sh + wm * b_mid + wh * b_hi + b_g;
-        a += (wh - ws) * cross * kCrossA; // highlights warm, shadows teal
-        b += (wh - ws) * cross * kCrossB;
+        // Crossbalance: stock-characteristic shadow/highlight casts, scaled by scene exposure.
+        a += cross * kCrossover * (ws * cs_a * sh_exp_gain + wh * ch_a * hi_exp_gain);
+        b += cross * kCrossover * (ws * cs_b * sh_exp_gain + wh * ch_b * hi_exp_gain);
         oklab.pixels[i * 3 + 0] = std::clamp(l + ws * lum_sh + wm * lum_mid + wh * lum_hi + lum_g, 0.0F, 1.0F);
         oklab.pixels[i * 3 + 1] = a;
         oklab.pixels[i * 3 + 2] = b;
@@ -2428,7 +2443,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             ScopedStageTimer stage(response.engine, "render_preview_post_effects");
             rendered = apply_curves(rendered, request.curves);
             rendered = apply_hsl(rendered, request);
-            apply_color_grading(rendered, make_color_grade_params(request));
+            apply_color_grading(rendered, make_color_grade_params(request, render_plan.film_response));
             {
                 ScopedStageTimer substage(response.engine, "render_preview_post_stage_clarity");
                 rendered = renderer.apply_clarity(rendered, request.clarity);
@@ -2819,7 +2834,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     rendered = apply_post_film_color(rendered, request);
                     rendered = apply_curves(rendered, request.curves);
                     rendered = apply_hsl(rendered, request);
-                    apply_color_grading(rendered, make_color_grade_params(request));
+                    apply_color_grading(rendered, make_color_grade_params(request, render_plan->film_response));
                     rendered = renderer.apply_clarity(rendered, request.clarity);
                     rendered = renderer.apply_texture(rendered, request.texture);
                     rendered = renderer.apply_dehaze(rendered, request.dehaze);

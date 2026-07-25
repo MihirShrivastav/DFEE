@@ -108,3 +108,9 @@ compression:
 hue_chroma_gain:
   green: 0.06
   magenta: -0.05
+crossover:
+  shadow_cast_a: -0.42
+  shadow_cast_b: -0.35
+  highlight_cast_a: 0.15
+  highlight_cast_b: 0.28
+  exposure_sensitivity: 0.55

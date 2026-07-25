@@ -25,6 +25,15 @@ struct ColorGradeParams {
     float balance = 0.0F;
     float blending = 0.0F;
     float crossbalance = 0.0F;
+    // Per-stock crossover context for the Crossbalance control (populated from the render
+    // plan). Casts are OKLab (a,b) directions; scene_exposure_key -1..1 (under..over) shifts
+    // the shadow<->highlight balance. All-zero casts fall back to the classic teal/warm look.
+    float cross_shadow_a = 0.0F;
+    float cross_shadow_b = 0.0F;
+    float cross_highlight_a = 0.0F;
+    float cross_highlight_b = 0.0F;
+    float cross_exposure_sensitivity = 0.0F;
+    float scene_exposure_key = 0.0F;
 };
 
 // Applies the grade in place on linear-ish rendered RGB. Colour shifts are done in OKLab

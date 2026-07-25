@@ -2322,6 +2322,27 @@ void test_color_grading_zones() {
     }
 }
 
+void test_crossbalance_stock_and_exposure() {
+    dfee::Image img(1, 1, 3);
+    img.at(0, 0, 0) = 0.03F; img.at(0, 0, 1) = 0.03F; img.at(0, 0, 2) = 0.03F; // shadow, neutral (in-gamut headroom)
+    const auto a_of = [](const dfee::Image& im) { return dfee::rgb_to_oklab(im).at(0, 0, 1); };
+    const float a0 = a_of(img);
+
+    dfee::ColorGradeParams base;
+    base.crossbalance = 100.0F;
+    base.cross_shadow_a = -0.25F;     // stock casts shadows green (a-)
+    base.cross_highlight_a = 0.6F;
+    base.cross_exposure_sensitivity = 0.8F;
+
+    dfee::Image normal = img; { auto p = base; p.scene_exposure_key = 0.0F; dfee::apply_color_grading(normal, p); }
+    dfee::Image under = img;  { auto p = base; p.scene_exposure_key = -1.0F; dfee::apply_color_grading(under, p); }
+
+    const float shift_normal = a0 - a_of(normal); // green cast => a decreases => positive shift
+    const float shift_under = a0 - a_of(under);
+    assert(shift_normal > 1.0e-4F);          // the stock's shadow cast is applied
+    assert(shift_under > shift_normal * 1.4F); // underexposure intensifies the shadow crossover
+}
+
 void test_hue_saturation_targets_hue_bounded() {
     dfee::Image img(4, 1, 3);
     // red, green, blue, neutral gray
@@ -2942,6 +2963,7 @@ int main() {
         test_solver_auto_exposure_protects_highlights();
         test_hue_saturation_targets_hue_bounded();
         test_color_grading_zones();
+        test_crossbalance_stock_and_exposure();
         test_scene_referred_tone_zones();
         test_scene_referred_tone_chroma_symmetry_noop();
         test_highlight_rolloff_compresses_highlights();

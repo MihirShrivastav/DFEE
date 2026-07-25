@@ -109,3 +109,9 @@ hue_chroma_gain:
   red: 0.12
   yellow: 0.10
   orange: 0.08
+crossover:
+  shadow_cast_a: -0.12
+  shadow_cast_b: -0.34
+  highlight_cast_a: 0.52
+  highlight_cast_b: 0.62
+  exposure_sensitivity: 0.42

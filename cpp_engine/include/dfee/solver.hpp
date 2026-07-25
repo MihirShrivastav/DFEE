@@ -103,6 +103,14 @@ struct FilmResponsePlan {
     std::unordered_map<std::string, float> chroma_coupling;
     std::unordered_map<std::string, float> dye_contamination;
     std::unordered_map<std::string, float> hue_chroma_gain; // per-hue-family chroma gain (filmic_v3), 0 = neutral
+    // Per-stock film crossover (drives the Crossbalance control). shadow/highlight_cast are
+    // OKLab (a,b) direction magnitudes (~-1..1); exposure_sensitivity is how strongly the
+    // scene's exposure shifts the shadow<->highlight balance. scene_exposure_key is resolved
+    // from analysis (-1 underexposed .. +1 overexposed).
+    std::array<float, 2> crossover_shadow_cast{0.0F, 0.0F};
+    std::array<float, 2> crossover_highlight_cast{0.0F, 0.0F};
+    float crossover_exposure_sensitivity = 0.0F;
+    float scene_exposure_key = 0.0F;
     std::string stock_type = "color_negative";
     float film_color = 100.0F;
     float highlight_color_hold = 0.0F;
