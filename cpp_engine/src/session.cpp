@@ -1984,6 +1984,7 @@ NativeSelectResponse EngineSession::select_file(const NativeSelectRequest& reque
                 const auto file_response = decode_raw_image_from_file({
                     .filename = raw_path.string(),
                     .draft_mode = true,
+                    .color_space = request.color_space,
                 });
                 if (!file_response.ok) {
                     result.status = file_response.status;
@@ -2102,6 +2103,7 @@ NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& 
             const auto file_response = decode_raw_image_from_file({
                 .filename = (raw_dir_ / response.filename).string(),
                 .draft_mode = request.draft_mode,
+                .color_space = request.color_space,
             });
             response.ok = file_response.ok;
             response.status = file_response.status;

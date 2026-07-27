@@ -46,6 +46,7 @@ struct NativeProfilesResponse {
 
 struct NativeSelectRequest {
     std::string filename;
+    std::string color_space = "srgb"; // for TIFF/rendered inputs: srgb | adobe_rgb | prophoto
 };
 
 struct NativeRawMetadata {
@@ -112,6 +113,7 @@ struct NativeRawMetadataResponse {
 struct NativeRawDecodeRequest {
     std::string filename;
     bool draft_mode = true;
+    std::string color_space = "srgb"; // for TIFF/rendered inputs: srgb | adobe_rgb | prophoto
 };
 
 struct NativeRawDecodeSummary {

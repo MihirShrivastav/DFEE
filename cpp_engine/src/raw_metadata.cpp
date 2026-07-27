@@ -1,6 +1,7 @@
 #include "dfee/raw_metadata.hpp"
 
 #include "dfee/bridge_utils.hpp"
+#include "dfee/raw_decode.hpp"
 #include "dfee/version.hpp"
 
 #include <cmath>
@@ -70,6 +71,20 @@ NativeRawMetadataResponse read_raw_metadata_from_file(const NativeRawMetadataReq
             .user_message = "Select a RAW file before continuing.",
             .detail = "read_raw_metadata received an empty filename.",
         };
+        return response;
+    }
+
+    if (is_tiff_filename(request.filename)) {
+        // Rendered TIFF inputs carry no RAW EXIF; reuse the decoder's generic
+        // metadata (dimensions + defaults) so diagnostics/grain still work.
+        const auto decoded = decode_raw_image_from_file({
+            .filename = request.filename,
+            .draft_mode = false,
+        });
+        response.ok = decoded.ok;
+        response.status = decoded.status;
+        response.metadata = decoded.decoded.metadata;
+        response.error = decoded.error;
         return response;
     }
 

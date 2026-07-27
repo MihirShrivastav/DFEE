@@ -203,6 +203,19 @@ body {
   color: var(--text-muted);
 }
 
+.file-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border-radius: 3px;
+  color: var(--accent, #6ea8fe);
+  background: color-mix(in srgb, var(--accent, #6ea8fe) 16%, transparent);
+  vertical-align: middle;
+}
+
 .sidebar-presets-panel {
   padding: 12px;
   border-top: 1px solid var(--border-subtle);

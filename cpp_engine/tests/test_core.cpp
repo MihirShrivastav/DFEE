@@ -3,6 +3,7 @@
 #include "dfee/color_spaces.hpp"
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
+#include "dfee/raw_decode.hpp"
 #include "dfee/renderer.hpp"
 #include "dfee/session.hpp"
 #include "dfee/solver.hpp"
@@ -23,6 +24,10 @@
 #include <numbers>
 #include <stdexcept>
 #include <string>
+
+#if DFEE_HAS_OPENCV
+#include <opencv2/imgcodecs.hpp>
+#endif
 
 namespace {
 
@@ -1537,6 +1542,91 @@ void test_loader_accepts_optional_color_character_group() {
     }
 }
 
+#if DFEE_HAS_OPENCV
+void test_tiff_ingestion() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const std::filesystem::path raw_dir = repo_root / "raw_files";
+    std::filesystem::create_directories(raw_dir);
+
+    const auto srgb16_path = raw_dir / "native_core_test_srgb16.tif";
+    const auto gray8_path = raw_dir / "native_core_test_gray8.tif";
+    const auto bgra8_path = raw_dir / "native_core_test_bgra8.tif";
+    const auto corrupt_path = raw_dir / "native_core_test_corrupt.tif";
+
+    const auto cleanup = [&]() {
+        std::filesystem::remove(srgb16_path);
+        std::filesystem::remove(gray8_path);
+        std::filesystem::remove(bgra8_path);
+        std::filesystem::remove(corrupt_path);
+    };
+    struct CleanupGuard {
+        decltype(cleanup)& cleanup_fn;
+        ~CleanupGuard() { cleanup_fn(); }
+    } cleanup_guard{cleanup};
+
+    // 1) 16-bit sRGB-encoded mid-gray (0.5 code) -> linear ~= 0.214 after EOTF.
+    {
+        const std::uint16_t code = 32768;  // ~0.5 in 16-bit
+        cv::Mat img(4, 4, CV_16UC3, cv::Scalar(code, code, code));
+        assert(cv::imwrite(srgb16_path.string(), img));
+
+        const auto decoded = dfee::decode_raw_image_from_file({
+            .filename = srgb16_path.string(),
+            .draft_mode = false,
+            .color_space = "srgb",
+        });
+        assert(decoded.ok);
+        assert(decoded.decoded.rgb_linear.width == 4);
+        assert(decoded.decoded.rgb_linear.height == 4);
+        require_close(decoded.decoded.rgb_linear.pixels[0], 0.214F, 0.01F);
+        require_close(decoded.decoded.rgb_linear.pixels[1], 0.214F, 0.01F);
+        require_close(decoded.decoded.rgb_linear.pixels[2], 0.214F, 0.01F);
+        assert(decoded.decoded.metadata.camera_model == "TIFF");
+        assert(decoded.decoded.metadata.image_width == 4);
+    }
+
+    // 2) 8-bit single-channel grayscale -> replicated to RGB, decodes without error.
+    {
+        cv::Mat gray(3, 5, CV_8UC1, cv::Scalar(128));
+        assert(cv::imwrite(gray8_path.string(), gray));
+        const auto decoded = dfee::decode_raw_image_from_file({
+            .filename = gray8_path.string(),
+            .draft_mode = false,
+        });
+        assert(decoded.ok);
+        assert(decoded.decoded.rgb_linear.channels == 3);
+        // Neutral gray stays neutral (all channels equal).
+        require_close(decoded.decoded.rgb_linear.pixels[0], decoded.decoded.rgb_linear.pixels[1], 1e-4F);
+        require_close(decoded.decoded.rgb_linear.pixels[1], decoded.decoded.rgb_linear.pixels[2], 1e-4F);
+    }
+
+    // 3) 8-bit 4-channel BGRA -> alpha dropped, decodes without error.
+    {
+        cv::Mat bgra(6, 6, CV_8UC4, cv::Scalar(40, 80, 160, 255));
+        assert(cv::imwrite(bgra8_path.string(), bgra));
+        const auto decoded = dfee::decode_raw_image_from_file({
+            .filename = bgra8_path.string(),
+            .draft_mode = false,
+        });
+        assert(decoded.ok);
+        assert(decoded.decoded.rgb_linear.channels == 3);
+    }
+
+    // 4) Corrupt / non-image .tif -> clean error, no crash.
+    {
+        std::ofstream out(corrupt_path, std::ios::binary);
+        out << "this is not a tiff\n";
+        out.close();
+        const auto decoded = dfee::decode_raw_image_from_file({
+            .filename = corrupt_path.string(),
+            .draft_mode = false,
+        });
+        assert(!decoded.ok);
+        assert(decoded.error.code == "TIFF_DECODE_FAILED");
+    }
+}
+#endif  // DFEE_HAS_OPENCV
+
 void test_raw_failure_paths() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const std::filesystem::path raw_dir = repo_root / "raw_files";
@@ -2949,6 +3039,9 @@ int main() {
         test_print_finish();
         test_print_per_channel_curve();
         test_profile_loading();
+#if DFEE_HAS_OPENCV
+        test_tiff_ingestion();
+#endif
         test_raw_failure_paths();
         test_color_character_request_fields_default_to_neutral_zero();
         test_loader_accepts_optional_color_character_group();

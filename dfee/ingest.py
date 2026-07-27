@@ -3,6 +3,60 @@ import numpy as np
 import os
 
 
+# Extensions treated as rendered (display-referred) inputs rather than camera RAW.
+RENDERED_EXTENSIONS = frozenset({".tif", ".tiff"})
+
+
+def is_rendered_image(filepath):
+    return os.path.splitext(filepath)[1].lower() in RENDERED_EXTENSIONS
+
+
+def _srgb_eotf(v):
+    """sRGB EOTF (display -> linear), piecewise. v in [0,1] float array."""
+    return np.where(v <= 0.04045, v / 12.92, np.power((v + 0.055) / 1.055, 2.4))
+
+
+# Linear-primaries -> linear sRGB(D65) matrices (row-major), matching the native decoder.
+_XYZ_TO_SRGB = np.array([
+    [3.2404542, -1.5371385, -0.4985314],
+    [-0.9692660, 1.8760108, 0.0415560],
+    [0.0556434, -0.2040259, 1.0572252],
+])
+_ADOBE_TO_XYZ = np.array([
+    [0.5767309, 0.1855540, 0.1881852],
+    [0.2973769, 0.6273491, 0.0752741],
+    [0.0270343, 0.0706872, 0.9911085],
+])
+_PROPHOTO_TO_XYZ_D50 = np.array([
+    [0.7976749, 0.1351917, 0.0313534],
+    [0.2880402, 0.7118741, 0.0000857],
+    [0.0000000, 0.0000000, 0.8252100],
+])
+_BRADFORD_D50_TO_D65 = np.array([
+    [0.9555766, -0.0230393, 0.0631636],
+    [-0.0282895, 1.0099416, 0.0210077],
+    [0.0122982, -0.0204830, 1.3299098],
+])
+
+
+def _primaries_to_srgb(color_space):
+    space = (color_space or "srgb").lower().strip()
+    if space == "adobe_rgb":
+        return _XYZ_TO_SRGB @ _ADOBE_TO_XYZ
+    if space == "prophoto":
+        return _XYZ_TO_SRGB @ _BRADFORD_D50_TO_D65 @ _PROPHOTO_TO_XYZ_D50
+    return None  # sRGB -> identity
+
+
+def _linearize_transfer(v, color_space):
+    space = (color_space or "srgb").lower().strip()
+    if space == "adobe_rgb":
+        return np.power(np.clip(v, 0.0, None), 2.19921875)
+    if space == "prophoto":
+        return np.where(v < 0.03125, v / 16.0, np.power(np.clip(v, 0.0, None), 1.8))
+    return _srgb_eotf(v)
+
+
 def _safe_exif_ratio(tag):
     """Convert an exifread IfdTag Ratio to a Python float."""
     try:
@@ -83,14 +137,15 @@ def _read_exif(filepath):
 
 
 class RawIngestor:
-    def __init__(self, filepath):
+    def __init__(self, filepath, color_space="srgb"):
         self.filepath = filepath
+        self.color_space = color_space
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"RAW file not found: {filepath}")
 
     def ingest(self, draft_mode=False):
         """
-        Ingests the RAW file, linearises it, and extracts metadata.
+        Ingests a RAW (or rendered TIFF) file, linearises it, and extracts metadata.
 
         Returns:
             rgb_linear      – float32 image array, range [0.0, 1.0]
@@ -99,6 +154,9 @@ class RawIngestor:
             clipping_ratios – clipping ratios for R, G, B channels
             metadata        – extracted metadata fields (including real EXIF)
         """
+        if is_rendered_image(self.filepath):
+            return self._ingest_rendered(draft_mode=draft_mode)
+
         # ── EXIF read (fast, before rawpy which is slow) ────────────────────
         exif = _read_exif(self.filepath)
 
@@ -147,6 +205,95 @@ class RawIngestor:
             metadata['raw_clipping_ratio'] = max(clipping_ratios.values())
 
             return rgb_linear, luminance, clipping_masks, clipping_ratios, metadata
+
+    def _ingest_rendered(self, draft_mode=False):
+        """Ingest a rendered TIFF (display-referred) into scene-linear sRGB [0,1].
+
+        Mirrors the native TIFF decoder: read via OpenCV, normalise depth,
+        coerce channels to RGB, linearise per declared colour space, convert
+        primaries to sRGB, and clamp to [0,1] so the rest of the pipeline is
+        identical to a decoded RAW.
+        """
+        import cv2
+
+        raw = cv2.imread(self.filepath, cv2.IMREAD_UNCHANGED | cv2.IMREAD_ANYDEPTH)
+        if raw is None:
+            raise ValueError(f"Could not decode image: {self.filepath}")
+
+        if raw.dtype == np.uint8:
+            arr = raw.astype(np.float32) / 255.0
+        elif raw.dtype == np.uint16:
+            arr = raw.astype(np.float32) / 65535.0
+        elif raw.dtype == np.float32 or raw.dtype == np.float64:
+            arr = raw.astype(np.float32)
+        else:
+            raise ValueError(f"Unsupported image bit depth: {raw.dtype}")
+
+        if arr.ndim == 2:
+            arr = np.stack([arr, arr, arr], axis=-1)
+        elif arr.shape[2] == 4:
+            arr = arr[:, :, :3]
+        elif arr.shape[2] != 3:
+            raise ValueError(f"Unsupported channel count: {arr.shape[2]}")
+
+        # OpenCV is BGR -> RGB
+        arr = arr[:, :, ::-1]
+        arr = np.clip(arr, 0.0, 1.0)
+
+        if draft_mode:
+            longer = max(arr.shape[0], arr.shape[1])
+            max_edge = 2048
+            if longer > max_edge:
+                scale = max_edge / float(longer)
+                new_w = max(1, int(round(arr.shape[1] * scale)))
+                new_h = max(1, int(round(arr.shape[0] * scale)))
+                arr = cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+        # Linearise transfer then convert primaries to linear sRGB.
+        lin = _linearize_transfer(arr, self.color_space).astype(np.float32)
+        matrix = _primaries_to_srgb(self.color_space)
+        if matrix is not None:
+            lin = lin @ matrix.T.astype(np.float32)
+        rgb_linear = np.clip(lin, 0.0, 1.0).astype(np.float32)
+
+        luminance = (
+            0.2126 * rgb_linear[:, :, 0] +
+            0.7152 * rgb_linear[:, :, 1] +
+            0.0722 * rgb_linear[:, :, 2]
+        ).astype(np.float32)
+
+        clip_threshold = 0.99
+        clipping_masks = {
+            'R': rgb_linear[:, :, 0] >= clip_threshold,
+            'G': rgb_linear[:, :, 1] >= clip_threshold,
+            'B': rgb_linear[:, :, 2] >= clip_threshold,
+        }
+        total_pixels = rgb_linear.shape[0] * rgb_linear.shape[1]
+        clipping_ratios = {
+            ch: float(np.sum(clipping_masks[ch]) / total_pixels)
+            for ch in ('R', 'G', 'B')
+        }
+
+        h, w = rgb_linear.shape[0], rgb_linear.shape[1]
+        metadata = {
+            'camera_make': 'Rendered',
+            'camera_model': 'TIFF',
+            'lens_model': '',
+            'iso': 100,
+            'shutter_speed': 1 / 125.0,
+            'shutter_speed_str': '',
+            'aperture': 4.0,
+            'focal_length': None,
+            'white_balance_multipliers': [1.0, 1.0, 1.0, 1.0],
+            'black_level': 0,
+            'white_level': 65535,
+            'image_height': h,
+            'image_width': w,
+            'raw_height': h,
+            'raw_width': w,
+            'raw_clipping_ratio': max(clipping_ratios.values()),
+        }
+        return rgb_linear, luminance, clipping_masks, clipping_ratios, metadata
 
     def _extract_metadata(self, raw, exif):
         """Merge rawpy + exifread data into a single metadata dict."""

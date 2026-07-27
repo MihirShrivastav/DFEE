@@ -195,6 +195,13 @@ RAW_EXTENSIONS = frozenset({
     ".nrw",                           # Nikon (compact)
 })
 
+# Rendered (display-referred) inputs — e.g. a Lightroom "Edit in DFEE" 16-bit
+# sRGB TIFF export. Decoded/linearised via the TIFF ingestion path, not LibRaw.
+RENDERED_EXTENSIONS = frozenset({".tif", ".tiff"})
+
+# All file types selectable in the picker.
+SUPPORTED_INPUT_EXTENSIONS = RAW_EXTENSIONS | RENDERED_EXTENSIONS
+
 # Ensure directories exist
 os.makedirs(RAW_DIR, exist_ok=True)
 
@@ -797,13 +804,15 @@ def list_files():
         for entry in os.scandir(RAW_DIR):
             if not entry.is_file():
                 continue
-            if os.path.splitext(entry.name)[1].lower() not in RAW_EXTENSIONS:
+            ext = os.path.splitext(entry.name)[1].lower()
+            if ext not in SUPPORTED_INPUT_EXTENSIONS:
                 continue
             stat = entry.stat()
             results.append({
                 "filename": entry.name,
                 "size_mb": round(stat.st_size / (1024 * 1024), 2),
                 "modified": stat.st_mtime,
+                "kind": "rendered" if ext in RENDERED_EXTENSIONS else "raw",
             })
     results.sort(key=lambda item: item["filename"].lower())
     return results

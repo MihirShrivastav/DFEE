@@ -30,6 +30,7 @@ struct DecodedRawImageResponse {
     NativeError error;
 };
 
+[[nodiscard]] bool is_tiff_filename(const std::string& filename);
 [[nodiscard]] DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest& request);
 [[nodiscard]] NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& request);
 

@@ -1116,7 +1116,7 @@ export default function App() {
               <div className="empty-msg">Scanning…</div>
             ) : files.length === 0 ? (
               <div className="empty-msg">
-                No .ARW files found.<br />Place images in <code style={{ color: 'var(--text-secondary)' }}>raw_files/</code>
+                No RAW or TIFF files found.<br />Place images in <code style={{ color: 'var(--text-secondary)' }}>raw_files/</code>
               </div>
             ) : (
               files.map(f => (
@@ -1125,7 +1125,10 @@ export default function App() {
                   className={`file-item ${selectedFile === f.filename ? 'active' : ''}`}
                   onClick={() => selectFile(f.filename)}
                 >
-                  <span className="file-name">{f.filename}</span>
+                  <span className="file-name">
+                    {f.filename}
+                    {f.kind === 'rendered' && <span className="file-badge">TIFF</span>}
+                  </span>
                   <span className="file-size">{f.size_mb} MB</span>
                 </div>
               ))
