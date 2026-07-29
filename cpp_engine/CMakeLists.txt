@@ -109,6 +109,19 @@ else()
     target_compile_options(dfee_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# OpenMP for CPU parallelism of the per-pixel render stages (threading only; we keep the
+# default x86-64/SSE2 arch baseline and do NOT force AVX, so there is no illegal-instruction
+# risk on older CPUs). Optional: without it the engine builds and runs serially.
+find_package(OpenMP QUIET)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(dfee_core PUBLIC OpenMP::OpenMP_CXX)
+    target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENMP=1)
+    message(STATUS "DFEE: OpenMP enabled (${OpenMP_CXX_FLAGS})")
+else()
+    target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENMP=0)
+    message(STATUS "DFEE: OpenMP not found — render stages will run single-threaded")
+endif()
+
 add_executable(dfee_cli tools/dfee_cli.cpp)
 target_link_libraries(dfee_cli PRIVATE dfee_core)
 target_compile_definitions(dfee_cli PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")

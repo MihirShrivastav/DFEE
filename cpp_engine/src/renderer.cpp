@@ -1,5 +1,6 @@
 #include "dfee/renderer.hpp"
 #include "dfee/color_spaces.hpp"
+#include "dfee/parallel.hpp"
 
 #include <array>
 #include <algorithm>
@@ -656,7 +657,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     }
 
     Image contaminated(rgb_linear.width, rgb_linear.height, 3);
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         const float r = rgb_linear.pixels[i * 3 + 0];
         const float g = rgb_linear.pixels[i * 3 + 1];
         const float b = rgb_linear.pixels[i * 3 + 2];
@@ -664,7 +665,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         contaminated.pixels[i * 3 + 0] = clamp01(r + g * g_to_r + b * b_to_r);
         contaminated.pixels[i * 3 + 1] = clamp01(g + r * r_to_g + b * b_to_g);
         contaminated.pixels[i * 3 + 2] = clamp01(b + r * r_to_b + g * g_to_b);
-    }
+    });
     return contaminated;
 }
 
@@ -735,7 +736,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     const float hi_b_scale = response.highlight_bias_lab[2] * kBiasScale * fc;
 
     Image out(rgb_linear.width, rgb_linear.height, 3);
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         float r = rgb_linear.pixels[i * 3 + 0];
         float g = rgb_linear.pixels[i * 3 + 1];
         float b = rgb_linear.pixels[i * 3 + 2];
@@ -819,7 +820,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         out.pixels[i * 3 + 0] = r;
         out.pixels[i * 3 + 1] = g;
         out.pixels[i * 3 + 2] = b;
-    }
+    });
     return out;
 }
 
@@ -916,7 +917,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     Image out(rgb_linear.width, rgb_linear.height, 3);
     const bool trace_gamut_reentry = should_trace_gamut_reentry(metadata, timing_prefix);
     std::size_t gamut_reentry_count = 0U;
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         const OklabPixel base_oklab = rgb_to_oklab_pixel(
             rgb_linear.pixels[i * 3 + 0],
             rgb_linear.pixels[i * 3 + 1],
@@ -979,6 +980,9 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
         if (needs_gamut_clamp) {
             if (trace_gamut_reentry) {
+#if DFEE_HAS_OPENMP
+#pragma omp atomic
+#endif
                 ++gamut_reentry_count;
             }
             const OklabPixel coupled_oklab = rgb_to_oklab_pixel(
@@ -1011,7 +1015,7 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
         out.pixels[i * 3 + 0] = rgb[0];
         out.pixels[i * 3 + 1] = rgb[1];
         out.pixels[i * 3 + 2] = rgb[2];
-    }
+    });
 
     if (trace_gamut_reentry) {
         append_timing_metric(metadata, timing_prefix, "__gamut_reentry_count", static_cast<double>(gamut_reentry_count));
@@ -1069,7 +1073,7 @@ Image FilmRenderer::apply_pre_film_normalization(
     Image normalized(rgb_linear.width, rgb_linear.height, 3);
     const float exp_factor = std::pow(2.0F, pre_film.exposure_compensation_stops);
 
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         float r = rgb_linear.pixels[i * 3 + 0] * exp_factor;
         float g = rgb_linear.pixels[i * 3 + 1] * exp_factor;
         float b = rgb_linear.pixels[i * 3 + 2] * exp_factor;
@@ -1091,7 +1095,7 @@ Image FilmRenderer::apply_pre_film_normalization(
         normalized.pixels[i * 3 + 0] = rgb[0];
         normalized.pixels[i * 3 + 1] = rgb[1];
         normalized.pixels[i * 3 + 2] = rgb[2];
-    }
+    });
 
     return normalized;
 }
@@ -1104,7 +1108,7 @@ Image FilmRenderer::apply_panchromatic_conversion(
     }
 
     Image monochrome(rgb_linear.width, rgb_linear.height, 3);
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         const float y_pan =
             response.pan_weight_r * rgb_linear.pixels[i * 3 + 0] +
             response.pan_weight_g * rgb_linear.pixels[i * 3 + 1] +
@@ -1112,7 +1116,7 @@ Image FilmRenderer::apply_panchromatic_conversion(
         monochrome.pixels[i * 3 + 0] = y_pan;
         monochrome.pixels[i * 3 + 1] = y_pan;
         monochrome.pixels[i * 3 + 2] = y_pan;
-    }
+    });
     return monochrome;
 }
 
@@ -1198,8 +1202,8 @@ Image FilmRenderer::apply_film_tone_response(
     // midtone) still shows through, but we don't double-map and blow the highlights.
     // 1.0 (default, RAW/parity) = full tone response, byte-identical to before.
     const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
-    for (std::size_t pixel_index = 0; pixel_index < rgb_linear.pixel_count(); ++pixel_index) {
-        const std::size_t base = pixel_index * 3U;
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t pixel_index) {
+        const std::size_t base = static_cast<std::size_t>(pixel_index) * 3U;
         if (tone_k >= 0.999F) {
             toned.pixels[base + 0U] = apply_tone_curve(rgb_linear.pixels[base + 0U], 0);
             toned.pixels[base + 1U] = apply_tone_curve(rgb_linear.pixels[base + 1U], 1);
@@ -1211,7 +1215,7 @@ Image FilmRenderer::apply_film_tone_response(
                 toned.pixels[base + static_cast<std::size_t>(c)] = in + tone_k * (out - in);
             }
         }
-    }
+    });
 
     return toned;
 }
@@ -1258,7 +1262,7 @@ Image FilmRenderer::apply_subtractive_density(
         return out;
     }
     const float lo = response.density_low_luma_limit;
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         const OklabPixel lab = rgb_to_oklab_pixel(
             rgb_linear.pixels[i * 3 + 0],
             rgb_linear.pixels[i * 3 + 1],
@@ -1273,7 +1277,7 @@ Image FilmRenderer::apply_subtractive_density(
         out.pixels[i * 3 + 0] = rgb[0];
         out.pixels[i * 3 + 1] = rgb[1];
         out.pixels[i * 3 + 2] = rgb[2];
-    }
+    });
     return out;
 }
 
@@ -1292,7 +1296,7 @@ Image FilmRenderer::apply_color_compression(
         out.pixels = rgb_linear.pixels;
         return out;
     }
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         const OklabPixel lab = rgb_to_oklab_pixel(
             rgb_linear.pixels[i * 3 + 0], rgb_linear.pixels[i * 3 + 1], rgb_linear.pixels[i * 3 + 2]);
         const OklchPixel lch = oklab_to_oklch_pixel(lab);
@@ -1318,7 +1322,7 @@ Image FilmRenderer::apply_color_compression(
         out.pixels[i * 3 + 0] = rgb[0];
         out.pixels[i * 3 + 1] = rgb[1];
         out.pixels[i * 3 + 2] = rgb[2];
-    }
+    });
     return out;
 }
 
@@ -1355,7 +1359,7 @@ Image FilmRenderer::apply_hue_saturation(
     constexpr float kMaxTotal = 0.35F;   // hard ceiling on the per-pixel chroma multiply
     const float inv_two_sigma_sq = 1.0F / (2.0F * kSigma * kSigma);
     const float two_pi = 2.0F * std::numbers::pi_v<float>;
-    for (std::size_t i = 0; i < rgb_linear.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
         const OklabPixel lab = rgb_to_oklab_pixel(
             rgb_linear.pixels[i * 3 + 0], rgb_linear.pixels[i * 3 + 1], rgb_linear.pixels[i * 3 + 2]);
         const OklchPixel lch = oklab_to_oklch_pixel(lab);
@@ -1379,7 +1383,7 @@ Image FilmRenderer::apply_hue_saturation(
         out.pixels[i * 3 + 0] = rgb[0];
         out.pixels[i * 3 + 1] = rgb[1];
         out.pixels[i * 3 + 2] = rgb[2];
-    }
+    });
     return out;
 }
 
@@ -1873,7 +1877,7 @@ Image FilmRenderer::apply_film_grain(
     static const auto kGammaDecodeLut = build_power_lut(2.2F);
     static const auto kGrainModulationLut = build_grain_modulation_lut();
 
-    for (int y = 0; y < h; ++y) {
+    parallel_for_rows(h, [&](int y) {
         const float* noise_r_row = noise_r.ptr<float>(y);
         const float* noise_g_row = noise_g.ptr<float>(y);
         const float* noise_b_row = noise_b.ptr<float>(y);
@@ -1894,7 +1898,7 @@ Image FilmRenderer::apply_film_grain(
             out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, gamma_out_g);
             out.pixels[base + 2] = sample_unit_lut(kGammaDecodeLut, gamma_out_b);
         }
-    }
+    });
 
     return out;
 }

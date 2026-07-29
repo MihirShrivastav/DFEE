@@ -7,6 +7,7 @@
 #include "dfee/bridge_utils.hpp"
 #include "dfee/color_spaces.hpp"
 #include "dfee/native_error.hpp"
+#include "dfee/parallel.hpp"
 #include "dfee/raw_decode.hpp"
 #include "dfee/renderer.hpp"
 #include "dfee/raw_metadata.hpp"
@@ -1939,6 +1940,8 @@ EngineSession::EngineSession(std::filesystem::path project_root)
             "The DFEE project root could not be found.",
             "Expected project root directory does not exist: " + project_root_.string());
     }
+    // Resolve the render thread count once (env DFEE_NATIVE_THREADS; default = all cores).
+    set_thread_count(configured_thread_count());
 }
 
 const std::filesystem::path& EngineSession::project_root() const noexcept {
