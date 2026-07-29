@@ -339,7 +339,7 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     request.film_color_compression = dict_float(dict, "film_color_compression", 100.0F);
     request.highlight_rolloff = dict_float(dict, "highlight_rolloff", 100.0F);
     request.film_contrast = dict_float(dict, "film_contrast", 100.0F);
-    request.rendered_input = dict_float(dict, "rendered_input", 65.0F);
+    request.rendered_input = dict_float(dict, "rendered_input", 80.0F);
     request.adaptive = dict_bool(dict, "adaptive", true);
     request.halation_strength = dict_float(dict, "halation_strength", 100.0F);
     request.halation_threshold = dict_float(dict, "halation_threshold", 50.0F);

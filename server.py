@@ -763,7 +763,7 @@ class PreviewRequest(BaseModel):
     film_color_compression: float = 100.0   # 0-200, colour compression (filmic_v3); 100 = stock default
     highlight_rolloff: float = 100.0   # 0-200, tone highlight rolloff (filmic_v3); 100 = stock default
     film_contrast: float = 100.0   # 0-200, film tone contrast (filmic_v3); 100 = stock default
-    rendered_input: float = 65.0   # 0-100, TIFF relief; 0 = keep display look, 100 = match RAW. Ignored for RAW.
+    rendered_input: float = 80.0   # 0-100, TIFF: trust baked exposure/tone + apply film tone gently. Ignored for RAW.
     adaptive: bool = True   # scene-referred tone steering on/off (filmic_v3)
     halation_strength: float = 100.0   # 0-200, halation glow strength (filmic_v3); 100 = stock default, 0 = off
     halation_threshold: float = 50.0   # 0-100, halation highlight threshold (filmic_v3); lower = more highlights bloom
@@ -1465,7 +1465,7 @@ def get_preview(
     film_color_compression: float = 100.0,
     highlight_rolloff: float = 100.0,
     film_contrast: float = 100.0,
-    rendered_input: float = 65.0,
+    rendered_input: float = 80.0,
     adaptive: bool = True,
     halation_strength: float = 100.0,
     halation_threshold: float = 50.0,

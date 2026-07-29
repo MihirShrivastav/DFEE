@@ -575,22 +575,6 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response.highlight_rolloff_knee = highlight_rolloff_knee;
     plan.film_response.highlight_rolloff_amount = highlight_rolloff_amount;
 
-    // Rendered-input relief index: how hard this stock's tone curve compresses.
-    // Drives how much headroom we restore for display-referred (TIFF) inputs so a
-    // contrasty stock doesn't double-compress an already-rolled-off image. Built
-    // from the resolved shoulder (dominant term — the highlight double-compression
-    // we measured), toe, and midtone contrast, with a bump for reversal stocks.
-    {
-        const float shoulder_term = std::clamp((shoulder_strength - 0.35F) / 0.55F, 0.0F, 1.0F);
-        const float toe_term = std::clamp((toe_strength - 0.20F) / 0.50F, 0.0F, 1.0F);
-        const float mid_term = std::clamp((midtone_density - 0.95F) / 0.35F, 0.0F, 1.0F);
-        float relief_index = 0.60F * shoulder_term + 0.20F * toe_term + 0.20F * mid_term;
-        if (stock_profile.stock_type == StockType::ColorReversal) {
-            relief_index = std::max(relief_index, 0.55F) + 0.25F;
-        }
-        plan.film_response.rendered_relief_index = std::clamp(relief_index, 0.0F, 1.0F);
-    }
-
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);
     float grain_roughness = get_numeric(stock_profile.numeric_values, "grain.roughness", 0.5F);

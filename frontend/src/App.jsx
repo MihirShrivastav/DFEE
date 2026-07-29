@@ -69,7 +69,7 @@ const DEFAULT_PARAMS = {
   film_color_compression: 100,
   highlight_rolloff: 100,
   film_contrast: 100,
-  rendered_input: 65,
+  rendered_input: 80,
   adaptive: true,
   print_stock: 'none',
   print_strength: 1.0,
@@ -1764,15 +1764,15 @@ export default function App() {
                     );
                   })}
                   {/\.tiff?$/i.test(selectedFile || '') && (() => {
-                    const tooltip = 'TIFFs from Lightroom already carry a baked-in contrast curve. This restores highlight/midtone headroom so contrasty stocks don’t double-crush the image. 0 = keep the TIFF look, 100 = match a RAW. Only affects rendered (TIFF) inputs.';
-                    const isDirty = params.rendered_input !== 65;
+                    const tooltip = 'TIFFs from Lightroom already carry a baked-in tone curve. This softens how strongly the film stock’s own tone curve is re-applied on top, so highlights don’t get pushed up and blown. Higher = gentler/subtler (protects skies & highlights); lower = full film tone like a RAW. The stock’s tonal character always shows through. Only affects rendered (TIFF) inputs.';
+                    const isDirty = params.rendered_input !== 80;
                     return (
                       <div className="slider-row" key="rendered_input">
                         <div className="slider-header">
                           <span className="slider-label" title={tooltip}>Rendered Input <span className="file-badge">TIFF</span></span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             {isDirty && (
-                              <button className="revert-btn" title="Reset Rendered Input" onClick={() => setParams(p => ({ ...p, rendered_input: 65 }))}>Reset</button>
+                              <button className="revert-btn" title="Reset Rendered Input" onClick={() => setParams(p => ({ ...p, rendered_input: 80 }))}>Reset</button>
                             )}
                             <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>{Math.round(params.rendered_input)}</span>
                           </div>

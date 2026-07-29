@@ -258,9 +258,10 @@ struct NativePreviewRenderRequest {
     float film_color_compression = 100.0F;
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
-    // Rendered-input (TIFF) relief: 0 = keep the display-referred look as-is,
-    // 100 = fully match the scene-referred (RAW) tone. Ignored for RAW inputs.
-    float rendered_input = 65.0F;
+    // Rendered-input (TIFF) handling: how much to trust the TIFF's baked exposure/tone
+    // and apply the film's own tone subtly. 0 = full RAW-style auto exposure + tone,
+    // 100 = fully trust the TIFF (film tone applied gently). Ignored for RAW inputs.
+    float rendered_input = 80.0F;
     bool adaptive = true;
     float halation_strength = 100.0F;
     float halation_threshold = 50.0F;

@@ -236,7 +236,7 @@ class NativePreviewRenderRequest:
     film_color_compression: float = 100.0
     highlight_rolloff: float = 100.0
     film_contrast: float = 100.0
-    rendered_input: float = 65.0
+    rendered_input: float = 80.0
     adaptive: bool = True
     halation_strength: float = 100.0
     halation_threshold: float = 50.0

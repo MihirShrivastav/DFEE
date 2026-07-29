@@ -1142,53 +1142,35 @@ void apply_gamma_additive_tone(
     adjusted = gamma_decode_mat_22(gamma_rgb);
 }
 
-// Peak luminance lift near white at full strength (relief_index=1, control=100).
-// Calibrated against a RAW-vs-TIFF Ultramax A/B: restores the highlight headroom
-// that a display-referred (Lightroom) export baked away, so the film shoulder does
-// not double-compress. Tuned so default control (65) on a mid-contrast stock closes
-// ~60% of the measured gap.
-constexpr float kRenderedReliefPeak = 0.52F;
+// Max attenuation of the film tone response for rendered (TIFF) inputs at control=100.
+// A TIFF already carries a baked-in tone curve, so re-applying the stock's full tone
+// response double-maps. The "Rendered Input" control (0..100) scales how much we tame
+// it: strength = 1 - (control/100) * kMaxToneAtten. Capped below 1.0 so the stock's
+// tone character always shows through (we tame, not bypass).
+constexpr float kMaxToneAtten = 0.70F;
 
-// Restore headroom on a display-referred (TIFF) input so the film tone shoulder
-// isn't applied on top of the baked-in one. `amount` is the peak luminance lift
-// (0 = no-op). The lift is a HUMP centred in the upper-mids that tapers to zero
-// before white: it opens up the mid/upper-mid tones that were compressed, but is
-// deliberately gentle on the highlight/white regions a TIFF already has baked in,
-// so bright skies and speculars are never pushed into clipping. A per-channel soft
-// ceiling guarantees no channel crosses ~0.985 (no blown highlights); hue preserved.
-void apply_rendered_input_relief(Image& img, const float amount) {
-    if (amount <= 1e-4F) {
-        return;
-    }
-    constexpr float kCeiling = 0.985F;  // lifted channels never cross this
-    const std::size_t count = img.pixel_count();
-    for (std::size_t i = 0; i < count; ++i) {
-        float& r = img.pixels[i * 3 + 0];
-        float& g = img.pixels[i * 3 + 1];
-        float& b = img.pixels[i * 3 + 2];
-        const float lum = std::clamp(0.2126F * r + 0.7152F * g + 0.0722F * b, 0.0F, 1.0F);
-        // Headroom-restore hump: peaks ~0.5 luma, tapers off through the upper-mids.
-        const float d = (lum - 0.50F) / 0.22F;
-        const float hump = std::exp(-d * d);
-        // Highlight guard: force the lift to zero as luminance approaches white so
-        // baked-in TIFF highlights/whites are left untouched.
-        const float guard = std::clamp((0.85F - lum) / 0.25F, 0.0F, 1.0F);
-        const float lift = amount * hump * guard;
-        if (lift <= 1e-5F) {
-            continue;
-        }
-        float gain = (lum > 1e-4F) ? (lum + lift) / lum : 1.0F;
-        // Soft ceiling: cap the gain so the brightest channel can't cross kCeiling,
-        // and never darken. This is the hard guarantee against blown highlights.
-        const float maxc = std::max({r, g, b});
-        if (maxc > 1e-4F) {
-            gain = std::min(gain, kCeiling / maxc);
-        }
-        gain = std::max(gain, 1.0F);
-        r = std::clamp(r * gain, 0.0F, 1.0F);
-        g = std::clamp(g * gain, 0.0F, 1.0F);
-        b = std::clamp(b * gain, 0.0F, 1.0F);
-    }
+// Adjust a render plan for a rendered (TIFF) input. A Lightroom TIFF is already
+// exposed and tone-mapped, so:
+//  1) drop the scene-referred AUTO exposure + tone compensations the solver added
+//     (they re-expose an already-exposed image, which was lifting/blowing highlights),
+//  2) apply the stock's own tone response subtly (control-scaled) so it isn't double-
+//     mapped on top of the baked-in curve. The stock's tonal character still shows.
+// Manual user exposure/tone sliders still apply on top (added after this).
+void apply_rendered_input_adjustments(RenderPlan& plan, const float rendered_input_control) {
+    const float c = std::clamp(rendered_input_control / 100.0F, 0.0F, 1.0F);
+    plan.film_response.tone_response_strength = std::clamp(1.0F - c * kMaxToneAtten, 0.0F, 1.0F);
+
+    auto& norm = plan.pre_film_normalization;
+    // Scale the auto adjustments down with the control (0 = keep RAW-style auto,
+    // 100 = fully trust the TIFF's baked exposure/tone).
+    const float keep = 1.0F - c;
+    norm.exposure_compensation_stops *= keep;
+    norm.contrast_compensation *= keep;
+    norm.highlights_compensation *= keep;
+    norm.shadows_compensation *= keep;
+    norm.blacks_compensation *= keep;
+    norm.whites_compensation *= keep;
+    norm.midtones_compensation *= keep;
 }
 
 Image apply_pre_film_preview_sliders(
@@ -2511,12 +2493,10 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         FilmRenderer renderer;
         {
             ScopedStageTimer stage(response.engine, "render_preview_apply_pre_film_sliders");
-            rendered = apply_pre_film_preview_sliders(preview.rgb_linear, request, render_plan);
             if (is_tiff_filename(response.filename)) {
-                const float relief = kRenderedReliefPeak * render_plan.film_response.rendered_relief_index
-                    * std::clamp(request.rendered_input / 100.0F, 0.0F, 1.0F);
-                apply_rendered_input_relief(rendered, relief);
+                apply_rendered_input_adjustments(render_plan, request.rendered_input);
             }
+            rendered = apply_pre_film_preview_sliders(preview.rgb_linear, request, render_plan);
         }
         {
             ScopedStageTimer stage(response.engine, "render_preview_film_pipeline");
@@ -2901,12 +2881,10 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 Image fullres_prefilm;
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_prefilm_fullres");
-                    fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
                     if (is_tiff_filename(response.filename)) {
-                        const float relief = kRenderedReliefPeak * render_plan->film_response.rendered_relief_index
-                            * std::clamp(request.rendered_input / 100.0F, 0.0F, 1.0F);
-                        apply_rendered_input_relief(fullres_prefilm, relief);
+                        apply_rendered_input_adjustments(*render_plan, request.rendered_input);
                     }
+                    fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
                 }
                 append_export_trace(project_root_, "export_image:fullres_prefilm:done");
                 export_analysis_cache_.reset();

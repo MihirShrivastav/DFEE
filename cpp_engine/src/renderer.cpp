@@ -1192,11 +1192,25 @@ Image FilmRenderer::apply_film_tone_response(
         return lut[lower] * (1.0F - mix) + lut[upper] * mix;
     };
 
+    // tone_response_strength < 1 applies the stock's tone curve subtly by blending the
+    // toned result back toward the untoned input. Used for rendered (TIFF) inputs, which
+    // already carry a baked-in tone curve — the stock's tonal character (toe/shoulder/
+    // midtone) still shows through, but we don't double-map and blow the highlights.
+    // 1.0 (default, RAW/parity) = full tone response, byte-identical to before.
+    const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
     for (std::size_t pixel_index = 0; pixel_index < rgb_linear.pixel_count(); ++pixel_index) {
         const std::size_t base = pixel_index * 3U;
-        toned.pixels[base + 0U] = apply_tone_curve(rgb_linear.pixels[base + 0U], 0);
-        toned.pixels[base + 1U] = apply_tone_curve(rgb_linear.pixels[base + 1U], 1);
-        toned.pixels[base + 2U] = apply_tone_curve(rgb_linear.pixels[base + 2U], 2);
+        if (tone_k >= 0.999F) {
+            toned.pixels[base + 0U] = apply_tone_curve(rgb_linear.pixels[base + 0U], 0);
+            toned.pixels[base + 1U] = apply_tone_curve(rgb_linear.pixels[base + 1U], 1);
+            toned.pixels[base + 2U] = apply_tone_curve(rgb_linear.pixels[base + 2U], 2);
+        } else {
+            for (int c = 0; c < 3; ++c) {
+                const float in = rgb_linear.pixels[base + static_cast<std::size_t>(c)];
+                const float out = apply_tone_curve(in, c);
+                toned.pixels[base + static_cast<std::size_t>(c)] = in + tone_k * (out - in);
+            }
+        }
     }
 
     return toned;

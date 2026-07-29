@@ -135,10 +135,10 @@ struct FilmResponsePlan {
     float tone_adaptive_factor = 1.0F;     // resolved scene-referred factor (report/diagnostic)
     float highlight_rolloff_knee = 1.0F;   // renderer highlight-shoulder knee (>=1.0 = off, filmic_v3)
     float highlight_rolloff_amount = 0.0F; // renderer highlight-shoulder strength (0 = off, filmic_v3)
-    // How aggressively this stock's tone curve compresses (0 = gentle like Portra,
-    // 1 = harsh like reversal). Scales the rendered-input relief so display-referred
-    // (TIFF) inputs aren't double-compressed by contrasty stocks. 0 for RAW behaviour.
-    float rendered_relief_index = 0.0F;
+    // Strength of the film tone response (1.0 = full, RAW/parity default). Reduced for
+    // rendered (TIFF) inputs so the stock's tone curve is applied subtly on top of the
+    // TIFF's baked-in tone rather than double-mapped (which blows highlights).
+    float tone_response_strength = 1.0F;
 };
 
 struct MaterialEffectsPlan {
