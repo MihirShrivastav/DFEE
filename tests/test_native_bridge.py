@@ -756,6 +756,39 @@ class TestNativeBridge(unittest.TestCase):
                 )
             self.assertIn(ctx.exception.code, {"LIBRAW_UNAVAILABLE", "OPENCV_UNAVAILABLE"})
 
+    def test_resolve_auto_grain_matches_equivalent_custom_render(self):
+        raw_filename = self._raw_filename()
+        if not self.session.list_profiles().engine.libraw_enabled:
+            self.skipTest("LibRaw not available")
+
+        self.session.select_file(raw_filename)
+        auto_request = dfee_native_bridge.NativePreviewRenderRequest(
+            filename=raw_filename,
+            stock="portra_400",
+            effect_pipeline_version="filmic_v3",
+            grain="Auto",
+        )
+        resolved = self.session.resolve_auto_grain(auto_request)
+
+        self.assertGreaterEqual(resolved.grain_strength, 0.0)
+        self.assertGreater(resolved.grain_size, 0.0)
+        self.assertGreaterEqual(resolved.grain_roughness, 0.0)
+        self.assertTrue(any(t.stage == "resolve_auto_grain_total" for t in resolved.engine.timings))
+
+        auto_preview = self.session.render_preview(auto_request)
+        custom_preview = self.session.render_preview(
+            dfee_native_bridge.NativePreviewRenderRequest(
+                filename=raw_filename,
+                stock="portra_400",
+                effect_pipeline_version="filmic_v3",
+                grain="Custom",
+                grain_strength=resolved.grain_strength,
+                grain_size=resolved.grain_size,
+                grain_roughness=resolved.grain_roughness,
+            )
+        )
+        self.assertEqual(auto_preview.jpeg_bytes, custom_preview.jpeg_bytes)
+
     def test_render_preview_accepts_filmic_v2_effect_pipeline_version(self):
         raw_filename = self._raw_filename()
         if self.session.list_profiles().engine.libraw_enabled:

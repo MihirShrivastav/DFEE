@@ -575,6 +575,22 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response.highlight_rolloff_knee = highlight_rolloff_knee;
     plan.film_response.highlight_rolloff_amount = highlight_rolloff_amount;
 
+    // Rendered-input relief index: how hard this stock's tone curve compresses.
+    // Drives how much headroom we restore for display-referred (TIFF) inputs so a
+    // contrasty stock doesn't double-compress an already-rolled-off image. Built
+    // from the resolved shoulder (dominant term — the highlight double-compression
+    // we measured), toe, and midtone contrast, with a bump for reversal stocks.
+    {
+        const float shoulder_term = std::clamp((shoulder_strength - 0.35F) / 0.55F, 0.0F, 1.0F);
+        const float toe_term = std::clamp((toe_strength - 0.20F) / 0.50F, 0.0F, 1.0F);
+        const float mid_term = std::clamp((midtone_density - 0.95F) / 0.35F, 0.0F, 1.0F);
+        float relief_index = 0.60F * shoulder_term + 0.20F * toe_term + 0.20F * mid_term;
+        if (stock_profile.stock_type == StockType::ColorReversal) {
+            relief_index = std::max(relief_index, 0.55F) + 0.25F;
+        }
+        plan.film_response.rendered_relief_index = std::clamp(relief_index, 0.0F, 1.0F);
+    }
+
     float grain_strength = get_numeric(stock_profile.numeric_values, "grain.strength", 0.0F);
     float grain_size = get_numeric(stock_profile.numeric_values, "grain.size", 0.0F);
     float grain_roughness = get_numeric(stock_profile.numeric_values, "grain.roughness", 0.5F);
@@ -629,6 +645,20 @@ RenderPlan RenderPlanSolver::solve(
         grain_strength *= 1.0F - 0.20F * noise_sensitivity;
     }
 
+    // Preserve the value before the scene-wide suppression pass. Supplying it
+    // through Custom causes that same pass to run once, matching Auto exactly.
+    // The final grain_strength above remains the renderer's effective value.
+    const float grain_custom_strength = contains_warning(plan.warnings, "SHADOW_NOISE_RISK")
+        ? [&stock_profile, grain_strength]() {
+            const float noise_sensitivity = get_numeric(
+                stock_profile.numeric_values,
+                "adaptation.shadow_noise_sensitivity",
+                0.6F);
+            const float suppression = 1.0F - 0.20F * noise_sensitivity;
+            return suppression > 1.0e-6F ? grain_strength / suppression : grain_strength;
+        }()
+        : grain_strength;
+
     const std::string inferred_grain_family = infer_grain_family(
         stock_profile,
         grain_strength,
@@ -665,6 +695,9 @@ RenderPlan RenderPlanSolver::solve(
         .grain_strength = grain_strength,
         .grain_size = grain_size,
         .grain_roughness = grain_roughness,
+        .grain_custom_strength = grain_custom_strength,
+        .grain_custom_size = grain_size,
+        .grain_custom_roughness = grain_roughness,
         .grain_chroma_strength = get_numeric(stock_profile.numeric_values, "grain.chroma_strength", 0.0F),
         .grain_family = grain_family,
         .grain_target_pgi = get_numeric(stock_profile.numeric_values, "grain.target_pgi_35mm_4x6", grain_defaults.target_pgi),

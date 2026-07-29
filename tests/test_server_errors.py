@@ -281,7 +281,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(response.headers["content-type"], "image/jpeg")
 
     def test_preview_can_use_native_render_behind_flag(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.raw_preview_bytes = b"python-raw-preview"
 
         native_preview = SimpleNamespace(
@@ -310,7 +310,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(response.headers["content-type"], "image/jpeg")
         native_mock.assert_called_once()
         payload = native_mock.call_args.args[0]
-        self.assertEqual(payload["filename"], "example.ARW")
+        self.assertEqual(payload["filename"], server._resolve_input_path("example.ARW"))
         self.assertEqual(payload["stock"], "portra_400")
         self.assertEqual(payload["print_stock"], "kodak_2383")
         self.assertEqual(payload["exposure"], 0.15)
@@ -318,6 +318,63 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["film_exposure_ev"], -0.35)
         self.assertEqual(payload["saturation"], 10.0)
         self.assertEqual(payload["bloom"], 5.0)
+
+    def test_auto_grain_resolution_returns_native_solver_values(self):
+        raw_filename = self._raw_filename()
+        server.session.filename = server._resolve_input_path(raw_filename)
+        resolved_grain = SimpleNamespace(
+            filename=server.session.filename,
+            stock="portra_400",
+            status="resolved",
+            grain_strength=0.42,
+            grain_size=0.63,
+            grain_roughness=0.38,
+            engine=self._fake_engine_info(),
+        )
+
+        with mock.patch.object(server, "_resolve_native_auto_grain", return_value=resolved_grain) as native_mock:
+            response = self.client.post(
+                "/api/grain-settings/auto",
+                json={
+                    "filename": raw_filename,
+                    "stock": "portra_400",
+                    "effect_pipeline_version": "filmic_v3",
+                    "grain": "Custom",
+                    "grain_strength": 0.1,
+                    "grain_size": 0.2,
+                    "grain_roughness": 0.3,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "status": "resolved",
+                "filename": server.session.filename,
+                "stock": "portra_400",
+                "grain_strength": 0.42,
+                "grain_size": 0.63,
+                "grain_roughness": 0.38,
+            },
+        )
+        payload = native_mock.call_args.args[0]
+        self.assertEqual(payload["grain"], "Auto")
+        self.assertEqual(payload["grain_strength"], -1.0)
+        self.assertEqual(payload["grain_size"], -1.0)
+        self.assertEqual(payload["grain_roughness"], -1.0)
+
+    def test_auto_grain_resolution_requires_selected_stock(self):
+        raw_filename = self._raw_filename()
+        server.session.filename = server._resolve_input_path(raw_filename)
+
+        response = self.client.post(
+            "/api/grain-settings/auto",
+            json={"filename": raw_filename, "stock": "none"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("film stock", response.json()["detail"].lower())
 
     def test_preview_rejects_unsupported_effect_pipeline_version(self):
         server.session.filename = "example.ARW"
@@ -358,7 +415,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         native_mock.assert_not_called()
 
     def test_preview_accepts_filmic_v2_effect_pipeline_version(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.raw_preview_bytes = b"python-raw-preview"
 
         native_preview = SimpleNamespace(
@@ -383,7 +440,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["effect_pipeline_version"], "filmic_v2")
 
     def test_preview_accepts_filmic_v3_effect_pipeline_version(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.raw_preview_bytes = b"python-raw-preview"
 
         native_preview = SimpleNamespace(
@@ -408,7 +465,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["effect_pipeline_version"], "filmic_v3")
 
     def test_preview_clamps_film_color_density_to_range(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.raw_preview_bytes = b"python-raw-preview"
 
         native_preview = SimpleNamespace(
@@ -433,7 +490,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["film_color_density"], 200.0)
 
     def test_preview_clamps_film_color_compression_to_range(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.raw_preview_bytes = b"python-raw-preview"
 
         native_preview = SimpleNamespace(
@@ -458,7 +515,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(payload["film_color_compression"], 200.0)
 
     def test_preview_clamps_film_contrast_and_forwards_adaptive(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.raw_preview_bytes = b"python-raw-preview"
 
         native_preview = SimpleNamespace(
@@ -487,7 +544,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertIs(payload["adaptive"], False)
 
     def test_preview_falls_back_to_python_pipeline_when_native_render_fails(self):
-        server.session.filename = "example.ARW"
+        server.session.filename = server._resolve_input_path("example.ARW")
         server.session.preview_rgb_linear = mock.Mock(copy=mock.Mock(return_value=np.zeros((2, 2, 3), dtype=np.float32)))
         server.session.masks = {}
         server.session.feature_dict = {}
@@ -921,7 +978,7 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertIn("metadata", payload)
         self.assertIn("diagnostics", payload)
         self.assertEqual(payload["diagnostics"]["dominant_hues"], ["Red", "Blue", "Yellow"])
-        native_mock.assert_called_once_with(raw_filename)
+        native_mock.assert_called_once_with(server._resolve_input_path(raw_filename))
 
     def test_select_falls_back_to_python_analysis_when_native_path_fails(self):
         raw_filename = self._raw_filename()
@@ -1008,6 +1065,33 @@ class TestServerRawFailureHandling(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("between -100 and 100", response.json()["detail"])
         native_mock.assert_not_called()
+
+
+class TestNativeRequestPayloadMapping(unittest.TestCase):
+    """Guards the payload -> native bridge request boundary against field skew.
+
+    Regression: PreviewRequest.model_dump() carries `export_format` (and could gain
+    other fields), which the preview bridge dataclass does not accept — constructing
+    it directly raised TypeError and broke /api/grain-settings/auto with a 503.
+    """
+
+    def test_preview_payload_drops_fields_absent_from_bridge_request(self):
+        import dfee_native_bridge as nb
+
+        payload = server.PreviewRequest(filename="x.arw", stock="portra_400").model_dump()
+        # export_format is on the preview HTTP model but not the preview bridge request.
+        self.assertIn("export_format", payload)
+        req = server._native_request_from_payload(nb.NativePreviewRenderRequest, payload)
+        self.assertFalse(hasattr(req, "export_format"))
+        self.assertEqual(req.stock, "portra_400")
+
+    def test_export_payload_maps_to_export_bridge_request(self):
+        import dfee_native_bridge as nb
+
+        payload = server.ExportRequest(filename="x.arw", stock="portra_400").model_dump()
+        req = server._native_request_from_payload(nb.NativeExportRequest, payload)
+        self.assertEqual(req.export_format, payload["export_format"])
+        self.assertEqual(req.stock, "portra_400")
 
 
 if __name__ == "__main__":

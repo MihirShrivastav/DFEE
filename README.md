@@ -167,6 +167,14 @@ Unsupported placement values and out-of-range film exposure offsets are
 rejected with HTTP `400`. The React Film Lab explicitly sends
 `exposure_placement=auto_balanced` as its default starting point.
 
+`POST /api/grain-settings/auto` accepts the existing preview request fields and
+returns the native solver's resolved `grain_strength`, `grain_size`, and
+`grain_roughness` for the selected RAW and camera stock. The React Film Lab
+uses it when Auto grain is turned off, so Custom sliders begin at the exact
+stock/ISO-derived Auto result instead of generic values. The route requires an
+active selected file and a non-`none` stock, and it returns HTTP `503` if the
+native engine is unavailable.
+
 Four **Color Character** controls are available under `filmic_v2`. Each is
 bipolar `−100` to `+100`, with `0` as the neutral no-op default:
 

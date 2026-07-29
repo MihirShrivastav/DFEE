@@ -107,6 +107,7 @@ before adding more material controls.
 | M7-006A | Complete M6-003 grain acceptance | Review representative bright, low-light, smooth, detailed, color, and monochrome RAWs at preview and export resolution. | No blotchy field artifacts, pixel-noise roughness collapse, or preview/export mismatch. |
 | M7-006B | Complete bloom/halation acceptance | Review point lights, bright edges, broad highlights, and scenes without highlight sources. | Diffusion is source-bound and filmic; it does not become a global white blur or halo every edge. |
 | M7-006C | Material UI polish | Present grain, halation, and bloom as bounded material choices with stock defaults and clear override states. | Control names remain general; stock defaults are discoverable without overcrowding the panel. |
+| M7-006D | done | Materialize Auto grain into Custom controls | Native bridge/route test plus Auto-vs-Custom render equivalence test | Turning Auto grain off resolves the active stock/RAW ISO settings through the native solver and starts Custom at values that reproduce the Auto render exactly. |
 
 ### M7-007: Recipes, Compare, and Recoverability
 

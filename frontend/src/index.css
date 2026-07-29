@@ -216,6 +216,199 @@ body {
   vertical-align: middle;
 }
 
+/* ── Pinned-folder accordion + navigator ───────────────────────────── */
+.folder-choose-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent, #6ea8fe);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.folder-choose-btn:hover {
+  background: color-mix(in srgb, var(--accent, #6ea8fe) 12%, transparent);
+  border-color: var(--accent, #6ea8fe);
+}
+
+.pin-section {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pin-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.pin-header:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.04)); }
+.pin-header svg { color: var(--accent, #6ea8fe); flex-shrink: 0; }
+
+.pin-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform 0.12s ease;
+  flex-shrink: 0;
+  width: 10px;
+}
+.pin-chevron.open { transform: rotate(90deg); }
+
+.pin-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pin-unpin {
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 3px 5px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+}
+.pin-header:hover .pin-unpin { opacity: 1; }
+.pin-unpin:hover { color: var(--danger, #ff6b6b); background: var(--surface-hover, rgba(255, 255, 255, 0.06)); }
+
+.pin-files {
+  padding: 2px 0 6px;
+  background: rgba(0, 0, 0, 0.12);
+}
+.pin-files .file-item { padding-left: 26px; }
+
+.empty-msg.small {
+  padding: 8px 12px 8px 26px;
+  font-size: 11px;
+}
+
+.folder-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.folder-card {
+  width: 520px;
+  max-width: 92vw;
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface, #1b1d22);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.folder-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.folder-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.folder-current-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent, #6ea8fe) 6%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.folder-filecount {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.folder-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.folder-row:hover {
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+  color: var(--text-primary);
+}
+.folder-row svg { color: var(--accent, #6ea8fe); flex-shrink: 0; }
+.folder-up { color: var(--text-muted); }
+
+.folder-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.folder-card-footer .btn-secondary,
+.folder-card-footer .btn-primary {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border-subtle);
+}
+.folder-card-footer .btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.folder-card-footer .btn-secondary:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover, rgba(255, 255, 255, 0.05));
+}
+.folder-card-footer .btn-primary {
+  background: var(--accent, #6ea8fe);
+  border-color: var(--accent, #6ea8fe);
+  color: #0b0d10;
+  font-weight: 600;
+}
+.folder-card-footer .btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .sidebar-presets-panel {
   padding: 12px;
   border-top: 1px solid var(--border-subtle);

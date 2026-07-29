@@ -339,6 +339,7 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     request.film_color_compression = dict_float(dict, "film_color_compression", 100.0F);
     request.highlight_rolloff = dict_float(dict, "highlight_rolloff", 100.0F);
     request.film_contrast = dict_float(dict, "film_contrast", 100.0F);
+    request.rendered_input = dict_float(dict, "rendered_input", 65.0F);
     request.adaptive = dict_bool(dict, "adaptive", true);
     request.halation_strength = dict_float(dict, "halation_strength", 100.0F);
     request.halation_threshold = dict_float(dict, "halation_threshold", 50.0F);
@@ -660,6 +661,42 @@ PyObject* py_render_preview(PyObject*, PyObject* args) {
     }
 }
 
+PyObject* py_resolve_auto_grain(PyObject*, PyObject* args) {
+    PyObject* capsule = nullptr;
+    PyObject* request_dict = nullptr;
+    if (!PyArg_ParseTuple(args, "OO!", &capsule, &PyDict_Type, &request_dict)) {
+        return nullptr;
+    }
+    auto* session = session_from_capsule(capsule);
+    if (session == nullptr) {
+        return nullptr;
+    }
+
+    try {
+        const auto result = session->resolve_auto_grain(preview_request_from_dict(request_dict));
+        PyObject* dict = PyDict_New();
+        PyDict_SetItemString(dict, "ok", result.ok ? Py_True : Py_False);
+        PyDict_SetItemString(dict, "filename", PyUnicode_FromString(result.filename.c_str()));
+        PyDict_SetItemString(dict, "stock", PyUnicode_FromString(result.stock.c_str()));
+        PyDict_SetItemString(dict, "status", PyUnicode_FromString(result.status.c_str()));
+        PyDict_SetItemString(dict, "grain_strength", PyFloat_FromDouble(result.grain_strength));
+        PyDict_SetItemString(dict, "grain_size", PyFloat_FromDouble(result.grain_size));
+        PyDict_SetItemString(dict, "grain_roughness", PyFloat_FromDouble(result.grain_roughness));
+        if (!result.error.empty()) {
+            PyObject* error = native_error_to_dict(result.error);
+            PyDict_SetItemString(dict, "error", error);
+            Py_DECREF(error);
+        }
+        PyObject* engine = engine_metadata_to_dict(result.engine);
+        PyDict_SetItemString(dict, "engine", engine);
+        Py_DECREF(engine);
+        return dict;
+    } catch (const std::exception& ex) {
+        set_python_exception_from_current(ex);
+        return nullptr;
+    }
+}
+
 PyObject* py_export_image(PyObject*, PyObject* args) {
     PyObject* capsule = nullptr;
     PyObject* request_dict = nullptr;
@@ -707,6 +744,7 @@ PyMethodDef kMethods[] = {
     {"cache_state", py_cache_state, METH_VARARGS, "Inspect native session cache ownership state."},
     {"raw_preview", reinterpret_cast<PyCFunction>(py_raw_preview), METH_VARARGS | METH_KEYWORDS, "Return cached native RAW preview JPEG bytes."},
     {"render_preview", py_render_preview, METH_VARARGS, "Render a native JPEG preview through the film pipeline."},
+    {"resolve_auto_grain", py_resolve_auto_grain, METH_VARARGS, "Resolve Auto grain into equivalent Custom control values."},
     {"export_image", py_export_image, METH_VARARGS, "Export a native full-resolution render to disk."},
     {nullptr, nullptr, 0, nullptr},
 };

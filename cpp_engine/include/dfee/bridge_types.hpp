@@ -258,6 +258,9 @@ struct NativePreviewRenderRequest {
     float film_color_compression = 100.0F;
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
+    // Rendered-input (TIFF) relief: 0 = keep the display-referred look as-is,
+    // 100 = fully match the scene-referred (RAW) tone. Ignored for RAW inputs.
+    float rendered_input = 65.0F;
     bool adaptive = true;
     float halation_strength = 100.0F;
     float halation_threshold = 50.0F;
@@ -276,6 +279,21 @@ struct NativePreviewRenderResponse {
     std::string status;
     std::string content_type = "image/jpeg";
     std::vector<std::uint8_t> jpeg_bytes;
+    NativeError error;
+    NativeEngineMetadata engine;
+};
+
+// The solver-resolved camera-grain values for the active RAW/stock pair.
+// This lets the UI materialize Auto grain into equivalent Custom controls
+// without rendering another preview or reimplementing stock/ISO logic in JS.
+struct NativeGrainResolutionResponse {
+    bool ok = false;
+    std::string filename;
+    std::string stock;
+    std::string status;
+    float grain_strength = 0.0F;
+    float grain_size = 0.0F;
+    float grain_roughness = 0.0F;
     NativeError error;
     NativeEngineMetadata engine;
 };

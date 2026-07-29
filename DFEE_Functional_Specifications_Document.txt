@@ -33,7 +33,7 @@ Apply film stock behavior as a controlled response system across luminance zones
 Maintain deterministic reproducibility: the same input RAW, selected profile, version, and user controls shall produce the same output.
 Allow camera-specific biases, such as cool/blue shadow casts or green-magenta imbalance, to be normalized before or during film rendering.
 Produce an explainable render report showing input diagnosis and applied rendering decisions.
-Support future extension to multiple film stock styles, scanner styles, and print styles without rewriting the core engine.
+Support future extension to multiple film stock styles and print styles without rewriting the core engine.
 2.2 Product Non-Goals
 DFEE shall not primarily rely on AI object detection, segmentation, or generative image manipulation to create the film look.
 DFEE shall not hallucinate new image content, replace regions, or create semantic edits such as changing sky, skin, face, clothes, or background independently as a core operation.
@@ -49,7 +49,7 @@ DFEE shall not assume that all photos should be corrected to a neutral, technica
 5. Generate continuous luminance-zone masks and value-based control maps.
 6. Combine image-state features with selected film stock and scan/print profile.
 7. Generate deterministic adaptive render plan.
-8. Apply exposure placement, film response curves, channel-density behavior, hue/saturation compression, local contrast shaping, grain synthesis, halation/bloom, and scanner/print finishing.
+8. Apply exposure placement, film response curves, channel-density behavior, hue/saturation compression, local contrast shaping, grain synthesis, halation/bloom, and optional print finishing.
 9. Export rendered image and sidecar render report.
 3.2 Logical Architecture
 Layer
@@ -240,11 +240,11 @@ The system shall compute halation source and receiver masks.
 Halation appears around high-intensity, high-contrast sources and bleeds into lower-density neighboring regions.
 FR-30
 The system shall compute digital sharpness score to optionally reduce brittle digital edges before film finishing.
-Over-sharpened inputs can be softened by stock profile or scanner profile.
+Over-sharpened inputs can be softened by stock profile behavior or print finishing.
 
 6. Film Stock Profile Requirements
 6.1 Film Stock as Behavior
-A film profile shall define behavior, not fixed slider values. The selected stock determines how tonal zones, hue bands, saturation ranges, channel relationships, grain, halation, and scanner/print finishing behave. The image-state analysis determines how strongly those behaviors should be applied.
+A film profile shall define behavior, not fixed slider values. The selected stock determines how tonal zones, hue bands, saturation ranges, channel relationships, grain, halation, and print finishing behave. The image-state analysis determines how strongly those behaviors should be applied.
 Profile Area
 Required Parameters
 Tone response
@@ -312,15 +312,14 @@ halation:
   warm_core: [1.0, 0.58, 0.24]
   red_fringe: [1.0, 0.18, 0.08]
 
-scanner:
-  style: frontier_soft
-  contrast: 0.52
-  warmth: 0.18
-  black_point: 0.035
-  output_sharpening: 0.15
+print_stock:
+  style: kodak_2383
+  contrast_boost: 1.18
+  saturation_scale: 1.08
+  black_point: 0.008
 7. Parameter Solver Requirements
 7.1 Solver Objective
-The parameter solver shall combine the input image-state feature dictionary with the selected film stock profile and scan/print profile to generate a deterministic render plan. The solver is responsible for deciding how strongly to apply each stock behavior based on the actual starting condition of the image.
+The parameter solver shall combine the input image-state feature dictionary with the selected film stock profile and optional print stock profile to generate a deterministic render plan. The solver is responsible for deciding how strongly to apply each stock behavior based on the actual starting condition of the image.
 7.2 Solver Logic
 Input Condition
 Solver Response Example
@@ -371,10 +370,10 @@ Limit shadow lift, suppress digital noise amplification, add controlled film gra
     "bloom_strength": 0.12,
     "edge_softening": 0.10
   },
-  "scanner_finish": {
-    "scan_contrast": 0.52,
-    "scan_warmth": 0.18,
-    "black_point": 0.035
+  "print_finish": {
+    "strength": 1.0,
+    "print_contrast": 0.0,
+    "print_black_point": 0.0
   }
 }
 8. Rendering Engine Functional Modules
@@ -689,8 +688,8 @@ CameraBiasEstimator
 Estimate neutral axis and camera/input color bias.
 FilmStockProfile
 Load and validate film stock behavior profile.
-ScanPrintProfile
-Load finishing profile.
+PrintStockProfile
+Load optional print finishing profile.
 RenderPlanSolver
 Generate deterministic transformation coefficients.
 FilmRenderer
@@ -703,7 +702,7 @@ Process multiple RAW files with consistent profile and per-image adaptation.
 11.2 Example Python Interface
 engine = DFEEEngine(
     stock_profile="color_negative_400_soft.yaml",
-    scan_profile="frontier_soft.yaml",
+    print_profile="kodak_2383.yaml",
     adaptation_strength=0.85,
     output_color_space="sRGB",
     output_bit_depth=16
@@ -725,7 +724,7 @@ Description
 Film stock
 Profile list
 Selects core film behavior.
-Scan/print style
+Print stock
 Profile list
 Selects final interpretation.
 Adaptation strength
@@ -756,7 +755,7 @@ The system shall process a folder of RAW files using one film profile while adap
 Each file receives a unique render plan and sidecar report.
 FR-32
 The system shall allow locking certain render parameters across a batch.
-User can lock stock, scan profile, grain seed policy, output size, and adaptation strength.
+User can lock stock, print stock, grain seed policy, output size, and adaptation strength.
 FR-33
 The system shall allow batch consistency mode.
 Color and exposure adaptation are constrained to prevent excessive variation across a shoot.
@@ -771,7 +770,7 @@ Every render shall produce a sidecar report. This is essential for debugging, ca
   "engine_version": "1.0.0",
   "input_file": "DSC00123.ARW",
   "stock_profile": "color_negative_400_soft",
-  "scan_profile": "frontier_soft",
+  "print_stock": "kodak_2383",
   "image_diagnosis": {},
   "feature_summary": {},
   "render_plan": {},
@@ -880,7 +879,7 @@ Phase 2: Basic Film Renderer
 Tone curve, color response, saturation compression, 2–3 profiles.
 Initial TIFF/JPEG output with adaptive render plan.
 Phase 3: Material Effects
-Grain, halation, bloom, local contrast, scanner finishing.
+Grain, halation, bloom, local contrast, print finishing.
 Integrated film-like output with sidecar report.
 Phase 4: Calibration Toolkit
 Reference image comparison, profile tuning, batch metrics.
@@ -905,7 +904,7 @@ Use stock behavior profiles rather than slider presets.
 Allows the same film identity to adapt safely across different inputs.
 Separate camera/input normalization from film response.
 Prevents camera-specific bias from being amplified by film color transforms.
-Separate film stock from scanner/print finish.
+Separate film stock from print finish.
 The perceived film look is film plus interpretation; this gives flexible creative control.
 Generate render reports.
 Improves debugging, calibration, trust, and repeatability.

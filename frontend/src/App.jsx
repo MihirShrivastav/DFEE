@@ -7,9 +7,9 @@ import ColorGradingPanel from './ColorGradingPanel';
 const API = 'http://localhost:8000';
 const EFFECT_PIPELINE_VERSION = 'filmic_v3';
 
-const RefreshIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+const FolderIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
   </svg>
 );
 
@@ -26,6 +26,9 @@ const CameraIcon = () => (
     <circle cx="12" cy="13" r="4"/>
   </svg>
 );
+
+// Normalise a path for comparison (drop trailing slashes, lower-case for Windows).
+const os_norm = (p) => (p || '').replace(/[\\/]+$/, '').toLowerCase();
 
 const DEFAULT_PARAMS = {
   stock: 'none',
@@ -66,6 +69,7 @@ const DEFAULT_PARAMS = {
   film_color_compression: 100,
   highlight_rolloff: 100,
   film_contrast: 100,
+  rendered_input: 65,
   adaptive: true,
   print_stock: 'none',
   print_strength: 1.0,
@@ -128,10 +132,16 @@ const BUILTIN_PRESETS = [
 ];
 
 export default function App() {
-  const [files, setFiles] = useState([]);
   const [profiles, setProfiles] = useState({ stocks: [], print_stocks: [] });
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);  // absolute path of the loaded file
+  // Pinned-folder workspace (accordion). Each pin lazily loads its own file list.
+  const [pins, setPins] = useState([]);                    // [{path, name}]
+  const [expandedPins, setExpandedPins] = useState({});    // { [path]: true }
+  const [filesByPin, setFilesByPin] = useState({});        // { [path]: [file, ...] }
+  const [loadingPin, setLoadingPin] = useState({});        // { [path]: true }
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [browseState, setBrowseState] = useState({ path: '', parent: null, is_root: true, drives: [], dirs: [], file_count: 0 });
+  const [browseLoading, setBrowseLoading] = useState(false);
   const [selectLoading, setSelectLoading] = useState(false);
   const [diagnostics, setDiagnostics] = useState(null);
   const [params, setParams] = useState(DEFAULT_PARAMS);
@@ -261,6 +271,7 @@ export default function App() {
   const [previewReady, setPreviewReady] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [grainResolving, setGrainResolving] = useState(false);
   const [exportFormat, setExportFormat] = useState('png8'); // 'png8' | 'png16' | 'tiff'
   const [toast, setToast] = useState(null);
   const [comparePos, setComparePos] = useState(50);
@@ -478,21 +489,171 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast', 'halation_strength', 'halation_threshold'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast', 'rendered_input', 'halation_strength', 'halation_threshold'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
 
-  const fetchFiles = useCallback(async () => {
-    setLoadingFiles(true);
+  const handleAutoGrainChange = async (event) => {
+    if (event.target.checked) {
+      setParams(p => ({
+        ...p,
+        grain: 'Auto',
+        grain_strength: -1.0,
+        grain_size: -1.0,
+        grain_roughness: -1.0,
+      }));
+      return;
+    }
+
+    if (!selectedFile || params.stock === 'none') {
+      showToast('Choose a RAW file and film stock before setting Custom grain.', 'warning');
+      return;
+    }
+
+    const autoRequest = {
+      filename: selectedFile,
+      effect_pipeline_version: EFFECT_PIPELINE_VERSION,
+      ...params,
+      grain: 'Auto',
+      grain_strength: -1.0,
+      grain_size: -1.0,
+      grain_roughness: -1.0,
+    };
+    const selectionToken = selectTokenRef.current;
+    setGrainResolving(true);
     try {
-      const res = await fetch(`${API}/api/files`);
+      const response = await fetch(`${API}/api/grain-settings/auto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(autoRequest),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const resolved = await response.json();
+
+      setParams(current => {
+        if (
+          selectTokenRef.current !== selectionToken ||
+          current.grain !== 'Auto' ||
+          current.stock !== autoRequest.stock
+        ) return current;
+        return {
+          ...current,
+          grain: 'Custom',
+          grain_strength: resolved.grain_strength,
+          grain_size: resolved.grain_size,
+          grain_roughness: resolved.grain_roughness,
+        };
+      });
+    } catch (error) {
+      showToast(`Could not resolve Auto grain: ${error.message}`, 'error');
+    } finally {
+      setGrainResolving(false);
+    }
+  };
+
+  // Load one pinned folder's files (lazy, cached in filesByPin).
+  const loadPinFiles = useCallback(async (path) => {
+    setLoadingPin(m => ({ ...m, [path]: true }));
+    try {
+      const res = await fetch(`${API}/api/files?path=${encodeURIComponent(path)}`);
       const data = await res.json();
-      setFiles(data);
+      setFilesByPin(m => ({ ...m, [path]: data }));
     } catch {
       showToast('Cannot reach backend — is server.py running?', 'error');
     } finally {
-      setLoadingFiles(false);
+      setLoadingPin(m => ({ ...m, [path]: false }));
+    }
+  }, [showToast]);
+
+  const togglePin = useCallback((path) => {
+    setExpandedPins(prev => {
+      const next = { ...prev, [path]: !prev[path] };
+      if (next[path]) loadPinFiles(path);
+      return next;
+    });
+  }, [loadPinFiles]);
+
+  const fetchPins = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/pins`);
+      const data = await res.json();
+      const pinned = data.pinned || [];
+      setPins(pinned);
+      // Auto-expand the folder containing the last-opened file (or the first pin).
+      const last = data.last_file || '';
+      const norm = (p) => p.replace(/[\\/]+$/, '');
+      const home = pinned.find(p => last && norm(last).toLowerCase().startsWith(norm(p.path).toLowerCase() + '\\')
+                                   || last && norm(last).toLowerCase().startsWith(norm(p.path).toLowerCase() + '/'))
+                   || pinned[0];
+      if (home) {
+        setExpandedPins({ [home.path]: true });
+        loadPinFiles(home.path);
+      }
+    } catch {
+      showToast('Cannot reach backend — is server.py running?', 'error');
+    }
+  }, [showToast, loadPinFiles]);
+
+  const browseTo = useCallback(async (path) => {
+    setBrowseLoading(true);
+    try {
+      const res = await fetch(`${API}/api/browse?path=${encodeURIComponent(path || '')}`);
+      if (!res.ok) throw new Error('browse failed');
+      const data = await res.json();
+      setBrowseState(data);
+    } catch {
+      showToast('Could not open that folder.', 'error');
+    } finally {
+      setBrowseLoading(false);
+    }
+  }, [showToast]);
+
+  const openBrowser = useCallback(() => {
+    setBrowserOpen(true);
+    browseTo('');   // start at drive list
+  }, [browseTo]);
+
+  const pinFolder = useCallback(async (path) => {
+    try {
+      const res = await fetch(`${API}/api/pins`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Could not pin folder');
+      }
+      const data = await res.json();
+      setPins(data.pinned || []);
+      setBrowserOpen(false);
+      // Expand and load the freshly pinned folder.
+      const added = os_norm(path);
+      const match = (data.pinned || []).find(p => os_norm(p.path) === added);
+      if (match) {
+        setExpandedPins(prev => ({ ...prev, [match.path]: true }));
+        loadPinFiles(match.path);
+      }
+    } catch (e) {
+      showToast(e.message || 'Could not pin folder.', 'error');
+    }
+  }, [showToast, loadPinFiles]);
+
+  const unpinFolder = useCallback(async (path, e) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await fetch(`${API}/api/pins/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      const data = await res.json();
+      setPins(data.pinned || []);
+      setExpandedPins(prev => { const n = { ...prev }; delete n[path]; return n; });
+      setFilesByPin(prev => { const n = { ...prev }; delete n[path]; return n; });
+    } catch {
+      showToast('Could not unpin folder.', 'error');
     }
   }, [showToast]);
 
@@ -509,10 +670,10 @@ export default function App() {
   // Boot
   useEffect(() => {
     queueMicrotask(() => {
-      fetchFiles();
+      fetchPins();
       fetchProfiles();
     });
-  }, [fetchFiles, fetchProfiles]);
+  }, [fetchPins, fetchProfiles]);
 
   const selectFile = async (filename) => {
     const selectToken = selectTokenRef.current + 1;
@@ -653,6 +814,7 @@ export default function App() {
         film_color_compression: String(params.film_color_compression),
         highlight_rolloff: String(params.highlight_rolloff),
         film_contrast: String(params.film_contrast),
+        rendered_input: String(params.rendered_input),
         adaptive: params.adaptive ? '1' : '0',
         print_stock: params.print_stock,
         print_strength: String(params.print_strength),
@@ -943,6 +1105,7 @@ export default function App() {
           film_color_compression: params.film_color_compression,
           highlight_rolloff: params.highlight_rolloff,
           film_contrast: params.film_contrast,
+          rendered_input: params.rendered_input,
           adaptive: params.adaptive,
           print_stock: params.print_stock,
           print_strength: params.print_strength,
@@ -1094,8 +1257,8 @@ export default function App() {
           <span className="brand-name">DFEE</span>
           <span className="brand-tag">Film Workspace</span>
         </div>
-        <span className="header-status">
-          {selectedFile ? selectedFile : 'No image loaded'}
+        <span className="header-status" title={selectedFile || ''}>
+          {selectedFile ? selectedFile.split(/[\\/]/).pop() : 'No image loaded'}
         </span>
       </header>
 
@@ -1106,32 +1269,61 @@ export default function App() {
         <aside className="dfee-sidebar">
           <div className="sidebar-header">
             <span className="sidebar-label">Library</span>
-            <button className="icon-btn" onClick={fetchFiles} title="Refresh">
-              <RefreshIcon />
-            </button>
+            <button className="folder-choose-btn" onClick={openBrowser} title="Pin a folder">＋ Pin folder</button>
           </div>
 
           <div className="file-list">
-            {loadingFiles ? (
-              <div className="empty-msg">Scanning…</div>
-            ) : files.length === 0 ? (
+            {pins.length === 0 ? (
               <div className="empty-msg">
-                No RAW or TIFF files found.<br />Place images in <code style={{ color: 'var(--text-secondary)' }}>raw_files/</code>
+                No pinned folders.<br />Use <strong>＋ Pin folder</strong> to add one.
               </div>
             ) : (
-              files.map(f => (
-                <div
-                  key={f.filename}
-                  className={`file-item ${selectedFile === f.filename ? 'active' : ''}`}
-                  onClick={() => selectFile(f.filename)}
-                >
-                  <span className="file-name">
-                    {f.filename}
-                    {f.kind === 'rendered' && <span className="file-badge">TIFF</span>}
-                  </span>
-                  <span className="file-size">{f.size_mb} MB</span>
-                </div>
-              ))
+              pins.map(pin => {
+                const open = !!expandedPins[pin.path];
+                const pinFiles = filesByPin[pin.path] || [];
+                return (
+                  <div key={pin.path} className="pin-section">
+                    <div
+                      className={`pin-header ${open ? 'open' : ''}`}
+                      onClick={() => togglePin(pin.path)}
+                      title={pin.path}
+                    >
+                      <span className={`pin-chevron ${open ? 'open' : ''}`}>▸</span>
+                      <FolderIcon />
+                      <span className="pin-name">{pin.name}</span>
+                      <button
+                        className="pin-unpin"
+                        title="Unpin folder"
+                        onClick={(e) => unpinFolder(pin.path, e)}
+                      >✕</button>
+                    </div>
+
+                    {open && (
+                      <div className="pin-files">
+                        {loadingPin[pin.path] ? (
+                          <div className="empty-msg small">Scanning…</div>
+                        ) : pinFiles.length === 0 ? (
+                          <div className="empty-msg small">No RAW or TIFF files here.</div>
+                        ) : (
+                          pinFiles.map(f => (
+                            <div
+                              key={f.path}
+                              className={`file-item ${selectedFile === f.path ? 'active' : ''}`}
+                              onClick={() => selectFile(f.path)}
+                            >
+                              <span className="file-name">
+                                {f.filename}
+                                {f.kind === 'rendered' && <span className="file-badge">TIFF</span>}
+                              </span>
+                              <span className="file-size">{f.size_mb} MB</span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
 
@@ -1571,6 +1763,30 @@ export default function App() {
                       </div>
                     );
                   })}
+                  {/\.tiff?$/i.test(selectedFile || '') && (() => {
+                    const tooltip = 'TIFFs from Lightroom already carry a baked-in contrast curve. This restores highlight/midtone headroom so contrasty stocks don’t double-crush the image. 0 = keep the TIFF look, 100 = match a RAW. Only affects rendered (TIFF) inputs.';
+                    const isDirty = params.rendered_input !== 65;
+                    return (
+                      <div className="slider-row" key="rendered_input">
+                        <div className="slider-header">
+                          <span className="slider-label" title={tooltip}>Rendered Input <span className="file-badge">TIFF</span></span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {isDirty && (
+                              <button className="revert-btn" title="Reset Rendered Input" onClick={() => setParams(p => ({ ...p, rendered_input: 65 }))}>Reset</button>
+                            )}
+                            <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>{Math.round(params.rendered_input)}</span>
+                          </div>
+                        </div>
+                        <input
+                          type="range" min={0} max={100} step={1}
+                          value={params.rendered_input}
+                          onChange={set('rendered_input')}
+                          title={tooltip}
+                          className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                        />
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -1780,14 +1996,13 @@ export default function App() {
                       type="checkbox"
                       className="checkbox-input"
                       checked={params.grain === 'Auto'}
-                      onChange={(e) => {
-                        const isAuto = e.target.checked;
-                        setParams(p => isAuto
-                          ? { ...p, grain: 'Auto', grain_strength: -1.0, grain_size: -1.0, grain_roughness: -1.0 }
-                          : { ...p, grain: 'Custom', grain_strength: 0.5, grain_size: 0.6, grain_roughness: 0.5 });
-                      }}
+                      disabled={grainResolving}
+                      onChange={handleAutoGrainChange}
                     />
-                    <span className="checkbox-label">Match grain to film speed (ISO)</span>
+                    <span
+                      className="checkbox-label"
+                      title="Turn Auto off to begin Custom grain from the selected stock and RAW ISO's resolved grain settings."
+                    >{grainResolving ? 'Resolving Auto grain…' : 'Match grain to film speed (ISO)'}</span>
                   </label>
 
                   {[
@@ -2018,6 +2233,66 @@ export default function App() {
             <span style={{ fontSize: 10, opacity: 0.45, marginTop: 4 }}>
               This takes 30–90s — full-res RAW must be re-rendered
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Folder navigator */}
+      {browserOpen && (
+        <div className="folder-overlay" onClick={() => setBrowserOpen(false)}>
+          <div className="folder-card" onClick={(e) => e.stopPropagation()}>
+            <div className="folder-card-header">
+              <span className="folder-card-title">Pin a folder</span>
+              <button className="icon-btn" onClick={() => setBrowserOpen(false)} title="Close">✕</button>
+            </div>
+
+            <div className="folder-current-path" title={browseState.path}>
+              {browseState.is_root ? 'This PC' : (browseState.path || '/')}
+              {!browseState.is_root && browseState.file_count > 0 && (
+                <span className="folder-filecount">{browseState.file_count} image{browseState.file_count === 1 ? '' : 's'}</span>
+              )}
+            </div>
+
+            <div className="folder-list">
+              {browseLoading ? (
+                <div className="empty-msg">Loading…</div>
+              ) : (
+                <>
+                  {!browseState.is_root && (
+                    <div
+                      className="folder-row folder-up"
+                      onClick={() => browseTo(browseState.parent ?? '')}
+                    >
+                      <FolderIcon /> <span>..</span>
+                    </div>
+                  )}
+                  {browseState.is_root && browseState.drives.map(d => (
+                    <div key={d.path} className="folder-row" onClick={() => browseTo(d.path)}>
+                      <FolderIcon /> <span>{d.name}</span>
+                    </div>
+                  ))}
+                  {browseState.dirs.map(d => (
+                    <div key={d.path} className="folder-row" onClick={() => browseTo(d.path)}>
+                      <FolderIcon /> <span>{d.name}</span>
+                    </div>
+                  ))}
+                  {!browseState.is_root && browseState.dirs.length === 0 && (
+                    <div className="empty-msg">No subfolders here.</div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="folder-card-footer">
+              <button className="btn-secondary" onClick={() => setBrowserOpen(false)}>Cancel</button>
+              <button
+                className="btn-primary"
+                disabled={browseState.is_root || !browseState.path}
+                onClick={() => pinFolder(browseState.path)}
+              >
+                Pin this folder
+              </button>
+            </div>
           </div>
         </div>
       )}

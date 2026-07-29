@@ -236,6 +236,7 @@ class NativePreviewRenderRequest:
     film_color_compression: float = 100.0
     highlight_rolloff: float = 100.0
     film_contrast: float = 100.0
+    rendered_input: float = 65.0
     adaptive: bool = True
     halation_strength: float = 100.0
     halation_threshold: float = 50.0
@@ -254,6 +255,17 @@ class NativeRenderedPreview:
     status: str
     content_type: str
     jpeg_bytes: bytes
+    engine: NativeEngineInfo
+
+
+@dataclass(frozen=True)
+class NativeResolvedGrain:
+    filename: str
+    stock: str
+    status: str
+    grain_strength: float
+    grain_size: float
+    grain_roughness: float
     engine: NativeEngineInfo
 
 
@@ -570,6 +582,32 @@ class NativeEngineSession:
             status=str(payload.get("status", "")),
             content_type=str(payload.get("content_type", "image/jpeg")),
             jpeg_bytes=bytes(payload.get("jpeg_bytes", b"")),
+            engine=_parse_engine_info(dict(payload.get("engine", {}))),
+        )
+
+    def resolve_auto_grain(self, request: NativePreviewRenderRequest) -> NativeResolvedGrain:
+        try:
+            payload = dict(self._native_module.resolve_auto_grain(self._handle, request.__dict__))
+        except Exception as exc:
+            self._raise_bridge_error(exc)
+
+        if "error" in payload:
+            error = _parse_error_info(dict(payload["error"]))
+            raise NativeOperationError(
+                error.code,
+                error.user_message,
+                error.detail,
+                filename=str(payload.get("filename", "")),
+                status=str(payload.get("status", "")),
+            )
+
+        return NativeResolvedGrain(
+            filename=str(payload.get("filename", "")),
+            stock=str(payload.get("stock", "")),
+            status=str(payload.get("status", "")),
+            grain_strength=float(payload.get("grain_strength", 0.0)),
+            grain_size=float(payload.get("grain_size", 0.0)),
+            grain_roughness=float(payload.get("grain_roughness", 0.0)),
             engine=_parse_engine_info(dict(payload.get("engine", {}))),
         )
 

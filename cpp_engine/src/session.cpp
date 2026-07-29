@@ -7,6 +7,7 @@
 #include "dfee/bridge_utils.hpp"
 #include "dfee/color_spaces.hpp"
 #include "dfee/native_error.hpp"
+#include "dfee/raw_decode.hpp"
 #include "dfee/renderer.hpp"
 #include "dfee/raw_metadata.hpp"
 #include "dfee/solver.hpp"
@@ -1139,6 +1140,45 @@ void apply_gamma_additive_tone(
     adjusted = gamma_decode_mat_22(gamma_rgb);
 }
 
+// Peak luminance lift near white at full strength (relief_index=1, control=100).
+// Calibrated against a RAW-vs-TIFF Ultramax A/B: restores the highlight headroom
+// that a display-referred (Lightroom) export baked away, so the film shoulder does
+// not double-compress. Tuned so default control (65) on a mid-contrast stock closes
+// ~60% of the measured gap.
+constexpr float kRenderedReliefPeak = 0.52F;
+
+// Restore headroom on a display-referred (TIFF) input so the film tone shoulder
+// isn't applied on top of the baked-in one. `amount` is the peak luminance lift
+// (0 = no-op). Highlight-weighted with a small midtone bump; deep shadows untouched.
+// Applied as a per-channel gain so hue is preserved.
+void apply_rendered_input_relief(Image& img, const float amount) {
+    if (amount <= 1e-4F) {
+        return;
+    }
+    const float mid_amt = amount * 0.35F;
+    const float gain_cap = 1.0F + amount * 3.0F;
+    const std::size_t count = img.pixel_count();
+    for (std::size_t i = 0; i < count; ++i) {
+        float& r = img.pixels[i * 3 + 0];
+        float& g = img.pixels[i * 3 + 1];
+        float& b = img.pixels[i * 3 + 2];
+        const float lum = std::clamp(0.2126F * r + 0.7152F * g + 0.0722F * b, 0.0F, 1.0F);
+        // Highlight weight: 0 below ~0.15, smoothstep to 1 at white.
+        const float t = std::clamp((lum - 0.15F) / 0.85F, 0.0F, 1.0F);
+        const float hi = t * t * (3.0F - 2.0F * t);
+        // Gentle midtone bump centred ~0.30 luma.
+        const float d = (lum - 0.30F) / 0.22F;
+        const float mid = std::exp(-d * d);
+        const float lift = amount * hi + mid_amt * mid;
+        const float new_lum = lum + lift;
+        float gain = (lum > 1e-4F) ? (new_lum / lum) : 1.0F;
+        gain = std::clamp(gain, 1.0F, gain_cap);
+        r = std::clamp(r * gain, 0.0F, 1.0F);
+        g = std::clamp(g * gain, 0.0F, 1.0F);
+        b = std::clamp(b * gain, 0.0F, 1.0F);
+    }
+}
+
 Image apply_pre_film_preview_sliders(
     const Image& rgb_input,
     const NativePreviewRenderRequest& request,
@@ -2192,6 +2232,99 @@ NativeRawPreviewResponse EngineSession::raw_preview(const NativeRawPreviewReques
     return response;
 }
 
+NativeGrainResolutionResponse EngineSession::resolve_auto_grain(const NativePreviewRenderRequest& request) {
+    NativeGrainResolutionResponse response;
+    response.engine = build_engine_metadata();
+    response.filename = request.filename.empty() ? selected_filename_ : resolve_filename(request.filename);
+    response.stock = request.stock;
+
+    ScopedStageTimer total(response.engine, "resolve_auto_grain_total");
+    if (response.filename.empty()) {
+        response.status = "error";
+        response.error = {
+            .code = "RAW_FILENAME_MISSING",
+            .user_message = "Select a RAW file before resolving grain.",
+            .detail = "resolve_auto_grain received an empty filename and no session file is currently selected.",
+        };
+        finalize_engine_metadata(response.engine);
+        return response;
+    }
+    if (request.stock.empty() || request.stock == "none") {
+        response.status = "error";
+        response.error = {
+            .code = "FILM_STOCK_REQUIRED",
+            .user_message = "Choose a film stock before resolving Auto grain.",
+            .detail = "Auto grain defaults are defined by the selected camera film profile.",
+        };
+        finalize_engine_metadata(response.engine);
+        return response;
+    }
+    if (const auto version_error = validate_effect_pipeline_version(request.effect_pipeline_version)) {
+        response.status = "error";
+        response.error = *version_error;
+        finalize_engine_metadata(response.engine);
+        return response;
+    }
+
+    {
+        ScopedStageTimer stage(response.engine, "resolve_auto_grain_ensure_preview_cache");
+        if (!draft_decode_cache_.has_value() || draft_decode_cache_->filename != response.filename ||
+            !preview_cache_.has_value() || preview_cache_->filename != response.filename) {
+            const auto decode = decode_raw({
+                .filename = response.filename,
+                .draft_mode = true,
+            });
+            if (!decode.ok) {
+                response.status = decode.status;
+                response.error = decode.error;
+                finalize_engine_metadata(response.engine);
+                return response;
+            }
+        }
+    }
+
+    FilmStockProfile stock_profile;
+    try {
+        ScopedStageTimer stage(response.engine, "resolve_auto_grain_load_profile");
+        stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
+    } catch (const std::exception& ex) {
+        response.status = "error";
+        response.error = {
+            .code = "PROFILE_LOAD_FAILED",
+            .user_message = "The selected film profile could not be loaded.",
+            .detail = ex.what(),
+        };
+        finalize_engine_metadata(response.engine);
+        return response;
+    }
+
+    SolverInput solver_input;
+    ZoneMasks zone_masks;
+    SpatialMasks spatial_masks;
+    {
+        ScopedStageTimer stage(response.engine, "resolve_auto_grain_analyze");
+        populate_preview_analysis_cache(response.filename, solver_input, zone_masks, spatial_masks);
+    }
+
+    {
+        ScopedStageTimer stage(response.engine, "resolve_auto_grain_solve_plan");
+        SolverControls controls = build_solver_controls(request);
+        controls.grain_amount = "Auto";
+        controls.grain_strength = -1.0F;
+        controls.grain_size = -1.0F;
+        controls.grain_roughness = -1.0F;
+        const RenderPlan plan = RenderPlanSolver().solve(solver_input, stock_profile, controls, nullptr);
+        response.grain_strength = plan.material_effects.grain_custom_strength;
+        response.grain_size = plan.material_effects.grain_custom_size;
+        response.grain_roughness = plan.material_effects.grain_custom_roughness;
+    }
+
+    response.ok = true;
+    response.status = "resolved";
+    finalize_engine_metadata(response.engine);
+    return response;
+}
+
 NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRenderRequest& request) {
     NativePreviewRenderResponse response;
     response.filename = resolve_filename(request.filename);
@@ -2361,6 +2494,11 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         {
             ScopedStageTimer stage(response.engine, "render_preview_apply_pre_film_sliders");
             rendered = apply_pre_film_preview_sliders(preview.rgb_linear, request, render_plan);
+            if (is_tiff_filename(response.filename)) {
+                const float relief = kRenderedReliefPeak * render_plan.film_response.rendered_relief_index
+                    * std::clamp(request.rendered_input / 100.0F, 0.0F, 1.0F);
+                apply_rendered_input_relief(rendered, relief);
+            }
         }
         {
             ScopedStageTimer stage(response.engine, "render_preview_film_pipeline");
@@ -2746,6 +2884,11 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_prefilm_fullres");
                     fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
+                    if (is_tiff_filename(response.filename)) {
+                        const float relief = kRenderedReliefPeak * render_plan->film_response.rendered_relief_index
+                            * std::clamp(request.rendered_input / 100.0F, 0.0F, 1.0F);
+                        apply_rendered_input_relief(fullres_prefilm, relief);
+                    }
                 }
                 append_export_trace(project_root_, "export_image:fullres_prefilm:done");
                 export_analysis_cache_.reset();
@@ -2853,17 +2996,21 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
             ScopedStageTimer stage(response.engine, "export_image_write_output");
             append_export_trace(project_root_, "export_image:write_output:start");
             const std::string stock_label = request.stock.empty() ? "none" : request.stock;
+            // Write exports next to the source file. raw_path collapses to the
+            // absolute source path when an absolute filename is supplied, so its
+            // parent is the source folder; for a bare legacy filename it stays raw_dir_.
+            const std::filesystem::path output_dir = raw_path.parent_path();
             if (canonical_format == "tiff") {
-                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.tif");
+                response.output_path = output_dir / (basename + "_" + stock_label + "_dfee.tif");
                 response.format_label = "16-bit TIFF";
             } else if (canonical_format == "png16") {
-                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee_16.png");
+                response.output_path = output_dir / (basename + "_" + stock_label + "_dfee_16.png");
                 response.format_label = "16-bit PNG";
             } else if (canonical_format == "jpeg") {
-                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.jpg");
+                response.output_path = output_dir / (basename + "_" + stock_label + "_dfee.jpg");
                 response.format_label = "JPEG";
             } else {
-                response.output_path = raw_dir_ / (basename + "_" + stock_label + "_dfee.png");
+                response.output_path = output_dir / (basename + "_" + stock_label + "_dfee.png");
                 response.format_label = "8-bit PNG";
             }
 
@@ -2946,7 +3093,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
         if (render_plan.has_value() && solver_input.has_value() && stock_profile.has_value()) {
             ScopedStageTimer stage(response.engine, "export_image_write_report");
             append_export_trace(project_root_, "export_image:write_report:start");
-            response.report_path = raw_dir_ / (basename + "_" + request.stock + "_report.json");
+            response.report_path = raw_path.parent_path() / (basename + "_" + request.stock + "_report.json");
             try {
                 write_text_file(
                     response.report_path,

@@ -25,6 +25,7 @@ public:
     [[nodiscard]] NativeRawMetadataResponse read_raw_metadata(const NativeRawMetadataRequest& request) const;
     [[nodiscard]] NativeRawDecodeResponse decode_raw(const NativeRawDecodeRequest& request);
     [[nodiscard]] NativeRawPreviewResponse raw_preview(const NativeRawPreviewRequest& request);
+    [[nodiscard]] NativeGrainResolutionResponse resolve_auto_grain(const NativePreviewRenderRequest& request);
     [[nodiscard]] NativePreviewRenderResponse render_preview(const NativePreviewRenderRequest& request);
     [[nodiscard]] NativeExportResponse export_image(const NativeExportRequest& request);
     [[nodiscard]] NativeSessionCacheStateResponse cache_state() const;

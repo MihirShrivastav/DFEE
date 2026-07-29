@@ -2,6 +2,7 @@ import os
 import glob
 import io
 import json
+import dataclasses
 import hashlib
 import logging
 import sys
@@ -18,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
 
-from dfee.ingest import RawIngestor
+from dfee.ingest import RawIngestor, is_rendered_image
 from dfee.analyzer import ImageStateAnalyzer
 from dfee.bias import CameraBiasEstimator
 from dfee.solver import RenderPlanSolver
@@ -171,6 +172,76 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RAW_DIR = os.path.join(BASE_DIR, "raw_files")
 STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "stocks")
 PRINT_STOCKS_DIR = os.path.join(BASE_DIR, "profiles", "print_stocks")
+
+# Fallback base for bare filenames. The pinned-folder workflow sends absolute
+# paths (each accordion section is its own folder), so this only matters for
+# legacy/bare filenames, which resolve against the bundled raw_files/.
+ACTIVE_LIBRARY_DIR = RAW_DIR
+
+
+def _resolve_input_path(filename: str) -> str:
+    """Resolve a picker filename to an absolute path.
+
+    The pinned-folder UI sends absolute paths, which pass straight through. The
+    engine (native raw_dir_ / filename, and Python os.path.join(RAW_DIR, ...))
+    also collapses to the absolute path when given one, so this is the single
+    place folder selection is applied. Bare names fall back to raw_files/.
+    """
+    if not filename:
+        return filename
+    if os.path.isabs(filename):
+        return filename
+    return os.path.join(ACTIVE_LIBRARY_DIR, filename)
+
+
+# ── Workspace persistence: pinned folders survive restarts ──────────────────
+SETTINGS_DIR = os.path.join(os.path.expanduser("~"), ".dfee")
+SETTINGS_PATH = os.path.join(SETTINGS_DIR, "settings.json")
+
+# In-memory workspace state, hydrated from disk on import.
+PINNED_FOLDERS: list[str] = []
+LAST_FILE: str = ""
+
+
+def _load_settings() -> None:
+    global PINNED_FOLDERS, LAST_FILE
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return
+    pins = data.get("pinned_folders", [])
+    # Keep only folders that still exist, normalised + de-duplicated in order.
+    seen, cleaned = set(), []
+    for p in pins:
+        ap = os.path.abspath(p)
+        if ap not in seen and os.path.isdir(ap):
+            seen.add(ap)
+            cleaned.append(ap)
+    PINNED_FOLDERS = cleaned
+    LAST_FILE = data.get("last_file", "") or ""
+
+
+def _save_settings() -> None:
+    try:
+        os.makedirs(SETTINGS_DIR, exist_ok=True)
+        with open(SETTINGS_PATH, "w", encoding="utf-8") as f:
+            json.dump({"pinned_folders": PINNED_FOLDERS, "last_file": LAST_FILE}, f, indent=2)
+    except OSError:
+        logger.warning("Could not persist workspace settings to %s", SETTINGS_PATH)
+
+
+def _pins_payload() -> dict:
+    return {
+        "pinned": [{"path": p, "name": os.path.basename(p.rstrip("\\/")) or p} for p in PINNED_FOLDERS],
+        "last_file": LAST_FILE,
+    }
+
+
+_load_settings()
+# Seed the bundled raw_files/ as the first pin on a fresh workspace.
+if not PINNED_FOLDERS and os.path.isdir(RAW_DIR):
+    PINNED_FOLDERS.append(os.path.abspath(RAW_DIR))
 
 # Major camera RAW formats. LibRaw (the native decoder) identifies format by file
 # content, so any of these decode natively — the listing filter is the only gate.
@@ -428,13 +499,36 @@ def _get_native_raw_preview(filename: str, *, max_edge: int = 1024):
     return preview
 
 
+def _native_request_from_payload(request_cls, payload: dict):
+    """Build a native bridge request dataclass from an HTTP payload.
+
+    Only fields the target dataclass declares are passed through — HTTP models are a
+    superset (e.g. PreviewRequest carries `export_format`, and may gain fields over
+    time) and passing an unmapped key to the dataclass raises TypeError, which used to
+    turn the whole Auto-grain / preview / export call into a 503. Extra keys are dropped.
+    """
+    names = {field.name for field in dataclasses.fields(request_cls)}
+    dropped = [key for key in payload if key not in names]
+    if dropped:
+        logger.debug("Dropping %d unmapped field(s) for %s: %s", len(dropped), request_cls.__name__, sorted(dropped))
+    return request_cls(**{key: value for key, value in payload.items() if key in names})
+
+
 def _get_native_rendered_preview(request_payload: dict):
     native_bridge = _get_native_bridge_module()
     native_session = _get_native_engine_session()
     native_session.select_file(request_payload["filename"])
-    request = native_bridge.NativePreviewRenderRequest(**request_payload)
+    request = _native_request_from_payload(native_bridge.NativePreviewRenderRequest, request_payload)
     preview = native_session.render_preview(request)
     return preview
+
+
+def _resolve_native_auto_grain(request_payload: dict):
+    native_bridge = _get_native_bridge_module()
+    native_session = _get_native_engine_session()
+    native_session.select_file(request_payload["filename"])
+    request = _native_request_from_payload(native_bridge.NativePreviewRenderRequest, request_payload)
+    return native_session.resolve_auto_grain(request)
 
 
 def _metadata_response_payload(metadata) -> dict[str, str]:
@@ -565,7 +659,7 @@ def _run_native_export(request_payload: dict) -> dict:
     native_bridge = _get_native_bridge_module()
     native_session = _get_native_engine_session()
     native_session.select_file(request_payload["filename"])
-    request = native_bridge.NativeExportRequest(**request_payload)
+    request = _native_request_from_payload(native_bridge.NativeExportRequest, request_payload)
     exported = native_session.export_image(request)
     return {
         "status": exported.status,
@@ -669,6 +763,7 @@ class PreviewRequest(BaseModel):
     film_color_compression: float = 100.0   # 0-200, colour compression (filmic_v3); 100 = stock default
     highlight_rolloff: float = 100.0   # 0-200, tone highlight rolloff (filmic_v3); 100 = stock default
     film_contrast: float = 100.0   # 0-200, film tone contrast (filmic_v3); 100 = stock default
+    rendered_input: float = 65.0   # 0-100, TIFF relief; 0 = keep display look, 100 = match RAW. Ignored for RAW.
     adaptive: bool = True   # scene-referred tone steering on/off (filmic_v3)
     halation_strength: float = 100.0   # 0-200, halation glow strength (filmic_v3); 100 = stock default, 0 = off
     halation_threshold: float = 50.0   # 0-100, halation highlight threshold (filmic_v3); lower = more highlights bloom
@@ -687,6 +782,114 @@ class ExportRequest(PreviewRequest):
     export_dpi: int = 300
     embed_metadata: bool = True
     export_color_space: str = "srgb"
+
+
+@app.post("/api/grain-settings/auto")
+def resolve_auto_grain_settings(req: PreviewRequest):
+    """Materialize the native Auto grain result into equivalent Custom values."""
+    started_at = time.perf_counter()
+    if req.stock == "none":
+        logger.warning("Auto grain resolution rejected reason=film_stock_required")
+        raise HTTPException(status_code=400, detail="Choose a film stock before resolving Auto grain")
+
+    filename = _resolve_input_path(req.filename)
+    if not os.path.exists(filename):
+        logger.warning("Auto grain resolution rejected file=%s reason=file_not_found", req.filename)
+        raise HTTPException(status_code=404, detail="File not found")
+    if session.filename != filename:
+        logger.warning(
+            "Auto grain resolution rejected file=%s reason=session_mismatch active=%s",
+            req.filename,
+            session.filename,
+        )
+        raise HTTPException(status_code=400, detail="Select the file before resolving Auto grain")
+
+    payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+    payload.update({
+        "filename": filename,
+        "grain": "Auto",
+        "grain_strength": -1.0,
+        "grain_size": -1.0,
+        "grain_roughness": -1.0,
+    })
+    request_fp = _request_fingerprint(payload)
+    logger.info(
+        "Auto grain resolution request fp=%s file=%s stock=%s",
+        request_fp,
+        req.filename,
+        req.stock,
+    )
+
+    try:
+        resolved = _resolve_native_auto_grain(payload)
+    except Exception as exc:
+        logger.exception(
+            "Auto grain resolution failed fp=%s file=%s stock=%s",
+            request_fp,
+            req.filename,
+            req.stock,
+        )
+        raise HTTPException(status_code=503, detail="Native Auto grain settings are unavailable") from exc
+
+    logger.info(
+        "Auto grain resolution complete fp=%s file=%s stock=%s elapsed_ms=%.1f strength=%.3f size=%.3f roughness=%.3f stages=%s",
+        request_fp,
+        req.filename,
+        req.stock,
+        _elapsed_ms(started_at),
+        resolved.grain_strength,
+        resolved.grain_size,
+        resolved.grain_roughness,
+        _format_stage_timings(resolved.engine, top_n=5),
+    )
+    return {
+        "status": resolved.status,
+        "filename": resolved.filename,
+        "stock": resolved.stock,
+        "grain_strength": resolved.grain_strength,
+        "grain_size": resolved.grain_size,
+        "grain_roughness": resolved.grain_roughness,
+    }
+
+
+# Peak luminance lift near white at full strength — mirrors kRenderedReliefPeak in
+# the native engine (session.cpp). Keep the two in sync.
+RENDERED_RELIEF_PEAK = 0.52
+
+
+def _rendered_relief_index(tone_response: dict, stock_type: str) -> float:
+    """How hard a stock's tone curve compresses (0 = gentle, 1 = harsh). Mirrors solver.cpp."""
+    ss = float(tone_response.get('shoulder_strength', 0.0))
+    ts = float(tone_response.get('toe_strength', 0.0))
+    mc = float(tone_response.get('midtone_contrast', 0.0))
+    shoulder = min(max((ss - 0.35) / 0.55, 0.0), 1.0)
+    toe = min(max((ts - 0.20) / 0.50, 0.0), 1.0)
+    mid = min(max((mc - 0.95) / 0.35, 0.0), 1.0)
+    idx = 0.60 * shoulder + 0.20 * toe + 0.20 * mid
+    if stock_type == 'color_reversal':
+        idx = max(idx, 0.55) + 0.25
+    return min(max(idx, 0.0), 1.0)
+
+
+def _apply_rendered_input_relief(rgb, amount: float):
+    """Restore highlight headroom on a display-referred (TIFF) input. Mirrors
+    apply_rendered_input_relief in session.cpp: highlight-weighted per-channel gain
+    with a small midtone bump, deep shadows untouched. `amount` = peak luma lift."""
+    if amount <= 1e-4:
+        return rgb
+    mid_amt = amount * 0.35
+    gain_cap = 1.0 + amount * 3.0
+    L = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+    L = np.clip(L, 0.0, 1.0)
+    t = np.clip((L - 0.15) / 0.85, 0.0, 1.0)
+    hi = t * t * (3.0 - 2.0 * t)
+    d = (L - 0.30) / 0.22
+    mid = np.exp(-d * d)
+    lift = amount * hi + mid_amt * mid
+    new_L = L + lift
+    gain = np.where(L > 1e-4, new_L / np.maximum(L, 1e-4), 1.0)
+    gain = np.clip(gain, 1.0, gain_cap)
+    return np.clip(rgb * gain[:, :, None], 0.0, 1.0).astype(np.float32)
 
 
 def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
@@ -795,27 +998,125 @@ def _apply_pre_film_sliders(rgb_input, masks, exposure, highlights, shadows,
 
     return rgb_input
 
-@app.get("/api/files")
-def list_files():
-    logger.info("Listing RAW files from %s", RAW_DIR)
-    # Scan the raw-files folder for any supported camera RAW format (see RAW_EXTENSIONS).
+def _list_supported_files(folder: str) -> list:
+    """Direct (non-recursive) supported RAW/TIFF files in a folder.
+
+    Each entry carries an absolute `path` — the pinned-folder UI uses it as the
+    selection identifier so files from different folders never collide.
+    """
     results = []
-    if os.path.isdir(RAW_DIR):
-        for entry in os.scandir(RAW_DIR):
+    if os.path.isdir(folder):
+        for entry in os.scandir(folder):
             if not entry.is_file():
                 continue
             ext = os.path.splitext(entry.name)[1].lower()
             if ext not in SUPPORTED_INPUT_EXTENSIONS:
                 continue
-            stat = entry.stat()
+            try:
+                stat = entry.stat()
+            except OSError:
+                continue
             results.append({
                 "filename": entry.name,
+                "path": entry.path,
                 "size_mb": round(stat.st_size / (1024 * 1024), 2),
                 "modified": stat.st_mtime,
                 "kind": "rendered" if ext in RENDERED_EXTENSIONS else "raw",
             })
     results.sort(key=lambda item: item["filename"].lower())
     return results
+
+
+@app.get("/api/files")
+def list_files(path: str = ""):
+    """List supported files in a specific folder (a pinned folder), or raw_files/."""
+    folder = os.path.abspath(path) if path else RAW_DIR
+    return _list_supported_files(folder)
+
+
+def _windows_drives() -> list:
+    drives = []
+    for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        root = f"{letter}:\\"
+        if os.path.exists(root):
+            drives.append({"name": f"{letter}:", "path": root})
+    return drives
+
+
+class PinRequest(BaseModel):
+    path: str
+
+
+@app.get("/api/pins")
+def get_pins():
+    """Pinned folders + last-opened file (persisted across restarts)."""
+    return _pins_payload()
+
+
+@app.post("/api/pins")
+def add_pin(req: PinRequest):
+    """Pin a folder to the workspace."""
+    path = os.path.abspath(req.path)
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=400, detail=f"Not a folder: {path}")
+    if path not in PINNED_FOLDERS:
+        PINNED_FOLDERS.append(path)
+        _save_settings()
+        logger.info("Pinned folder %s", path)
+    return _pins_payload()
+
+
+@app.post("/api/pins/remove")
+def remove_pin(req: PinRequest):
+    """Unpin a folder from the workspace."""
+    path = os.path.abspath(req.path)
+    if path in PINNED_FOLDERS:
+        PINNED_FOLDERS.remove(path)
+        _save_settings()
+        logger.info("Unpinned folder %s", path)
+    return _pins_payload()
+
+
+@app.get("/api/browse")
+def browse(path: str = ""):
+    """List subfolders of a directory for the in-app folder navigator.
+
+    Empty path returns the drive list (Windows) or filesystem root. Each response
+    reports the normalised path, its parent (if any), subfolders, and a count of
+    supported image files directly in the folder so the user can choose confidently.
+    """
+    if os.name == "nt" and not path:
+        return {"path": "", "parent": None, "is_root": True, "drives": _windows_drives(), "dirs": [], "file_count": 0}
+
+    target = os.path.abspath(path) if path else (os.path.abspath(os.sep))
+    if not os.path.isdir(target):
+        raise HTTPException(status_code=400, detail=f"Not a folder: {target}")
+
+    dirs = []
+    try:
+        for entry in os.scandir(target):
+            try:
+                if entry.is_dir() and not entry.name.startswith("."):
+                    dirs.append({"name": entry.name, "path": entry.path})
+            except OSError:
+                continue
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=f"Permission denied: {target}")
+    dirs.sort(key=lambda item: item["name"].lower())
+
+    parent = os.path.dirname(target)
+    # A drive root's dirname is itself; expose "" so the navigator can go up to drives.
+    if parent == target:
+        parent = "" if os.name == "nt" else None
+
+    return {
+        "path": target,
+        "parent": parent,
+        "is_root": False,
+        "drives": _windows_drives() if os.name == "nt" else [],
+        "dirs": dirs,
+        "file_count": len(_list_supported_files(target)),
+    }
 
 @app.get("/api/profiles")
 def list_profiles():
@@ -984,14 +1285,20 @@ def select_file(req: SelectRequest):
     started_at = time.perf_counter()
     request_fp = _request_fingerprint({"filename": req.filename})
     logger.info("Select request fp=%s file=%s native=%s", request_fp, req.filename, use_native)
-    filepath = os.path.join(RAW_DIR, req.filename)
+    resolved = _resolve_input_path(req.filename)
+    filepath = resolved
     if not os.path.exists(filepath):
         logger.warning("Select failed fp=%s file=%s reason=file_not_found", request_fp, req.filename)
         raise HTTPException(status_code=404, detail="File not found")
-        
+
+    global LAST_FILE
+    if LAST_FILE != resolved:
+        LAST_FILE = resolved
+        _save_settings()
+
     try:
         # --- Analysis cache: skip expensive reprocessing if same file is already loaded ---
-        if session.filename == req.filename and session.cached_diagnostics is not None:
+        if session.filename == resolved and session.cached_diagnostics is not None:
             cached_metadata = session.metadata if isinstance(session.metadata, dict) else {}
             logger.info(
                 "Select complete fp=%s file=%s backend=python_cached elapsed_ms=%.1f",
@@ -1007,10 +1314,10 @@ def select_file(req: SelectRequest):
 
         if use_native:
             try:
-                native_result = _get_native_select_result(req.filename)
+                native_result = _get_native_select_result(resolved)
                 metadata_payload = _metadata_response_payload(native_result.metadata)
                 diagnostics = _select_diagnostics_response_payload(native_result.diagnostics)
-                _reset_python_session_caches_for_selection(req.filename, metadata_payload, diagnostics)
+                _reset_python_session_caches_for_selection(resolved, metadata_payload, diagnostics)
                 logger.info(
                     "Select complete fp=%s file=%s backend=native elapsed_ms=%.1f stages=%s",
                     request_fp,
@@ -1030,7 +1337,7 @@ def select_file(req: SelectRequest):
                     req.filename,
                 )
 
-        metadata, diagnostics = _prepare_python_draft_session(req.filename)
+        metadata, diagnostics = _prepare_python_draft_session(resolved)
 
         logger.info(
             "Select complete fp=%s file=%s backend=python elapsed_ms=%.1f",
@@ -1158,6 +1465,7 @@ def get_preview(
     film_color_compression: float = 100.0,
     highlight_rolloff: float = 100.0,
     film_contrast: float = 100.0,
+    rendered_input: float = 65.0,
     adaptive: bool = True,
     halation_strength: float = 100.0,
     halation_threshold: float = 50.0,
@@ -1171,6 +1479,9 @@ def get_preview(
 ):
     use_native = _native_preview_enabled()
     started_at = time.perf_counter()
+    # Resolve against the active library folder so the mismatch check and the
+    # engine all operate on the same absolute path stored at selection time.
+    filename = _resolve_input_path(filename)
     native_payload = {
         "filename": filename,
         "stock": stock,
@@ -1239,6 +1550,7 @@ def get_preview(
         "film_color_compression": max(0.0, min(200.0, film_color_compression)),
         "highlight_rolloff": max(0.0, min(200.0, highlight_rolloff)),
         "film_contrast": max(0.0, min(200.0, film_contrast)),
+        "rendered_input": max(0.0, min(100.0, rendered_input)),
         "adaptive": bool(adaptive),
         "halation_strength": max(0.0, min(200.0, halation_strength)),
         "halation_threshold": max(0.0, min(100.0, halation_threshold)),
@@ -1389,6 +1701,10 @@ def get_preview(
             exposure + film_exposure_ev, highlights, shadows,
             blacks, whites, midtones, contrast, temp, tint, render_plan
         )
+        if is_rendered_image(session.filename or ""):
+            relief = RENDERED_RELIEF_PEAK * _rendered_relief_index(stock_profile.tone_response, stock_profile.stock_type) \
+                * max(0.0, min(1.0, rendered_input / 100.0))
+            rgb_input = _apply_rendered_input_relief(rgb_input, relief)
 
         renderer = FilmRenderer()
         rendered = renderer.render(rgb_input, session.masks, render_plan)
@@ -1481,14 +1797,18 @@ def export_file(req: ExportRequest):
         req.export_format,
         _native_export_enabled() and native_export_supported,
     )
-    filepath = os.path.join(RAW_DIR, req.filename)
+    resolved = _resolve_input_path(req.filename)
+    filepath = resolved
+    out_dir = os.path.dirname(resolved)  # exports land next to the source file
     if not os.path.exists(filepath):
         logger.warning("Export failed fp=%s file=%s reason=file_not_found", request_fp, req.filename)
         raise HTTPException(status_code=404, detail="File not found")
 
     if _native_export_enabled() and native_export_supported:
         try:
-            native_result = _run_native_export(req.model_dump())
+            native_payload = req.model_dump()
+            native_payload["filename"] = resolved
+            native_result = _run_native_export(native_payload)
             logger.info(
                 "Export complete fp=%s file=%s backend=native elapsed_ms=%.1f output=%s stages=%s",
                 request_fp,
@@ -1536,12 +1856,12 @@ def export_file(req: ExportRequest):
         stock_profile = _load_stock_profile(req.stock) if req.stock != "none" else None
         print_stock_profile = _load_print_stock_profile(req.print_stock)
 
-        basename    = os.path.splitext(req.filename)[0]
-        report_path = os.path.join(RAW_DIR, f"{basename}_{req.stock}_report.json")
+        basename    = os.path.splitext(os.path.basename(resolved))[0]
+        report_path = os.path.join(out_dir, f"{basename}_{req.stock}_report.json")
         # output_path/filename set in the format block below
 
         # ── Use cached full-res data if available (avoids re-reading RAW from disk) ──
-        if session.filename == req.filename and session.fullres_rgb_linear is not None:
+        if session.filename == resolved and session.fullres_rgb_linear is not None:
             logger.info("Using cached full-resolution RGB for %s", req.filename)
             rgb_linear      = session.fullres_rgb_linear
             Y               = session.fullres_Y
@@ -1552,7 +1872,7 @@ def export_file(req: ExportRequest):
             logger.info("Full-resolution cache miss for %s, ingesting from disk", req.filename)
             ingestor = RawIngestor(filepath)
             rgb_linear, Y, clipping_masks, clipping_ratios, metadata = ingestor.ingest(draft_mode=False)
-            if session.filename == req.filename:
+            if session.filename == resolved:
                 session.fullres_rgb_linear      = rgb_linear
                 session.fullres_Y               = Y
                 session.fullres_clipping_masks  = clipping_masks
@@ -1560,7 +1880,7 @@ def export_file(req: ExportRequest):
                 session.fullres_metadata        = metadata
 
         # ── Full-res analysis — cached after first export ────────────────────────
-        if (session.filename == req.filename
+        if (session.filename == resolved
                 and session.fullres_feature_dict is not None
                 and session.fullres_masks is not None):
             logger.info("Using cached full-resolution analysis for %s", req.filename)
@@ -1575,7 +1895,7 @@ def export_file(req: ExportRequest):
             feature_dict["camera_input_bias"] = bias_info
             feature_dict["raw_metadata"]      = metadata
             # Cache for subsequent exports of the same file
-            if session.filename == req.filename:
+            if session.filename == resolved:
                 session.fullres_feature_dict = feature_dict
                 session.fullres_masks        = masks
 
@@ -1623,6 +1943,10 @@ def export_file(req: ExportRequest):
                 req.blacks, req.whites, req.midtones,
                 req.contrast, req.temp, req.tint, render_plan
             )
+            if is_rendered_image(resolved):
+                relief = RENDERED_RELIEF_PEAK * _rendered_relief_index(stock_profile.tone_response, stock_profile.stock_type) \
+                    * max(0.0, min(1.0, req.rendered_input / 100.0))
+                rgb_input = _apply_rendered_input_relief(rgb_input, relief)
 
             renderer = FilmRenderer()
             rendered  = renderer.render(rgb_input, masks, render_plan)
@@ -1658,7 +1982,7 @@ def export_file(req: ExportRequest):
 
         if fmt == "tiff":
             output_filename = f"{basename}_{req.stock}_dfee.tif"
-            output_path     = os.path.join(RAW_DIR, output_filename)
+            output_path     = os.path.join(out_dir, output_filename)
             logger.info("Saving 16-bit TIFF to %s", output_path)
             uint16_data = (srgb_data * 65535.0).astype(np.uint16)
             uint16_data = np.ascontiguousarray(uint16_data)
@@ -1675,7 +1999,7 @@ def export_file(req: ExportRequest):
 
         elif fmt == "png16":
             output_filename = f"{basename}_{req.stock}_dfee_16.png"
-            output_path     = os.path.join(RAW_DIR, output_filename)
+            output_path     = os.path.join(out_dir, output_filename)
             logger.info("Saving 16-bit PNG to %s", output_path)
             uint16_data = (srgb_data * 65535.0).astype(np.uint16)
             uint16_data = np.ascontiguousarray(uint16_data)
@@ -1686,7 +2010,7 @@ def export_file(req: ExportRequest):
 
         elif fmt == "png8":
             output_filename = f"{basename}_{req.stock}_dfee.png"
-            output_path     = os.path.join(RAW_DIR, output_filename)
+            output_path     = os.path.join(out_dir, output_filename)
             logger.info("Saving 8-bit PNG to %s", output_path)
             uint8_data = (srgb_data * 255.0).astype(np.uint8)
             img = Image.fromarray(uint8_data, mode="RGB")
@@ -1694,7 +2018,7 @@ def export_file(req: ExportRequest):
             format_label = "8-bit PNG"
         else:
             output_filename = f"{basename}_{req.stock}_dfee.jpg"
-            output_path     = os.path.join(RAW_DIR, output_filename)
+            output_path     = os.path.join(out_dir, output_filename)
             logger.info("Saving JPEG to %s quality=%s dpi=%s", output_path, req.jpeg_quality, req.export_dpi)
             uint8_data = (srgb_data * 255.0).astype(np.uint8)
             img = Image.fromarray(uint8_data, mode="RGB")

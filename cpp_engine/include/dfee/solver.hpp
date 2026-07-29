@@ -135,12 +135,22 @@ struct FilmResponsePlan {
     float tone_adaptive_factor = 1.0F;     // resolved scene-referred factor (report/diagnostic)
     float highlight_rolloff_knee = 1.0F;   // renderer highlight-shoulder knee (>=1.0 = off, filmic_v3)
     float highlight_rolloff_amount = 0.0F; // renderer highlight-shoulder strength (0 = off, filmic_v3)
+    // How aggressively this stock's tone curve compresses (0 = gentle like Portra,
+    // 1 = harsh like reversal). Scales the rendered-input relief so display-referred
+    // (TIFF) inputs aren't double-compressed by contrasty stocks. 0 for RAW behaviour.
+    float rendered_relief_index = 0.0F;
 };
 
 struct MaterialEffectsPlan {
     float grain_strength = 0.0F;
     float grain_size = 0.0F;
     float grain_roughness = 0.0F;
+    // Inputs which reproduce this plan's Auto result when passed back through
+    // the Custom grain controls. These differ from the final strength when a
+    // scene-wide noise-suppression factor is applied after user controls.
+    float grain_custom_strength = 0.0F;
+    float grain_custom_size = 0.0F;
+    float grain_custom_roughness = 0.0F;
     float grain_chroma_strength = 0.0F;
     std::uint32_t grain_seed = 0U;
     std::string grain_family = "modern_color_negative_fine";
