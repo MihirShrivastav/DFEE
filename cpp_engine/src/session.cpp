@@ -219,20 +219,23 @@ struct NativeMemorySnapshot {
     const bool stock_enabled) {
     const std::uint64_t pixels =
         static_cast<std::uint64_t>(std::max(width, 0)) * static_cast<std::uint64_t>(std::max(height, 0));
-    const std::uint64_t rgb_float = pixels * 3ULL * sizeof(float);
-    const std::uint64_t luminance_float = pixels * sizeof(float);
-    const std::uint64_t clipping_masks = pixels * 3ULL * sizeof(std::uint8_t);
+    const std::uint64_t rgb_float = pixels * 3ULL * sizeof(float);          // one full-res RGB image
     const std::uint64_t output_bytes = pixels * ((format == "png8" || format == "jpeg") ? 3ULL : 6ULL);
 
-    std::uint64_t estimate = rgb_float + luminance_float + clipping_masks + output_bytes;
+    std::uint64_t estimate;
     if (stock_enabled) {
+        // The decode cache (rgb + luminance + clipping masks) is freed once the full-res
+        // pre-film image exists, so it is NOT concurrent with the render peak. The peak is:
+        //   full-res zone masks (7) + spatial masks (3), held through halation
+        //   + ~3 concurrent full-res RGB images (rendered + a stage intermediate + a blur/copy)
+        //   + the output buffer.
         const std::uint64_t full_zone_masks = pixels * 7ULL * sizeof(float);
         const std::uint64_t full_spatial_masks = pixels * 3ULL * sizeof(float);
         const std::uint64_t concurrent_full_images = rgb_float * 3ULL;
-        const std::uint64_t cv_headroom = rgb_float + luminance_float;
-        estimate += full_zone_masks + full_spatial_masks + concurrent_full_images + cv_headroom;
+        estimate = full_zone_masks + full_spatial_masks + concurrent_full_images + output_bytes;
     } else {
-        estimate += rgb_float;
+        // Passthrough: decoded image + a copy + output.
+        estimate = rgb_float * 2ULL + output_bytes;
     }
 
     return static_cast<std::uint64_t>(static_cast<long double>(estimate) * 1.20L);
@@ -2877,6 +2880,15 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 }
                 append_export_trace(project_root_, "export_image:resize_masks_for_fullres:done");
 
+                // The downscaled analysis buffers and small working masks are consumed
+                // once the full-res masks are built — free them before the heavy full-res
+                // stages so they don't sit in the peak.
+                analysis_rgb = Image();
+                analysis_luminance = LuminanceImage();
+                analysis_clipping_masks = DecodedRawChannelMasks();
+                working_zone_masks = ZoneMasks();
+                working_spatial_masks = SpatialMasks();
+
                 append_export_trace(project_root_, "export_image:fullres_prefilm:start");
                 Image fullres_prefilm;
                 {
@@ -2888,6 +2900,11 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 }
                 append_export_trace(project_root_, "export_image:fullres_prefilm:done");
                 export_analysis_cache_.reset();
+                // The full-res decoded image (rgb + luminance + clipping masks, ~19 B/px)
+                // is no longer needed once fullres_prefilm exists — the film stages work on
+                // `rendered`. Free the decode cache so it isn't held through the render peak.
+                // (`decoded` must not be referenced after this point; a later export re-decodes.)
+                full_decode_cache_.reset();
 
                 append_export_trace(project_root_, "export_image:fullres_renderer:start");
                 FilmRenderer renderer;
