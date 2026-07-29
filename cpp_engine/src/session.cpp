@@ -98,9 +98,11 @@ NativeSelectDiagnostics build_select_diagnostics(const SolverInput& solver_input
     diagnostics.dominant_hues = solver_input.hue_saturation_state.dominant_hue_bins;
     diagnostics.palette_entropy = solver_input.hue_saturation_state.hue_entropy;
     diagnostics.specular_ratio = solver_input.spatial_frequency.specular_point_ratio;
+    // Rendered inputs skip bias estimation (already white-balanced); report full
+    // neutral confidence rather than a misleading 0 %.
     diagnostics.neutral_confidence = solver_input.camera_input_bias.has_value()
         ? solver_input.camera_input_bias->neutral_confidence
-        : 0.0F;
+        : 1.0F;
     return diagnostics;
 }
 
@@ -1149,30 +1151,40 @@ constexpr float kRenderedReliefPeak = 0.52F;
 
 // Restore headroom on a display-referred (TIFF) input so the film tone shoulder
 // isn't applied on top of the baked-in one. `amount` is the peak luminance lift
-// (0 = no-op). Highlight-weighted with a small midtone bump; deep shadows untouched.
-// Applied as a per-channel gain so hue is preserved.
+// (0 = no-op). The lift is a HUMP centred in the upper-mids that tapers to zero
+// before white: it opens up the mid/upper-mid tones that were compressed, but is
+// deliberately gentle on the highlight/white regions a TIFF already has baked in,
+// so bright skies and speculars are never pushed into clipping. A per-channel soft
+// ceiling guarantees no channel crosses ~0.985 (no blown highlights); hue preserved.
 void apply_rendered_input_relief(Image& img, const float amount) {
     if (amount <= 1e-4F) {
         return;
     }
-    const float mid_amt = amount * 0.35F;
-    const float gain_cap = 1.0F + amount * 3.0F;
+    constexpr float kCeiling = 0.985F;  // lifted channels never cross this
     const std::size_t count = img.pixel_count();
     for (std::size_t i = 0; i < count; ++i) {
         float& r = img.pixels[i * 3 + 0];
         float& g = img.pixels[i * 3 + 1];
         float& b = img.pixels[i * 3 + 2];
         const float lum = std::clamp(0.2126F * r + 0.7152F * g + 0.0722F * b, 0.0F, 1.0F);
-        // Highlight weight: 0 below ~0.15, smoothstep to 1 at white.
-        const float t = std::clamp((lum - 0.15F) / 0.85F, 0.0F, 1.0F);
-        const float hi = t * t * (3.0F - 2.0F * t);
-        // Gentle midtone bump centred ~0.30 luma.
-        const float d = (lum - 0.30F) / 0.22F;
-        const float mid = std::exp(-d * d);
-        const float lift = amount * hi + mid_amt * mid;
-        const float new_lum = lum + lift;
-        float gain = (lum > 1e-4F) ? (new_lum / lum) : 1.0F;
-        gain = std::clamp(gain, 1.0F, gain_cap);
+        // Headroom-restore hump: peaks ~0.5 luma, tapers off through the upper-mids.
+        const float d = (lum - 0.50F) / 0.22F;
+        const float hump = std::exp(-d * d);
+        // Highlight guard: force the lift to zero as luminance approaches white so
+        // baked-in TIFF highlights/whites are left untouched.
+        const float guard = std::clamp((0.85F - lum) / 0.25F, 0.0F, 1.0F);
+        const float lift = amount * hump * guard;
+        if (lift <= 1e-5F) {
+            continue;
+        }
+        float gain = (lum > 1e-4F) ? (lum + lift) / lum : 1.0F;
+        // Soft ceiling: cap the gain so the brightest channel can't cross kCeiling,
+        // and never darken. This is the hard guarantee against blown highlights.
+        const float maxc = std::max({r, g, b});
+        if (maxc > 1e-4F) {
+            gain = std::min(gain, kCeiling / maxc);
+        }
+        gain = std::max(gain, 1.0F);
         r = std::clamp(r * gain, 0.0F, 1.0F);
         g = std::clamp(g * gain, 0.0F, 1.0F);
         b = std::clamp(b * gain, 0.0F, 1.0F);
@@ -1763,7 +1775,13 @@ NativeRenderWorkResult render_native_image(
     result.spatial_masks = std::move(spatial.second);
     append_export_trace(project_root, "render_native_image:analyze_spatial:done");
     append_export_trace(project_root, "render_native_image:bias:start");
-    result.solver_input.camera_input_bias = CameraBiasEstimator().estimate_bias(source_rgb, clipping_masks, result.zone_masks);
+    // Rendered inputs (TIFF) are already white-balanced/cast-corrected upstream, so
+    // estimating and applying a camera cast is both wasted compute and a wrong re-
+    // correction. Leaving camera_input_bias unset makes the solver apply zero cast
+    // correction (shadow_blue_norm / green_mag_stab gate on bias.has_value()).
+    if (metadata.camera_make != "Rendered") {
+        result.solver_input.camera_input_bias = CameraBiasEstimator().estimate_bias(source_rgb, clipping_masks, result.zone_masks);
+    }
     append_export_trace(project_root, "render_native_image:bias:done");
     if (metadata.iso > 0) {
         result.solver_input.raw_iso = metadata.iso;
@@ -3233,14 +3251,19 @@ void EngineSession::populate_preview_analysis_cache(
     solver_input.spatial_frequency = spatial_result.first;
     spatial_masks = std::move(spatial_result.second);
 
-    const auto preview_masks = resize_clipping_masks(
-        draft.decoded.clipping_masks,
-        draft.decoded.rgb_linear.width,
-        draft.decoded.rgb_linear.height,
-        preview.rgb_linear.width,
-        preview.rgb_linear.height);
-    CameraBiasEstimator bias_estimator;
-    solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
+    // Rendered inputs (TIFF) are already white-balanced upstream — skip camera-cast
+    // estimation entirely (saves the mask resize + estimator pass, and avoids re-
+    // correcting an already-neutral image). Unset bias => zero cast correction.
+    if (draft.decoded.metadata.camera_make != "Rendered") {
+        const auto preview_masks = resize_clipping_masks(
+            draft.decoded.clipping_masks,
+            draft.decoded.rgb_linear.width,
+            draft.decoded.rgb_linear.height,
+            preview.rgb_linear.width,
+            preview.rgb_linear.height);
+        CameraBiasEstimator bias_estimator;
+        solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
+    }
     if (draft.decoded.metadata.iso > 0) {
         solver_input.raw_iso = draft.decoded.metadata.iso;
     }

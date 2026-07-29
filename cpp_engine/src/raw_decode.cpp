@@ -114,12 +114,15 @@ void fill_metadata_from_raw_processor(NativeRawMetadata& metadata, const LibRaw&
 
 void fill_decoded_image_from_float_rgb(
     DecodedRawImage& decoded,
-    const std::vector<float>& pixels,
+    std::vector<float> pixels,
     const int width,
     const int height,
     const int channels) {
     decoded.rgb_linear = Image(width, height, channels);
-    decoded.rgb_linear.pixels = pixels;
+    // Move the caller's buffer straight in — avoids a full-image copy (and the peak
+    // second buffer) on every decode. Derived data is read back from the Image.
+    decoded.rgb_linear.pixels = std::move(pixels);
+    const std::vector<float>& image_pixels = decoded.rgb_linear.pixels;
     decoded.luminance = compute_luminance(decoded.rgb_linear);
     decoded.clipping_masks.red.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
     decoded.clipping_masks.green.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height), 0);
@@ -137,9 +140,9 @@ void fill_decoded_image_from_float_rgb(
     const std::size_t pixel_count = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
 
     for (std::size_t i = 0; i < pixel_count; ++i) {
-        const float r = pixels[i * 3 + 0];
-        const float g = pixels[i * 3 + 1];
-        const float b = pixels[i * 3 + 2];
+        const float r = image_pixels[i * 3 + 0];
+        const float g = image_pixels[i * 3 + 1];
+        const float b = image_pixels[i * 3 + 2];
         min_value = std::min({min_value, r, g, b});
         max_value = std::max({max_value, r, g, b});
         const std::uint8_t is_clip_r = r >= 0.99F ? 1 : 0;
@@ -253,6 +256,7 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     }
     cv::Mat f;
     raw.convertTo(f, CV_32F, scale);
+    raw.release();  // native-depth buffer no longer needed
 
     cv::Mat bgr;
     if (f.channels() == 1) {
@@ -270,6 +274,7 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
         };
         return response;
     }
+    f.release();  // for 1/4-ch this frees the pre-convert buffer; for 3-ch bgr keeps the data
 
     if (request.draft_mode) {
         const int longer = std::max(bgr.cols, bgr.rows);
@@ -311,9 +316,10 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
         }
     }
 
+    bgr.release();  // source consumed; free before computing derived data
     response.ok = true;
     response.status = "loaded";
-    fill_decoded_image_from_float_rgb(response.decoded, pixels, width, height, 3);
+    fill_decoded_image_from_float_rgb(response.decoded, std::move(pixels), width, height, 3);
     auto& md = response.decoded.metadata;
     md = NativeRawMetadata{};
     md.image_width = width;
@@ -471,7 +477,7 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
 
     response.ok = true;
     response.status = "loaded";
-    fill_decoded_image_from_float_rgb(response.decoded, pixels, width, height, channels);
+    fill_decoded_image_from_float_rgb(response.decoded, std::move(pixels), width, height, channels);
     LibRaw::dcraw_clear_mem(image);
     return response;
 #else
