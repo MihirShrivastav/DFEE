@@ -10,9 +10,9 @@ adaptation:
 tone_response:
   toe_strength: 0.46
   toe_length: 0.3
-  midtone_contrast: 1.08
-  shoulder_strength: 0.78
-  highlight_rolloff_start: 0.68
+  midtone_contrast: 1.1
+  shoulder_strength: 0.8
+  highlight_rolloff_start: 0.72
   black_density_floor: 0.01
   channel_toe_mult:
   - 1.0

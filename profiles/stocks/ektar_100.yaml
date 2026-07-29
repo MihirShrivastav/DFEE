@@ -109,7 +109,8 @@ hue_chroma_gain:
   blue: 0.15
   green: 0.12
   cyan: 0.10
-  red: 0.05
+  yellow: 0.06
+  red: 0.07
 crossover:
   shadow_cast_a: -0.15
   shadow_cast_b: -0.42

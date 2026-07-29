@@ -30,7 +30,7 @@ color_response:
   shadow_bias_lab:
   - -0.5
   - -1.5
-  - -3.0
+  - -2.2
   midtone_bias_lab:
   - 0.0
   - 0.2
@@ -105,3 +105,13 @@ compression:
   strength: 0.55
   threshold: 0.45
   crosstalk: 0.30
+hue_chroma_gain:
+  red: 0.05
+  yellow: 0.04
+  cyan: 0.04
+crossover:
+  shadow_cast_a: -0.08
+  shadow_cast_b: -0.25
+  highlight_cast_a: 0.35
+  highlight_cast_b: 0.40
+  exposure_sensitivity: 0.40

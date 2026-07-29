@@ -105,3 +105,12 @@ compression:
   strength: 0.45
   threshold: 0.48
   crosstalk: 0.25
+hue_chroma_gain:
+  green: 0.03
+  red: -0.02
+crossover:
+  shadow_cast_a: -0.10
+  shadow_cast_b: -0.30
+  highlight_cast_a: 0.15
+  highlight_cast_b: 0.20
+  exposure_sensitivity: 0.35

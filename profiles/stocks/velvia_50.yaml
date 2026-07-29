@@ -119,4 +119,12 @@ hue_chroma_gain:
   green: 0.10
   blue: 0.08
   magenta: 0.08
+  yellow: 0.06
   red: 0.06
+  orange: 0.05
+crossover:
+  shadow_cast_a: -0.10
+  shadow_cast_b: -0.70
+  highlight_cast_a: 0.30
+  highlight_cast_b: 0.30
+  exposure_sensitivity: 0.40

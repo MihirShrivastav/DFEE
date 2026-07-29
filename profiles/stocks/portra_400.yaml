@@ -105,6 +105,9 @@ compression:
   strength: 0.55
   threshold: 0.45
   crosstalk: 0.30
+hue_chroma_gain:
+  green: 0.05
+  blue: 0.04
 crossover:
   shadow_cast_a: -0.10
   shadow_cast_b: -0.55

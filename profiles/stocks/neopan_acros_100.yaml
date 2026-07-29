@@ -52,15 +52,15 @@ hue_saturation_response:
   neon_compression: 1.0
   highlight_desaturation: 1.0
 grain:
-  size: 0.22
-  strength: 0.2
+  size: 0.2
+  strength: 0.16
   chroma_strength: 0.0
   peak_zone: midtones_heavy
   texture_masking: 0.88
   family: bw_tabular
-  target_pgi_35mm_4x6: 30
+  target_pgi_35mm_4x6: 27
   clumpiness: 0.28
-  micro_grit: 0.12
+  micro_grit: 0.1
   layer_correlation: 1.00
   shadow_response: 0.48
   midtone_response: 0.76

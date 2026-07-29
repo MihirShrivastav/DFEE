@@ -107,6 +107,7 @@ compression:
   crosstalk: 0.26
 hue_chroma_gain:
   green: 0.06
+  cyan: 0.04
   magenta: -0.05
 crossover:
   shadow_cast_a: -0.42
