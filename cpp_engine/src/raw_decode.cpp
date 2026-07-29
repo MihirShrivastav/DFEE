@@ -1,6 +1,7 @@
 #include "dfee/raw_decode.hpp"
 
 #include "dfee/bridge_utils.hpp"
+#include "dfee/parallel.hpp"
 
 #include <algorithm>
 #include <array>
@@ -294,7 +295,7 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     const bool identity = !is_adobe && !is_prophoto;
 
     std::vector<float> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3U, 0.0F);
-    for (int y = 0; y < height; ++y) {
+    parallel_for_rows(height, [&](int y) {
         const cv::Vec3f* srow = bgr.ptr<cv::Vec3f>(y);
         for (int x = 0; x < width; ++x) {
             float b = std::clamp(srow[x][0], 0.0F, 1.0F);
@@ -314,7 +315,7 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
             pixels[base + 1] = std::clamp(lg, 0.0F, 1.0F);
             pixels[base + 2] = std::clamp(lb, 0.0F, 1.0F);
         }
-    }
+    });
 
     bgr.release();  // source consumed; free before computing derived data
     response.ok = true;

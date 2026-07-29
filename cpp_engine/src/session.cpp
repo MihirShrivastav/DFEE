@@ -1224,7 +1224,7 @@ Image apply_post_film_color(
     constexpr float kSkinHueCenter = 0.55F;
     constexpr float kChromaReference = 0.22F;
 
-    for (std::size_t i = 0; i < oklch.pixel_count(); ++i) {
+    parallel_for_index(static_cast<std::ptrdiff_t>(oklch.pixel_count()), [&](std::ptrdiff_t i) {
         float chroma = oklch.pixels[i * 3 + 1];
         const float hue = oklch.pixels[i * 3 + 2];
 
@@ -1239,7 +1239,7 @@ Image apply_post_film_color(
             chroma *= std::clamp(vibrance_mult, 0.01F, 4.0F);
         }
         oklch.pixels[i * 3 + 1] = std::max(chroma, 0.0F);
-    }
+    });
 
     Image adjusted_oklab = oklch_to_oklab(oklch);
     for (std::size_t i = 0; i < adjusted_oklab.pixel_count(); ++i) {
@@ -3031,12 +3031,13 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
             }
 
             cv::Mat output_mat(rendered.height, rendered.width, (canonical_format == "png8" || canonical_format == "jpeg") ? CV_8UC3 : CV_16UC3);
-            for (int y = 0; y < rendered.height; ++y) {
+            const bool eight_bit_output = (canonical_format == "png8" || canonical_format == "jpeg");
+            parallel_for_rows(rendered.height, [&](int y) {
                 for (int x = 0; x < rendered.width; ++x) {
                     const float r = linear_to_srgb_channel(rendered.at(x, y, 0));
                     const float g = linear_to_srgb_channel(rendered.at(x, y, 1));
                     const float b = linear_to_srgb_channel(rendered.at(x, y, 2));
-                    if (canonical_format == "png8" || canonical_format == "jpeg") {
+                    if (eight_bit_output) {
                         auto& pixel = output_mat.at<cv::Vec3b>(y, x);
                         pixel[0] = static_cast<std::uint8_t>(std::clamp(b * 255.0F, 0.0F, 255.0F));
                         pixel[1] = static_cast<std::uint8_t>(std::clamp(g * 255.0F, 0.0F, 255.0F));
@@ -3048,7 +3049,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         pixel[2] = static_cast<std::uint16_t>(std::clamp(r * 65535.0F, 0.0F, 65535.0F));
                     }
                 }
-            }
+            });
             std::vector<int> write_params;
             if (canonical_format == "tiff") {
                 write_params = {
