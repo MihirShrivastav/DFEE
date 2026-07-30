@@ -841,53 +841,6 @@ DecodedRawChannelMasks resize_clipping_masks(
     };
 }
 
-LuminanceImage resize_luminance_image(
-    const LuminanceImage& source,
-    const int target_width,
-    const int target_height,
-    const int interpolation = cv::INTER_LINEAR) {
-    if (source.width == target_width && source.height == target_height) {
-        return source;
-    }
-    cv::Mat source_mat(source.height, source.width, CV_32F);
-    for (int y = 0; y < source.height; ++y) {
-        for (int x = 0; x < source.width; ++x) {
-            source_mat.at<float>(y, x) = source.at(x, y);
-        }
-    }
-    cv::Mat resized_mat;
-    cv::resize(source_mat, resized_mat, cv::Size(target_width, target_height), 0.0, 0.0, interpolation);
-    LuminanceImage resized(target_width, target_height);
-    for (int y = 0; y < target_height; ++y) {
-        for (int x = 0; x < target_width; ++x) {
-            resized.at(x, y) = resized_mat.at<float>(y, x);
-        }
-    }
-    return resized;
-}
-
-ZoneMasks resize_zone_masks(
-    const ZoneMasks& source,
-    const int target_width,
-    const int target_height) {
-    ZoneMasks resized;
-    for (std::size_t i = 0; i < source.zones.size(); ++i) {
-        resized.zones[i] = resize_luminance_image(source.zones[i], target_width, target_height, cv::INTER_LINEAR);
-    }
-    return resized;
-}
-
-SpatialMasks resize_spatial_masks(
-    const SpatialMasks& source,
-    const int target_width,
-    const int target_height) {
-    return {
-        .grain_receptivity_mask = resize_luminance_image(source.grain_receptivity_mask, target_width, target_height, cv::INTER_LINEAR),
-        .halation_source_mask = resize_luminance_image(source.halation_source_mask, target_width, target_height, cv::INTER_LINEAR),
-        .halation_receiver_mask = resize_luminance_image(source.halation_receiver_mask, target_width, target_height, cv::INTER_LINEAR),
-    };
-}
-
 NativeRawPreviewResponse encode_preview_jpeg_bytes(const Image& preview_rgb, const std::string& filename) {
     NativeRawPreviewResponse response;
     response.filename = filename;
@@ -2436,7 +2389,6 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         }
 
         const auto& preview = *preview_cache_;
-        const auto& draft = *draft_decode_cache_;
 
         SolverInput solver_input;
         ZoneMasks zone_masks;
