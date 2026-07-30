@@ -867,10 +867,13 @@ void test_filmic_halation_bloom_compresses_and_diffuses_highlights() {
         return 0.2126F * image.at(x, y, 0) + 0.7152F * image.at(x, y, 1) + 0.0722F * image.at(x, y, 2);
     };
 
-    // At the bright source the highlight is compressed/diffused rather than painted
-    // brighter-white: its luma must not gain meaningfully (bloom refill roughly cancels
-    // the density shoulder). Tolerance absorbs sub-1% drift from shared-blur refactors.
-    assert(luma(adjusted, 48, 48) <= luma(rgb, 48, 48) + 0.01F);
+    // filmic halation/bloom is now an additive warm glow (it must be visible): the bright
+    // source blooms rather than being darkened away, and stays within range (soft-clipped,
+    // never blows past 1.0).
+    assert(luma(adjusted, 48, 48) >= luma(rgb, 48, 48) - 0.02F);
+    assert(adjusted.at(48, 48, 0) <= 1.0F && adjusted.at(48, 48, 1) <= 1.0F &&
+           adjusted.at(48, 48, 2) <= 1.0F);
+    // The dark ring beside the source picks up a warm halo (the halation signature).
     assert(luma(adjusted, 35, 48) > luma(rgb, 35, 48));
     assert(adjusted.at(35, 48, 0) > adjusted.at(35, 48, 1));
     assert(adjusted.at(35, 48, 1) > adjusted.at(35, 48, 2));

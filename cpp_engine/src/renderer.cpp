@@ -329,6 +329,40 @@ void append_timing_metric(
     return t * t * (3.0F - 2.0F * t);
 }
 
+// Bilinear read from a small proxy Mat at a (possibly fractional) proxy coordinate. Lets the
+// full-res composite sample a low-res glow field without materializing a full-res upsample.
+[[nodiscard]] inline float sample_mat_gray(const cv::Mat& m, float fx, float fy) {
+    fx = std::clamp(fx, 0.0F, static_cast<float>(m.cols - 1));
+    fy = std::clamp(fy, 0.0F, static_cast<float>(m.rows - 1));
+    const int x0 = static_cast<int>(fx);
+    const int y0 = static_cast<int>(fy);
+    const int x1 = std::min(x0 + 1, m.cols - 1);
+    const int y1 = std::min(y0 + 1, m.rows - 1);
+    const float tx = fx - static_cast<float>(x0);
+    const float ty = fy - static_cast<float>(y0);
+    const float* r0 = m.ptr<float>(y0);
+    const float* r1 = m.ptr<float>(y1);
+    const float top = r0[x0] * (1.0F - tx) + r0[x1] * tx;
+    const float bot = r1[x0] * (1.0F - tx) + r1[x1] * tx;
+    return top * (1.0F - ty) + bot * ty;
+}
+
+[[nodiscard]] inline cv::Vec3f sample_mat_rgb(const cv::Mat& m, float fx, float fy) {
+    fx = std::clamp(fx, 0.0F, static_cast<float>(m.cols - 1));
+    fy = std::clamp(fy, 0.0F, static_cast<float>(m.rows - 1));
+    const int x0 = static_cast<int>(fx);
+    const int y0 = static_cast<int>(fy);
+    const int x1 = std::min(x0 + 1, m.cols - 1);
+    const int y1 = std::min(y0 + 1, m.rows - 1);
+    const float tx = fx - static_cast<float>(x0);
+    const float ty = fy - static_cast<float>(y0);
+    const cv::Vec3f* r0 = m.ptr<cv::Vec3f>(y0);
+    const cv::Vec3f* r1 = m.ptr<cv::Vec3f>(y1);
+    const cv::Vec3f top = r0[x0] * (1.0F - tx) + r0[x1] * tx;
+    const cv::Vec3f bot = r1[x0] * (1.0F - tx) + r1[x1] * tx;
+    return top * (1.0F - ty) + bot * ty;
+}
+
 // filmic_v3 subtractive density.
 constexpr float kOklabChromaRef   = 0.35F; // chroma normalization reference (OKLCh C)
 constexpr float kDensityLumaMax   = 0.55F; // max fractional L reduction at full density
@@ -1672,115 +1706,129 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_filmic_halation_bloom expects a 3-channel RGB image");
     }
-    // Masks may be a lower-resolution proxy (export path); only the three channels this
-    // stage needs are upsampled here (transiently), not the whole mask set.
+    // filmic halation is threshold-driven (physical: bright regions cause the halo), so the
+    // analyzer's specular source/receiver masks and the highlight zone mask are not used here.
+    (void)zone_masks;
+    (void)spatial_masks;
     if (effects.halation_strength <= 0.0F && effects.bloom_strength <= 0.0F) {
         return rgb_linear;
     }
 
-    cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);
-    const cv::Mat luminance = compute_luminance_mat(rgb);
-    const cv::Mat z5 = luminance_image_to_mat_scaled(zone_masks.zones[5], rgb_linear.width, rgb_linear.height);
-    const cv::Mat halation_mask = luminance_image_to_mat_scaled(spatial_masks.halation_source_mask, rgb_linear.width, rgb_linear.height);
-    const cv::Mat receiver_mask = luminance_image_to_mat_scaled(spatial_masks.halation_receiver_mask, rgb_linear.width, rgb_linear.height);
-    cv::Mat source_mask(rgb.rows, rgb.cols, CV_32F);
-    cv::Mat bloom_source(rgb.rows, rgb.cols, CV_32FC3);
-    cv::Mat halation_source(rgb.rows, rgb.cols, CV_32F);
-    const bool specular_only = effects.halation_trigger == "specular_only";
-    // filmic_v3 halation: threshold-driven, ungated (the threshold defines the source),
-    // so the glow is a real, controllable effect. parity/filmic_v2 keep the old behaviour.
-    const bool subtractive_hal = effects.halation_subtractive;
+    cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);   // full-res working buffer, composited in place
+    const int full_w = rgb.cols;
+    const int full_h = rgb.rows;
+
+    // --- Build the glow on a small proxy. Physically, halation is light that penetrated the
+    // emulsion, reflected off the film base/pressure plate and re-exposed the surrounding area
+    // as a warm/red halo (pronounced on rem-jet-removed stocks like CineStill 800T, minimal on
+    // stocks with intact anti-halation backing). The glow is inherently low-frequency, so we
+    // compute it on a downscaled proxy and sample it back bilinearly at full res -- visually
+    // identical to a full-res blur, but the glow fields stay tens of MB instead of ~1 GB. ---
+    constexpr int kGlowProxyEdge = 1024;
+    const int proxy_long = std::max(full_w, full_h);
+    const float pscale = proxy_long > kGlowProxyEdge
+        ? static_cast<float>(kGlowProxyEdge) / static_cast<float>(proxy_long)
+        : 1.0F;
+    const int pw = std::max(1, static_cast<int>(std::lround(full_w * pscale)));
+    const int ph = std::max(1, static_cast<int>(std::lround(full_h * pscale)));
+    cv::Mat proxy_rgb;
+    if (pscale < 1.0F) {
+        cv::resize(rgb, proxy_rgb, cv::Size(pw, ph), 0.0, 0.0, cv::INTER_AREA);
+    } else {
+        proxy_rgb = rgb;   // small image: read the shared buffer (only read before compositing)
+    }
+
     const float hal_thresh = std::clamp(effects.halation_threshold, 0.30F, 0.80F);
-
-    for (int y = 0; y < rgb.rows; ++y) {
-        for (int x = 0; x < rgb.cols; ++x) {
-            const float y_luma = luminance.at<float>(y, x);
-            const float highlight = subtractive_hal
-                ? smoothstep01((y_luma - hal_thresh) / 0.20F)
-                : smoothstep01((y_luma - 0.66F) / 0.28F);
-            const float excess = subtractive_hal
-                ? std::max(0.0F, y_luma - (hal_thresh - 0.08F))
-                : std::max(0.0F, y_luma - 0.58F);
-            const float source = clamp01(std::max(highlight, z5.at<float>(y, x)) * (0.35F + excess));
-            source_mask.at<float>(y, x) = source;
-
-            const auto& src = rgb.at<cv::Vec3f>(y, x);
-            auto& bloom = bloom_source.at<cv::Vec3f>(y, x);
+    cv::Mat glow_src(ph, pw, CV_32F);      // scalar halation emitter (highlights above threshold)
+    cv::Mat bloom_src(ph, pw, CV_32FC3);   // colour bloom emitter (highlight-weighted colour)
+    for (int y = 0; y < ph; ++y) {
+        const cv::Vec3f* prow = proxy_rgb.ptr<cv::Vec3f>(y);
+        float* grow = glow_src.ptr<float>(y);
+        cv::Vec3f* brow = bloom_src.ptr<cv::Vec3f>(y);
+        for (int x = 0; x < pw; ++x) {
+            const cv::Vec3f& p = prow[x];
+            const float lum = 0.2126F * p[0] + 0.7152F * p[1] + 0.0722F * p[2];
+            const float highlight = smoothstep01((lum - hal_thresh) / 0.20F);
+            const float excess = std::max(0.0F, lum - (hal_thresh - 0.08F));
+            const float source = clamp01(highlight * (0.35F + excess));
+            grow[x] = source;
             const float bloom_weight = source * (0.55F + 0.45F * highlight);
-            bloom[0] = src[0] * bloom_weight;
-            bloom[1] = src[1] * bloom_weight;
-            bloom[2] = src[2] * bloom_weight;
-            // filmic_v3: threshold defines the source (ungated). Older paths keep the
-            // specular gate so their behaviour is unchanged.
-            const float halation_trigger = (specular_only && !subtractive_hal)
-                ? halation_mask.at<float>(y, x)
-                : source;
-            halation_source.at<float>(y, x) = halation_trigger * (0.40F + 0.60F * source);
+            brow[x] = cv::Vec3f(p[0] * bloom_weight, p[1] * bloom_weight, p[2] * bloom_weight);
         }
     }
 
-    const int short_edge = std::max(1, std::min(rgb_linear.width, rgb_linear.height));
-    const float halation_radius_scale = static_cast<float>(short_edge) / 2048.0F;
-    const int halation_tight_radius = std::max(
-        2,
-        static_cast<int>(std::lround(std::max(1.0F, effects.halation_radius_inner) * halation_radius_scale)));
-    const int halation_wide_radius = std::max(
-        halation_tight_radius + 1,
-        static_cast<int>(std::lround(std::max(effects.halation_radius_inner + 1.0F, effects.halation_radius_outer) * halation_radius_scale)));
-    const int bloom_tight_radius = std::max(3, short_edge / 95);
-    const int bloom_mid_radius = std::max(7, short_edge / 42);
-    const int bloom_wide_radius = std::max(13, short_edge / 18);
+    // Blur radii in proxy pixels (radius params are normalized to a 2048 px short edge).
+    const int pshort = std::max(1, std::min(pw, ph));
+    const auto proxy_radius = [&](const float radius_2048, const float floor_px) {
+        return std::max(floor_px, radius_2048 * static_cast<float>(pshort) / 2048.0F);
+    };
+    const float hal_tight_sigma = proxy_radius(std::max(1.0F, effects.halation_radius_inner), 1.0F);
+    const float hal_wide_sigma =
+        std::max(hal_tight_sigma + 1.0F, proxy_radius(std::max(effects.halation_radius_inner + 1.0F, effects.halation_radius_outer), 2.0F));
+    const float bloom_tight_sigma = std::max(2.0F, static_cast<float>(pshort) / 95.0F);
+    const float bloom_mid_sigma = std::max(4.0F, static_cast<float>(pshort) / 42.0F);
+    const float bloom_wide_sigma = std::max(8.0F, static_cast<float>(pshort) / 18.0F);
 
-    const cv::Mat halation_tight = gaussian_blur_downsampled_gray(halation_source, halation_tight_radius, 720);
-    const cv::Mat halation_wide = gaussian_blur_downsampled_gray(halation_source, halation_wide_radius, 720);
-    const cv::Mat bloom_tight = gaussian_blur_downsampled_rgb(
-        bloom_source,
-        odd_kernel_size(bloom_tight_radius * 2 + 1, 3, short_edge),
-        720);
-    const cv::Mat bloom_mid = gaussian_blur_downsampled_rgb(
-        bloom_source,
-        odd_kernel_size(bloom_mid_radius * 2 + 1, 3, short_edge),
-        640);
-    const cv::Mat bloom_wide = gaussian_blur_downsampled_rgb(
-        bloom_source,
-        odd_kernel_size(bloom_wide_radius * 2 + 1, 3, short_edge),
-        560);
+    cv::Mat hal_tight;
+    cv::Mat hal_wide;
+    cv::Mat bloom_tight;
+    cv::Mat bloom_mid;
+    cv::Mat bloom_wide;
+    cv::GaussianBlur(glow_src, hal_tight, cv::Size(0, 0), hal_tight_sigma);
+    cv::GaussianBlur(glow_src, hal_wide, cv::Size(0, 0), hal_wide_sigma);
+    cv::GaussianBlur(bloom_src, bloom_tight, cv::Size(0, 0), bloom_tight_sigma);
+    cv::GaussianBlur(bloom_src, bloom_mid, cv::Size(0, 0), bloom_mid_sigma);
+    cv::GaussianBlur(bloom_src, bloom_wide, cv::Size(0, 0), bloom_wide_sigma);
 
     const float halation_strength = std::max(0.0F, effects.halation_strength);
     const float bloom_strength = std::max(0.0F, effects.bloom_strength);
-    const float combined_strength = std::clamp(halation_strength + bloom_strength, 0.0F, 1.8F);
-    // filmic_v3 halation reads as a real glow -> higher apply gains; older paths unchanged.
-    const float hal_core_gain = subtractive_hal ? 0.62F : 0.42F;
-    const float hal_fringe_gain = subtractive_hal ? 0.30F : 0.18F;
+    const float combined_strength = std::clamp(halation_strength + bloom_strength, 0.0F, 2.0F);
+    // Calibrated so the stock's authored strength manifests film-accurately: a subtle warm halo
+    // at ~0.1-0.3 (Portra/Gold), minimal at ~0.05 (slide/B&W with good anti-halation) and a
+    // strong red halation at ~0.6 (CineStill 800T). Additive (screen) -- halation adds light.
+    const float hal_core_gain = 1.15F;
+    const float hal_fringe_gain = 0.55F;
+    const float bloom_gain = bloom_strength * 0.22F;
 
-    for (int y = 0; y < rgb.rows; ++y) {
-        for (int x = 0; x < rgb.cols; ++x) {
-            auto& pixel = rgb.at<cv::Vec3f>(y, x);
-            const float source = source_mask.at<float>(y, x);
+    const float sx = static_cast<float>(pw) / static_cast<float>(full_w);
+    const float sy = static_cast<float>(ph) / static_cast<float>(full_h);
+    parallel_for_rows(full_h, [&](int y) {
+        const float py = (static_cast<float>(y) + 0.5F) * sy - 0.5F;
+        cv::Vec3f* row = rgb.ptr<cv::Vec3f>(y);
+        for (int x = 0; x < full_w; ++x) {
+            const float px = (static_cast<float>(x) + 0.5F) * sx - 0.5F;
+            cv::Vec3f& pixel = row[x];
+            const float lum = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
 
-            // Film highlights shoulder off as density increases. Diffusion should lower
-            // source-region contrast instead of simply painting white glow on top.
-            const float shoulder_loss = source * combined_strength * 0.10F;
+            // Gentle highlight shoulder (film shoulders off where it diffuses) -- subtle, so the
+            // net effect is a glow rather than a darkening.
+            const float source_here = sample_mat_gray(glow_src, px, py);
+            const float shoulder_loss = source_here * combined_strength * 0.06F;
             pixel[0] *= 1.0F - shoulder_loss;
             pixel[1] *= 1.0F - shoulder_loss;
             pixel[2] *= 1.0F - shoulder_loss;
 
-            const float receiver = receiver_mask.at<float>(y, x);
-            const float halation_core_energy = halation_tight.at<float>(y, x) * receiver * halation_strength * hal_core_gain;
-            const float halation_fringe_energy = halation_wide.at<float>(y, x) * receiver * halation_strength * hal_fringe_gain;
+            // Additive warm halation. The blur already localizes it around highlights; the
+            // receiver term biases the deposit toward the darker ring around a highlight (where
+            // a halo actually reads) without ever gating it to zero.
+            const float core = sample_mat_gray(hal_tight, px, py) * halation_strength * hal_core_gain;
+            const float fringe = sample_mat_gray(hal_wide, px, py) * halation_strength * hal_fringe_gain;
+            const float receiver = 0.35F + 0.65F * clamp01(1.0F - lum);
             for (int channel = 0; channel < 3; ++channel) {
-                pixel[channel] += halation_core_energy * effects.halation_warm_core[static_cast<std::size_t>(channel)];
-                pixel[channel] += halation_fringe_energy * effects.halation_red_fringe[static_cast<std::size_t>(channel)];
+                const float add = (core * effects.halation_warm_core[static_cast<std::size_t>(channel)] +
+                                   fringe * effects.halation_red_fringe[static_cast<std::size_t>(channel)]) *
+                                  receiver;
+                // Screen blend: keeps bright cores from hard-clipping while still adding light.
+                pixel[channel] = pixel[channel] + add - pixel[channel] * add;
             }
 
-            const cv::Vec3f bloom =
-                0.52F * bloom_tight.at<cv::Vec3f>(y, x) +
-                0.31F * bloom_mid.at<cv::Vec3f>(y, x) +
-                0.17F * bloom_wide.at<cv::Vec3f>(y, x);
-            const float bloom_gain = bloom_strength * 0.20F;
-            pixel[0] += bloom[0] * bloom_gain * 1.05F;
-            pixel[1] += bloom[1] * bloom_gain * 1.01F;
-            pixel[2] += bloom[2] * bloom_gain * 0.88F;
+            // Soft white/colour bloom.
+            const cv::Vec3f bt = sample_mat_rgb(bloom_tight, px, py);
+            const cv::Vec3f bm = sample_mat_rgb(bloom_mid, px, py);
+            const cv::Vec3f bw = sample_mat_rgb(bloom_wide, px, py);
+            pixel[0] += (0.52F * bt[0] + 0.31F * bm[0] + 0.17F * bw[0]) * bloom_gain * 1.05F;
+            pixel[1] += (0.52F * bt[1] + 0.31F * bm[1] + 0.17F * bw[1]) * bloom_gain * 1.01F;
+            pixel[2] += (0.52F * bt[2] + 0.31F * bm[2] + 0.17F * bw[2]) * bloom_gain * 0.88F;
 
             for (int channel = 0; channel < 3; ++channel) {
                 if (pixel[channel] > 0.92F) {
@@ -1790,7 +1838,7 @@ Image FilmRenderer::apply_filmic_halation_bloom(
                 pixel[channel] = clamp01(pixel[channel]);
             }
         }
-    }
+    });
 
     return mat_to_rgb_image(rgb);
 }
@@ -1927,7 +1975,8 @@ Image FilmRenderer::apply_filmic_grain(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_filmic_grain expects a 3-channel RGB image");
     }
-    // Receptivity mask may be a lower-resolution proxy (export path); upsampled on use.
+    // Grain is coordinate-addressable (Phase 3); it no longer reads the receptivity mask.
+    (void)spatial_masks;
     if (effects.grain_strength == 0.0F) {
         return rgb_linear;
     }
