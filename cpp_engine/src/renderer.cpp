@@ -1,5 +1,6 @@
 #include "dfee/renderer.hpp"
 #include "dfee/color_spaces.hpp"
+#include "dfee/mask_sample.hpp"
 #include "dfee/parallel.hpp"
 
 #include <array>
@@ -210,6 +211,40 @@ void append_timing_metric(
         }
     }
     return out;
+}
+
+// Convert a (possibly lower-resolution proxy) luminance mask to a cv::Mat at the target
+// size. When the mask is smaller it is upsampled with cv::resize INTER_LINEAR — byte-
+// identical to the old path (which pre-upsampled the mask to full-res the same way), but
+// materialized transiently and only for the few channels a stage actually needs, instead
+// of holding all mask channels at full-res for the whole render.
+[[nodiscard]] cv::Mat luminance_image_to_mat_scaled(const LuminanceImage& image, const int dst_w, const int dst_h) {
+    cv::Mat src = luminance_image_to_mat(image);
+    if (image.width == dst_w && image.height == dst_h) {
+        return src;
+    }
+    cv::Mat out;
+    cv::resize(src, out, cv::Size(dst_w, dst_h), 0.0, 0.0, cv::INTER_LINEAR);
+    return out;
+}
+
+// Grain reads its receptivity mask per pixel as a flat vector. Return the mask's values
+// directly when it already matches (bit-identical), else upsample once via cv::resize
+// INTER_LINEAR into `scratch` (byte-identical to the old pre-upsampled mask).
+[[nodiscard]] const std::vector<float>& scaled_receptivity_values(
+    const LuminanceImage& mask, const int dst_w, const int dst_h, std::vector<float>& scratch) {
+    if (mask.width == dst_w && mask.height == dst_h) {
+        return mask.values;
+    }
+    const cv::Mat resized = luminance_image_to_mat_scaled(mask, dst_w, dst_h);
+    scratch.resize(static_cast<std::size_t>(dst_w) * static_cast<std::size_t>(dst_h));
+    for (int y = 0; y < dst_h; ++y) {
+        const float* row = resized.ptr<float>(y);
+        for (int x = 0; x < dst_w; ++x) {
+            scratch[static_cast<std::size_t>(y) * static_cast<std::size_t>(dst_w) + static_cast<std::size_t>(x)] = row[x];
+        }
+    }
+    return scratch;
 }
 
 [[nodiscard]] int odd_kernel_size(const int candidate, const int min_size, const int max_extent) {
@@ -833,17 +868,9 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_color_response_and_coupling_pipeline expects a 3-channel RGB image");
     }
-    for (const auto& zone : zone_masks.zones) {
-        if (zone.width != rgb_linear.width || zone.height != rgb_linear.height) {
-            throw std::invalid_argument("apply_color_response_and_coupling_pipeline expects zone masks to match the RGB image dimensions");
-        }
-    }
-
-    const auto& zone_1 = zone_masks.zones[1].values;
-    const auto& zone_2 = zone_masks.zones[2].values;
-    const auto& zone_3 = zone_masks.zones[3].values;
-    const auto& zone_4 = zone_masks.zones[4].values;
-    const auto& zone_5 = zone_masks.zones[5].values;
+    // Zone masks may be a lower-resolution proxy (export path); sampled scale-aware below.
+    const int mask_w = rgb_linear.width;
+    const int mask_h = rgb_linear.height;
 
     const float fc = response.film_color / 100.0F;
     constexpr float kBiasScale = 0.004F;
@@ -930,11 +957,13 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
             chroma *= chroma_boost;
         }
 
-        const float z1 = zone_1[i];
-        const float z2 = zone_2[i];
-        const float z3 = zone_3[i];
-        const float z4 = zone_4[i];
-        const float z5 = zone_5[i];
+        const int mx = static_cast<int>(i % mask_w);
+        const int my = static_cast<int>(i / mask_w);
+        const float z1 = sample_mask_scaled(zone_masks.zones[1], mx, my, mask_w, mask_h);
+        const float z2 = sample_mask_scaled(zone_masks.zones[2], mx, my, mask_w, mask_h);
+        const float z3 = sample_mask_scaled(zone_masks.zones[3], mx, my, mask_w, mask_h);
+        const float z4 = sample_mask_scaled(zone_masks.zones[4], mx, my, mask_w, mask_h);
+        const float z5 = sample_mask_scaled(zone_masks.zones[5], mx, my, mask_w, mask_h);
 
         const float shadow_zone = z1 + z2 * 0.5F;
         const float mid_zone = z2 * 0.5F + z3 + z4 * 0.5F;
@@ -1064,16 +1093,17 @@ Image FilmRenderer::apply_pre_film_normalization(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_pre_film_normalization expects a 3-channel RGB image");
     }
-    for (const auto& zone : zone_masks.zones) {
-        if (zone.width != rgb_linear.width || zone.height != rgb_linear.height) {
-            throw std::invalid_argument("apply_pre_film_normalization expects zone masks to match the RGB image dimensions");
-        }
-    }
+    // Zone masks may be a lower-resolution proxy (export path) — sampled scale-aware
+    // below, so no full-resolution upsample is materialized.
 
     Image normalized(rgb_linear.width, rgb_linear.height, 3);
     const float exp_factor = std::pow(2.0F, pre_film.exposure_compensation_stops);
+    const int w = rgb_linear.width;
+    const int h = rgb_linear.height;
 
     parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t i) {
+        const int x = static_cast<int>(i % w);
+        const int y_px = static_cast<int>(i / w);
         float r = rgb_linear.pixels[i * 3 + 0] * exp_factor;
         float g = rgb_linear.pixels[i * 3 + 1] * exp_factor;
         float b = rgb_linear.pixels[i * 3 + 2] * exp_factor;
@@ -1087,8 +1117,8 @@ Image FilmRenderer::apply_pre_film_normalization(
         }
 
         OklabPixel oklab = rgb_to_oklab_pixel(r, g, b);
-        oklab.b += zone_masks.zones[1].values[i] * pre_film.shadow_blue_normalization;
-        oklab.a -= zone_masks.zones[3].values[i] * pre_film.green_magenta_stabilization *
+        oklab.b += sample_mask_scaled(zone_masks.zones[1], x, y_px, w, h) * pre_film.shadow_blue_normalization;
+        oklab.a -= sample_mask_scaled(zone_masks.zones[3], x, y_px, w, h) * pre_film.green_magenta_stabilization *
             (oklab.a < 0.0F ? -1.0F : (oklab.a > 0.0F ? 1.0F : 0.0F));
 
         const auto rgb = oklab_to_rgb_pixel(oklab);
@@ -1581,17 +1611,7 @@ Image FilmRenderer::apply_halation_bloom(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_halation_bloom expects a 3-channel RGB image");
     }
-    for (const auto& zone : zone_masks.zones) {
-        if (zone.width != rgb_linear.width || zone.height != rgb_linear.height) {
-            throw std::invalid_argument("apply_halation_bloom expects zone masks to match the RGB image dimensions");
-        }
-    }
-    if (spatial_masks.halation_source_mask.width != rgb_linear.width ||
-        spatial_masks.halation_source_mask.height != rgb_linear.height ||
-        spatial_masks.halation_receiver_mask.width != rgb_linear.width ||
-        spatial_masks.halation_receiver_mask.height != rgb_linear.height) {
-        throw std::invalid_argument("apply_halation_bloom expects spatial masks to match the RGB image dimensions");
-    }
+    // Masks may be a lower-resolution proxy (export path); upsampled on use below.
     if (effects.halation_strength <= 0.0F && effects.bloom_strength <= 0.0F) {
         return rgb_linear;
     }
@@ -1599,8 +1619,8 @@ Image FilmRenderer::apply_halation_bloom(
     cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);
 
     if (effects.halation_strength > 0.0F) {
-        cv::Mat source = luminance_image_to_mat(spatial_masks.halation_source_mask);
-        cv::Mat receiver = luminance_image_to_mat(spatial_masks.halation_receiver_mask);
+        cv::Mat source = luminance_image_to_mat_scaled(spatial_masks.halation_source_mask, rgb_linear.width, rgb_linear.height);
+        cv::Mat receiver = luminance_image_to_mat_scaled(spatial_masks.halation_receiver_mask, rgb_linear.width, rgb_linear.height);
         const int halation_kernel = odd_kernel_size(21, 5, std::min(rgb_linear.width, rgb_linear.height));
         cv::Mat halation_blur;
         cv::GaussianBlur(source, halation_blur, cv::Size(halation_kernel, halation_kernel), 0.0);
@@ -1619,7 +1639,7 @@ Image FilmRenderer::apply_halation_bloom(
     if (effects.bloom_strength > 0.0F) {
         const int bloom_kernel = odd_kernel_size(51, 15, std::min(rgb_linear.width, rgb_linear.height));
         cv::Mat bloom_blur = gaussian_blur_downsampled_rgb(rgb, bloom_kernel, 512);
-        cv::Mat z5 = luminance_image_to_mat(zone_masks.zones[5]);
+        cv::Mat z5 = luminance_image_to_mat_scaled(zone_masks.zones[5], rgb_linear.width, rgb_linear.height);
         const float bloom_mix = effects.bloom_strength * 0.12F;
         for (int y = 0; y < rgb.rows; ++y) {
             for (int x = 0; x < rgb.cols; ++x) {
@@ -1644,26 +1664,17 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_filmic_halation_bloom expects a 3-channel RGB image");
     }
-    for (const auto& zone : zone_masks.zones) {
-        if (zone.width != rgb_linear.width || zone.height != rgb_linear.height) {
-            throw std::invalid_argument("apply_filmic_halation_bloom expects zone masks to match the RGB image dimensions");
-        }
-    }
-    if (spatial_masks.halation_source_mask.width != rgb_linear.width ||
-        spatial_masks.halation_source_mask.height != rgb_linear.height ||
-        spatial_masks.halation_receiver_mask.width != rgb_linear.width ||
-        spatial_masks.halation_receiver_mask.height != rgb_linear.height) {
-        throw std::invalid_argument("apply_filmic_halation_bloom expects spatial masks to match the RGB image dimensions");
-    }
+    // Masks may be a lower-resolution proxy (export path); only the three channels this
+    // stage needs are upsampled here (transiently), not the whole mask set.
     if (effects.halation_strength <= 0.0F && effects.bloom_strength <= 0.0F) {
         return rgb_linear;
     }
 
     cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);
     const cv::Mat luminance = compute_luminance_mat(rgb);
-    const cv::Mat z5 = luminance_image_to_mat(zone_masks.zones[5]);
-    const cv::Mat halation_mask = luminance_image_to_mat(spatial_masks.halation_source_mask);
-    const cv::Mat receiver_mask = luminance_image_to_mat(spatial_masks.halation_receiver_mask);
+    const cv::Mat z5 = luminance_image_to_mat_scaled(zone_masks.zones[5], rgb_linear.width, rgb_linear.height);
+    const cv::Mat halation_mask = luminance_image_to_mat_scaled(spatial_masks.halation_source_mask, rgb_linear.width, rgb_linear.height);
+    const cv::Mat receiver_mask = luminance_image_to_mat_scaled(spatial_masks.halation_receiver_mask, rgb_linear.width, rgb_linear.height);
     cv::Mat source_mask(rgb.rows, rgb.cols, CV_32F);
     cv::Mat bloom_source(rgb.rows, rgb.cols, CV_32FC3);
     cv::Mat halation_source(rgb.rows, rgb.cols, CV_32F);
@@ -1783,10 +1794,7 @@ Image FilmRenderer::apply_film_grain(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_film_grain expects a 3-channel RGB image");
     }
-    if (spatial_masks.grain_receptivity_mask.width != rgb_linear.width ||
-        spatial_masks.grain_receptivity_mask.height != rgb_linear.height) {
-        throw std::invalid_argument("apply_film_grain expects grain receptivity mask to match the RGB image dimensions");
-    }
+    // Receptivity mask may be a lower-resolution proxy (export path); upsampled on use.
     if (effects.grain_strength == 0.0F) {
         return rgb_linear;
     }
@@ -1872,7 +1880,8 @@ Image FilmRenderer::apply_film_grain(
     const float strength_r = effects.grain_strength * 0.038F * kStrengthMults[0];
     const float strength_g = effects.grain_strength * 0.038F * kStrengthMults[1];
     const float strength_b = effects.grain_strength * 0.038F * kStrengthMults[2];
-    const auto& grain_receptivity = spatial_masks.grain_receptivity_mask.values;
+    std::vector<float> receptivity_scratch;
+    const auto& grain_receptivity = scaled_receptivity_values(spatial_masks.grain_receptivity_mask, w, h, receptivity_scratch);
     static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
     static const auto kGammaDecodeLut = build_power_lut(2.2F);
     static const auto kGrainModulationLut = build_grain_modulation_lut();
@@ -1910,10 +1919,7 @@ Image FilmRenderer::apply_filmic_grain(
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_filmic_grain expects a 3-channel RGB image");
     }
-    if (spatial_masks.grain_receptivity_mask.width != rgb_linear.width ||
-        spatial_masks.grain_receptivity_mask.height != rgb_linear.height) {
-        throw std::invalid_argument("apply_filmic_grain expects grain receptivity mask to match the RGB image dimensions");
-    }
+    // Receptivity mask may be a lower-resolution proxy (export path); upsampled on use.
     if (effects.grain_strength == 0.0F) {
         return rgb_linear;
     }

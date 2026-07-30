@@ -2876,24 +2876,13 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     request.print_stock,
                     render_plan->material_effects);
 
-                append_export_trace(project_root_, "export_image:resize_masks_for_fullres:start");
-                ZoneMasks fullres_zone_masks;
-                SpatialMasks fullres_spatial_masks;
-                {
-                    ScopedStageTimer substage(response.engine, "export_image_render_resize_masks");
-                    fullres_zone_masks = resize_zone_masks(working_zone_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
-                    fullres_spatial_masks = resize_spatial_masks(working_spatial_masks, decoded.rgb_linear.width, decoded.rgb_linear.height);
-                }
-                append_export_trace(project_root_, "export_image:resize_masks_for_fullres:done");
-
-                // The downscaled analysis buffers and small working masks are consumed
-                // once the full-res masks are built — free them before the heavy full-res
-                // stages so they don't sit in the peak.
+                // No full-res mask upsample: the film stages sample the low-res proxy masks
+                // directly (scale-aware), so we never materialize the ~1.8 GB of full-res
+                // mask channels. The small proxy masks (working_*) stay alive through the
+                // render; free only the now-unused analysis image buffers.
                 analysis_rgb = Image();
                 analysis_luminance = LuminanceImage();
                 analysis_clipping_masks = DecodedRawChannelMasks();
-                working_zone_masks = ZoneMasks();
-                working_spatial_masks = SpatialMasks();
 
                 append_export_trace(project_root_, "export_image:fullres_prefilm:start");
                 Image fullres_prefilm;
@@ -2920,7 +2909,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_pre_film_normalization");
                         rendered = renderer.apply_pre_film_normalization(
                             fullres_prefilm,
-                            fullres_zone_masks,
+                            working_zone_masks,
                             render_plan->pre_film_normalization);
                     }
                     fullres_prefilm = Image();
@@ -2937,7 +2926,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         if (render_plan->stock_type != "monochrome") {
                             rendered = renderer.apply_color_response_and_coupling(
                                 rendered,
-                                fullres_zone_masks,
+                                working_zone_masks,
                                 render_plan->film_response,
                                 &response.engine,
                                 "export_image_render_stage_color_response");
@@ -2968,23 +2957,23 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                             ? renderer.apply_filmic_halation_bloom(
                                 rendered,
-                                fullres_zone_masks,
-                                fullres_spatial_masks,
+                                working_zone_masks,
+                                working_spatial_masks,
                                 render_plan->material_effects)
                             : renderer.apply_halation_bloom(
                                 rendered,
-                                fullres_zone_masks,
-                                fullres_spatial_masks,
+                                working_zone_masks,
+                                working_spatial_masks,
                                 render_plan->material_effects);
                     }
-                    fullres_zone_masks = ZoneMasks();
+                    working_zone_masks = ZoneMasks();
                     {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_grain");
                         rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
-                            ? renderer.apply_filmic_grain(rendered, fullres_spatial_masks, render_plan->material_effects)
-                            : renderer.apply_film_grain(rendered, fullres_spatial_masks, render_plan->material_effects);
+                            ? renderer.apply_filmic_grain(rendered, working_spatial_masks, render_plan->material_effects)
+                            : renderer.apply_film_grain(rendered, working_spatial_masks, render_plan->material_effects);
                     }
-                    fullres_spatial_masks = SpatialMasks();
+                    working_spatial_masks = SpatialMasks();
                     if (render_plan->print_finish.has_value()) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_print_finish");
                         rendered = renderer.apply_print_finish(rendered, *render_plan->print_finish);
