@@ -1475,9 +1475,12 @@ Image apply_post_bloom_filmic(
             const float y_luma = 0.2126F * pixel[0] + 0.7152F * pixel[1] + 0.0722F * pixel[2];
             luminance.at<float>(y, x) = y_luma;
 
-            const float highlight = smoothstep_unit((y_luma - 0.64F) / 0.30F);
-            const float excess = std::max(0.0F, y_luma - 0.56F);
-            const float mask = std::clamp(highlight * (0.45F + excess), 0.0F, 1.0F);
+            // Onset lowered so mid-highlights (not just near-white) contribute to the
+            // glow, making bloom actually visible; still smooth so it never blooms the
+            // whole frame.
+            const float highlight = smoothstep_unit((y_luma - 0.52F) / 0.34F);
+            const float excess = std::max(0.0F, y_luma - 0.45F);
+            const float mask = std::clamp(highlight * (0.55F + excess), 0.0F, 1.0F);
             source_mask.at<float>(y, x) = mask;
 
             auto& dst = masked_source.at<cv::Vec3f>(y, x);
@@ -1512,8 +1515,8 @@ Image apply_post_bloom_filmic(
             const auto& base = source.at<cv::Vec3f>(y, x);
             auto& dst = out.at<cv::Vec3f>(y, x);
             const float mask = source_mask.at<float>(y, x);
-            const float shoulder_loss = mask * strength * 0.16F;
-            const float gain = strength * 0.42F;
+            const float shoulder_loss = mask * strength * 0.13F;
+            const float gain = strength * 0.60F;
             for (int channel = 0; channel < 3; ++channel) {
                 float value = base[channel] * (1.0F - shoulder_loss) + warm_bloom[channel] * gain;
                 if (value > 0.92F) {
