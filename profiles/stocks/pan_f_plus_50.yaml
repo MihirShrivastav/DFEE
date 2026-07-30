@@ -1,0 +1,103 @@
+stock_id: pan_f_plus_50
+stock_name: Ilford Pan F Plus 50
+stock_type: monochrome
+adaptation:
+  base_iso: 50
+  default_strength: 1.0
+  camera_cast_compensation_sensitivity: 0.5
+  highlight_stress_sensitivity: 0.9
+  shadow_noise_sensitivity: 0.35
+tone_response:
+  toe_strength: 0.44
+  toe_length: 0.28
+  midtone_contrast: 1.16
+  shoulder_strength: 0.74
+  highlight_rolloff_start: 0.8
+  black_density_floor: 0.004
+  channel_toe_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+  channel_shoulder_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+  channel_midtone_mult:
+  - 1.0
+  - 1.0
+  - 1.0
+color_response:
+  shadow_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  midtone_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  highlight_bias_lab:
+  - 0.0
+  - 0.0
+  - 0.0
+  blue_cast_suppression: 0.0
+  green_magenta_stabilization: 0.0
+  pan_weight_r: 0.2
+  pan_weight_g: 0.62
+  pan_weight_b: 0.18
+hue_saturation_response:
+  saturation_boost: 1.0
+  red_orange_midtone_compression: 1.0
+  yellow_green_muting: 1.0
+  cyan_blue_highlight_compression: 1.0
+  neon_compression: 1.0
+  highlight_desaturation: 1.0
+grain:
+  size: 0.22
+  strength: 0.17
+  chroma_strength: 0.0
+  peak_zone: midtones
+  texture_masking: 0.86
+  family: bw_cubic
+  target_pgi_35mm_4x6: 24
+  clumpiness: 0.38
+  micro_grit: 0.14
+  layer_correlation: 1.00
+  shadow_response: 0.52
+  midtone_response: 0.80
+  highlight_response: 0.30
+  underexposure_coarsening: 0.30
+  overexposure_smoothing: 0.18
+halation:
+  trigger: specular_only
+  strength: 0.06
+  radius_inner: 3
+  radius_outer: 12
+  warm_core:
+  - 1.0
+  - 1.0
+  - 1.0
+  red_fringe:
+  - 1.0
+  - 1.0
+  - 1.0
+chroma_coupling:
+  hi_rolloff_start: 0.72
+  hi_rolloff_rate: 2.0
+  hi_compression: 0.0
+  sh_rolloff_start: 0.18
+  sh_compression: 0.0
+  hi_hue_conv_rad: 0.0
+  hi_hue_conv_str: 0.0
+dye_contamination:
+  r_to_g: 0.0
+  g_to_r: 0.0
+  b_to_g: 0.0
+  b_to_r: 0.0
+  r_to_b: 0.0
+  g_to_b: 0.0
+color_character:
+  highlight_hold_sensitivity: 0.0
+  shadow_retention_sensitivity: 0.0
+  emulsion_density_sensitivity: 0.0
+  palette:
+    range_sensitivity: 0.0

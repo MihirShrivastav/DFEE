@@ -1,0 +1,118 @@
+stock_id: fujicolor_c200
+stock_name: Fujicolor C200
+stock_type: color_negative
+adaptation:
+  base_iso: 200
+  default_strength: 0.95
+  camera_cast_compensation_sensitivity: 0.75
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.6
+tone_response:
+  toe_strength: 0.4
+  toe_length: 0.32
+  midtone_contrast: 1.04
+  shoulder_strength: 0.62
+  highlight_rolloff_start: 0.72
+  black_density_floor: 0.012
+  channel_toe_mult:
+  - 0.95
+  - 1.0
+  - 1.15
+  channel_shoulder_mult:
+  - 0.92
+  - 1.0
+  - 1.2
+  channel_midtone_mult:
+  - 1.02
+  - 1.0
+  - 0.96
+color_response:
+  shadow_bias_lab:
+  - 0.0
+  - -2.2
+  - -1.0
+  midtone_bias_lab:
+  - 0.0
+  - -0.6
+  - 0.3
+  highlight_bias_lab:
+  - 0.0
+  - -1.0
+  - 1.0
+  blue_cast_suppression: 0.3
+  green_magenta_stabilization: 0.15
+hue_saturation_response:
+  saturation_boost: 1.2
+  red_orange_midtone_compression: 0.28
+  yellow_green_muting: 0.15
+  cyan_blue_highlight_compression: 0.35
+  neon_compression: 0.68
+  highlight_desaturation: 0.5
+grain:
+  size: 0.42
+  strength: 0.36
+  chroma_strength: 0.1
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.78
+  family: consumer_color_negative
+  target_pgi_35mm_4x6: 42
+  clumpiness: 0.48
+  micro_grit: 0.24
+  layer_correlation: 0.68
+  shadow_response: 0.8
+  midtone_response: 1.02
+  highlight_response: 0.28
+  underexposure_coarsening: 0.32
+  overexposure_smoothing: 0.24
+halation:
+  trigger: specular_only
+  strength: 0.18
+  radius_inner: 5
+  radius_outer: 20
+  warm_core:
+  - 1.0
+  - 0.5
+  - 0.25
+  red_fringe:
+  - 1.0
+  - 0.15
+  - 0.08
+chroma_coupling:
+  hi_rolloff_start: 0.7
+  hi_rolloff_rate: 1.8
+  hi_compression: 0.55
+  sh_rolloff_start: 0.19
+  sh_compression: 0.48
+  hi_hue_conv_rad: 0.28
+  hi_hue_conv_str: 0.18
+dye_contamination:
+  r_to_g: 0.026
+  g_to_r: 0.012
+  b_to_g: 0.011
+  b_to_r: 0.005
+  r_to_b: 0.0
+  g_to_b: 0.006
+color_character:
+  highlight_hold_sensitivity: 0.62
+  shadow_retention_sensitivity: 0.6
+  emulsion_density_sensitivity: 0.6
+  palette:
+    range_sensitivity: 0.55
+density:
+  strength: 0.58
+  low_luma_limit: 0.1
+compression:
+  strength: 0.56
+  threshold: 0.44
+  crosstalk: 0.3
+hue_chroma_gain:
+  green: 0.12
+  cyan: 0.1
+  blue: 0.08
+  red: -0.05
+crossover:
+  shadow_cast_a: -0.5
+  shadow_cast_b: -0.2
+  highlight_cast_a: 0.2
+  highlight_cast_b: 0.3
+  exposure_sensitivity: 0.55

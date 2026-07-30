@@ -1,0 +1,121 @@
+stock_id: velvia_100
+stock_name: Fujifilm Velvia 100
+stock_type: color_reversal
+adaptation:
+  base_iso: 100
+  default_strength: 0.95
+  camera_cast_compensation_sensitivity: 0.5
+  highlight_stress_sensitivity: 0.85
+  shadow_noise_sensitivity: 0.4
+tone_response:
+  toe_strength: 0.58
+  toe_length: 0.24
+  midtone_contrast: 1.24
+  shoulder_strength: 0.9
+  highlight_rolloff_start: 0.62
+  black_density_floor: 0.003
+  channel_toe_mult:
+  - 1.0
+  - 1.0
+  - 1.22
+  channel_shoulder_mult:
+  - 1.0
+  - 1.05
+  - 1.38
+  channel_midtone_mult:
+  - 1.0
+  - 1.05
+  - 0.92
+color_response:
+  shadow_bias_lab:
+  - 0.0
+  - -2.0
+  - -4.5
+  midtone_bias_lab:
+  - 0.0
+  - -2.2
+  - 1.2
+  highlight_bias_lab:
+  - 0.3
+  - 0.5
+  - 2.5
+  blue_cast_suppression: 0.05
+  green_magenta_stabilization: 0.2
+hue_saturation_response:
+  saturation_boost: 1.5
+  red_orange_midtone_compression: 0.12
+  yellow_green_muting: 0.05
+  cyan_blue_highlight_compression: 0.14
+  neon_compression: 0.45
+  highlight_desaturation: 0.2
+grain:
+  size: 0.12
+  strength: 0.07
+  chroma_strength: 0.005
+  peak_zone: lower_mid_to_mid
+  texture_masking: 0.85
+  family: color_reversal_fine
+  target_pgi_35mm_4x6: 25
+  clumpiness: 0.22
+  micro_grit: 0.1
+  layer_correlation: 0.92
+  shadow_response: 0.42
+  midtone_response: 0.7
+  highlight_response: 0.16
+  underexposure_coarsening: 0.12
+  overexposure_smoothing: 0.42
+halation:
+  trigger: specular_only
+  strength: 0.07
+  radius_inner: 3
+  radius_outer: 12
+  warm_core:
+  - 1.0
+  - 0.6
+  - 0.25
+  red_fringe:
+  - 0.95
+  - 0.2
+  - 0.05
+chroma_coupling:
+  hi_rolloff_start: 0.68
+  hi_rolloff_rate: 3.5
+  hi_compression: 0.8
+  sh_rolloff_start: 0.14
+  sh_compression: 0.6
+  hi_hue_conv_rad: 0.1
+  hi_hue_conv_str: 0.1
+dye_contamination:
+  r_to_g: 0.0
+  g_to_r: 0.0
+  b_to_g: 0.0
+  b_to_r: 0.0
+  r_to_b: 0.0
+  g_to_b: 0.0
+color_character:
+  highlight_hold_sensitivity: 0.9
+  shadow_retention_sensitivity: 0.5
+  emulsion_density_sensitivity: 0.8
+  palette:
+    range_sensitivity: 0.85
+    anchors:
+    - 0.5236
+    - 2.0944
+    - 3.1416
+    - 4.7124
+    anchor_weights:
+    - 0.75
+    - 1.0
+    - 0.82
+    - 0.95
+density:
+  strength: 0.88
+  low_luma_limit: 0.12
+compression:
+  strength: 0.72
+  threshold: 0.42
+  crosstalk: 0.4
+hue_chroma_gain:
+  green: 0.12
+  yellow: 0.08
+  blue: 0.06
