@@ -417,6 +417,14 @@ struct GrainNoiseCacheEntry {
     cv::Mat noise_r;
     cv::Mat noise_g;
     cv::Mat noise_b;
+    // Second, coprime-period noise octave used only on the tiled (large-export) path to
+    // detile the wrap-around texture (empty otherwise). Summed with the primary octave at
+    // 1/sqrt(2) during compositing: each octave is individually seamless, so the sum is
+    // seamless, but the combined period (lcm of the two tile sizes) exceeds any image, so
+    // the primary tile's repetition is broken. Grain variance/spectrum are unchanged.
+    cv::Mat noise_r2;
+    cv::Mat noise_g2;
+    cv::Mat noise_b2;
 };
 
 [[nodiscard]] std::int32_t quantize_grain_param(const float value) {
@@ -1928,6 +1936,20 @@ Image FilmRenderer::apply_filmic_grain(
     const int w = rgb_linear.width;
     const float scale_factor = static_cast<float>(w) / 2048.0F;
     const bool is_mono = effects.grain_chroma_strength <= 0.0F;
+    // Large images generate the noise on a bounded PERIODIC tile and sample it wrapped, so
+    // the field stays ~48 MB instead of the full-res ~1.6 GB. Grain feature SIZE is unchanged
+    // (scale_factor is from the full width); only the repeat period is bounded. Images that
+    // already fit the tile keep the exact old path (byte-identical).
+    constexpr int kGrainTileMax = 2048;
+    constexpr int kGrainTileMaxB = 1728;  // coprime-ish 2nd octave (gcd 64 -> lcm 55296 >> any image)
+    constexpr int kGrainWrapMargin = 24;  // >= 3x max blur sigma, so the wrapped blur is seamless
+    const bool grain_tiled = (w > kGrainTileMax || h > kGrainTileMax);
+    const int gen_w = grain_tiled ? std::min(w, kGrainTileMax) : w;
+    const int gen_h = grain_tiled ? std::min(h, kGrainTileMax) : h;
+    // 2nd-octave canvas: only shrink on axes that are actually tiled (period < image), so a
+    // non-tiled axis keeps its full-width period and never gains repetition from detiling.
+    const int gen_w2 = (w > kGrainTileMax) ? kGrainTileMaxB : gen_w;
+    const int gen_h2 = (h > kGrainTileMax) ? kGrainTileMaxB : gen_h;
     const std::uint32_t grain_seed = effects.grain_seed != 0U ? effects.grain_seed : compute_grain_seed(rgb_linear);
     const GrainNoiseCacheKey cache_key{
         .width = w,
@@ -1945,11 +1967,17 @@ Image FilmRenderer::apply_filmic_grain(
     cv::Mat noise_r;
     cv::Mat noise_g;
     cv::Mat noise_b;
+    cv::Mat noise_r2;  // 2nd octave (tiled path only)
+    cv::Mat noise_g2;
+    cv::Mat noise_b2;
 
     if (filmic_grain_noise_cache.has_value() && filmic_grain_noise_cache->key.matches(cache_key)) {
         noise_r = filmic_grain_noise_cache->noise_r;
         noise_g = filmic_grain_noise_cache->noise_g;
         noise_b = filmic_grain_noise_cache->noise_b;
+        noise_r2 = filmic_grain_noise_cache->noise_r2;
+        noise_g2 = filmic_grain_noise_cache->noise_g2;
+        noise_b2 = filmic_grain_noise_cache->noise_b2;
     } else {
         std::mt19937_64 rng(static_cast<std::uint64_t>(grain_seed) ^ 0xD1B54A32D192ED03ULL);
         // Fine, resolution-scaled grain: grain_size drives a small blur setting the physical
@@ -1962,10 +1990,21 @@ Image FilmRenderer::apply_filmic_grain(
         // Gentler roughness/crispness response (less extreme at the top).
         const float roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
 
-        auto make_fine = [&](std::mt19937_64& r) {
-            cv::Mat m = make_standard_normal_mat(h, w, r);
+        // Generate one correlated-noise tile at an explicit size. On the tiled path the blur
+        // is wrap-padded so the tile is periodic (seamless when wrap-sampled); when not tiled
+        // (tw==w, th==h) this is the exact original full-image path (byte-identical).
+        auto make_tile = [&](std::mt19937_64& r, const int th, const int tw) {
+            cv::Mat m = make_standard_normal_mat(th, tw, r);
             if (grain_sigma > 0.35F) {
-                cv::GaussianBlur(m, m, cv::Size(0, 0), grain_sigma);
+                if (grain_tiled) {
+                    cv::Mat padded;
+                    cv::copyMakeBorder(m, padded, kGrainWrapMargin, kGrainWrapMargin,
+                                       kGrainWrapMargin, kGrainWrapMargin, cv::BORDER_WRAP);
+                    cv::GaussianBlur(padded, padded, cv::Size(0, 0), grain_sigma);
+                    m = padded(cv::Rect(kGrainWrapMargin, kGrainWrapMargin, tw, th)).clone();
+                } else {
+                    cv::GaussianBlur(m, m, cv::Size(0, 0), grain_sigma);
+                }
             }
             normalize_zero_mean_unit_variance(m);
             if (roughness > 0.0F) {
@@ -1982,22 +2021,39 @@ Image FilmRenderer::apply_filmic_grain(
             return m;
         };
 
-        cv::Mat mono = make_fine(rng);
-        if (is_mono) {
-            noise_r = mono;
-            noise_g = mono;
-            noise_b = mono;
-        } else {
-            const float base_chroma = clampf(effects.grain_chroma_strength * 2.2F, 0.0F, 1.0F);
-            const float layer_correlation = std::clamp(effects.grain_layer_correlation, 0.0F, 1.0F);
-            const float chroma_mix = base_chroma * std::clamp(0.18F + (1.0F - layer_correlation) * 0.55F, 0.12F, 0.65F);
-            cv::Mat ind_r = make_fine(rng);
-            cv::Mat ind_b = make_fine(rng);
-            noise_g = mono;
-            noise_r = (1.0F - chroma_mix) * mono + chroma_mix * ind_r;
-            noise_b = (1.0F - chroma_mix) * mono + chroma_mix * ind_b;
-            normalize_zero_mean_unit_variance(noise_r);
-            normalize_zero_mean_unit_variance(noise_b);
+        const float base_chroma = clampf(effects.grain_chroma_strength * 2.2F, 0.0F, 1.0F);
+        const float layer_correlation = std::clamp(effects.grain_layer_correlation, 0.0F, 1.0F);
+        const float chroma_mix = base_chroma * std::clamp(0.18F + (1.0F - layer_correlation) * 0.55F, 0.12F, 0.65F);
+
+        // Assemble the R/G/B noise for one octave from its mono + independent chroma tiles.
+        const auto assemble = [&](cv::Mat& out_r, cv::Mat& out_g, cv::Mat& out_b,
+                                  const cv::Mat& mono, const cv::Mat& ind_r, const cv::Mat& ind_b) {
+            if (is_mono) {
+                out_r = mono;
+                out_g = mono;
+                out_b = mono;
+            } else {
+                out_g = mono;
+                out_r = (1.0F - chroma_mix) * mono + chroma_mix * ind_r;
+                out_b = (1.0F - chroma_mix) * mono + chroma_mix * ind_b;
+                normalize_zero_mean_unit_variance(out_r);
+                normalize_zero_mean_unit_variance(out_b);
+            }
+        };
+
+        // Octave A (primary tile). Draw order matches the original exactly on the non-tiled
+        // path (mono, ind_r, ind_b) so preview output stays byte-identical.
+        cv::Mat mono = make_tile(rng, gen_h, gen_w);
+        cv::Mat ind_r = is_mono ? cv::Mat() : make_tile(rng, gen_h, gen_w);
+        cv::Mat ind_b = is_mono ? cv::Mat() : make_tile(rng, gen_h, gen_w);
+        assemble(noise_r, noise_g, noise_b, mono, ind_r, ind_b);
+
+        // Octave B (detiling): only on the tiled path, at the coprime period.
+        if (grain_tiled) {
+            cv::Mat mono2 = make_tile(rng, gen_h2, gen_w2);
+            cv::Mat ind_r2 = is_mono ? cv::Mat() : make_tile(rng, gen_h2, gen_w2);
+            cv::Mat ind_b2 = is_mono ? cv::Mat() : make_tile(rng, gen_h2, gen_w2);
+            assemble(noise_r2, noise_g2, noise_b2, mono2, ind_r2, ind_b2);
         }
 
         filmic_grain_noise_cache = GrainNoiseCacheEntry{
@@ -2005,6 +2061,9 @@ Image FilmRenderer::apply_filmic_grain(
             .noise_r = noise_r,
             .noise_g = noise_g,
             .noise_b = noise_b,
+            .noise_r2 = noise_r2,
+            .noise_g2 = noise_g2,
+            .noise_b2 = noise_b2,
         };
     }
 
@@ -2025,11 +2084,29 @@ Image FilmRenderer::apply_filmic_grain(
     static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
     static const auto kGammaDecodeLut = build_power_lut(2.2F);
 
+    const int noise_h = noise_g.rows;   // == h when not tiled -> wrapped indices are identity
+    const int noise_w = noise_g.cols;
+    const int noise_h2 = grain_tiled ? noise_g2.rows : 1;
+    const int noise_w2 = grain_tiled ? noise_g2.cols : 1;
+    constexpr float kInvSqrt2 = 0.70710678F;  // keeps unit variance when summing the 2 octaves
     for (int y = 0; y < h; ++y) {
-        const float* noise_r_row = noise_r.ptr<float>(y);
-        const float* noise_g_row = noise_g.ptr<float>(y);
-        const float* noise_b_row = noise_b.ptr<float>(y);
+        const float* noise_r_row = noise_r.ptr<float>(y % noise_h);
+        const float* noise_g_row = noise_g.ptr<float>(y % noise_h);
+        const float* noise_b_row = noise_b.ptr<float>(y % noise_h);
+        const float* noise_r2_row = grain_tiled ? noise_r2.ptr<float>(y % noise_h2) : nullptr;
+        const float* noise_g2_row = grain_tiled ? noise_g2.ptr<float>(y % noise_h2) : nullptr;
+        const float* noise_b2_row = grain_tiled ? noise_b2.ptr<float>(y % noise_h2) : nullptr;
         for (int x = 0; x < w; ++x) {
+            const int nx = x % noise_w;
+            float nr = noise_r_row[nx];
+            float ng = noise_g_row[nx];
+            float nb = noise_b_row[nx];
+            if (grain_tiled) {
+                const int nx2 = x % noise_w2;
+                nr = (nr + noise_r2_row[nx2]) * kInvSqrt2;
+                ng = (ng + noise_g2_row[nx2]) * kInvSqrt2;
+                nb = (nb + noise_b2_row[nx2]) * kInvSqrt2;
+            }
             const std::size_t pixel_index = static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
             const std::size_t base = pixel_index * 3U;
 
@@ -2079,9 +2156,9 @@ Image FilmRenderer::apply_filmic_grain(
             const float exposure_mod = std::max(0.0F, density_mod);
 
             // Soft-light composite of a neutral-grey grain layer (0.5 +/- noise*amp).
-            const float bl_r = clamp01(0.5F + noise_r_row[x] * amp_base * kAmpMults[0] * exposure_mod);
-            const float bl_g = clamp01(0.5F + noise_g_row[x] * amp_base * kAmpMults[1] * exposure_mod);
-            const float bl_b = clamp01(0.5F + noise_b_row[x] * amp_base * kAmpMults[2] * exposure_mod);
+            const float bl_r = clamp01(0.5F + nr * amp_base * kAmpMults[0] * exposure_mod);
+            const float bl_g = clamp01(0.5F + ng * amp_base * kAmpMults[1] * exposure_mod);
+            const float bl_b = clamp01(0.5F + nb * amp_base * kAmpMults[2] * exposure_mod);
 
             out.pixels[base + 0] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_r, bl_r)));
             out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_g, bl_g)));
