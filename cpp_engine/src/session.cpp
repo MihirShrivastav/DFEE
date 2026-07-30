@@ -35,6 +35,8 @@
 #endif
 #include <windows.h>
 #include <memoryapi.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
 #endif
 
 #if DFEE_HAS_OPENCV
@@ -200,6 +202,19 @@ struct NativeMemorySnapshot {
     return snapshot;
 }
 
+// Temporary instrumentation: current + peak process working set, to locate the export
+// memory high-water. Removed once the peak stage is identified.
+[[nodiscard]] std::pair<std::uint64_t, std::uint64_t> current_and_peak_working_set_bytes() {
+#if defined(_WIN32)
+    PROCESS_MEMORY_COUNTERS pmc{};
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc))) {
+        return {static_cast<std::uint64_t>(pmc.WorkingSetSize),
+                static_cast<std::uint64_t>(pmc.PeakWorkingSetSize)};
+    }
+#endif
+    return {0ULL, 0ULL};
+}
+
 [[nodiscard]] std::string format_bytes_human(const std::uint64_t bytes) {
     constexpr std::array<const char*, 5> kUnits{"B", "KB", "MB", "GB", "TB"};
     double value = static_cast<double>(bytes);
@@ -226,14 +241,19 @@ struct NativeMemorySnapshot {
     std::uint64_t estimate;
     if (stock_enabled) {
         // The decode cache (rgb + luminance + clipping masks) is freed once the full-res
-        // pre-film image exists, so it is NOT concurrent with the render peak. The peak is:
-        //   full-res zone masks (7) + spatial masks (3), held through halation
-        //   + ~3 concurrent full-res RGB images (rendered + a stage intermediate + a blur/copy)
+        // pre-film image exists, so it is NOT concurrent with the render peak. Post Phase 1
+        // (masks are low-res proxies sampled scale-aware, never materialized full-res) and
+        // Phase 3 (grain is a bounded wrap-around tile, not a full-res field), the peak is:
+        //   ~3 concurrent full-res RGB images (rendered + a stage intermediate + a blur/copy)
+        //   + the bounded proxy masks (<= ~2048^2 x 10 channels) + bounded grain tile
         //   + the output buffer.
-        const std::uint64_t full_zone_masks = pixels * 7ULL * sizeof(float);
-        const std::uint64_t full_spatial_masks = pixels * 3ULL * sizeof(float);
+        constexpr std::uint64_t kProxyDim = 2048ULL;
+        const std::uint64_t proxy_pixels = std::min<std::uint64_t>(pixels, kProxyDim * kProxyDim);
+        const std::uint64_t proxy_masks = proxy_pixels * 10ULL * sizeof(float);   // 7 zone + 3 spatial
+        const std::uint64_t grain_tile = std::min<std::uint64_t>(pixels, kProxyDim * kProxyDim)
+            * 3ULL * 2ULL * sizeof(float);                                        // 2 octaves x 3 channels
         const std::uint64_t concurrent_full_images = rgb_float * 3ULL;
-        estimate = full_zone_masks + full_spatial_masks + concurrent_full_images + output_bytes;
+        estimate = concurrent_full_images + proxy_masks + grain_tile + output_bytes;
     } else {
         // Passthrough: decoded image + a copy + output.
         estimate = rgb_float * 2ULL + output_bytes;
@@ -243,23 +263,27 @@ struct NativeMemorySnapshot {
 }
 
 [[nodiscard]] std::uint64_t compute_safe_export_budget_bytes(const NativeMemorySnapshot& snapshot) {
-    if (!snapshot.available || snapshot.available_physical == 0ULL) {
+    if (!snapshot.available) {
         return 0ULL;
     }
-    if (snapshot.low_memory_signal) {
-        const std::uint64_t reserve = std::max<std::uint64_t>(
-            1536ULL * 1024ULL * 1024ULL,
-            snapshot.total_physical / 8ULL);
-        if (snapshot.available_physical <= reserve) {
-            return 0ULL;
-        }
-        return snapshot.available_physical - reserve;
-    }
-    const std::uint64_t reserve = 768ULL * 1024ULL * 1024ULL;
-    if (snapshot.available_physical <= reserve) {
+    // Windows allocations succeed against the commit limit (free physical + free page file),
+    // not free physical RAM. Basing the budget on free physical over-refuses whenever the
+    // machine is merely busy (other apps holding RAM) even though the export would commit
+    // fine and the OS would page as needed -- which is how Lightroom/darktable behave. Base
+    // the budget on the commit headroom (ullAvailPageFile) so a busy-but-not-exhausted system
+    // still exports; keep a reserve so we never drive the whole machine to the commit ceiling.
+    // available_page_file already accounts for free physical, so it is >= available_physical.
+    const std::uint64_t commit_headroom = std::max(snapshot.available_page_file, snapshot.available_physical);
+    if (commit_headroom == 0ULL) {
         return 0ULL;
     }
-    return snapshot.available_physical - reserve;
+    const std::uint64_t reserve = snapshot.low_memory_signal
+        ? std::max<std::uint64_t>(1536ULL * 1024ULL * 1024ULL, snapshot.total_physical / 8ULL)
+        : 768ULL * 1024ULL * 1024ULL;
+    if (commit_headroom <= reserve) {
+        return 0ULL;
+    }
+    return commit_headroom - reserve;
 }
 
 [[nodiscard]] std::size_t vector_bytes(const std::vector<float>& values) {
@@ -1004,6 +1028,14 @@ void append_export_trace(const std::filesystem::path& project_root, const std::s
         return;
     }
     out << line << "\n";
+}
+
+// Temporary: log current + peak working set at an export boundary (gated by the trace env).
+void trace_mem(const std::filesystem::path& project_root, const char* label) {
+    const auto [ws, peak] = current_and_peak_working_set_bytes();
+    append_export_trace(
+        project_root,
+        std::string("MEM ") + label + " ws=" + format_bytes_human(ws) + " peak=" + format_bytes_human(peak));
 }
 
 // Legacy tone stage (parity_v1 / filmic_v2): additive shifts in gamma-2.2 space.
@@ -2683,6 +2715,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                 }
                 append_export_trace(project_root_, "export_image:ensure_full_cache:done");
+                trace_mem(project_root_, "after_decode(cache-alive)");
             }
             {
                 ScopedStageTimer stage(response.engine, "export_image_load_profiles");
@@ -2846,12 +2879,14 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
                 }
                 append_export_trace(project_root_, "export_image:fullres_prefilm:done");
+                trace_mem(project_root_, "after_prefilm(decode-still-alive)");
                 export_analysis_cache_.reset();
                 // The full-res decoded image (rgb + luminance + clipping masks, ~19 B/px)
                 // is no longer needed once fullres_prefilm exists — the film stages work on
                 // `rendered`. Free the decode cache so it isn't held through the render peak.
                 // (`decoded` must not be referenced after this point; a later export re-decodes.)
                 full_decode_cache_.reset();
+                trace_mem(project_root_, "after_decode_freed");
 
                 append_export_trace(project_root_, "export_image:fullres_renderer:start");
                 FilmRenderer renderer;
@@ -2884,6 +2919,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                                 "export_image_render_stage_color_response");
                         }
                     }
+                    trace_mem(project_root_, "after_color_response");
                     if (render_plan->stock_type != "monochrome" &&
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_density");
@@ -2919,6 +2955,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                                 render_plan->material_effects);
                     }
                     working_zone_masks = ZoneMasks();
+                    trace_mem(project_root_, "after_acutance+halation");
                     {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_grain");
                         rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
@@ -2926,6 +2963,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             : renderer.apply_film_grain(rendered, working_spatial_masks, render_plan->material_effects);
                     }
                     working_spatial_masks = SpatialMasks();
+                    trace_mem(project_root_, "after_grain");
                     if (render_plan->print_finish.has_value()) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_print_finish");
                         rendered = renderer.apply_print_finish(rendered, *render_plan->print_finish);
@@ -2974,6 +3012,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 response.format_label = "8-bit PNG";
             }
 
+            trace_mem(project_root_, "before_output_alloc");
             cv::Mat output_mat(rendered.height, rendered.width, (canonical_format == "png8" || canonical_format == "jpeg") ? CV_8UC3 : CV_16UC3);
             const bool eight_bit_output = (canonical_format == "png8" || canonical_format == "jpeg");
             parallel_for_rows(rendered.height, [&](int y) {
@@ -3012,6 +3051,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     std::clamp(request.jpeg_quality, 1, 100),
                 };
             }
+            trace_mem(project_root_, "after_output_encode_write");
             if (!cv::imwrite(response.output_path.string(), output_mat, write_params)) {
                 response.status = "error";
                 response.error = {
