@@ -1,8 +1,12 @@
 #include <QGuiApplication>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QTimer>
+#include <QImage>
+#include <QFontDatabase>
+#include <QFont>
 #include <QCommandLineParser>
 #include <QFile>
 #include <QTextStream>
@@ -18,6 +22,18 @@ int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("DFEE");
     app.setOrganizationName("DFEE");
+
+    // Bundled Geist (Swiss grotesque) — the Graphite typeface. Embedded via qrc so it
+    // renders identically everywhere, including headless/offscreen captures.
+    QFontDatabase::addApplicationFont(":/fonts/Geist-Regular.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Geist-Medium.ttf");
+    QFontDatabase::addApplicationFont(":/fonts/Geist-SemiBold.ttf");
+    {
+        QFont base("Geist");
+        base.setPixelSize(13);
+        base.setStyleStrategy(QFont::PreferAntialias);
+        app.setFont(base);
+    }
 
     QCommandLineParser commandLine;
     commandLine.setApplicationDescription("DFEE native film editor");
@@ -139,6 +155,35 @@ int main(int argc, char* argv[]) {
             QTimer::singleShot(7000, &controller, [&controller]() {
                 controller.exportImage();
             });
+        }
+    }
+
+    // Headless UI screenshot: set DFEE_SCREENSHOT=<png-path> to grab the window
+    // after first paint and quit. Optional DFEE_SCREENSHOT_OPEN=<image> loads a
+    // photo first; DFEE_SCREENSHOT_DELAY=<ms> tunes the settle time. Run under
+    // `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software` for deterministic,
+    // display-free captures. This is the dev loop for iterating the Graphite look.
+    if (qEnvironmentVariableIsSet("DFEE_SCREENSHOT")) {
+        const QString shotPath = qEnvironmentVariable("DFEE_SCREENSHOT");
+        if (qEnvironmentVariableIsSet("DFEE_SCREENSHOT_OPEN")) {
+            controller.openFile(QUrl::fromLocalFile(qEnvironmentVariable("DFEE_SCREENSHOT_OPEN")));
+        }
+        QObject* rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().constFirst();
+        if (auto* win = qobject_cast<QQuickWindow*>(rootObj)) {
+            const int delayMs = qEnvironmentVariableIsSet("DFEE_SCREENSHOT_DELAY")
+                ? qEnvironmentVariable("DFEE_SCREENSHOT_DELAY").toInt()
+                : 1600;
+            QTimer::singleShot(delayMs, win, [win, shotPath]() {
+                const QImage img = win->grabWindow();
+                if (!img.isNull() && img.save(shotPath)) {
+                    qInfo() << "SCREENSHOT saved" << shotPath << img.width() << "x" << img.height();
+                } else {
+                    qWarning() << "SCREENSHOT failed to save" << shotPath;
+                }
+                QCoreApplication::quit();
+            });
+        } else {
+            qWarning() << "SCREENSHOT: root object is not a QQuickWindow";
         }
     }
 

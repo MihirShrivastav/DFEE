@@ -14,17 +14,23 @@ Window {
     title: "DFEE"
     color: bg
 
-    readonly property color bg: "#101114"
-    readonly property color canvas: "#141519"
-    readonly property color panel: "#1b1d22"
-    readonly property color panelRaised: "#23262d"
-    readonly property color border: "#343842"
-    readonly property color textPrimary: "#f1f2f4"
-    readonly property color textSecondary: "#a9adb7"
-    readonly property color textMuted: "#747985"
-    readonly property color accent: "#d7b46a"
-    readonly property color accentDark: "#735a2b"
-    readonly property color danger: "#e28a8a"
+    // Graphite palette — charcoal, monochrome. Colour lives only in the photo + boxart.
+    readonly property color bg: "#0f0f10"
+    readonly property color canvas: "#0f0f10"
+    readonly property color panel: "#1a1a1c"
+    readonly property color panelRaised: "#202023"
+    readonly property color inset: "#141416"          // recessed fields / slider grooves
+    readonly property color border: "#26262b"
+    readonly property color hair: "#14ffffff"           // ~0.08 white hairline (#AARRGGBB)
+    readonly property color textPrimary: "#c7c7cc"      // softened — no pure white
+    readonly property color textSecondary: "#8b8b90"
+    readonly property color textMuted: "#5a5a60"
+    readonly property color textValue: "#74747a"        // dim right-hand slider readouts
+    readonly property color accent: "#e9e9ec"           // inverted light chip for active states
+    readonly property color accentDark: "#c9c9ce"       // pressed light chip
+    readonly property color accentText: "#161618"       // text on a light accent fill
+    readonly property color knob: "#c4c4c9"             // slider knob
+    readonly property color danger: "#e0655b"
     property bool exposureOpen: true
     property bool toneOpen: true
     property bool colorOpen: true
@@ -47,7 +53,7 @@ Window {
     component InspectorLabel: Text {
         color: root.textSecondary
         font.pixelSize: 12
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
     }
 
     component InspectorSlider: Slider {
@@ -88,7 +94,7 @@ Window {
         width: parent.width
         height: 38
         font.pixelSize: 13
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
 
         contentItem: Text {
             text: button.text
@@ -100,7 +106,7 @@ Window {
 
         background: Rectangle {
             radius: 5
-            color: !button.enabled ? root.panelRaised : button.down ? "#c89e4d" : root.accent
+            color: !button.enabled ? root.panelRaised : button.down ? root.accentDark : root.accent
         }
     }
 
@@ -109,7 +115,7 @@ Window {
         width: parent.width
         height: 38
         font.pixelSize: 13
-        font.weight: Font.DemiBold
+        font.weight: Font.Medium
 
         contentItem: Text {
             text: button.text
@@ -213,7 +219,7 @@ Window {
                 text: "DFEE"
                 color: root.textPrimary
                 font.pixelSize: 22
-                font.weight: Font.DemiBold
+                font.weight: Font.Medium
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -279,7 +285,7 @@ Window {
                     text: "Film lab"
                     color: root.textPrimary
                     font.pixelSize: 19
-                    font.weight: Font.DemiBold
+                    font.weight: Font.Medium
                 }
                 Text {
                     text: engine.hasImage ? "Native preview" : "No image loaded"
@@ -331,7 +337,7 @@ Window {
                             readonly property bool selected: engine.exportFormat === modelData.id
                             enabled: !engine.exporting
                             onClicked: engine.exportFormat = modelData.id
-                            contentItem: Text { text: parent.text; color: parent.selected ? root.bg : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.DemiBold }
+                            contentItem: Text { text: parent.text; color: parent.selected ? root.bg : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
                             background: Rectangle { radius: 4; color: parent.selected ? root.accent : root.panelRaised; border.width: 1; border.color: parent.selected ? root.accent : root.border }
                         }
                     }
@@ -446,7 +452,7 @@ Window {
             Item {
                 width: parent.width
                 height: 30
-                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film exposure"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film exposure"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                 Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.exposureOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.exposureOpen = !root.exposureOpen }
             }
@@ -466,7 +472,7 @@ Window {
                             text: modelData.label
                             readonly property bool selected: engine.filmControls.exposure_placement === modelData.value
                             onClicked: engine.setFilmControl("exposure_placement", modelData.value)
-                            contentItem: Text { text: parent.text; color: parent.selected ? root.bg : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.DemiBold }
+                            contentItem: Text { text: parent.text; color: parent.selected ? root.bg : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
                             background: Rectangle { radius: 4; color: parent.selected ? root.accent : root.panelRaised; border.width: 1; border.color: parent.selected ? root.accent : root.border }
                         }
                     }
@@ -477,7 +483,7 @@ Window {
             Item {
                 width: parent.width
                 height: 30
-                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film tone"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film tone"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                 Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.toneOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.toneOpen = !root.toneOpen }
             }
@@ -499,7 +505,7 @@ Window {
             Item {
                 width: parent.width
                 height: 30
-                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color character"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color character"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                 Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.colorOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.colorOpen = !root.colorOpen }
             }
@@ -518,7 +524,7 @@ Window {
             Item {
                 width: parent.width
                 height: 30
-                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                 Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.materialOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.materialOpen = !root.materialOpen }
             }
@@ -575,7 +581,7 @@ Window {
                 text: engine.lightroomRoundTrip ? "Saving back to Lightroom" : "Exporting full resolution"
                 color: root.textPrimary
                 font.pixelSize: 16
-                font.weight: Font.DemiBold
+                font.weight: Font.Medium
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter

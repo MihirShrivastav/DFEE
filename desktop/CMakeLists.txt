@@ -29,6 +29,20 @@ qt_add_qml_module(DFEE
     QML_FILES qml/Main.qml
 )
 
+# Bundled assets: Geist (Swiss grotesque) + film-stock boxart tiles. BASE "resources"
+# maps e.g. resources/fonts/Geist-Regular.ttf -> :/fonts/Geist-Regular.ttf and
+# resources/boxart/portra_400.svg -> :/boxart/portra_400.svg.
+file(GLOB DFEE_BOXART CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/boxart/*.svg")
+qt_add_resources(DFEE "app_assets"
+    PREFIX "/"
+    BASE "resources"
+    FILES
+        resources/fonts/Geist-Regular.ttf
+        resources/fonts/Geist-Medium.ttf
+        resources/fonts/Geist-SemiBold.ttf
+        ${DFEE_BOXART}
+)
+
 target_compile_definitions(DFEE PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent Qt6::QuickControls2 dfee_core)
 set_target_properties(DFEE PROPERTIES WIN32_EXECUTABLE ON)
