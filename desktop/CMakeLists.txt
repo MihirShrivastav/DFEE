@@ -11,7 +11,7 @@ set(DFEE_BUILD_TESTS OFF)
 set(DFEE_BUILD_PYTHON OFF)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../cpp_engine ${CMAKE_BINARY_DIR}/cpp_engine)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Quick Gui Concurrent)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Quick Gui Concurrent QuickControls2)
 qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(DFEE
@@ -30,5 +30,5 @@ qt_add_qml_module(DFEE
 )
 
 target_compile_definitions(DFEE PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent dfee_core)
+target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent Qt6::QuickControls2 dfee_core)
 set_target_properties(DFEE PROPERTIES WIN32_EXECUTABLE ON)

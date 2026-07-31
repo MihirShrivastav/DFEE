@@ -1,4 +1,5 @@
 #include <QGuiApplication>
+#include <QQuickStyle>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QTimer>
@@ -8,6 +9,11 @@
 #include "PreviewImageProvider.h"
 
 int main(int argc, char* argv[]) {
+    // Native Windows controls cannot be safely restyled from QML.  Basic keeps
+    // rendering entirely within the application and makes the Graphite tokens
+    // deterministic across supported Windows versions.
+    QQuickStyle::setStyle("Basic");
+
     QGuiApplication app(argc, argv);
     app.setApplicationName("DFEE");
     app.setOrganizationName("DFEE");
