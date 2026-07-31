@@ -168,6 +168,9 @@ int main(int argc, char* argv[]) {
         if (qEnvironmentVariableIsSet("DFEE_SCREENSHOT_OPEN")) {
             controller.openFile(QUrl::fromLocalFile(qEnvironmentVariable("DFEE_SCREENSHOT_OPEN")));
         }
+        if (qEnvironmentVariableIsSet("DFEE_SCREENSHOT_STOCK")) {
+            controller.setStock(qEnvironmentVariable("DFEE_SCREENSHOT_STOCK"));
+        }
         QObject* rootObj = engine.rootObjects().isEmpty() ? nullptr : engine.rootObjects().constFirst();
         if (auto* win = qobject_cast<QQuickWindow*>(rootObj)) {
             const int delayMs = qEnvironmentVariableIsSet("DFEE_SCREENSHOT_DELAY")

@@ -43,6 +43,32 @@ Window {
         return "16-bit TIFF"
     }
 
+    // Boxart tile for a stock id (bundled SVGs at :/boxart/<id>.svg). Empty for "none".
+    function boxartFor(stockId) {
+        return (stockId && stockId !== "none") ? ("qrc:/boxart/" + stockId + ".svg") : ""
+    }
+
+    component BoxartSwatch: Rectangle {
+        property string stockId: ""
+        property int cell: 26
+        width: cell
+        height: cell
+        radius: 4
+        clip: true
+        color: root.inset
+        border.width: 1
+        border.color: root.hair
+        Image {
+            anchors.fill: parent
+            sourceSize.width: parent.cell * 2
+            sourceSize.height: parent.cell * 2
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            source: root.boxartFor(parent.stockId)
+            visible: source != ""
+        }
+    }
+
     FileDialog {
         id: openDialog
         title: "Open image"
@@ -67,25 +93,29 @@ Window {
             width: control.availableWidth
             height: 4
             radius: 2
-            color: root.border
-
-            Rectangle {
+            color: root.inset                       // recessed groove
+            // subtle top inset line for depth
+            Rectangle { width: parent.width; height: 1; radius: 1; color: "#66000000" }
+            Rectangle {                              // filled portion — subtle grey, monochrome
                 width: control.visualPosition * parent.width
                 height: parent.height
                 radius: parent.radius
-                color: root.accent
+                color: "#3c3c41"
             }
         }
 
-        handle: Rectangle {
+        handle: Rectangle {                          // raised metallic knob
             x: control.leftPadding + control.visualPosition * (control.availableWidth - width)
             y: control.topPadding + control.availableHeight / 2 - height / 2
             width: 14
             height: 14
             radius: 7
-            color: control.pressed ? root.textPrimary : root.accent
-            border.width: 2
-            border.color: root.panel
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: control.pressed ? "#d7d7db" : "#cdcdd2" }
+                GradientStop { position: 1.0; color: "#9a9aa1" }
+            }
+            border.width: 1
+            border.color: "#6e000000"
         }
     }
 
@@ -385,29 +415,59 @@ Window {
                     width: parent.width
                     height: 38
                     model: engine.stockNames
+                    // Keep the trigger (name + boxart) in sync with the engine's
+                    // current stock, including programmatic changes.
+                    currentIndex: {
+                        for (var i = 0; i < engine.stockNames.length; ++i)
+                            if (engine.stockIdAt(i) === engine.stock) return i;
+                        return 0;
+                    }
                     onActivated: engine.stock = engine.stockIdAt(currentIndex)
 
-                    contentItem: Text {
-                        leftPadding: 12
-                        rightPadding: 34
-                        text: stockBox.displayText
-                        color: root.textPrimary
-                        verticalAlignment: Text.AlignVCenter
-                        elide: Text.ElideRight
-                        font.pixelSize: 13
+                    contentItem: Item {
+                        Row {
+                            anchors.left: parent.left
+                            anchors.leftMargin: 10
+                            anchors.right: parent.right
+                            anchors.rightMargin: 32
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 10
+                            BoxartSwatch {
+                                anchors.verticalCenter: parent.verticalCenter
+                                cell: 26
+                                stockId: engine.stockIdAt(stockBox.currentIndex)
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - 36
+                                text: stockBox.displayText
+                                color: root.textPrimary
+                                elide: Text.ElideRight
+                                font.pixelSize: 13
+                            }
+                        }
                     }
                     background: Rectangle {
                         radius: 5
-                        color: root.panelRaised
+                        color: root.inset
                         border.width: 1
-                        border.color: stockBox.activeFocus ? root.accentDark : root.border
+                        border.color: stockBox.activeFocus ? root.accentDark : root.hair
                     }
-                    indicator: Text {
-                        x: stockBox.width - width - 12
-                        y: stockBox.topPadding + (stockBox.availableHeight - height) / 2
-                        text: "⌄"
-                        color: root.textSecondary
-                        font.pixelSize: 16
+                    indicator: Canvas {
+                        x: stockBox.width - 24
+                        y: (stockBox.height - 7) / 2
+                        width: 12
+                        height: 7
+                        onPaint: {
+                            var c = getContext("2d");
+                            c.reset();
+                            c.strokeStyle = "#8b8b90";
+                            c.lineWidth = 1.5;
+                            c.lineCap = "round";
+                            c.beginPath();
+                            c.moveTo(1, 1); c.lineTo(6, 6); c.lineTo(11, 1);
+                            c.stroke();
+                        }
                     }
                     popup: Popup {
                         y: stockBox.height + 4
@@ -430,18 +490,27 @@ Window {
                     }
                     delegate: ItemDelegate {
                         width: stockBox.width - 8
-                        height: 34
+                        height: 44
                         highlighted: stockBox.highlightedIndex === index
-                        contentItem: Text {
-                            text: modelData
-                            color: root.textPrimary
-                            verticalAlignment: Text.AlignVCenter
-                            elide: Text.ElideRight
-                            font.pixelSize: 13
+                        contentItem: Row {
+                            leftPadding: 8
+                            spacing: 10
+                            BoxartSwatch {
+                                anchors.verticalCenter: parent.verticalCenter
+                                cell: 30
+                                stockId: engine.stockIdAt(index)
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData
+                                color: root.textPrimary
+                                elide: Text.ElideRight
+                                font.pixelSize: 13
+                            }
                         }
                         background: Rectangle {
-                            radius: 4
-                            color: parent.highlighted ? root.border : "transparent"
+                            radius: 6
+                            color: parent.highlighted ? "#12ffffff" : "transparent"
                         }
                     }
                 }
