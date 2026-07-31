@@ -14,7 +14,7 @@ Run this checklist from a Release build of `DFEE.exe`. The app must use the nati
 1. Select **Open image** and load a TIFF from `comparision/`.
 2. Confirm a fitted preview appears and the UI remains responsive during the decode.
 3. Select a film stock, for example **Kodak Portra 400**. Confirm the preview updates.
-4. Change Scene placement, Film exposure, Film contrast, and a Color Character control.
+4. Change Scene placement, Film exposure, Film contrast, Shadow Lift, and a Color Character control.
    Confirm the final slider positions render without a backlog of obsolete preview frames.
 5. For a colour stock, adjust Color density, Color boost, Highlight saturation,
    and Shadow saturation. Open a monochrome stock and confirm those controls are

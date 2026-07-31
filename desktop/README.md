@@ -33,9 +33,10 @@ See the design spec: `docs/superpowers/specs/2026-07-31-native-app-foundation.md
 The desktop app drives `filmic_v3` directly through immutable native request
 snapshots. The primary workflow currently includes Film Recipe, Film Exposure
 (scene placement and stock-relative exposure), Film Tone, Color Character, and
-Material Finish. Color Character provides the live supported controls: Color
-Density, Color Boost, Highlight Saturation, and Shadow Saturation. These
-controls automatically disable for monochrome stocks.
+Material Finish. Film Tone provides adaptive scene tone, highlight rolloff, film
+contrast, and Shadow Lift. Color Character provides the live supported controls:
+Color Density, Color Boost, Highlight Saturation, and Shadow Saturation. These
+color controls automatically disable for monochrome stocks.
 
 Material Finish keeps grain matched to the selected film speed by default.
 Turning that option off resolves the active stock and image through the native
