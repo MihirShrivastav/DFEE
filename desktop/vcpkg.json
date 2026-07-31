@@ -1,0 +1,5 @@
+{
+  "name": "dfee-desktop",
+  "version-string": "0.1.0",
+  "dependencies": ["libraw", "opencv", "yaml-cpp", "nlohmann-json", "tiff", "libpng", "libjpeg-turbo"]
+}
