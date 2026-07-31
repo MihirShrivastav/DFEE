@@ -28,11 +28,15 @@ EngineController::EngineController(PreviewImageProvider* provider,
         {"exposure_placement", "auto_balanced"},
         {"film_exposure_ev", 0.0},
         {"adaptive", true},
+        {"adaptation", 1.0},
+        {"rendered_input", 80.0},
         {"highlight_rolloff", 100.0},
         {"film_contrast", 100.0},
         {"shadow_lift", 0.0},
         {"film_color_density", 100.0},
+        {"film_color_compression", 100.0},
         {"emulsion_color_density", 0.0},
+        {"palette_range", 0.0},
         {"highlight_color_hold", 0.0},
         {"shadow_color_retention", 0.0},
         {"grain_auto", true},
@@ -42,6 +46,47 @@ EngineController::EngineController(PreviewImageProvider* provider,
         {"halation_strength", 100.0},
         {"halation_threshold", 50.0},
         {"bloom", 0.0},
+        // Basic tone/colour (generic grade on top of the film response)
+        {"exposure", 0.0},
+        {"contrast", 0.0},
+        {"highlights", 0.0},
+        {"shadows", 0.0},
+        {"whites", 0.0},
+        {"blacks", 0.0},
+        {"midtones", 0.0},
+        {"temp", 0.0},
+        {"tint", 0.0},
+        {"saturation", 0.0},
+        {"vibrance", 0.0},
+        // Detail & optics
+        {"texture", 0.0},
+        {"clarity", 0.0},
+        {"dehaze", 0.0},
+        {"sharpness", 0.0},
+        {"sharpness_mask", 0.5},
+        // Print finish
+        {"print_stock", "none"},
+        {"print_strength", 1.0},
+        {"print_c", 0.0},
+        {"print_m", 0.0},
+        {"print_y", 0.0},
+        {"print_contrast", 0.0},
+        {"print_black_point", 0.0},
+        // Colour grading — 3-way + global (hue 0..360, sat 0..100, lum -100..100)
+        {"cg_shadow_hue", 0.0}, {"cg_shadow_sat", 0.0}, {"cg_shadow_lum", 0.0},
+        {"cg_midtone_hue", 0.0}, {"cg_midtone_sat", 0.0}, {"cg_midtone_lum", 0.0},
+        {"cg_highlight_hue", 0.0}, {"cg_highlight_sat", 0.0}, {"cg_highlight_lum", 0.0},
+        {"cg_global_hue", 0.0}, {"cg_global_sat", 0.0}, {"cg_global_lum", 0.0},
+        {"cg_balance", 0.0}, {"cg_blending", 0.0}, {"cg_crossbalance", 0.0},
+        // HSL — 8 bands x hue/sat/lum (-100..100)
+        {"hsl_red_h", 0.0}, {"hsl_red_s", 0.0}, {"hsl_red_l", 0.0},
+        {"hsl_orange_h", 0.0}, {"hsl_orange_s", 0.0}, {"hsl_orange_l", 0.0},
+        {"hsl_yellow_h", 0.0}, {"hsl_yellow_s", 0.0}, {"hsl_yellow_l", 0.0},
+        {"hsl_green_h", 0.0}, {"hsl_green_s", 0.0}, {"hsl_green_l", 0.0},
+        {"hsl_aqua_h", 0.0}, {"hsl_aqua_s", 0.0}, {"hsl_aqua_l", 0.0},
+        {"hsl_blue_h", 0.0}, {"hsl_blue_s", 0.0}, {"hsl_blue_l", 0.0},
+        {"hsl_purple_h", 0.0}, {"hsl_purple_s", 0.0}, {"hsl_purple_l", 0.0},
+        {"hsl_magenta_h", 0.0}, {"hsl_magenta_s", 0.0}, {"hsl_magenta_l", 0.0},
     };
     // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
     // so there is no concurrent access.
@@ -68,12 +113,20 @@ void EngineController::loadStocks()
     stockIds_.clear();
     stockNames_ << "None";
     stockIds_ << "none";
+    printStockNames_.clear();
+    printStockIds_.clear();
+    printStockNames_ << "None";
+    printStockIds_ << "none";
     const dfee::NativeProfilesResponse profiles = session_->list_profiles();
     for (const auto& s : profiles.stocks) {
         stockNames_ << QString::fromStdString(s.stock_name);
         stockIds_ << QString::fromStdString(s.stock_id);
         monochromeStocks_.insert(QString::fromStdString(s.stock_id),
                                  s.stock_type == "monochrome");
+    }
+    for (const auto& p : profiles.print_stocks) {
+        printStockNames_ << QString::fromStdString(p.print_stock_name);
+        printStockIds_ << QString::fromStdString(p.print_stock_id);
     }
     emit stocksChanged();
 }
@@ -168,6 +221,51 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
         {"halation_strength", {0.0, 200.0}},
         {"halation_threshold", {0.0, 100.0}},
         {"bloom", {0.0, 100.0}},
+        // Film emulsion extras
+        {"adaptation", {0.0, 2.0}},
+        {"rendered_input", {0.0, 100.0}},
+        {"film_color_compression", {0.0, 200.0}},
+        {"palette_range", {-100.0, 100.0}},
+        // Basic tone/colour
+        {"exposure", {-3.0, 3.0}},
+        {"contrast", {-100.0, 100.0}},
+        {"highlights", {-100.0, 100.0}},
+        {"shadows", {-100.0, 100.0}},
+        {"whites", {-100.0, 100.0}},
+        {"blacks", {-100.0, 100.0}},
+        {"midtones", {-100.0, 100.0}},
+        {"temp", {-100.0, 100.0}},
+        {"tint", {-100.0, 100.0}},
+        {"saturation", {-100.0, 100.0}},
+        {"vibrance", {-100.0, 100.0}},
+        // Detail & optics
+        {"texture", {-100.0, 100.0}},
+        {"clarity", {-100.0, 100.0}},
+        {"dehaze", {-100.0, 100.0}},
+        {"sharpness", {0.0, 2.0}},
+        {"sharpness_mask", {0.0, 1.0}},
+        // Print finish
+        {"print_strength", {0.0, 2.0}},
+        {"print_c", {-100.0, 100.0}},
+        {"print_m", {-100.0, 100.0}},
+        {"print_y", {-100.0, 100.0}},
+        {"print_contrast", {-100.0, 100.0}},
+        {"print_black_point", {-100.0, 100.0}},
+        // Colour grading
+        {"cg_shadow_hue", {0.0, 360.0}}, {"cg_shadow_sat", {0.0, 100.0}}, {"cg_shadow_lum", {-100.0, 100.0}},
+        {"cg_midtone_hue", {0.0, 360.0}}, {"cg_midtone_sat", {0.0, 100.0}}, {"cg_midtone_lum", {-100.0, 100.0}},
+        {"cg_highlight_hue", {0.0, 360.0}}, {"cg_highlight_sat", {0.0, 100.0}}, {"cg_highlight_lum", {-100.0, 100.0}},
+        {"cg_global_hue", {0.0, 360.0}}, {"cg_global_sat", {0.0, 100.0}}, {"cg_global_lum", {-100.0, 100.0}},
+        {"cg_balance", {-100.0, 100.0}}, {"cg_blending", {0.0, 100.0}}, {"cg_crossbalance", {-100.0, 100.0}},
+        // HSL — 8 bands
+        {"hsl_red_h", {-100.0, 100.0}}, {"hsl_red_s", {-100.0, 100.0}}, {"hsl_red_l", {-100.0, 100.0}},
+        {"hsl_orange_h", {-100.0, 100.0}}, {"hsl_orange_s", {-100.0, 100.0}}, {"hsl_orange_l", {-100.0, 100.0}},
+        {"hsl_yellow_h", {-100.0, 100.0}}, {"hsl_yellow_s", {-100.0, 100.0}}, {"hsl_yellow_l", {-100.0, 100.0}},
+        {"hsl_green_h", {-100.0, 100.0}}, {"hsl_green_s", {-100.0, 100.0}}, {"hsl_green_l", {-100.0, 100.0}},
+        {"hsl_aqua_h", {-100.0, 100.0}}, {"hsl_aqua_s", {-100.0, 100.0}}, {"hsl_aqua_l", {-100.0, 100.0}},
+        {"hsl_blue_h", {-100.0, 100.0}}, {"hsl_blue_s", {-100.0, 100.0}}, {"hsl_blue_l", {-100.0, 100.0}},
+        {"hsl_purple_h", {-100.0, 100.0}}, {"hsl_purple_s", {-100.0, 100.0}}, {"hsl_purple_l", {-100.0, 100.0}},
+        {"hsl_magenta_h", {-100.0, 100.0}}, {"hsl_magenta_s", {-100.0, 100.0}}, {"hsl_magenta_l", {-100.0, 100.0}},
     };
     const auto it = ranges.constFind(key);
     if (it == ranges.cend()) {
@@ -186,6 +284,14 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
 
 void EngineController::setFilmControl(const QString& key, const QVariant& value)
 {
+    if (key == "print_stock") {
+        const QString id = value.toString();
+        if (filmControls_.value(key).toString() == id) return;
+        filmControls_.insert(key, id);
+        emit filmControlsChanged();
+        scheduleRender();
+        return;
+    }
     if (key == "adaptive" || key == "grain_auto") {
         const bool enabled = value.toBool();
         if (filmControls_.value(key).toBool() == enabled) return;
@@ -299,6 +405,74 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
     request.halation_strength = static_cast<float>(filmControls_.value("halation_strength").toDouble());
     request.halation_threshold = static_cast<float>(filmControls_.value("halation_threshold").toDouble());
     request.bloom = static_cast<float>(filmControls_.value("bloom").toDouble());
+
+    // Shorthand: pull a numeric film control as float.
+    const auto f = [this](const char* key) {
+        return static_cast<float>(filmControls_.value(key).toDouble());
+    };
+
+    // Film emulsion extras
+    request.adaptation = f("adaptation");
+    request.rendered_input = f("rendered_input");
+    request.film_color_compression = f("film_color_compression");
+    request.palette_range = f("palette_range");
+
+    // Basic tone/colour
+    request.exposure = f("exposure");
+    request.contrast = f("contrast");
+    request.highlights = f("highlights");
+    request.shadows = f("shadows");
+    request.whites = f("whites");
+    request.blacks = f("blacks");
+    request.midtones = f("midtones");
+    request.temp = f("temp");
+    request.tint = f("tint");
+    request.saturation = f("saturation");
+    request.vibrance = f("vibrance");
+
+    // Detail & optics
+    request.texture = f("texture");
+    request.clarity = f("clarity");
+    request.dehaze = f("dehaze");
+    request.sharpness = f("sharpness");
+    request.sharpness_mask = f("sharpness_mask");
+
+    // Print finish
+    request.print_stock = filmControls_.value("print_stock").toString().toStdString();
+    request.print_strength = f("print_strength");
+    request.print_c = f("print_c");
+    request.print_m = f("print_m");
+    request.print_y = f("print_y");
+    request.print_contrast = f("print_contrast");
+    request.print_black_point = f("print_black_point");
+
+    // Colour grading — 3-way + global
+    request.cg_shadow_hue = f("cg_shadow_hue");
+    request.cg_shadow_sat = f("cg_shadow_sat");
+    request.cg_shadow_lum = f("cg_shadow_lum");
+    request.cg_midtone_hue = f("cg_midtone_hue");
+    request.cg_midtone_sat = f("cg_midtone_sat");
+    request.cg_midtone_lum = f("cg_midtone_lum");
+    request.cg_highlight_hue = f("cg_highlight_hue");
+    request.cg_highlight_sat = f("cg_highlight_sat");
+    request.cg_highlight_lum = f("cg_highlight_lum");
+    request.cg_global_hue = f("cg_global_hue");
+    request.cg_global_sat = f("cg_global_sat");
+    request.cg_global_lum = f("cg_global_lum");
+    request.cg_balance = f("cg_balance");
+    request.cg_blending = f("cg_blending");
+    request.cg_crossbalance = f("cg_crossbalance");
+
+    // HSL — 8 bands
+    request.hsl_red_h = f("hsl_red_h");     request.hsl_red_s = f("hsl_red_s");         request.hsl_red_l = f("hsl_red_l");
+    request.hsl_orange_h = f("hsl_orange_h"); request.hsl_orange_s = f("hsl_orange_s"); request.hsl_orange_l = f("hsl_orange_l");
+    request.hsl_yellow_h = f("hsl_yellow_h"); request.hsl_yellow_s = f("hsl_yellow_s"); request.hsl_yellow_l = f("hsl_yellow_l");
+    request.hsl_green_h = f("hsl_green_h");   request.hsl_green_s = f("hsl_green_s");     request.hsl_green_l = f("hsl_green_l");
+    request.hsl_aqua_h = f("hsl_aqua_h");     request.hsl_aqua_s = f("hsl_aqua_s");       request.hsl_aqua_l = f("hsl_aqua_l");
+    request.hsl_blue_h = f("hsl_blue_h");     request.hsl_blue_s = f("hsl_blue_s");       request.hsl_blue_l = f("hsl_blue_l");
+    request.hsl_purple_h = f("hsl_purple_h"); request.hsl_purple_s = f("hsl_purple_s");   request.hsl_purple_l = f("hsl_purple_l");
+    request.hsl_magenta_h = f("hsl_magenta_h"); request.hsl_magenta_s = f("hsl_magenta_s"); request.hsl_magenta_l = f("hsl_magenta_l");
+
     return request;
 }
 

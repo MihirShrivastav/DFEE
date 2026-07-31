@@ -91,8 +91,9 @@ Window {
             c.lineWidth = 1.5;
             c.lineCap = "round";
             c.beginPath();
-            if (open) { c.moveTo(1, 1); c.lineTo(6, 6); c.lineTo(11, 1); }
-            else { c.moveTo(1, 6); c.lineTo(6, 1); c.lineTo(11, 6); }
+            // collapsed → point down (expand); expanded → point up (collapse)
+            if (open) { c.moveTo(1, 6); c.lineTo(6, 1); c.lineTo(11, 6); }
+            else { c.moveTo(1, 1); c.lineTo(6, 6); c.lineTo(11, 1); }
             c.stroke();
         }
     }
@@ -144,6 +145,87 @@ Window {
             leftPadding: cb.indicator.width + cb.spacing
             verticalAlignment: Text.AlignVCenter
             font.pixelSize: 12
+        }
+    }
+
+    // Draggable colour-grading wheel: angle = hue, radius = saturation. Reads/writes
+    // engine.filmControls["cg_<zone>_hue"/"_sat"]. Double-click resets to neutral.
+    component ColorWheel: Item {
+        id: wheel
+        property string zone: ""
+        property string label: ""
+        property int diameter: 84
+        width: diameter
+        height: diameter + 18
+        readonly property real hueVal: Number(engine.filmControls["cg_" + zone + "_hue"])
+        readonly property real satVal: Number(engine.filmControls["cg_" + zone + "_sat"])
+
+        Rectangle {
+            id: disc
+            width: wheel.diameter; height: wheel.diameter; radius: wheel.diameter / 2
+            anchors.horizontalCenter: parent.horizontalCenter
+            color: root.inset
+            border.width: 1; border.color: root.hair
+            clip: true
+
+            Canvas {
+                anchors.fill: parent
+                onPaint: {
+                    var ctx = getContext("2d"); ctx.reset();
+                    var w = width, cx = w / 2, cy = w / 2, r = w / 2;
+                    for (var a = 0; a < 360; a += 3) {
+                        ctx.beginPath();
+                        ctx.moveTo(cx, cy);
+                        ctx.arc(cx, cy, r, (-(a + 3)) * Math.PI / 180, (-a) * Math.PI / 180, false);
+                        ctx.closePath();
+                        ctx.fillStyle = "hsl(" + a + ",68%,52%)";
+                        ctx.fill();
+                    }
+                    var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+                    g.addColorStop(0.0, "rgba(20,20,22,1.0)");
+                    g.addColorStop(0.35, "rgba(20,20,22,0.35)");
+                    g.addColorStop(1.0, "rgba(20,20,22,0.0)");
+                    ctx.fillStyle = g;
+                    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.fill();
+                }
+            }
+
+            Rectangle {                          // handle
+                width: 13; height: 13; radius: 7
+                border.width: 2; border.color: "#f4f4f6"
+                x: disc.width / 2 + Math.cos(wheel.hueVal * Math.PI / 180) * (wheel.satVal / 100) * (disc.width / 2 - 9) - width / 2
+                y: disc.height / 2 - Math.sin(wheel.hueVal * Math.PI / 180) * (wheel.satVal / 100) * (disc.height / 2 - 9) - height / 2
+                color: wheel.satVal > 0 ? Qt.hsla(((wheel.hueVal % 360) + 360) % 360 / 360, Math.min(wheel.satVal / 100, 1.0), 0.55, 1.0) : root.panelRaised
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.CrossCursor
+                onPressed: (mouse) => wheel.pick(mouse.x, mouse.y)
+                onPositionChanged: (mouse) => { if (pressed) wheel.pick(mouse.x, mouse.y) }
+                onDoubleClicked: {
+                    engine.setFilmControl("cg_" + wheel.zone + "_hue", 0);
+                    engine.setFilmControl("cg_" + wheel.zone + "_sat", 0);
+                }
+            }
+        }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            text: wheel.label
+            color: root.textSecondary
+            font.pixelSize: 11
+        }
+
+        function pick(mx, my) {
+            var cx = wheel.diameter / 2, cy = wheel.diameter / 2;
+            var dx = mx - cx, dy = my - cy;
+            var ang = Math.atan2(-dy, dx) * 180 / Math.PI;
+            if (ang < 0) ang += 360;
+            var rad = Math.min(Math.sqrt(dx * dx + dy * dy) / (wheel.diameter / 2), 1.0);
+            engine.setFilmControl("cg_" + wheel.zone + "_hue", Math.round(ang));
+            engine.setFilmControl("cg_" + wheel.zone + "_sat", Math.round(rad * 100));
         }
     }
 
@@ -580,7 +662,7 @@ Window {
                                 indicator: ChevronToggle {
                                     x: stockBox.width - 24
                                     y: (stockBox.height - 7) / 2
-                                    open: true
+                                    open: false
                                 }
                                 popup: Popup {
                                     y: stockBox.height + 4
@@ -627,6 +709,109 @@ Window {
                                         color: stockItem.highlighted ? "#16ffffff" : "transparent"
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // ── Print finish card ──────────────────────────────────
+                Rectangle {
+                    id: printCard
+                    property bool open: false
+                    readonly property bool active: engine.filmControls.print_stock !== undefined && engine.filmControls.print_stock !== "none"
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: printCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: printCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Print finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.right: chev1.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: printCard.active && !printCard.open; text: "On"; color: root.textValue; font.pixelSize: 11 }
+                            ChevronToggle { id: chev1; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: printCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: printCard.open = !printCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 12
+                            visible: printCard.open
+
+                            InspectorLabel { text: "Print stock" }
+                            ComboBox {
+                                id: printBox
+                                width: parent.width
+                                height: 38
+                                model: engine.printStockNames
+                                currentIndex: {
+                                    for (var i = 0; i < engine.printStockNames.length; ++i)
+                                        if (engine.printStockIdAt(i) === engine.filmControls.print_stock) return i;
+                                    return 0;
+                                }
+                                onActivated: engine.setFilmControl("print_stock", engine.printStockIdAt(currentIndex))
+                                contentItem: Text {
+                                    leftPadding: 12; rightPadding: 32
+                                    text: printBox.displayText
+                                    color: root.textPrimary
+                                    verticalAlignment: Text.AlignVCenter
+                                    elide: Text.ElideRight
+                                    font.pixelSize: 13
+                                }
+                                background: Rectangle {
+                                    radius: 8
+                                    color: root.inset
+                                    border.width: 1
+                                    border.color: printBox.activeFocus ? root.border : root.hair
+                                }
+                                indicator: ChevronToggle { x: printBox.width - 24; y: (printBox.height - 7) / 2; open: false }
+                                popup: Popup {
+                                    y: printBox.height + 4
+                                    width: printBox.width
+                                    implicitHeight: Math.min(contentItem.implicitHeight + 8, 300)
+                                    padding: 4
+                                    contentItem: ListView {
+                                        clip: true
+                                        implicitHeight: contentHeight
+                                        model: printBox.popup.visible ? printBox.delegateModel : null
+                                        currentIndex: printBox.highlightedIndex
+                                        ScrollIndicator.vertical: ScrollIndicator { }
+                                    }
+                                    background: Rectangle { radius: 10; color: root.panelRaised; border.width: 1; border.color: root.border }
+                                }
+                                delegate: ItemDelegate {
+                                    id: printItem
+                                    width: printBox.width - 8
+                                    height: 36
+                                    highlighted: printBox.highlightedIndex === index
+                                    contentItem: Text { leftPadding: 8; text: modelData; color: root.textPrimary; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; font.pixelSize: 13 }
+                                    background: Rectangle { radius: 8; color: printItem.highlighted ? "#16ffffff" : "transparent" }
+                                }
+                            }
+
+                            Column {
+                                width: parent.width
+                                spacing: 12
+                                visible: printCard.active
+                                opacity: printCard.active ? 1.0 : 0.4
+                                FilmSlider { controlKey: "print_strength"; label: "Print strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0 }
+                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true }
+                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true }
+                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true }
+                                FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true }
+                                FilmSlider { controlKey: "print_black_point"; label: "Black point (lift)"; minimum: -100; maximum: 100; bipolar: true }
                             }
                         }
                     }
@@ -746,6 +931,8 @@ Window {
                             FilmSlider { controlKey: "highlight_rolloff"; label: "Highlight rolloff"; minimum: 0; maximum: 200; neutral: 100 }
                             FilmSlider { controlKey: "film_contrast"; label: "Film contrast"; minimum: 0; maximum: 200; neutral: 100 }
                             FilmSlider { controlKey: "shadow_lift"; label: "Shadow lift"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "adaptation"; label: "Tone adaptation"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0 }
+                            FilmSlider { controlKey: "rendered_input"; label: "Rendered input (TIFF)"; minimum: 0; maximum: 100; neutral: 80 }
                         }
                     }
                 }
@@ -787,9 +974,285 @@ Window {
 
                             Text { visible: engine.currentStockMonochrome; text: "Unavailable for monochrome stocks"; color: root.textMuted; font.pixelSize: 11 }
                             FilmSlider { controlKey: "film_color_density"; label: "Color density"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
+                            FilmSlider { controlKey: "film_color_compression"; label: "Color compression"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
                             FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                            FilmSlider { controlKey: "palette_range"; label: "Palette range"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
                             FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
                             FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                        }
+                    }
+                }
+
+                // ── Light card (basic tone) ────────────────────────────
+                Rectangle {
+                    id: lightCard
+                    property bool open: false
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: lightCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: lightCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Light"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: lightCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: lightCard.open = !lightCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 12
+                            visible: lightCard.open
+                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true }
+                            FilmSlider { controlKey: "contrast"; label: "Contrast"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "highlights"; label: "Highlights"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "shadows"; label: "Shadows"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "whites"; label: "Whites"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "blacks"; label: "Blacks"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "midtones"; label: "Midtones"; minimum: -100; maximum: 100; bipolar: true }
+                        }
+                    }
+                }
+
+                // ── Colour balance card ────────────────────────────────
+                Rectangle {
+                    id: colourCard
+                    property bool open: false
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: colourCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: colourCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Colour balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colourCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colourCard.open = !colourCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 12
+                            visible: colourCard.open
+                            FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true }
+                        }
+                    }
+                }
+
+                // ── Detail card ────────────────────────────────────────
+                Rectangle {
+                    id: detailCard
+                    property bool open: false
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: detailCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: detailCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Detail"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: detailCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: detailCard.open = !detailCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 12
+                            visible: detailCard.open
+                            FilmSlider { controlKey: "texture"; label: "Texture"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "clarity"; label: "Clarity"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "dehaze"; label: "Dehaze"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "sharpness"; label: "Detail sharpness"; minimum: 0; maximum: 2; increment: 0.05; decimals: true }
+                            FilmSlider { controlKey: "sharpness_mask"; label: "Luminance mask"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 0.5 }
+                        }
+                    }
+                }
+
+                // ── HSL card ───────────────────────────────────────────
+                Rectangle {
+                    id: hslCard
+                    property bool open: false
+                    property string suffix: "h"
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: hslCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: hslCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "HSL"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: hslCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: hslCard.open = !hslCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 12
+                            visible: hslCard.open
+
+                            Rectangle {                          // H/S/L tab track
+                                width: parent.width
+                                height: 34
+                                radius: 9
+                                color: root.inset
+                                border.width: 1
+                                border.color: root.hair
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 3
+                                    spacing: 4
+                                    Repeater {
+                                        model: [{ label: "Hue", v: "h" }, { label: "Saturation", v: "s" }, { label: "Luminance", v: "l" }]
+                                        delegate: Button {
+                                            id: hslTabBtn
+                                            width: (parent.width - 8) / 3
+                                            height: parent.height
+                                            text: modelData.label
+                                            readonly property bool selected: hslCard.suffix === modelData.v
+                                            onClicked: hslCard.suffix = modelData.v
+                                            contentItem: Text { text: hslTabBtn.text; color: hslTabBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
+                                            background: Rectangle {
+                                                radius: 7
+                                                color: hslTabBtn.selected ? "#33333a" : "transparent"
+                                                border.width: hslTabBtn.selected ? 1 : 0
+                                                border.color: root.hair
+                                                Rectangle { visible: hslTabBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Repeater {
+                                model: [
+                                    { key: "red", label: "Red", dot: "#f25c5c" },
+                                    { key: "orange", label: "Orange", dot: "#f2944a" },
+                                    { key: "yellow", label: "Yellow", dot: "#d4c62a" },
+                                    { key: "green", label: "Green", dot: "#4db858" },
+                                    { key: "aqua", label: "Aqua", dot: "#38c0c0" },
+                                    { key: "blue", label: "Blue", dot: "#4a85e8" },
+                                    { key: "purple", label: "Purple", dot: "#9b5de5" },
+                                    { key: "magenta", label: "Magenta", dot: "#d44fa8" }
+                                ]
+                                delegate: FilmSlider {
+                                    controlKey: "hsl_" + modelData.key + "_" + hslCard.suffix
+                                    label: modelData.label
+                                    minimum: -100; maximum: 100; bipolar: true
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Colour grading card ────────────────────────────────
+                Rectangle {
+                    id: gradeCard
+                    property bool open: false
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: gradeCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: gradeCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Colour grading"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: gradeCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: gradeCard.open = !gradeCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 14
+                            visible: gradeCard.open
+
+                            Grid {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                columns: 2
+                                columnSpacing: 26
+                                rowSpacing: 14
+                                ColorWheel { zone: "shadow"; label: "Shadows" }
+                                ColorWheel { zone: "midtone"; label: "Midtones" }
+                                ColorWheel { zone: "highlight"; label: "Highlights" }
+                                ColorWheel { zone: "global"; label: "Global" }
+                            }
+
+                            FilmSlider { controlKey: "cg_shadow_lum"; label: "Shadow luminance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "cg_midtone_lum"; label: "Midtone luminance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "cg_highlight_lum"; label: "Highlight luminance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "cg_global_lum"; label: "Global luminance"; minimum: -100; maximum: 100; bipolar: true }
+
+                            InspectorLabel { text: "Grade" }
+                            FilmSlider { controlKey: "cg_crossbalance"; label: "Film crossbalance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "cg_balance"; label: "Balance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "cg_blending"; label: "Blending"; minimum: 0; maximum: 100 }
                         }
                     }
                 }

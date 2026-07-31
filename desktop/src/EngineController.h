@@ -19,6 +19,7 @@ class RenderWorker;
 class EngineController : public QObject {
     Q_OBJECT
     Q_PROPERTY(QStringList stockNames READ stockNames NOTIFY stocksChanged)
+    Q_PROPERTY(QStringList printStockNames READ printStockNames NOTIFY stocksChanged)
     Q_PROPERTY(QString stock READ stock WRITE setStock NOTIFY stockChanged)
     Q_PROPERTY(double filmExposure READ filmExposure WRITE setFilmExposure NOTIFY paramsChanged)
     Q_PROPERTY(double shadowLift READ shadowLift WRITE setShadowLift NOTIFY paramsChanged)
@@ -43,6 +44,7 @@ public:
     ~EngineController() override;
 
     QStringList stockNames() const { return stockNames_; }
+    QStringList printStockNames() const { return printStockNames_; }
     QString stock() const { return stockId_; }
     void setStock(const QString& id);
 
@@ -64,6 +66,9 @@ public:
 
     Q_INVOKABLE QString stockIdAt(int i) const {
         return (i >= 0 && i < stockIds_.size()) ? stockIds_.at(i) : QString("none");
+    }
+    Q_INVOKABLE QString printStockIdAt(int i) const {
+        return (i >= 0 && i < printStockIds_.size()) ? printStockIds_.at(i) : QString("none");
     }
 
     Q_INVOKABLE void openFile(const QUrl& url);
@@ -107,6 +112,8 @@ private:
     std::unique_ptr<dfee::EngineSession> session_;
     QStringList stockNames_;
     QStringList stockIds_;
+    QStringList printStockNames_;
+    QStringList printStockIds_;
     QHash<QString, bool> monochromeStocks_;
     QString stockId_ = "none";
 
