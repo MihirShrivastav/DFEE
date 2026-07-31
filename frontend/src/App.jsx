@@ -58,6 +58,7 @@ const DEFAULT_PARAMS = {
   halation: 'Auto',
   halation_strength: 100,
   halation_threshold: 50,
+  shadow_lift: 0,
   sharpness: 0.0,
   sharpness_mask: 0.5,
   film_color: 100,
@@ -489,7 +490,7 @@ export default function App() {
 
   const set = (key) => (e) => {
     const val = e.target.type === 'range'
-      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast', 'rendered_input', 'halation_strength', 'halation_threshold'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
+      ? (['exposure', 'film_exposure_ev', 'adaptation', 'sharpness', 'sharpness_mask', 'highlight_color_hold', 'shadow_color_retention', 'palette_range', 'emulsion_color_density', 'film_color_density', 'film_color_compression', 'highlight_rolloff', 'film_contrast', 'rendered_input', 'halation_strength', 'halation_threshold', 'shadow_lift'].includes(key) ? parseFloat(e.target.value) : parseInt(e.target.value))
       : e.target.value;
     setParams(p => ({ ...p, [key]: val }));
   };
@@ -803,6 +804,7 @@ export default function App() {
         halation: params.halation,
         halation_strength: String(params.halation_strength),
         halation_threshold: String(params.halation_threshold),
+        shadow_lift: String(params.shadow_lift),
         sharpness: String(params.sharpness),
         sharpness_mask: String(params.sharpness_mask),
         film_color: String(params.film_color),
@@ -901,6 +903,7 @@ export default function App() {
         + `&halation=${encodeURIComponent(params.halation)}`
         + `&halation_strength=${params.halation_strength}`
         + `&halation_threshold=${params.halation_threshold}`
+        + `&shadow_lift=${params.shadow_lift}`
         + `&sharpness=${params.sharpness}`
         + `&sharpness_mask=${params.sharpness_mask}`
         + `&film_color=${params.film_color}`
@@ -1094,6 +1097,7 @@ export default function App() {
           halation: params.halation,
           halation_strength: params.halation_strength,
           halation_threshold: params.halation_threshold,
+          shadow_lift: params.shadow_lift,
           sharpness: params.sharpness,
           sharpness_mask: params.sharpness_mask,
           film_color: params.film_color,
@@ -1763,6 +1767,30 @@ export default function App() {
                       </div>
                     );
                   })}
+                  {(() => {
+                    const tooltip = "Base-fog fade in the deepest shadows, the way real negative film never quite reaches pure black. 0 keeps the stock's natural amount; forward lifts shadows into a soft matte fade; back deepens them toward true black. The stock's shadow tint carries through.";
+                    const isDirty = params.shadow_lift !== 0;
+                    return (
+                      <div className="slider-row" key="shadow_lift">
+                        <div className="slider-header">
+                          <span className="slider-label" title={tooltip}>Shadow Lift</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {isDirty && (
+                              <button className="revert-btn" title="Reset Shadow Lift" onClick={() => setParams(p => ({ ...p, shadow_lift: 0 }))}>Reset</button>
+                            )}
+                            <span className={`slider-value${isDirty ? ' slider-value--dirty' : ''}`}>{Math.round(params.shadow_lift)}</span>
+                          </div>
+                        </div>
+                        <input
+                          type="range" min={-100} max={100} step={1}
+                          value={params.shadow_lift}
+                          onChange={set('shadow_lift')}
+                          title={tooltip}
+                          className={`slider${isDirty ? ' slider--dirty' : ''}`}
+                        />
+                      </div>
+                    );
+                  })()}
                   {/\.tiff?$/i.test(selectedFile || '') && (() => {
                     const tooltip = 'TIFFs from Lightroom already carry a baked-in tone curve. This softens how strongly the film stock’s own tone curve is re-applied on top, so highlights don’t get pushed up and blown. Higher = gentler/subtler (protects skies & highlights); lower = full film tone like a RAW. The stock’s tonal character always shows through. Only affects rendered (TIFF) inputs.';
                     const isDirty = params.rendered_input !== 80;

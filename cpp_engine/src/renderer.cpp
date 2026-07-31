@@ -1248,7 +1248,8 @@ Image FilmRenderer::apply_film_tone_response(
                 s_curve = knee + range * (t / (1.0F + k * t));
             }
 
-            const float toe_fade = clampf(s_curve / 0.25F, 0.0F, 1.0F);
+            const float toe_knee = std::max(0.05F, response.shadow_lift_knee);
+            const float toe_fade = clampf(s_curve / toe_knee, 0.0F, 1.0F);
             const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
             lut[sample_index] = clamp01(s_curve + response.black_density_floor * shadow_weight);
         }

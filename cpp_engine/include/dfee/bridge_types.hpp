@@ -265,6 +265,7 @@ struct NativePreviewRenderRequest {
     bool adaptive = true;
     float halation_strength = 100.0F;
     float halation_threshold = 50.0F;
+    float shadow_lift = 0.0F;  // -100..100 bipolar; 0 = stock's natural base-fog floor
     std::string print_stock = "none";
     float print_strength = 1.0F;
     float print_c = 0.0F;

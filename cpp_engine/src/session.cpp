@@ -937,6 +937,7 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
     controls.halation_strength = request.halation_strength;
     controls.halation_threshold = request.halation_threshold;
+    controls.shadow_lift = request.shadow_lift;
     controls.print_strength = request.print_strength;
     controls.print_c = request.print_c;
     controls.print_m = request.print_m;
@@ -2462,6 +2463,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
             controls.halation_strength = request.halation_strength;
             controls.halation_threshold = request.halation_threshold;
+            controls.shadow_lift = request.shadow_lift;
             controls.print_strength = request.print_strength;
             controls.print_c = request.print_c;
             controls.print_m = request.print_m;

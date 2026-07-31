@@ -343,6 +343,7 @@ dfee::NativePreviewRenderRequest preview_request_from_dict(PyObject* dict) {
     request.adaptive = dict_bool(dict, "adaptive", true);
     request.halation_strength = dict_float(dict, "halation_strength", 100.0F);
     request.halation_threshold = dict_float(dict, "halation_threshold", 50.0F);
+    request.shadow_lift = dict_float(dict, "shadow_lift", 0.0F);
     request.print_stock = dict_string(dict, "print_stock", "none");
     request.print_strength = dict_float(dict, "print_strength", 1.0F);
     request.print_c = dict_float(dict, "print_c");

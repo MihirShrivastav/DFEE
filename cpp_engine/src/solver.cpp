@@ -484,13 +484,31 @@ RenderPlan RenderPlanSolver::solve(
         highlight_desaturation = std::min(highlight_desaturation + 0.15F, 0.95F);
     }
 
+    // Shadow Lift: bipolar control around the stock's natural base-fog floor (black_density).
+    // 0 = the stock's authored floor (unchanged). Positive lifts the deep-shadow floor toward a
+    // matte ceiling and widens its footprint into the low shadows (a genuine faded look, not just
+    // a moved black point). Negative pulls the floor toward true black and tightens the footprint.
+    // The renderer applies floor via: s + floor * (1 - clamp(s/knee,0,1))^2.
+    constexpr float kShadowLiftFloorMax = 0.07F;  // shared ceiling so the slider ends mean the same on every stock
+    const float shadow_lift_norm = std::clamp(controls.shadow_lift / 100.0F, -1.0F, 1.0F);
+    float shadow_lift_floor = black_density;
+    float shadow_lift_knee = 0.25F;
+    if (shadow_lift_norm > 0.0F) {
+        shadow_lift_floor = black_density + shadow_lift_norm * std::max(0.0F, kShadowLiftFloorMax - black_density);
+        shadow_lift_knee = 0.25F + shadow_lift_norm * 0.20F;   // widen: 0.25 -> 0.45
+    } else if (shadow_lift_norm < 0.0F) {
+        shadow_lift_floor = std::max(0.0F, black_density * (1.0F + shadow_lift_norm));  // -> 0 at -100
+        shadow_lift_knee = 0.25F + shadow_lift_norm * 0.08F;   // tighten: 0.25 -> 0.17
+    }
+
     plan.film_response = {
         .toe_strength = toe_strength,
         .toe_length = get_numeric(stock_profile.numeric_values, "tone_response.toe_length", 0.0F),
         .midtone_density = midtone_density,
         .shoulder_strength = shoulder_strength,
         .highlight_rolloff_start = highlight_rolloff_start,
-        .black_density_floor = black_density,
+        .black_density_floor = shadow_lift_floor,
+        .shadow_lift_knee = shadow_lift_knee,
         .highlight_desaturation = highlight_desaturation,
         .blue_cyan_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.cyan_blue_highlight_compression", 0.0F),
         .red_orange_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.red_orange_midtone_compression", 0.0F),

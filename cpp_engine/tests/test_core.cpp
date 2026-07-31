@@ -441,6 +441,46 @@ void test_film_tone_response() {
     assert(toned.at(3, 0, 0) < toned.at(2, 0, 0));
 }
 
+void test_shadow_lift_floor_and_footprint() {
+    // Neutral dark-to-mid gradient; Shadow Lift acts on the deep-shadow base-fog floor.
+    dfee::Image rgb(5, 1, 3);
+    const float vals[5] = {0.0F, 0.04F, 0.10F, 0.22F, 0.55F};
+    for (int x = 0; x < 5; ++x) {
+        rgb.at(x, 0, 0) = rgb.at(x, 0, 1) = rgb.at(x, 0, 2) = vals[x];
+    }
+    const dfee::FilmRenderer renderer;
+    const auto tone = [&](const float floor, const float knee) {
+        dfee::FilmResponsePlan r;
+        r.toe_strength = 0.40F;
+        r.toe_length = 0.30F;
+        r.midtone_density = 1.0F;
+        r.shoulder_strength = 0.60F;
+        r.black_density_floor = floor;
+        r.shadow_lift_knee = knee;
+        r.channel_toe_mult = {1.0F, 1.0F, 1.0F};
+        r.channel_shoulder_mult = {1.0F, 1.0F, 1.0F};
+        r.channel_midtone_mult = {1.0F, 1.0F, 1.0F};
+        return renderer.apply_film_tone_response(rgb, r);
+    };
+    const auto base = tone(0.01F, 0.25F);  // stock default (== pre-change constant knee)
+    const auto lift = tone(0.07F, 0.45F);  // Shadow Lift +100 (solver maps to this)
+    const auto deep = tone(0.00F, 0.17F);  // Shadow Lift -100
+    const auto L = [](const dfee::Image& im, const int x) { return im.at(x, 0, 0); };
+
+    // Positive lift raises the deepest-shadow floor.
+    assert(L(lift, 0) > L(base, 0) + 0.02F);
+    // Negative lift drives the floor toward true black, below the stock default.
+    assert(L(deep, 0) < L(base, 0));
+    // Wider footprint: positive lift still adds into the low shadows where the default knee
+    // has already faded out.
+    assert(L(lift, 2) > L(base, 2) + 0.01F);
+    // The default knee equals the pre-change hardcoded constant -> Shadow Lift 0 is a no-op.
+    const dfee::FilmResponsePlan defaults;
+    assert(std::fabs(defaults.shadow_lift_knee - 0.25F) < 1.0e-6F);
+    // Still monotonic and in range.
+    assert(L(lift, 0) <= L(lift, 1) && L(lift, 3) <= 1.0F);
+}
+
 void test_color_response() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "portra_400.yaml");
@@ -3024,6 +3064,7 @@ int main() {
         test_pre_film_normalization();
         test_panchromatic_conversion();
         test_film_tone_response();
+        test_shadow_lift_floor_and_footprint();
         test_color_response();
         test_yellow_green_muting();
         test_luminance_chroma_coupling();

@@ -47,6 +47,7 @@ struct SolverControls {
     bool subtractive_pipeline = false; // set true for filmic_v3 (gates v3 tone steering)
     float halation_strength = 100.0F;  // 0..200, 100 = stock default (0 = off)
     float halation_threshold = 50.0F;  // 0..100, lower = more highlights bloom
+    float shadow_lift = 0.0F;          // -100..100 bipolar; 0 = stock's natural base-fog floor
     float print_strength = 1.0F;
     float print_c = 0.0F;
     float print_m = 0.0F;
@@ -85,6 +86,7 @@ struct FilmResponsePlan {
     float shoulder_strength = 0.0F;
     float highlight_rolloff_start = 0.0F;
     float black_density_floor = 0.0F;
+    float shadow_lift_knee = 0.25F;  // deep-shadow footprint of the base-fog floor (Shadow Lift widens/tightens it)
     float highlight_desaturation = 0.0F;
     float blue_cyan_compression = 0.0F;
     float red_orange_compression = 0.0F;
