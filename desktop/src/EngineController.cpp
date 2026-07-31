@@ -136,6 +136,26 @@ void EngineController::onPreviewReady()
     emit statusChanged();
 }
 
+void EngineController::exportImage()
+{
+    if (currentFile_.isEmpty()) return;
+    status_ = "Exporting…";
+    emit statusChanged();
+    QMetaObject::invokeMethod(worker_, "exportImage",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, currentFile_),
+                              Q_ARG(QString, stockId_),
+                              Q_ARG(double, filmExposure_),
+                              Q_ARG(double, shadowLift_));
+}
+
+void EngineController::onExportDone(const QString& msg)
+{
+    status_ = msg;
+    emit statusChanged();
+    qDebug() << "DFEE export:" << msg;
+}
+
 void EngineController::onRenderFailed(const QString& msg)
 {
     status_ = msg;

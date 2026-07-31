@@ -65,6 +65,13 @@ Window {
             onClicked: openDialog.open()
         }
 
+        Button {
+            text: "Export TIFF"
+            width: parent.width
+            enabled: engine.hasImage
+            onClicked: engine.exportImage()
+        }
+
         Text { text: "Film stock"; color: "#8b8b90"; font.pixelSize: 12 }
         ComboBox {
             id: stockBox

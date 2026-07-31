@@ -59,6 +59,38 @@ void RenderWorker::render(const QString& file,
     doRender(file, stock, filmExposureEv, shadowLift);
 }
 
+void RenderWorker::exportImage(const QString& file,
+                               const QString& stock,
+                               double filmExposureEv,
+                               double shadowLift)
+{
+    dfee::NativeExportRequest req;
+    req.filename               = file.toStdString();
+    req.stock                  = stock.toStdString();
+    req.effect_pipeline_version = "filmic_v3";
+    req.film_exposure_ev       = static_cast<float>(filmExposureEv);
+    req.shadow_lift            = static_cast<float>(shadowLift);
+    req.export_format          = "tiff";
+
+    QString msg;
+    try {
+        const dfee::NativeExportResponse resp = session_->export_image(req);
+        if (resp.ok) {
+            msg = "Exported: " + QString::fromStdString(resp.output_path.string());
+            if (qEnvironmentVariableIsSet("DFEE_SELFTEST_EXPORT")) {
+                qDebug() << "SELFTEST_EXPORT output_path:" << QString::fromStdString(resp.output_path.string());
+            }
+        } else {
+            msg = "Export failed: " + QString::fromStdString(resp.error.user_message);
+        }
+    } catch (const std::exception& e) {
+        msg = QString("Export failed: ") + e.what();
+    }
+
+    QMetaObject::invokeMethod(controller_, "onExportDone",
+                              Qt::QueuedConnection, Q_ARG(QString, msg));
+}
+
 void RenderWorker::doRender(const QString& file,
                              const QString& stock,
                              double filmExposureEv,

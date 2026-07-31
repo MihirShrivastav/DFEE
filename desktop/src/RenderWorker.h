@@ -30,6 +30,12 @@ public slots:
                 double filmExposureEv,
                 double shadowLift);
 
+    // Export full-resolution TIFF (writes beside the source file).
+    void exportImage(const QString& file,
+                     const QString& stock,
+                     double filmExposureEv,
+                     double shadowLift);
+
 private:
     void doRender(const QString& file,
                   const QString& stock,

@@ -43,6 +43,7 @@ public:
     }
 
     Q_INVOKABLE void openFile(const QUrl& url);
+    Q_INVOKABLE void exportImage();
 
     bool hasImage() const { return hasImage_; }
     int previewRevision() const { return previewRevision_; }
@@ -52,6 +53,7 @@ public:
     Q_INVOKABLE void onPreviewReady();
     Q_INVOKABLE void onRenderFailed(const QString& msg);
     Q_INVOKABLE void onWorkerBusyChanged(bool busy);
+    Q_INVOKABLE void onExportDone(const QString& msg);
 
 signals:
     void stocksChanged();

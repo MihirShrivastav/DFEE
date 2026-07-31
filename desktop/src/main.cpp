@@ -2,6 +2,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QTimer>
+#include <QFile>
+#include <QTextStream>
 #include "EngineController.h"
 #include "PreviewImageProvider.h"
 
@@ -55,6 +57,31 @@ int main(int argc, char* argv[]) {
             qDebug() << "SELFTEST nudging filmExposure to 2.0 to trigger re-render";
             controller.setFilmExposure(2.0);
         });
+
+        // Task-5 export self-test: after render completes, trigger an export.
+        // When DFEE_SELFTEST_EXPORT is set, we also install a status watcher that
+        // writes the export result to a log file so the headless test script can
+        // verify the output path without relying on OutputDebugString.
+        if (qEnvironmentVariableIsSet("DFEE_SELFTEST_EXPORT")) {
+            const QString logPath = qEnvironmentVariable("DFEE_SELFTEST_EXPORT");
+            // Connect statusChanged so we can capture the export result.
+            QObject::connect(&controller, &EngineController::statusChanged,
+                             &controller, [&controller, logPath]() {
+                const QString st = controller.status();
+                if (st.startsWith("Exported:") || st.startsWith("Export failed:")) {
+                    QFile f(logPath);
+                    if (f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+                        QTextStream ts(&f);
+                        ts << st << "\n";
+                    }
+                    QCoreApplication::quit();
+                }
+            }, Qt::QueuedConnection);
+
+            QTimer::singleShot(7000, &controller, [&controller]() {
+                controller.exportImage();
+            });
+        }
     }
 
     return app.exec();
