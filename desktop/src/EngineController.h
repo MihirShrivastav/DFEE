@@ -25,6 +25,10 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantMap filmControls READ filmControls NOTIFY filmControlsChanged)
     Q_PROPERTY(bool grainResolving READ grainResolving NOTIFY grainResolvingChanged)
     Q_PROPERTY(bool currentStockMonochrome READ currentStockMonochrome NOTIFY stockChanged)
+    Q_PROPERTY(QString exportFormat READ exportFormat WRITE setExportFormat NOTIFY exportSettingsChanged)
+    Q_PROPERTY(int jpegQuality READ jpegQuality WRITE setJpegQuality NOTIFY exportSettingsChanged)
+    Q_PROPERTY(int exportDpi READ exportDpi WRITE setExportDpi NOTIFY exportSettingsChanged)
+    Q_PROPERTY(bool exporting READ exporting NOTIFY exportingChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -48,6 +52,13 @@ public:
     QVariantMap filmControls() const { return filmControls_; }
     bool grainResolving() const { return grainResolving_; }
     bool currentStockMonochrome() const;
+    QString exportFormat() const { return exportFormat_; }
+    void setExportFormat(const QString& format);
+    int jpegQuality() const { return jpegQuality_; }
+    void setJpegQuality(int quality);
+    int exportDpi() const { return exportDpi_; }
+    void setExportDpi(int dpi);
+    bool exporting() const { return exporting_; }
 
     Q_INVOKABLE QString stockIdAt(int i) const {
         return (i >= 0 && i < stockIds_.size()) ? stockIds_.at(i) : QString("none");
@@ -76,6 +87,8 @@ signals:
     void paramsChanged();
     void filmControlsChanged();
     void grainResolvingChanged();
+    void exportSettingsChanged();
+    void exportingChanged();
     void hasImageChanged();
     void previewChanged();
     void statusChanged();
@@ -107,6 +120,10 @@ private:
     double shadowLift_ = 0.0;
     QVariantMap filmControls_;
     bool grainResolving_ = false;
+    QString exportFormat_ = "png8";
+    int jpegQuality_ = 92;
+    int exportDpi_ = 300;
+    bool exporting_ = false;
 
     // Coalescing state (read/written only on GUI thread).
     // dirty_ = a deferred op is pending while the worker is busy.

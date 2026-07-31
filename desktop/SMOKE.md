@@ -29,10 +29,14 @@ Run this checklist from a Release build of `DFEE.exe`. The app must use the nati
 
 ## Export
 
-1. With a loaded image, selected stock, and non-neutral Film Lab controls, click **Export TIFF** once.
-2. Wait for the status line to show `Exported: <path>`.
-3. Confirm the 16-bit TIFF exists beside the source image and opens in a viewer.
-4. Confirm a non-writable source directory reports an export failure while leaving
+1. Select each available format: 8-bit PNG, 16-bit PNG, 16-bit TIFF, and JPEG.
+   Confirm JPEG quality and TIFF DPI are only shown for their applicable formats.
+2. With a loaded image, selected stock, and non-neutral Film Lab controls, export once.
+3. Confirm the full-resolution export overlay appears, duplicate export requests
+   are unavailable, and it clears when the operation finishes.
+4. Wait for the status line to show `Exported: <path>` and confirm the matching
+   file exists beside the source image and opens in a viewer.
+5. Confirm a non-writable source directory reports an export failure while leaving
    the application usable.
 
 ## Failure Handling

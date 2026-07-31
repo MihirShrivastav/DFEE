@@ -42,3 +42,14 @@ Turning that option off resolves the active stock and image through the native
 solver, then seeds editable Strength, Size, and Roughness controls with the
 matching Custom values. Preview and TIFF export use the same snapshot, so an
 export cannot accidentally omit a recent Film Lab adjustment.
+
+## Export
+
+Exports are written beside the source image. Choose 8-bit PNG, 16-bit PNG,
+16-bit TIFF, or JPEG from the Film Lab inspector. JPEG exposes a quality
+setting and TIFF exposes its output DPI. The app blocks duplicate requests and
+shows an indeterminate full-resolution export state until the native engine
+reports either the resulting path or an error.
+
+Current TIFF output is 16-bit RGB and intentionally uncompressed for
+compatibility. Lossless TIFF compression is a separate export-engine task.

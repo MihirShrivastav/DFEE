@@ -43,6 +43,9 @@ int main(int argc, char* argv[]) {
     // dimensions, not A's.
     if (qEnvironmentVariableIsSet("DFEE_SELFTEST")) {
         const QString pathA = qEnvironmentVariable("DFEE_SELFTEST");
+        if (qEnvironmentVariableIsSet("DFEE_SELFTEST_EXPORT_FORMAT")) {
+            controller.setExportFormat(qEnvironmentVariable("DFEE_SELFTEST_EXPORT_FORMAT"));
+        }
         if (qEnvironmentVariableIsSet("DFEE_SELFTEST_FILM_LAB")) {
             // Exercise the native Film Lab request snapshot with controls from
             // every primary group, rather than only the legacy exposure knob.

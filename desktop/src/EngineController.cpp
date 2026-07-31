@@ -103,6 +103,31 @@ bool EngineController::currentStockMonochrome() const
     return monochromeStocks_.value(stockId_, false);
 }
 
+void EngineController::setExportFormat(const QString& format)
+{
+    static const QStringList formats{"png8", "png16", "tiff", "jpeg"};
+    const QString canonical = formats.contains(format) ? format : "png8";
+    if (exportFormat_ == canonical) return;
+    exportFormat_ = canonical;
+    emit exportSettingsChanged();
+}
+
+void EngineController::setJpegQuality(int quality)
+{
+    const int bounded = std::clamp(quality, 1, 100);
+    if (jpegQuality_ == bounded) return;
+    jpegQuality_ = bounded;
+    emit exportSettingsChanged();
+}
+
+void EngineController::setExportDpi(int dpi)
+{
+    const int bounded = std::clamp(dpi, 1, 65535);
+    if (exportDpi_ == bounded) return;
+    exportDpi_ = bounded;
+    emit exportSettingsChanged();
+}
+
 bool EngineController::updateNumericFilmControl(const QString& key, double value)
 {
     struct Range { double minimum; double maximum; };
@@ -213,7 +238,7 @@ void EngineController::openFile(const QUrl& url)
 
 void EngineController::scheduleRender()
 {
-    if (currentFile_.isEmpty()) return;
+    if (currentFile_.isEmpty() || exporting_) return;
 
     if (workerBusy_) {
         dirty_ = true;
@@ -259,7 +284,9 @@ dfee::NativeExportRequest EngineController::buildExportRequest() const
 {
     dfee::NativeExportRequest request;
     static_cast<dfee::NativePreviewRenderRequest&>(request) = buildPreviewRequest();
-    request.export_format = "tiff";
+    request.export_format = exportFormat_.toStdString();
+    request.jpeg_quality = jpegQuality_;
+    request.export_dpi = exportDpi_;
     return request;
 }
 
@@ -280,6 +307,10 @@ void EngineController::exportImage()
     if (currentFile_.isEmpty()) return;
     status_ = "Exporting…";
     emit statusChanged();
+    exporting_ = true;
+    emit exportingChanged();
+    status_ = "Exporting full resolution...";
+    emit statusChanged();
     const dfee::NativeExportRequest request = buildExportRequest();
     QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
         worker->exportImage(request);
@@ -288,6 +319,8 @@ void EngineController::exportImage()
 
 void EngineController::onExportDone(const QString& msg)
 {
+    exporting_ = false;
+    emit exportingChanged();
     status_ = msg;
     emit statusChanged();
     qDebug() << "DFEE export:" << msg;

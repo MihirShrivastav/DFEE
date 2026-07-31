@@ -30,6 +30,13 @@ Window {
     property bool colorOpen: true
     property bool materialOpen: true
 
+    function exportFormatLabel(format) {
+        if (format === "png8") return "8-bit PNG"
+        if (format === "png16") return "16-bit PNG"
+        if (format === "jpeg") return "JPEG"
+        return "16-bit TIFF"
+    }
+
     FileDialog {
         id: openDialog
         title: "Open image"
@@ -293,9 +300,72 @@ Window {
             }
 
             SecondaryButton {
-                text: "Export TIFF"
-                enabled: engine.hasImage
+                text: engine.exporting ? "Exporting..." : "Export " + root.exportFormatLabel(engine.exportFormat)
+                enabled: engine.hasImage && !engine.exporting
                 onClicked: engine.exportImage()
+            }
+
+            Column {
+                width: parent.width
+                visible: engine.hasImage
+                spacing: 7
+
+                InspectorLabel { text: "Export format" }
+                Grid {
+                    width: parent.width
+                    columns: 2
+                    columnSpacing: 6
+                    rowSpacing: 6
+                    Repeater {
+                        model: [
+                            { id: "png8", label: "8-bit PNG" },
+                            { id: "png16", label: "16-bit PNG" },
+                            { id: "tiff", label: "16-bit TIFF" },
+                            { id: "jpeg", label: "JPEG" }
+                        ]
+                        delegate: Button {
+                            width: (parent.width - 6) / 2
+                            height: 31
+                            text: modelData.label
+                            readonly property bool selected: engine.exportFormat === modelData.id
+                            enabled: !engine.exporting
+                            onClicked: engine.exportFormat = modelData.id
+                            contentItem: Text { text: parent.text; color: parent.selected ? root.bg : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.DemiBold }
+                            background: Rectangle { radius: 4; color: parent.selected ? root.accent : root.panelRaised; border.width: 1; border.color: parent.selected ? root.accent : root.border }
+                        }
+                    }
+                }
+                Row {
+                    width: parent.width
+                    visible: engine.exportFormat === "jpeg"
+                    spacing: 8
+                    InspectorLabel { text: "JPEG quality"; width: parent.width - qualityBox.width - 8 }
+                    SpinBox {
+                        id: qualityBox
+                        from: 1
+                        to: 100
+                        value: engine.jpegQuality
+                        editable: true
+                        enabled: !engine.exporting
+                        onValueModified: engine.jpegQuality = value
+                    }
+                }
+                Row {
+                    width: parent.width
+                    visible: engine.exportFormat === "tiff"
+                    spacing: 8
+                    InspectorLabel { text: "TIFF DPI"; width: parent.width - dpiBox.width - 8 }
+                    SpinBox {
+                        id: dpiBox
+                        from: 72
+                        to: 1200
+                        stepSize: 1
+                        value: engine.exportDpi
+                        editable: true
+                        enabled: !engine.exporting
+                        onValueModified: engine.exportDpi = value
+                    }
+                }
             }
 
             Column {
@@ -479,6 +549,38 @@ Window {
                 font.pixelSize: 11
             }
         }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent
+        z: 10
+        visible: engine.exporting
+        color: "#d9101114"
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 12
+
+            BusyIndicator {
+                anchors.horizontalCenter: parent.horizontalCenter
+                running: engine.exporting
+                width: 42
+                height: 42
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Exporting full resolution"
+                color: root.textPrimary
+                font.pixelSize: 16
+                font.weight: Font.DemiBold
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
+                color: root.textSecondary
+                font.pixelSize: 12
+            }
         }
     }
 }
