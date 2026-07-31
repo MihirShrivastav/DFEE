@@ -376,15 +376,11 @@ constexpr float kCompressLeanGain = 0.20F;  // max radians of neighbour lean at 
 constexpr float kLeanRedSign      = 1.0F;   // sign chosen so red leans toward orange
 constexpr float kLeanBlueSign     = -1.0F;  // sign chosen so blue leans toward cyan
 
-// filmic_v3 grain: soft-light blend amplitude (maps grain_strength to a visible amount).
-constexpr float kGrainSoftLightAmp = 0.20F;
-
-// Pegtop soft-light blend: base a, blend layer b, both in [0,1]. Grain built as a
-// neutral-grey layer (0.5 +/- noise) composited this way interacts with the tones
-// (tapers toward black/white, strongest in mids) instead of being a flat overlay.
-[[nodiscard]] inline float soft_light(const float a, const float b) {
-    return (1.0F - 2.0F * b) * a * a + 2.0F * b * a;
-}
+// Film grain belongs in optical density, not as a display-space overlay. The
+// stock response and artist-facing Amount control apply the remaining shaping.
+constexpr float kGrainDensitySigma = 0.060F;
+constexpr float kGrainDensityFloor = 1.0e-5F;
+constexpr float kGrainMaxDensity = 12.0F;
 
 // Smoothstep with explicit [lo, hi] range → [0, 1]. Distinct signature from the single-arg overload.
 [[nodiscard]] inline float smoothstep01(const float lo, const float hi, const float x) {
@@ -510,12 +506,40 @@ struct GrainNoiseCacheEntry {
     return lut;
 }
 
+[[nodiscard]] std::array<float, 8193> build_density_from_linear_lut() {
+    std::array<float, 8193> lut{};
+    for (std::size_t index = 0; index < lut.size(); ++index) {
+        const float linear = static_cast<float>(index) / static_cast<float>(lut.size() - 1U);
+        lut[index] = -std::log(std::max(linear, kGrainDensityFloor));
+    }
+    return lut;
+}
+
+[[nodiscard]] std::array<float, 8193> build_linear_from_density_lut() {
+    std::array<float, 8193> lut{};
+    for (std::size_t index = 0; index < lut.size(); ++index) {
+        const float density = kGrainMaxDensity * static_cast<float>(index) / static_cast<float>(lut.size() - 1U);
+        lut[index] = std::exp(-density);
+    }
+    return lut;
+}
+
 template <std::size_t N>
 [[nodiscard]] float sample_unit_lut(const std::array<float, N>& lut, const float value) {
     const float clamped = clamp01(value);
     const float scaled = clamped * static_cast<float>(N - 1);
     const auto lower = static_cast<std::size_t>(scaled);
     const auto upper = std::min(lower + 1, N - 1);
+    const float t = scaled - static_cast<float>(lower);
+    return lut[lower] + (lut[upper] - lut[lower]) * t;
+}
+
+template <std::size_t N>
+[[nodiscard]] float sample_density_lut(const std::array<float, N>& lut, const float density) {
+    const float clamped = std::clamp(density, 0.0F, kGrainMaxDensity);
+    const float scaled = clamped * static_cast<float>(N - 1U) / kGrainMaxDensity;
+    const auto lower = static_cast<std::size_t>(scaled);
+    const auto upper = std::min(lower + 1U, N - 1U);
     const float t = scaled - static_cast<float>(lower);
     return lut[lower] + (lut[upper] - lut[lower]) * t;
 }
@@ -2071,9 +2095,11 @@ Image FilmRenderer::apply_filmic_grain(
             return m;
         };
 
-        const float base_chroma = clampf(effects.grain_chroma_strength * 2.2F, 0.0F, 1.0F);
+        // Most colour-grain structure is shared between dye layers. Independent
+        // variation remains restrained so it does not turn into RGB speckle.
+        const float base_chroma = clampf(effects.grain_chroma_strength * 1.35F, 0.0F, 0.42F);
         const float layer_correlation = std::clamp(effects.grain_layer_correlation, 0.0F, 1.0F);
-        const float chroma_mix = base_chroma * std::clamp(0.18F + (1.0F - layer_correlation) * 0.55F, 0.12F, 0.65F);
+        const float chroma_mix = base_chroma * std::clamp(0.12F + (1.0F - layer_correlation) * 0.35F, 0.12F, 0.47F);
 
         // Assemble the R/G/B noise for one octave from its mono + independent chroma tiles.
         const auto assemble = [&](cv::Mat& out_r, cv::Mat& out_g, cv::Mat& out_b,
@@ -2120,26 +2146,25 @@ Image FilmRenderer::apply_filmic_grain(
     Image out(rgb_linear.width, rgb_linear.height, 3);
     // Per-dye-layer amplitude (blue layer slightly grainier) for colour grain only.
     // Monochrome grain must stay truly neutral across channels, so use uniform amplitude.
-    constexpr std::array<float, 3> kColorAmpMults{0.94F, 1.00F, 1.08F};
+    constexpr std::array<float, 3> kColorAmpMults{0.97F, 1.00F, 1.05F};
     const std::array<float, 3> kAmpMults = is_mono ? std::array<float, 3>{1.0F, 1.0F, 1.0F} : kColorAmpMults;
     const float pgi_visibility = std::clamp(effects.grain_target_pgi / 40.0F, 0.55F, 1.55F);
     const float stock_visibility = pgi_visibility * std::clamp(0.82F + effects.grain_midtone_response * 0.18F, 0.65F, 1.25F);
-    // Soft-light grain amplitude. Spatially UNIFORM: no receptivity / texture-detail term
-    // (that spatial gating caused the blotches). Modulated only per-luminance below.
-    // Soft-saturating response: the 0..2 strength slider eases in (more control in the
-    // low/mid range) and its high end is scaled back so max is strong-but-tasteful, not extreme.
+    // Spatially uniform: no receptivity / texture-detail term (that spatial
+    // gating caused the blotches). Modulated only by each pixel's smooth tone response.
     const float gs = std::max(0.0F, effects.grain_strength);
     const float strength_shaped = gs / (1.0F + 0.6F * gs);   // 0.5->0.38, 1.0->0.63, 2.0->0.91
-    const float amp_base = strength_shaped * kGrainSoftLightAmp * stock_visibility;
+    const float sigma_base = strength_shaped * kGrainDensitySigma * stock_visibility;
     static const auto kGammaEncodeLut = build_power_lut(1.0F / 2.2F);
-    static const auto kGammaDecodeLut = build_power_lut(2.2F);
+    static const auto kDensityFromLinearLut = build_density_from_linear_lut();
+    static const auto kLinearFromDensityLut = build_linear_from_density_lut();
 
     const int noise_h = noise_g.rows;   // == h when not tiled -> wrapped indices are identity
     const int noise_w = noise_g.cols;
     const int noise_h2 = grain_tiled ? noise_g2.rows : 1;
     const int noise_w2 = grain_tiled ? noise_g2.cols : 1;
     constexpr float kInvSqrt2 = 0.70710678F;  // keeps unit variance when summing the 2 octaves
-    for (int y = 0; y < h; ++y) {
+    parallel_for_rows(h, [&](const int y) {
         const float* noise_r_row = noise_r.ptr<float>(y % noise_h);
         const float* noise_g_row = noise_g.ptr<float>(y % noise_h);
         const float* noise_b_row = noise_b.ptr<float>(y % noise_h);
@@ -2160,10 +2185,12 @@ Image FilmRenderer::apply_filmic_grain(
             const std::size_t pixel_index = static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x);
             const std::size_t base = pixel_index * 3U;
 
-            const float gamma_r = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 0]);
-            const float gamma_g = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 1]);
-            const float gamma_b = sample_unit_lut(kGammaEncodeLut, rgb_linear.pixels[base + 2]);
-            const float y_gamma = 0.2126F * gamma_r + 0.7152F * gamma_g + 0.0722F * gamma_b;
+            const float input_r = clamp01(rgb_linear.pixels[base + 0]);
+            const float input_g = clamp01(rgb_linear.pixels[base + 1]);
+            const float input_b = clamp01(rgb_linear.pixels[base + 2]);
+            const float luma_linear = 0.2126F * input_r + 0.7152F * input_g + 0.0722F * input_b;
+            const float luma_density = sample_unit_lut(kDensityFromLinearLut, luma_linear);
+            const float y_gamma = sample_unit_lut(kGammaEncodeLut, luma_linear);
 
             const float lifted_shadow = smoothstep01((0.42F - y_gamma) / 0.34F);
             const float lower_mid = smoothstep01((y_gamma - 0.16F) / 0.24F) * (1.0F - smoothstep01((y_gamma - 0.58F) / 0.24F));
@@ -2203,18 +2230,29 @@ Image FilmRenderer::apply_filmic_grain(
                 (0.35F + shadow_response * 0.55F * lifted_shadow + lower_mid_response * 0.95F * lower_mid + midtone_response * 0.55F * midtone) *
                 (1.0F - (0.70F - highlight_response) * highlight);
             // Tonal (per-luminance) modulation only — smooth, cannot blotch. No spatial term.
-            const float exposure_mod = std::max(0.0F, density_mod);
+            // Clear highlights and blocked shadows remain quiet. This envelope
+            // is signal-dependent but never tied to neighbouring image detail.
+            const float clear_highlight_taper = smoothstep01(0.16F, 0.60F, luma_density);
+            const float blocked_shadow_taper = 1.0F - smoothstep01(3.00F, 5.00F, luma_density);
+            const float sigma_luma = sigma_base * std::max(0.0F, density_mod) *
+                clear_highlight_taper * blocked_shadow_taper;
 
-            // Soft-light composite of a neutral-grey grain layer (0.5 +/- noise*amp).
-            const float bl_r = clamp01(0.5F + nr * amp_base * kAmpMults[0] * exposure_mod);
-            const float bl_g = clamp01(0.5F + ng * amp_base * kAmpMults[1] * exposure_mod);
-            const float bl_b = clamp01(0.5F + nb * amp_base * kAmpMults[2] * exposure_mod);
+            const auto apply_density_grain = [&](const float input, const float noise, const float channel_multiplier) {
+                if (input <= kGrainDensityFloor || input >= 1.0F - kGrainDensityFloor) {
+                    return input;
+                }
+                const float sigma = sigma_luma * channel_multiplier;
+                // +0.5*sigma^2 compensates the log-normal inverse transform,
+                // preventing a zero-mean field from visibly darkening a flat patch.
+                const float adjusted_density = sample_unit_lut(kDensityFromLinearLut, input) + sigma * noise + 0.5F * sigma * sigma;
+                return clamp01(sample_density_lut(kLinearFromDensityLut, adjusted_density));
+            };
 
-            out.pixels[base + 0] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_r, bl_r)));
-            out.pixels[base + 1] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_g, bl_g)));
-            out.pixels[base + 2] = sample_unit_lut(kGammaDecodeLut, clamp01(soft_light(gamma_b, bl_b)));
+            out.pixels[base + 0] = apply_density_grain(input_r, nr, kAmpMults[0]);
+            out.pixels[base + 1] = apply_density_grain(input_g, ng, kAmpMults[1]);
+            out.pixels[base + 2] = apply_density_grain(input_b, nb, kAmpMults[2]);
         }
-    }
+    });
 
     return out;
 }

@@ -1047,6 +1047,64 @@ void test_filmic_grain_density_response_and_stock_character() {
     }
 }
 
+void test_filmic_grain_density_domain_preserves_flat_mean_and_endpoints() {
+    constexpr int kWidth = 256;
+    constexpr int kHeight = 128;
+    dfee::Image rgb(kWidth, kHeight, 3);
+    for (int y = 0; y < kHeight; ++y) {
+        for (int x = 0; x < kWidth; ++x) {
+            const float value = x == 0 ? 0.0F : (x == kWidth - 1 ? 1.0F : 0.36F);
+            rgb.at(x, y, 0) = value;
+            rgb.at(x, y, 1) = value;
+            rgb.at(x, y, 2) = value;
+        }
+    }
+
+    dfee::SpatialMasks masks;
+    dfee::MaterialEffectsPlan effects;
+    effects.grain_strength = 0.85F;
+    effects.grain_size = 0.55F;
+    effects.grain_roughness = 0.40F;
+    effects.grain_chroma_strength = 0.0F;
+    effects.grain_seed = 918273U;
+
+    const dfee::FilmRenderer renderer;
+    const auto out = renderer.apply_filmic_grain(rgb, masks, effects);
+
+    double mean = 0.0;
+    double variance = 0.0;
+    std::size_t count = 0;
+    for (int y = 0; y < kHeight; ++y) {
+        for (int x = 1; x < kWidth - 1; ++x) {
+            const double value = out.at(x, y, 1);
+            mean += value;
+            ++count;
+        }
+    }
+    mean /= static_cast<double>(count);
+    for (int y = 0; y < kHeight; ++y) {
+        for (int x = 1; x < kWidth - 1; ++x) {
+            const double delta = out.at(x, y, 1) - mean;
+            variance += delta * delta;
+        }
+    }
+    variance /= static_cast<double>(count);
+
+    if (std::fabs(mean - 0.36) > 0.0025) {
+        throw std::runtime_error("density grain must preserve flat-patch mean exposure, got " + std::to_string(mean));
+    }
+    if (!(variance > 1.0e-6)) {
+        throw std::runtime_error("density grain must create measurable flat-patch variance");
+    }
+    for (int y = 0; y < kHeight; ++y) {
+        for (int c = 0; c < 3; ++c) {
+            if (out.at(0, y, c) != 0.0F || out.at(kWidth - 1, y, c) != 1.0F) {
+                throw std::runtime_error("density grain must leave true black and white endpoints unchanged");
+            }
+        }
+    }
+}
+
 void test_filmic_grain_avoids_low_frequency_blotches() {
     dfee::Image rgb(96, 96, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -3077,6 +3135,7 @@ int main() {
         test_filmic_halation_profile_geometry_and_colour();
         test_film_grain_determinism();
         test_filmic_grain_density_response_and_stock_character();
+        test_filmic_grain_density_domain_preserves_flat_mean_and_endpoints();
         test_filmic_grain_avoids_low_frequency_blotches();
         test_filmic_grain_roughness_does_not_become_pixel_noise();
         test_filmic_grain_profile_placement_and_texture_masking();

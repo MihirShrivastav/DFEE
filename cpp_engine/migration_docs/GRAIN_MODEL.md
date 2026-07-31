@@ -12,7 +12,7 @@ fast enough after earlier optimization, and already better than simple noise:
 - it shapes particles through a boolean-style kernel
 - it separates RGB dye layers
 - it makes blue/yellow dye grain more visible
-- it applies grain in gamma space
+- it applies grain as a display-space overlay
 - it gates grain with the analyzer's smooth-region receptivity mask
 
 The limitation is that the exposure response is too generic. Real grain is not
@@ -136,10 +136,13 @@ Implementation status:
   optional fields.
 - Native reports include the resolved grain family and numeric grain model
   values in `render_plan.material_effects`.
-- `peak_zone` now changes the tonal placement of v2 grain and
-  `texture_masking` controls how strongly the analyzer's smooth-region mask
-  suppresses grain over busy detail. Both remain stock-profile controls rather
-  than user-facing roughness substitutes.
+- `peak_zone` changes the tonal placement of v2 grain. `texture_masking` is
+  retained in the profile contract for compatibility but is deliberately not
+  used by the filmic renderer: neighbourhood/detail gating caused the earlier
+  blotchy-sky failure.
+- `filmic_v2`/`filmic_v3` now apply grain as signal-dependent optical-density
+  modulation. A mean-preserving correction keeps a zero-mean grain field from
+  globally darkening flat regions after the inverse density transform.
 
 ## Initial Native Algorithm
 
@@ -149,12 +152,14 @@ Implementation status:
    - mid-frequency particle field
    - micro-grit field
    - optional independent dye-layer fields
-3. Build an exposure-density response mask:
+3. Build a smooth per-pixel density response:
    - shadow/lower-mid boost
    - midtone stock baseline
    - highlight suppression
-   - smooth-region visibility from analyzer mask
-4. Apply grain in perceptual/gamma space for preview/export consistency.
+   - blocked-shadow suppression
+4. Convert linear RGB to optical density, add the signal-dependent noise per
+   dye layer, apply the log-normal mean correction, then convert back to linear
+   RGB. Do not use Soft Light or another display-space overlay blend.
 5. For color stocks, blend common luminance grain with dye-layer grain using
    `layer_correlation` and `chroma_strength`.
 6. For monochrome stocks, use a single silver-density field.
@@ -194,6 +199,8 @@ Native tests:
   grain, preventing visible blotchy patterns.
 - roughness-only changes do not materially increase pixel-to-pixel grain energy;
   rough grain should look harder, not smaller or noisier.
+- a flat mid-density patch retains its mean exposure while gaining measurable
+  grain variance; true black and true white endpoints remain unchanged.
 
 Bridge/server tests:
 
