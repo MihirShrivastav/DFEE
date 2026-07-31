@@ -1087,41 +1087,43 @@ input[type="checkbox"] {
 .advanced-correction { order: 9; }
 .supporting-workflow { order: 10; }
 
+/* Tactile segmented toggle: recessed track, raised active chip (no outline). */
 .placement-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  gap: 0;
   padding: 3px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 .placement-toggle button {
   min-height: 28px;
-  padding: 5px 7px;
-  border: 1px solid transparent;
-  border-radius: 4px;
+  padding: 6px 7px;
+  border: none;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
   font: inherit;
-  font-size: 11px;
+  font-size: 11.5px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s;
 }
 
-.placement-toggle button:hover {
+.placement-toggle button:hover:not(.active) {
   color: var(--text-secondary);
 }
 
 .placement-toggle button.active {
-  background: var(--bg-panel);
-  border-color: var(--accent);
   color: var(--text-primary);
+  background: linear-gradient(180deg, #37373e, #26262b);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 .placement-toggle button:active {
-  transform: scale(0.98);
+  transform: scale(0.985);
 }
 
 .slider.slider-film-exposure {
@@ -1198,9 +1200,10 @@ optgroup option {
 .select {
   width: 100%;
   padding: 10px 13px;
-  background: var(--bg-inset);
+  background-color: var(--bg-inset);
   border: 1px solid var(--hair);
   border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
   color: var(--text-primary);
   font-size: 13px;
   font-family: inherit;
@@ -1239,6 +1242,7 @@ optgroup option {
   background: var(--bg-inset);
   border: 1px solid var(--hair);
   border-radius: var(--radius-md);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
   padding: 10px 12px;
   cursor: pointer;
   font-family: inherit;
@@ -1257,7 +1261,7 @@ optgroup option {
 .fsel-swatch {
   width: 52px;
   height: 52px;
-  border-radius: 10px;
+  border-radius: 4px;   /* slight window rounding on the square boxart */
   flex: none;
   display: block;
   object-fit: cover;
@@ -1268,7 +1272,7 @@ optgroup option {
 .fsel-swatch--sm {
   width: 44px;
   height: 44px;
-  border-radius: 9px;
+  border-radius: 4px;
 }
 
 .fsel-swatch--empty {
@@ -1406,13 +1410,13 @@ optgroup option {
 
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: #bcbcc2;
+  background: linear-gradient(180deg, #cbcbd0, #9a9aa1);
   border: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  transition: transform 0.1s, background 0.12s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: transform 0.1s;
 }
 
 .slider::-webkit-slider-thumb:hover {
@@ -1424,12 +1428,12 @@ optgroup option {
 }
 
 .slider::-moz-range-thumb {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: #bcbcc2;
+  background: linear-gradient(180deg, #cbcbd0, #9a9aa1);
   border: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 /* ─── Diagnostics ────────────────────────────── */
@@ -2092,11 +2096,12 @@ optgroup option {
   border: 1px solid var(--hair);
   border-radius: 5px;
   background: var(--bg-inset);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   flex: none;
 }
 
@@ -2105,8 +2110,9 @@ optgroup option {
 }
 
 .checkbox-input:checked {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: linear-gradient(180deg, #eaeaec, #c6c6cc);
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .checkbox-input:checked::after {
