@@ -72,5 +72,17 @@ Window {
             model: engine.stockNames
             onActivated: engine.stock = engine.stockIdAt(currentIndex)
         }
+
+        Text { text: "Film exposure"; color: "#8b8b90"; font.pixelSize: 12 }
+        Slider {
+            width: parent.width; from: -5; to: 5; value: engine.filmExposure
+            onMoved: engine.filmExposure = value
+        }
+
+        Text { text: "Shadow lift"; color: "#8b8b90"; font.pixelSize: 12 }
+        Slider {
+            width: parent.width; from: -100; to: 100; value: engine.shadowLift
+            onMoved: engine.shadowLift = value
+        }
     }
 }

@@ -1,6 +1,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QTimer>
 #include "EngineController.h"
 #include "PreviewImageProvider.h"
 
@@ -45,6 +46,15 @@ int main(int argc, char* argv[]) {
             const QString pathB = qEnvironmentVariable("DFEE_SELFTEST2");
             controller.openFile(QUrl::fromLocalFile(pathB));
         }
+
+        // Task-4 param-change self-test: after a short delay (giving the first
+        // render time to complete), nudge filmExposure so a second render fires.
+        // The RenderWorker logs "SELFTEST preview ready" on each completion, so
+        // two such lines in stderr confirm both renders happened.
+        QTimer::singleShot(3000, &controller, [&controller]() {
+            qDebug() << "SELFTEST nudging filmExposure to 2.0 to trigger re-render";
+            controller.setFilmExposure(2.0);
+        });
     }
 
     return app.exec();

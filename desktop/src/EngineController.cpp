@@ -58,10 +58,23 @@ void EngineController::setStock(const QString& id)
     if (stockId_ == id) return;
     stockId_ = id;
     emit stockChanged();
-    // Re-render if we have a file loaded.
-    if (!currentFile_.isEmpty()) {
-        scheduleRender();
-    }
+    scheduleRender();
+}
+
+void EngineController::setFilmExposure(double v)
+{
+    if (qFuzzyCompare(filmExposure_, v)) return;
+    filmExposure_ = v;
+    emit paramsChanged();
+    scheduleRender();
+}
+
+void EngineController::setShadowLift(double v)
+{
+    if (qFuzzyCompare(shadowLift_, v)) return;
+    shadowLift_ = v;
+    emit paramsChanged();
+    scheduleRender();
 }
 
 void EngineController::openFile(const QUrl& url)

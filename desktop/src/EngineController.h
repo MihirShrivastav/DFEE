@@ -15,6 +15,8 @@ class EngineController : public QObject {
     Q_OBJECT
     Q_PROPERTY(QStringList stockNames READ stockNames NOTIFY stocksChanged)
     Q_PROPERTY(QString stock READ stock WRITE setStock NOTIFY stockChanged)
+    Q_PROPERTY(double filmExposure READ filmExposure WRITE setFilmExposure NOTIFY paramsChanged)
+    Q_PROPERTY(double shadowLift READ shadowLift WRITE setShadowLift NOTIFY paramsChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -30,6 +32,11 @@ public:
     QStringList stockNames() const { return stockNames_; }
     QString stock() const { return stockId_; }
     void setStock(const QString& id);
+
+    double filmExposure() const { return filmExposure_; }
+    void setFilmExposure(double v);
+    double shadowLift() const { return shadowLift_; }
+    void setShadowLift(double v);
 
     Q_INVOKABLE QString stockIdAt(int i) const {
         return (i >= 0 && i < stockIds_.size()) ? stockIds_.at(i) : QString("none");
@@ -49,6 +56,7 @@ public:
 signals:
     void stocksChanged();
     void stockChanged();
+    void paramsChanged();
     void hasImageChanged();
     void previewChanged();
     void statusChanged();
