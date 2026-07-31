@@ -115,6 +115,15 @@ Status values:
 | M7-005 | planned | Separate and harden the Print stage | Native print fixtures plus UI visual QA | Move print controls out of Film Recipe while preserving request behavior and validate supported stock/print combinations. |
 | M7-006 | planned | Close Material Finish visual acceptance | Representative RAW visual/performance acceptance matrix | Complete grain and bloom/halation review before adding more material controls. M7-006D is done: disabling Auto grain now materializes native stock/ISO-derived Custom slider values. |
 | M7-007 | planned | Add versioned recipes and A/B comparison | Recipe round-trip and cache-aware UI tests | Recipes must capture pipeline version and reproduce native render inputs without duplicating full-resolution source buffers. |
+
+## Desktop / Host Integration
+
+| ID | Status | Task | Acceptance | Notes |
+| --- | --- | --- | --- | --- |
+| DSK-LR-001 | done | Lightroom Classic external-editor save-back | `DFEE.exe --lightroom-edit <absolute-tiff>` renders and atomically replaces the handed-off TIFF | Lightroom owns derivative creation/catalog stacking; DFEE never touches source RAW/DNG. |
+| DSK-LR-002 | planned | ICC-aware wide-gamut round-trip | Detect embedded profile; preserve/emit tagged TIFF; ProPhoto 16-bit Lightroom smoke pass | Release blocker before documenting a ProPhoto preset. |
+| DSK-LR-003 | planned | Lightroom convenience plug-in | Plugin launches the same external-editor contract and provides setup diagnostics | Must not take ownership of raw conversion/import from Lightroom. |
+| DSK-LR-004 | planned | Installer + registered host integration | Installed, signed executable selectable in Lightroom preferences | Include upgrade/uninstall behavior and per-user preset instructions. |
 | M7-008 | planned | Add guided diagnostics and workflow accessibility | Route/report tests plus keyboard/narrow-layout QA | Guidance is factual and reversible; accessibility work must not increase redundant preview rendering. |
 | M7-009 | planned | Film Lab release hardening | Contract matrix, quality regression set, and performance/memory probes | Validate native bridge, preview/export agreement, visual quality, and large-RAW behavior before calling the Film Lab complete. |
 

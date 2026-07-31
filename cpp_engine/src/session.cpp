@@ -15,6 +15,7 @@
 #include "dfee/version.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cmath>
 #include <cctype>
@@ -1012,6 +1013,40 @@ void write_text_file(const std::filesystem::path& path, const std::string& conte
     if (!out.good()) {
         throw std::runtime_error("Failed while writing file: " + path.string());
     }
+}
+
+[[nodiscard]] bool replace_file_atomically(
+    const std::filesystem::path& temporary_path,
+    const std::filesystem::path& destination_path,
+    std::string& detail) {
+#if defined(_WIN32)
+    if (MoveFileExW(
+            temporary_path.c_str(),
+            destination_path.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) == 0) {
+        detail = "MoveFileExW could not replace " + destination_path.string() +
+            " (Win32 error " + std::to_string(GetLastError()) + ").";
+        return false;
+    }
+    return true;
+#else
+    std::error_code error;
+    std::filesystem::rename(temporary_path, destination_path, error);
+    if (error) {
+        detail = "Could not replace " + destination_path.string() + ": " + error.message();
+        return false;
+    }
+    return true;
+#endif
+}
+
+[[nodiscard]] std::string temporary_output_suffix() {
+#if defined(_WIN32)
+    return std::to_string(GetCurrentProcessId());
+#else
+    static std::atomic_uint64_t sequence = 0;
+    return std::to_string(++sequence);
+#endif
 }
 
 bool export_trace_enabled() {
@@ -3014,6 +3049,56 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 response.format_label = "8-bit PNG";
             }
 
+            if (!request.output_path.empty()) {
+                const std::filesystem::path requested_output = request.output_path.lexically_normal();
+                if (!requested_output.is_absolute()) {
+                    response.status = "error";
+                    response.error = {
+                        .code = "EXPORT_OUTPUT_PATH_INVALID",
+                        .user_message = "The requested export destination must be an absolute path.",
+                        .detail = "output_path was relative: " + requested_output.string(),
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
+                if (requested_output.parent_path().empty() ||
+                    !std::filesystem::is_directory(requested_output.parent_path())) {
+                    response.status = "error";
+                    response.error = {
+                        .code = "EXPORT_OUTPUT_DIRECTORY_INVALID",
+                        .user_message = "The requested export folder does not exist.",
+                        .detail = "output_path parent is unavailable: " + requested_output.parent_path().string(),
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
+                std::string suffix = requested_output.extension().string();
+                std::ranges::transform(suffix, suffix.begin(), [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                const bool matching_extension =
+                    (canonical_format == "tiff" && (suffix == ".tif" || suffix == ".tiff")) ||
+                    (canonical_format == "png16" && suffix == ".png") ||
+                    (canonical_format == "png8" && suffix == ".png") ||
+                    (canonical_format == "jpeg" && (suffix == ".jpg" || suffix == ".jpeg"));
+                if (!matching_extension) {
+                    response.status = "error";
+                    response.error = {
+                        .code = "EXPORT_OUTPUT_EXTENSION_MISMATCH",
+                        .user_message = "The requested export filename does not match the selected format.",
+                        .detail = "output_path=" + requested_output.string() + ", format=" + canonical_format,
+                    };
+                    finalize_engine_metadata(response.engine);
+                    return response;
+                }
+                response.output_path = requested_output;
+            }
+
+            const std::filesystem::path temporary_output =
+                response.output_path.parent_path() /
+                (response.output_path.stem().string() + ".dfee-writing-" +
+                 temporary_output_suffix() + response.output_path.extension().string());
+            std::error_code cleanup_error;
+            std::filesystem::remove(temporary_output, cleanup_error);
+
             trace_mem(project_root_, "before_output_alloc");
             cv::Mat output_mat(rendered.height, rendered.width, (canonical_format == "png8" || canonical_format == "jpeg") ? CV_8UC3 : CV_16UC3);
             const bool eight_bit_output = (canonical_format == "png8" || canonical_format == "jpeg");
@@ -3054,19 +3139,19 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 };
             }
             trace_mem(project_root_, "after_output_encode_write");
-            if (!cv::imwrite(response.output_path.string(), output_mat, write_params)) {
+            if (!cv::imwrite(temporary_output.string(), output_mat, write_params)) {
                 response.status = "error";
                 response.error = {
                     .code = "EXPORT_WRITE_FAILED",
                     .user_message = "The native export could not be written to disk.",
-                    .detail = "cv::imwrite returned false for " + response.output_path.string(),
+                    .detail = "cv::imwrite returned false for " + temporary_output.string(),
                 };
                 finalize_engine_metadata(response.engine);
                 return response;
             }
             if ((canonical_format == "png8" || canonical_format == "png16") && request.embed_metadata) {
                 std::string png_metadata_error;
-                if (!patch_png_phys_density(response.output_path, request.export_dpi, png_metadata_error)) {
+                if (!patch_png_phys_density(temporary_output, request.export_dpi, png_metadata_error)) {
                     response.status = "error";
                         response.error = {
                         .code = "EXPORT_METADATA_WRITE_FAILED",
@@ -3079,7 +3164,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
             }
             if (canonical_format == "jpeg" && request.embed_metadata) {
                 std::string jpeg_metadata_error;
-                if (!patch_jpeg_jfif_density(response.output_path, request.export_dpi, jpeg_metadata_error)) {
+                if (!patch_jpeg_jfif_density(temporary_output, request.export_dpi, jpeg_metadata_error)) {
                     response.status = "error";
                     response.error = {
                         .code = "EXPORT_METADATA_WRITE_FAILED",
@@ -3089,6 +3174,18 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     finalize_engine_metadata(response.engine);
                     return response;
                 }
+            }
+            std::string replace_error;
+            if (!replace_file_atomically(temporary_output, response.output_path, replace_error)) {
+                std::filesystem::remove(temporary_output, cleanup_error);
+                response.status = "error";
+                response.error = {
+                    .code = "EXPORT_ATOMIC_REPLACE_FAILED",
+                    .user_message = "The export was written safely but could not replace the destination file.",
+                    .detail = replace_error,
+                };
+                finalize_engine_metadata(response.engine);
+                return response;
             }
             append_export_trace(project_root_, "export_image:write_output:done");
         }

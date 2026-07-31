@@ -44,3 +44,16 @@ Run this checklist from a Release build of `DFEE.exe`. The app must use the nati
 1. Attempt to open an unsupported or corrupt file.
 2. Confirm the status line shows an `Open failed` message and the last valid preview
    remains available.
+
+## Lightroom Classic Round-Trip
+
+1. In Lightroom Classic, configure DFEE as an Additional External Editor using the
+   Phase A 16-bit sRGB TIFF settings documented in `desktop/README.md`.
+2. Use **Photo > Edit In > DFEE** on a RAW/DNG. Confirm DFEE opens with the subtitle
+   `Lightroom round-trip TIFF`, image opening is unavailable, and export format options
+   are hidden.
+3. Apply a stock and one Film Lab control, then select **Save Back to Lightroom**.
+4. Confirm the status reports the original handed-off TIFF path, no `*_dfee.*` sibling
+   is created, and Lightroom shows the edited TIFF beside/stacked with the source.
+5. Repeat with DFEE closed without saving. Confirm Lightroom's working TIFF remains
+   unchanged and readable.

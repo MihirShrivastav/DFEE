@@ -26,7 +26,7 @@ public slots:
     // Re-render only (file already decoded in session cache).
     void render(const dfee::NativePreviewRenderRequest& request);
 
-    // Export full-resolution TIFF (writes beside the source file).
+    // Export full-resolution image. Lightroom mode supplies the exact working TIFF path.
     void exportImage(const dfee::NativeExportRequest& request);
 
     // Resolves Auto grain through the same native solver without rendering.

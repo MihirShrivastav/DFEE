@@ -217,7 +217,7 @@ Window {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Open a RAW or TIFF image to begin"
+                text: engine.lightroomRoundTrip ? "Lightroom round-trip TIFF" : "Open a RAW or TIFF image to begin"
                 color: root.textMuted
                 font.pixelSize: 13
             }
@@ -296,18 +296,19 @@ Window {
 
             PrimaryButton {
                 text: "Open image"
+                enabled: !engine.lightroomRoundTrip
                 onClicked: openDialog.open()
             }
 
             SecondaryButton {
-                text: engine.exporting ? "Exporting..." : "Export " + root.exportFormatLabel(engine.exportFormat)
+                text: engine.exporting ? (engine.lightroomRoundTrip ? "Saving back..." : "Exporting...") : (engine.lightroomRoundTrip ? "Save Back to Lightroom" : "Export " + root.exportFormatLabel(engine.exportFormat))
                 enabled: engine.hasImage && !engine.exporting
                 onClicked: engine.exportImage()
             }
 
             Column {
                 width: parent.width
-                visible: engine.hasImage
+                visible: engine.hasImage && !engine.lightroomRoundTrip
                 spacing: 7
 
                 InspectorLabel { text: "Export format" }
@@ -570,14 +571,14 @@ Window {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Exporting full resolution"
+                text: engine.lightroomRoundTrip ? "Saving back to Lightroom" : "Exporting full resolution"
                 color: root.textPrimary
                 font.pixelSize: 16
                 font.weight: Font.DemiBold
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
+                text: engine.lightroomRoundTrip ? "Rendering and atomically replacing the working TIFF" : "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
                 color: root.textSecondary
                 font.pixelSize: 12
             }

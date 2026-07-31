@@ -306,6 +306,11 @@ struct NativeExportRequest : NativePreviewRenderRequest {
     int export_dpi = 300;
     bool embed_metadata = true;
     std::string export_color_space = "srgb";
+    // Empty keeps the standard sibling-file naming policy. A caller that owns
+    // a working file (for example Lightroom external editing) may request an
+    // exact destination. The exporter writes a temporary sibling first and
+    // replaces this path only after encoding and metadata work both succeed.
+    std::filesystem::path output_path;
 };
 
 struct NativeExportResponse {

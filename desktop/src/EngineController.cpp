@@ -128,6 +128,26 @@ void EngineController::setExportDpi(int dpi)
     emit exportSettingsChanged();
 }
 
+void EngineController::beginLightroomRoundTrip(const QString& tiffPath)
+{
+    const QFileInfo source(tiffPath);
+    const QString suffix = source.suffix().toLower();
+    if (!source.isAbsolute() || !source.isFile() || (suffix != "tif" && suffix != "tiff")) {
+        status_ = "Lightroom edit requires an existing TIFF working file.";
+        emit statusChanged();
+        qWarning() << "DFEE Lightroom round-trip rejected" << tiffPath;
+        return;
+    }
+
+    lightroomRoundTrip_ = true;
+    exportFormat_ = "tiff";
+    currentFile_ = source.absoluteFilePath();
+    emit exportSettingsChanged();
+    emit lightroomRoundTripChanged();
+    qInfo() << "DFEE Lightroom round-trip opened" << currentFile_;
+    openFile(QUrl::fromLocalFile(currentFile_));
+}
+
 bool EngineController::updateNumericFilmControl(const QString& key, double value)
 {
     struct Range { double minimum; double maximum; };
@@ -287,6 +307,10 @@ dfee::NativeExportRequest EngineController::buildExportRequest() const
     request.export_format = exportFormat_.toStdString();
     request.jpeg_quality = jpegQuality_;
     request.export_dpi = exportDpi_;
+    if (lightroomRoundTrip_) {
+        request.export_format = "tiff";
+        request.output_path = std::filesystem::path(currentFile_.toStdString());
+    }
     return request;
 }
 
@@ -309,7 +333,9 @@ void EngineController::exportImage()
     emit statusChanged();
     exporting_ = true;
     emit exportingChanged();
-    status_ = "Exporting full resolution...";
+    status_ = lightroomRoundTrip_
+        ? "Rendering and saving the Lightroom working TIFF..."
+        : "Exporting full resolution...";
     emit statusChanged();
     const dfee::NativeExportRequest request = buildExportRequest();
     QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {

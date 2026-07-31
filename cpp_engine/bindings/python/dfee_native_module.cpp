@@ -362,6 +362,7 @@ dfee::NativeExportRequest export_request_from_dict(PyObject* dict) {
     request.export_dpi = dict_int(dict, "export_dpi", 300);
     request.embed_metadata = dict_bool(dict, "embed_metadata", true);
     request.export_color_space = dict_string(dict, "export_color_space", "srgb");
+    request.output_path = dict_string(dict, "output_path", "");
     return request;
 }
 

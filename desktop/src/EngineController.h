@@ -29,6 +29,7 @@ class EngineController : public QObject {
     Q_PROPERTY(int jpegQuality READ jpegQuality WRITE setJpegQuality NOTIFY exportSettingsChanged)
     Q_PROPERTY(int exportDpi READ exportDpi WRITE setExportDpi NOTIFY exportSettingsChanged)
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportingChanged)
+    Q_PROPERTY(bool lightroomRoundTrip READ lightroomRoundTrip NOTIFY lightroomRoundTripChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -59,6 +60,7 @@ public:
     int exportDpi() const { return exportDpi_; }
     void setExportDpi(int dpi);
     bool exporting() const { return exporting_; }
+    bool lightroomRoundTrip() const { return lightroomRoundTrip_; }
 
     Q_INVOKABLE QString stockIdAt(int i) const {
         return (i >= 0 && i < stockIds_.size()) ? stockIds_.at(i) : QString("none");
@@ -68,6 +70,7 @@ public:
     Q_INVOKABLE void exportImage();
     Q_INVOKABLE void setFilmControl(const QString& key, const QVariant& value);
     Q_INVOKABLE void setAutoGrain(bool enabled);
+    void beginLightroomRoundTrip(const QString& tiffPath);
 
     bool hasImage() const { return hasImage_; }
     int previewRevision() const { return previewRevision_; }
@@ -89,6 +92,7 @@ signals:
     void grainResolvingChanged();
     void exportSettingsChanged();
     void exportingChanged();
+    void lightroomRoundTripChanged();
     void hasImageChanged();
     void previewChanged();
     void statusChanged();
@@ -124,6 +128,7 @@ private:
     int jpegQuality_ = 92;
     int exportDpi_ = 300;
     bool exporting_ = false;
+    bool lightroomRoundTrip_ = false;
 
     // Coalescing state (read/written only on GUI thread).
     // dirty_ = a deferred op is pending while the worker is busy.

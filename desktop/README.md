@@ -53,3 +53,23 @@ reports either the resulting path or an error.
 
 Current TIFF output is 16-bit RGB and intentionally uncompressed for
 compatibility. Lossless TIFF compression is a separate export-engine task.
+
+## Lightroom Classic Round-Trip
+
+Configure Lightroom Classic's **Additional External Editor** to launch `DFEE.exe`, then
+use `Photo > Edit In > DFEE`. The application receives Lightroom's rendered working
+TIFF as:
+
+```text
+DFEE.exe --lightroom-edit "C:\\path\\to\\working-file.tif"
+```
+
+In this mode, the regular export controls are intentionally replaced with **Save Back
+to Lightroom**. DFEE encodes a temporary sibling and atomically replaces only the
+working TIFF on success, never the original RAW/DNG.
+
+Phase A requires Lightroom to create an **uncompressed 16-bit sRGB TIFF**. The engine
+does not yet retain embedded ICC profiles, so ProPhoto RGB, Adobe RGB, HDR, and custom
+profiles are not supported for this handoff yet. Full setup, safety behavior, and the
+wide-gamut follow-up are in
+[`docs/superpowers/specs/2026-07-31-lightroom-classic-roundtrip.md`](../docs/superpowers/specs/2026-07-31-lightroom-classic-roundtrip.md).

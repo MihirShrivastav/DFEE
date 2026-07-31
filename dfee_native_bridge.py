@@ -277,6 +277,7 @@ class NativeExportRequest(NativePreviewRenderRequest):
     export_dpi: int = 300
     embed_metadata: bool = True
     export_color_space: str = "srgb"
+    output_path: str = ""
 
 
 @dataclass(frozen=True)

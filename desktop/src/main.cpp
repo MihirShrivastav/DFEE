@@ -3,6 +3,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QTimer>
+#include <QCommandLineParser>
 #include <QFile>
 #include <QTextStream>
 #include "EngineController.h"
@@ -17,6 +18,14 @@ int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("DFEE");
     app.setOrganizationName("DFEE");
+
+    QCommandLineParser commandLine;
+    commandLine.setApplicationDescription("DFEE native film editor");
+    commandLine.addHelpOption();
+    const QCommandLineOption lightroomEditOption(
+        "lightroom-edit", "Open a Lightroom-provided TIFF and save back to that exact working file.", "tiff");
+    commandLine.addOption(lightroomEditOption);
+    commandLine.process(app);
 
     // Construct the provider BEFORE EngineController so it can be passed to
     // the worker at construction time.  This ensures provider_ is set before
@@ -36,6 +45,10 @@ int main(int argc, char* argv[]) {
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("DFEE", "Main");
+
+    if (commandLine.isSet(lightroomEditOption)) {
+        controller.beginLightroomRoundTrip(commandLine.value(lightroomEditOption));
+    }
 
     // Headless self-test: set DFEE_SELFTEST=<path-to-tiff> to verify end-to-end.
     // Set DFEE_SELFTEST2=<path-to-second-tiff> to exercise the coalescing fix:
