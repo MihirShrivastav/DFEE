@@ -322,6 +322,7 @@ TonalDistribution ImageStateAnalyzer::analyze_tonal(
     result.luma_p50 = percentile(values, 50.0F);
     result.luma_p75 = percentile(values, 75.0F);
     result.luma_p95 = percentile(values, 95.0F);
+    result.luma_p98 = percentile(values, 98.0F);
     result.luma_p99 = percentile(values, 99.0F);
     result.luma_p995 = percentile(values, 99.5F);
 

@@ -1586,6 +1586,7 @@ std::string serialize_feature_report_json(
         << "\"luma_p50\": " << json_number(tonal.luma_p50) << ","
         << "\"luma_p75\": " << json_number(tonal.luma_p75) << ","
         << "\"luma_p95\": " << json_number(tonal.luma_p95) << ","
+        << "\"luma_p98\": " << json_number(tonal.luma_p98) << ","
         << "\"luma_p99\": " << json_number(tonal.luma_p99) << ","
         << "\"luma_p995\": " << json_number(tonal.luma_p995) << ","
         << "\"dynamic_range_stops\": " << json_number(tonal.dynamic_range_stops) << ","

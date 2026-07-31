@@ -287,7 +287,7 @@ void test_neutral_scene_placement() {
     dfee::SolverInput input;
     input.tonal_distribution.tonal_skew = "low_key";
     input.tonal_distribution.midtone_anchor = 0.09F;
-    input.tonal_distribution.luma_p95 = 0.36F;
+    input.tonal_distribution.luma_p98 = 0.36F;
     input.tonal_distribution.highlight_headroom = 0.64F;
 
     dfee::SolverControls auto_controls;
@@ -306,26 +306,26 @@ void test_neutral_scene_placement() {
     const auto as_shot_plan = solver.solve_neutral(input, auto_controls);
     require_close(as_shot_plan.pre_film_normalization.exposure_compensation_stops, 0.0F, 1.0e-6F);
 
-    // A bright broad-highlight p95 limits the automatic lift before it pushes useful highlight
+    // A bright p98 limits the automatic lift before it pushes useful highlight
     // detail above the neutral display ceiling.
-    input.tonal_distribution.luma_p95 = 0.70F;
+    input.tonal_distribution.luma_p98 = 0.70F;
     const auto protected_plan = solver.solve_neutral(input, dfee::SolverControls{
         .adaptation_strength = 1.0F,
         .exposure_intent = "Auto",
     });
     assert(protected_plan.pre_film_normalization.exposure_compensation_stops < 0.25F);
 
-    // Sparse speculars must not meter a normally exposed scene as high-key.
-    // The solver protects diffuse highlight mass (p95); p99 is left for the
-    // tone shoulder to manage.
+    // A sparse top 1% must not meter a normally exposed scene as high-key, but
+    // the p98 sky/daylight guard must remain active.
     input.tonal_distribution.midtone_anchor = 0.055F;
     input.tonal_distribution.luma_p95 = 0.181F;
+    input.tonal_distribution.luma_p98 = 0.290F;
     input.tonal_distribution.luma_p99 = 0.519F;
     const auto sparse_specular_plan = solver.solve_neutral(input, dfee::SolverControls{
         .adaptation_strength = 1.0F,
         .exposure_intent = "Auto",
     });
-    assert(sparse_specular_plan.pre_film_normalization.exposure_compensation_stops > 1.5F);
+    require_close(sparse_specular_plan.pre_film_normalization.exposure_compensation_stops, 1.5F, 0.02F);
 }
 
 void test_render_plan_solver_rich_grain_profile_fields() {
@@ -2742,6 +2742,7 @@ void test_solver_auto_exposure_protects_highlights() {
         in.tonal_distribution.midtone_anchor = midtone;
         in.tonal_distribution.highlight_headroom = 0.05F;
         in.tonal_distribution.luma_p95 = std::max(0.0F, p99 - 0.03F);
+        in.tonal_distribution.luma_p98 = std::max(0.0F, p99 - 0.01F);
         in.tonal_distribution.luma_p99 = p99;
         in.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
         in.raw_iso = 400;

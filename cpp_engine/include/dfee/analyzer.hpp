@@ -16,6 +16,7 @@ struct TonalDistribution {
     float luma_p50 = 0.0F;
     float luma_p75 = 0.0F;
     float luma_p95 = 0.0F;
+    float luma_p98 = 0.0F;
     float luma_p99 = 0.0F;
     float luma_p995 = 0.0F;
     float dynamic_range_stops = 0.0F;
