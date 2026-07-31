@@ -283,6 +283,39 @@ void test_render_plan_solver() {
         plan.pre_film_normalization.exposure_compensation_stops);
 }
 
+void test_neutral_scene_placement() {
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "low_key";
+    input.tonal_distribution.midtone_anchor = 0.09F;
+    input.tonal_distribution.luma_p99 = 0.36F;
+    input.tonal_distribution.highlight_headroom = 0.64F;
+
+    dfee::SolverControls auto_controls;
+    auto_controls.exposure_intent = "Auto";
+    auto_controls.adaptation_strength = 1.0F;
+    const dfee::RenderPlanSolver solver;
+    const auto auto_plan = solver.solve_neutral(input, auto_controls);
+
+    assert(auto_plan.stock_type == "neutral");
+    require_close(auto_plan.pre_film_normalization.exposure_compensation_stops, 1.0F, 1.0e-4F);
+    require_close(auto_plan.pre_film_normalization.contrast_compensation, 0.0F, 1.0e-6F);
+    require_close(auto_plan.film_response.toe_strength, 0.0F, 1.0e-6F);
+    require_close(auto_plan.material_effects.grain_strength, 0.0F, 1.0e-6F);
+
+    auto_controls.exposure_intent = "Preserve";
+    const auto as_shot_plan = solver.solve_neutral(input, auto_controls);
+    require_close(as_shot_plan.pre_film_normalization.exposure_compensation_stops, 0.0F, 1.0e-6F);
+
+    // A bright p99 limits the automatic lift before it pushes useful highlight
+    // detail above the neutral display ceiling.
+    input.tonal_distribution.luma_p99 = 0.70F;
+    const auto protected_plan = solver.solve_neutral(input, dfee::SolverControls{
+        .adaptation_strength = 1.0F,
+        .exposure_intent = "Auto",
+    });
+    assert(protected_plan.pre_film_normalization.exposure_compensation_stops < 0.25F);
+}
+
 void test_render_plan_solver_rich_grain_profile_fields() {
     dfee::FilmStockProfile stock;
     stock.stock_id = "synthetic_grain_profile";
@@ -3118,6 +3151,7 @@ int main() {
         test_spatial_analysis();
         test_camera_bias_estimator();
         test_render_plan_solver();
+        test_neutral_scene_placement();
         test_render_plan_solver_rich_grain_profile_fields();
         test_pre_film_normalization();
         test_panchromatic_conversion();

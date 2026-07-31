@@ -2404,16 +2404,73 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         }
 
         if (request.stock == "none") {
-            ScopedStageTimer stage(response.engine, "render_preview_passthrough");
-            const auto raw = raw_preview({
-                .filename = response.filename,
-                .max_edge = 1024,
-            });
-            response.ok = raw.ok;
-            response.status = raw.status;
-            response.content_type = raw.content_type;
-            response.jpeg_bytes = raw.jpeg_bytes;
-            response.error = raw.error;
+            // "None" is a neutral RAW development path, not a JPEG passthrough.
+            // The old passthrough skipped Auto Balanced scene placement and every
+            // manual correction, making normal overcast RAWs appear materially
+            // darker than the Film Lab's actual working baseline.
+            {
+                ScopedStageTimer stage(response.engine, "render_preview_neutral_ensure_preview_cache");
+                if (!draft_decode_cache_.has_value() || draft_decode_cache_->filename != response.filename ||
+                    !preview_cache_.has_value() || preview_cache_->filename != response.filename) {
+                    const auto decode = decode_raw({
+                        .filename = response.filename,
+                        .draft_mode = true,
+                    });
+                    if (!decode.ok) {
+                        response.status = decode.status;
+                        response.error = decode.error;
+                        finalize_engine_metadata(response.engine);
+                        return response;
+                    }
+                }
+            }
+
+            SolverInput solver_input;
+            ZoneMasks zone_masks;
+            SpatialMasks spatial_masks;
+            {
+                ScopedStageTimer stage(response.engine, "render_preview_neutral_analyze");
+                populate_preview_analysis_cache(response.filename, solver_input, zone_masks, spatial_masks);
+            }
+
+            RenderPlan render_plan;
+            {
+                ScopedStageTimer stage(response.engine, "render_preview_neutral_scene_placement");
+                render_plan = RenderPlanSolver().solve_neutral(solver_input, build_solver_controls(request));
+            }
+
+            FilmRenderer renderer;
+            Image rendered;
+            {
+                ScopedStageTimer stage(response.engine, "render_preview_neutral_pre_film");
+                rendered = apply_pre_film_preview_sliders(preview_cache_->rgb_linear, request, render_plan);
+                rendered = renderer.apply_pre_film_normalization(
+                    rendered,
+                    zone_masks,
+                    render_plan.pre_film_normalization);
+            }
+            {
+                ScopedStageTimer stage(response.engine, "render_preview_neutral_post");
+                rendered = apply_post_film_color(rendered, request);
+                rendered = apply_curves(rendered, request.curves);
+                rendered = apply_hsl(rendered, request);
+                apply_color_grading(rendered, make_color_grade_params(request, render_plan.film_response));
+                rendered = renderer.apply_clarity(rendered, request.clarity);
+                rendered = renderer.apply_texture(rendered, request.texture);
+                rendered = renderer.apply_dehaze(rendered, request.dehaze);
+                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                    ? apply_post_bloom_filmic(rendered, request.bloom)
+                    : apply_post_bloom(rendered, request.bloom);
+            }
+            {
+                ScopedStageTimer stage(response.engine, "render_preview_neutral_encode_jpeg");
+                const auto encoded = encode_preview_jpeg_bytes(rendered, response.filename);
+                response.ok = encoded.ok;
+                response.status = encoded.status;
+                response.content_type = encoded.content_type;
+                response.jpeg_bytes = encoded.jpeg_bytes;
+                response.error = encoded.error;
+            }
             finalize_engine_metadata(response.engine);
             return response;
         }
@@ -2718,24 +2775,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
         std::optional<FilmStockProfile> stock_profile;
         std::optional<PrintStockProfile> print_stock_profile;
 
-        if (request.stock == "none") {
-            ScopedStageTimer stage(response.engine, "export_image_passthrough");
-            append_export_trace(project_root_, "export_image:passthrough:start");
-            if (!full_decode_cache_.has_value() || full_decode_cache_->filename != response.filename) {
-                const auto decode = decode_raw({
-                    .filename = response.filename,
-                    .draft_mode = false,
-                });
-                if (!decode.ok) {
-                    response.status = decode.status;
-                    response.error = decode.error;
-                    finalize_engine_metadata(response.engine);
-                    return response;
-                }
-            }
-            rendered = full_decode_cache_->decoded.rgb_linear;
-            append_export_trace(project_root_, "export_image:passthrough:done");
-        } else {
+        {
             {
                 ScopedStageTimer stage(response.engine, "export_image_ensure_full_cache");
                 append_export_trace(project_root_, "export_image:ensure_full_cache:start");
@@ -2758,9 +2798,17 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 ScopedStageTimer stage(response.engine, "export_image_load_profiles");
                 append_export_trace(project_root_, "export_image:load_profiles:start");
                 try {
-                    stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
-                    if (request.print_stock != "none") {
-                        print_stock_profile = load_print_stock_profile(print_stocks_dir_ / (request.print_stock + ".yaml"));
+                    if (request.stock == "none") {
+                        stock_profile = FilmStockProfile{
+                            .stock_id = "none",
+                            .stock_name = "No Film Stock",
+                            .stock_type = StockType::ColorNegative,
+                        };
+                    } else {
+                        stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
+                        if (request.print_stock != "none") {
+                            print_stock_profile = load_print_stock_profile(print_stocks_dir_ / (request.print_stock + ".yaml"));
+                        }
                     }
                 } catch (const std::exception& ex) {
                     response.status = "error";
@@ -2831,8 +2879,11 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 DecodedRawChannelMasks analysis_clipping_masks;
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_prepare_analysis");
-                    constexpr int kAnalysisMaxEdge = 2048;
-                    analysis_rgb = resize_image_to_max_edge(decoded.rgb_linear, kAnalysisMaxEdge);
+                    // Neutral development only meters global scene placement. Match the
+                    // 1024px preview analysis proxy rather than sorting a 4x larger image;
+                    // stock renders retain the 2048px proxy for material/spatial analysis.
+                    const int analysis_max_edge = request.stock == "none" ? 1024 : 2048;
+                    analysis_rgb = resize_image_to_max_edge(decoded.rgb_linear, analysis_max_edge);
                     analysis_luminance = compute_luminance(analysis_rgb);
                     analysis_clipping_masks = resize_clipping_masks(
                         decoded.clipping_masks,
@@ -2850,7 +2901,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 ZoneMasks working_zone_masks;
                 SpatialMasks working_spatial_masks;
                 bool used_cached_analysis = false;
-                {
+                if (request.stock != "none") {
                     ScopedStageTimer cache_lookup(response.engine, "export_image_render_working_analysis_cache_lookup");
                     if (export_analysis_cache_.has_value() && export_analysis_cache_->filename == response.filename) {
                         solver_input = export_analysis_cache_->solver_input;
@@ -2860,37 +2911,60 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                 }
                 if (!used_cached_analysis) {
-                    NativeRenderWorkResult work;
-                    {
-                        ScopedStageTimer substage(response.engine, "export_image_render_working_analysis");
-                        work = render_native_image(
-                            project_root_,
-                            analysis_rgb,
+                    if (request.stock == "none") {
+                        // Neutral development needs only tonal metering and zone masks for
+                        // pre-film placement. Spatial, colour, and camera-bias analysis are
+                        // film-stage inputs, so skipping them avoids needless full-export work.
+                        ScopedStageTimer substage(response.engine, "export_image_render_neutral_analysis");
+                        ImageStateAnalyzer analyzer;
+                        SolverInput neutral_input;
+                        neutral_input.clipping_ratios = clipping_ratio_map;
+                        neutral_input.tonal_distribution = analyzer.analyze_tonal(
                             analysis_luminance,
-                            analysis_clipping_masks,
-                            decoded.metadata,
-                            clipping_ratio_map,
-                            request,
-                            *stock_profile,
-                            print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+                            clipping_ratio_map);
+                        if (decoded.metadata.iso > 0) {
+                            neutral_input.raw_iso = decoded.metadata.iso;
+                        }
+                        working_zone_masks = analyzer.generate_zone_masks(
+                            analysis_luminance,
+                            neutral_input.tonal_distribution.midtone_anchor);
+                        solver_input = std::move(neutral_input);
+                    } else {
+                        NativeRenderWorkResult work;
+                        {
+                            ScopedStageTimer substage(response.engine, "export_image_render_working_analysis");
+                            work = render_native_image(
+                                project_root_,
+                                analysis_rgb,
+                                analysis_luminance,
+                                analysis_clipping_masks,
+                                decoded.metadata,
+                                clipping_ratio_map,
+                                request,
+                                *stock_profile,
+                                print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+                        }
+                        solver_input = work.solver_input;
+                        working_zone_masks = std::move(work.zone_masks);
+                        working_spatial_masks = std::move(work.spatial_masks);
+                        export_analysis_cache_ = CachedExportAnalysis{
+                            .filename = response.filename,
+                            .solver_input = *solver_input,
+                            .zone_masks = working_zone_masks,
+                            .spatial_masks = working_spatial_masks,
+                        };
                     }
-                    solver_input = work.solver_input;
-                    working_zone_masks = std::move(work.zone_masks);
-                    working_spatial_masks = std::move(work.spatial_masks);
-                    export_analysis_cache_ = CachedExportAnalysis{
-                        .filename = response.filename,
-                        .solver_input = *solver_input,
-                        .zone_masks = working_zone_masks,
-                        .spatial_masks = working_spatial_masks,
-                    };
                 }
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_solve_plan");
-                    render_plan = RenderPlanSolver().solve(
-                        *solver_input,
-                        *stock_profile,
-                        build_solver_controls(request),
-                        print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+                    const SolverControls controls = build_solver_controls(request);
+                    render_plan = request.stock == "none"
+                        ? RenderPlanSolver().solve_neutral(*solver_input, controls)
+                        : RenderPlanSolver().solve(
+                            *solver_input,
+                            *stock_profile,
+                            controls,
+                            print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
                 }
                 render_plan->material_effects.grain_seed = compute_stable_grain_seed(
                     response.filename,
@@ -2937,15 +3011,15 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             render_plan->pre_film_normalization);
                     }
                     fullres_prefilm = Image();
-                    if (render_plan->stock_type == "monochrome") {
+                    if (request.stock != "none" && render_plan->stock_type == "monochrome") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_panchromatic");
                         rendered = renderer.apply_panchromatic_conversion(rendered, render_plan->film_response);
                     }
-                    {
+                    if (request.stock != "none") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_tone_response");
                         rendered = renderer.apply_film_tone_response(rendered, render_plan->film_response);
                     }
-                    {
+                    if (request.stock != "none") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_color_response");
                         if (render_plan->stock_type != "monochrome") {
                             rendered = renderer.apply_color_response_and_coupling(
@@ -2957,27 +3031,27 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         }
                     }
                     trace_mem(project_root_, "after_color_response");
-                    if (render_plan->stock_type != "monochrome" &&
+                    if (request.stock != "none" && render_plan->stock_type != "monochrome" &&
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_density");
                         rendered = renderer.apply_subtractive_density(rendered, render_plan->film_response);
                     }
-                    if (render_plan->stock_type != "monochrome" &&
+                    if (request.stock != "none" && render_plan->stock_type != "monochrome" &&
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         // Before compression, so its chroma shoulder self-limits any hue over-boost.
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_hue_saturation");
                         rendered = renderer.apply_hue_saturation(rendered, render_plan->film_response);
                     }
-                    if (render_plan->stock_type != "monochrome" &&
+                    if (request.stock != "none" && render_plan->stock_type != "monochrome" &&
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_compression");
                         rendered = renderer.apply_color_compression(rendered, render_plan->film_response);
                     }
-                    {
+                    if (request.stock != "none") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_acutance");
                         rendered = renderer.apply_acutance_shaping(rendered, render_plan->material_effects);
                     }
-                    {
+                    if (request.stock != "none") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_halation_bloom");
                         rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                             ? renderer.apply_filmic_halation_bloom(
@@ -2993,7 +3067,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                     working_zone_masks = ZoneMasks();
                     trace_mem(project_root_, "after_acutance+halation");
-                    {
+                    if (request.stock != "none") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_grain");
                         rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                             ? renderer.apply_filmic_grain(rendered, working_spatial_masks, render_plan->material_effects)
@@ -3001,7 +3075,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                     working_spatial_masks = SpatialMasks();
                     trace_mem(project_root_, "after_grain");
-                    if (render_plan->print_finish.has_value()) {
+                    if (request.stock != "none" && render_plan->print_finish.has_value()) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_print_finish");
                         rendered = renderer.apply_print_finish(rendered, *render_plan->print_finish);
                     }

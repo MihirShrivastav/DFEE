@@ -28,9 +28,11 @@ Native preview and export requests accept:
 - `film_exposure_ev`: `-3.0` to `+3.0`
 
 `auto_balanced` solves a stock-aware scene placement before applying the film
-response. `as_shot` preserves the captured RAW placement. `film_exposure_ev`
-is added before the emulation stage and is therefore different from the legacy
-advanced `exposure` correction.
+response. With no stock selected, it instead applies the same neutral RAW
+placement without a stock bias, tone curve, grain, or color response.
+`as_shot` preserves the captured RAW placement. `film_exposure_ev` is added
+before the emulation stage and is therefore different from the legacy advanced
+`exposure` correction.
 
 For API compatibility, omitted `exposure_placement` defaults to `as_shot`.
 The Film Lab UI explicitly sends `auto_balanced` by default.

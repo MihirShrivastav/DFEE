@@ -759,4 +759,47 @@ RenderPlan RenderPlanSolver::solve(
     return plan;
 }
 
+RenderPlan RenderPlanSolver::solve_neutral(
+    const SolverInput& input,
+    const SolverControls& controls) const {
+    const auto& tonal = input.tonal_distribution;
+    const auto& color = input.hue_saturation_state;
+    const auto& spatial = input.spatial_frequency;
+
+    RenderPlan plan;
+    plan.stock_type = "neutral";
+    plan.input_diagnosis = {
+        .tonal_state = tonal.tonal_skew,
+        .dynamic_range_stops = tonal.dynamic_range_stops,
+        .shadow_cast = std::fabs(tonal.shadow_depth) < 0.05F ? "normal" : "deep",
+        .midtone_anchor = tonal.midtone_anchor,
+        .highlight_headroom = tonal.highlight_headroom,
+        .neon_risk = color.neon_risk,
+        .specular_candidate_strength = spatial.specular_point_ratio,
+    };
+
+    // RAW values are scene-referred and intentionally decoded with LibRaw auto
+    // bright disabled. Auto Balanced therefore meters a robust scene midtone to
+    // 18% linear. The p99 ceiling protects genuinely high-key scenes from being
+    // raised until their highlight structure clips.
+    float exposure_compensation = 0.0F;
+    if (controls.exposure_intent == "Auto") {
+        exposure_compensation = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
+        constexpr float kAutoHighlightCeiling = 0.82F;
+        const float highlights = std::max(tonal.luma_p99, 1.0e-4F);
+        const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
+        if (exposure_compensation > 0.0F) {
+            exposure_compensation = std::min(exposure_compensation, std::max(headroom_up, 0.0F));
+        }
+        exposure_compensation = clampf(
+            exposure_compensation * std::clamp(controls.adaptation_strength, 0.0F, 1.0F),
+            -2.5F,
+            2.5F);
+    }
+
+    plan.pre_film_normalization.exposure_compensation_stops = exposure_compensation;
+    plan.film_response.stock_type = "neutral";
+    return plan;
+}
+
 }  // namespace dfee

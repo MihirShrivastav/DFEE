@@ -228,6 +228,14 @@ public:
         const FilmStockProfile& stock_profile,
         const SolverControls& controls = {},
         const PrintStockProfile* print_stock = nullptr) const;
+
+    // Develop a RAW without an emulation profile. This deliberately retains only
+    // scene placement: it must not inherit a negative/reversal stock bias, tone
+    // compensation, grain, or colour response just because the user selected
+    // "None" in the Film Lab.
+    [[nodiscard]] RenderPlan solve_neutral(
+        const SolverInput& input,
+        const SolverControls& controls = {}) const;
 };
 
 }  // namespace dfee
