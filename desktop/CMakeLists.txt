@@ -18,6 +18,9 @@ qt_add_executable(DFEE
     src/main.cpp
     src/EngineController.cpp
     src/EngineController.h
+    src/RenderWorker.cpp
+    src/RenderWorker.h
+    src/PreviewImageProvider.h
 )
 
 qt_add_qml_module(DFEE
