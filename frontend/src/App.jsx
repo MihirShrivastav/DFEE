@@ -15,6 +15,32 @@ const STOCK_TYPE_LABEL = {
 const stockBoxart = (opt) =>
   (opt && opt.id && opt.id !== 'none') ? `/boxart/${opt.id}.svg` : null;
 
+// Lazy library thumbnail — only fetches once the row scrolls into view.
+function FileThumb({ path }) {
+  const ref = useRef(null);
+  const [src, setSrc] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) {
+        setSrc(`${API}/api/thumbnail?path=${encodeURIComponent(path)}`);
+        io.disconnect();
+      }
+    }, { rootMargin: '250px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [path]);
+  return (
+    <div className="file-thumb" ref={ref}>
+      {src && !failed
+        ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
+        : <span className="file-thumb-ph" aria-hidden="true" />}
+    </div>
+  );
+}
+
 const API = 'http://localhost:8000';
 const EFFECT_PIPELINE_VERSION = 'filmic_v3';
 
@@ -1326,11 +1352,14 @@ export default function App() {
                               className={`file-item ${selectedFile === f.path ? 'active' : ''}`}
                               onClick={() => selectFile(f.path)}
                             >
-                              <span className="file-name">
-                                {f.filename}
-                                {f.kind === 'rendered' && <span className="file-badge">TIFF</span>}
-                              </span>
-                              <span className="file-size">{f.size_mb} MB</span>
+                              <FileThumb path={f.path} />
+                              <div className="file-meta">
+                                <span className="file-name">
+                                  {f.filename}
+                                  {f.kind === 'rendered' && <span className="file-badge">TIFF</span>}
+                                </span>
+                                <span className="file-size">{f.size_mb} MB</span>
+                              </div>
                             </div>
                           ))
                         )}

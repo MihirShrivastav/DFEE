@@ -184,13 +184,42 @@ input[type="checkbox"] {
 
 .file-item {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 9px 12px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: background 0.12s;
   border: 1px solid transparent;
+}
+.file-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.file-thumb {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-inset);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.file-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.file-thumb-ph {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(180deg, #1a1a1d, #141416);
 }
 
 .file-item:hover {
@@ -304,7 +333,7 @@ input[type="checkbox"] {
   padding: 2px 0 6px;
   background: rgba(0, 0, 0, 0.12);
 }
-.pin-files .file-item { padding-left: 26px; }
+.pin-files .file-item { padding-left: 14px; }
 
 .empty-msg.small {
   padding: 8px 12px 8px 26px;

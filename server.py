@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import logging
 import sys
+import threading
 import time
 from contextlib import asynccontextmanager
 from functools import lru_cache
@@ -197,6 +198,8 @@ def _resolve_input_path(filename: str) -> str:
 # ── Workspace persistence: pinned folders survive restarts ──────────────────
 SETTINGS_DIR = os.path.join(os.path.expanduser("~"), ".dfee")
 SETTINGS_PATH = os.path.join(SETTINGS_DIR, "settings.json")
+THUMBNAIL_DIR = os.path.join(SETTINGS_DIR, "thumbnails")
+THUMBNAIL_EDGE = 256  # decoded preview size; displayed small in the browser rows
 
 # In-memory workspace state, hydrated from disk on import.
 PINNED_FOLDERS: list[str] = []
@@ -497,6 +500,38 @@ def _get_native_raw_preview(filename: str, *, max_edge: int = 1024):
     native_session.decode_raw(filename, draft_mode=True)
     preview = native_session.raw_preview(filename, max_edge=max_edge)
     return preview
+
+
+# ── Library thumbnails ───────────────────────────────────────────────────────
+# Small unprocessed previews for the file browser. Generated off a DEDICATED native
+# session (its own handle) so they never mutate the user's active editing session,
+# serialized by a lock, and disk-cached keyed by path+mtime+size so each file is
+# decoded only once (survives restarts).
+_thumb_lock = threading.Lock()
+
+
+@lru_cache(maxsize=1)
+def _get_thumb_session():
+    return _get_native_bridge_module().create_session(BASE_DIR)
+
+
+def _thumbnail_cache_path(abs_path: str) -> str:
+    try:
+        st = os.stat(abs_path)
+        key = f"{abs_path}|{int(st.st_mtime)}|{st.st_size}"
+    except OSError:
+        key = abs_path
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()
+    return os.path.join(THUMBNAIL_DIR, f"{digest}.jpg")
+
+
+def _generate_thumbnail(abs_path: str) -> bytes:
+    thumb_session = _get_thumb_session()
+    with _thumb_lock:
+        thumb_session.select_file(abs_path)
+        thumb_session.decode_raw(abs_path, draft_mode=True)
+        preview = thumb_session.raw_preview(abs_path, max_edge=THUMBNAIL_EDGE)
+    return preview.jpeg_bytes
 
 
 def _native_request_from_payload(request_cls, payload: dict):
@@ -1359,6 +1394,34 @@ def select_file(req: SelectRequest):
             _elapsed_ms(started_at),
         )
         raise HTTPException(status_code=500, detail=f"Failed to ingest RAW file: {str(e)}")
+
+@app.get("/api/thumbnail")
+def get_thumbnail(path: str):
+    """Small unprocessed preview for a library file (disk-cached)."""
+    abs_path = _resolve_input_path(path)
+    if not abs_path or not os.path.isfile(abs_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    headers = {"Cache-Control": "private, max-age=600"}
+    cache_path = _thumbnail_cache_path(abs_path)
+    if os.path.isfile(cache_path):
+        try:
+            with open(cache_path, "rb") as f:
+                return StreamingResponse(io.BytesIO(f.read()), media_type="image/jpeg", headers=headers)
+        except OSError:
+            pass
+    try:
+        jpeg = _generate_thumbnail(abs_path)
+    except Exception:
+        logger.exception("Thumbnail generation failed for %s", abs_path)
+        raise HTTPException(status_code=422, detail="Could not generate thumbnail")
+    try:
+        os.makedirs(THUMBNAIL_DIR, exist_ok=True)
+        with open(cache_path, "wb") as f:
+            f.write(jpeg)
+    except OSError:
+        logger.warning("Could not cache thumbnail to %s", cache_path)
+    return StreamingResponse(io.BytesIO(jpeg), media_type="image/jpeg", headers=headers)
+
 
 @app.get("/api/raw-image")
 def get_raw_image():
