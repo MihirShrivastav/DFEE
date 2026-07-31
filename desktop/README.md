@@ -27,3 +27,16 @@ Configured via CMake with `-DCMAKE_PREFIX_PATH=<path/to/Qt6>` and the vcpkg tool
 builds `dfee_core` (static) + `DFEE` (Qt executable).
 
 See the design spec: `docs/superpowers/specs/2026-07-31-native-app-foundation.md`.
+
+## Current Film Lab Controls
+
+The desktop app drives `filmic_v3` directly through immutable native request
+snapshots. The primary workflow currently includes Film Recipe, Film Exposure
+(scene placement and stock-relative exposure), Film Tone, Color Character, and
+Material Finish. Color controls automatically disable for monochrome stocks.
+
+Material Finish keeps grain matched to the selected film speed by default.
+Turning that option off resolves the active stock and image through the native
+solver, then seeds editable Strength, Size, and Roughness controls with the
+matching Custom values. Preview and TIFF export use the same snapshot, so an
+export cannot accidentally omit a recent Film Lab adjustment.

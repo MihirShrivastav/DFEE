@@ -5,7 +5,12 @@
 #include <QThread>
 #include <QUrl>
 #include <QImage>
+#include <QHash>
+#include <QVariant>
+#include <QVariantMap>
 #include <memory>
+
+#include "dfee/bridge_types.hpp"
 
 namespace dfee { class EngineSession; }
 class PreviewImageProvider;
@@ -17,6 +22,9 @@ class EngineController : public QObject {
     Q_PROPERTY(QString stock READ stock WRITE setStock NOTIFY stockChanged)
     Q_PROPERTY(double filmExposure READ filmExposure WRITE setFilmExposure NOTIFY paramsChanged)
     Q_PROPERTY(double shadowLift READ shadowLift WRITE setShadowLift NOTIFY paramsChanged)
+    Q_PROPERTY(QVariantMap filmControls READ filmControls NOTIFY filmControlsChanged)
+    Q_PROPERTY(bool grainResolving READ grainResolving NOTIFY grainResolvingChanged)
+    Q_PROPERTY(bool currentStockMonochrome READ currentStockMonochrome NOTIFY stockChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
@@ -37,6 +45,9 @@ public:
     void setFilmExposure(double v);
     double shadowLift() const { return shadowLift_; }
     void setShadowLift(double v);
+    QVariantMap filmControls() const { return filmControls_; }
+    bool grainResolving() const { return grainResolving_; }
+    bool currentStockMonochrome() const;
 
     Q_INVOKABLE QString stockIdAt(int i) const {
         return (i >= 0 && i < stockIds_.size()) ? stockIds_.at(i) : QString("none");
@@ -44,6 +55,8 @@ public:
 
     Q_INVOKABLE void openFile(const QUrl& url);
     Q_INVOKABLE void exportImage();
+    Q_INVOKABLE void setFilmControl(const QString& key, const QVariant& value);
+    Q_INVOKABLE void setAutoGrain(bool enabled);
 
     bool hasImage() const { return hasImage_; }
     int previewRevision() const { return previewRevision_; }
@@ -54,11 +67,15 @@ public:
     Q_INVOKABLE void onRenderFailed(const QString& msg);
     Q_INVOKABLE void onWorkerBusyChanged(bool busy);
     Q_INVOKABLE void onExportDone(const QString& msg);
+    Q_INVOKABLE void onAutoGrainResolved(bool ok, double strength, double size,
+                                         double roughness, const QString& error);
 
 signals:
     void stocksChanged();
     void stockChanged();
     void paramsChanged();
+    void filmControlsChanged();
+    void grainResolvingChanged();
     void hasImageChanged();
     void previewChanged();
     void statusChanged();
@@ -66,10 +83,14 @@ signals:
 private:
     void loadStocks();
     void scheduleRender();
+    [[nodiscard]] dfee::NativePreviewRenderRequest buildPreviewRequest() const;
+    [[nodiscard]] dfee::NativeExportRequest buildExportRequest() const;
+    bool updateNumericFilmControl(const QString& key, double value);
 
     std::unique_ptr<dfee::EngineSession> session_;
     QStringList stockNames_;
     QStringList stockIds_;
+    QHash<QString, bool> monochromeStocks_;
     QString stockId_ = "none";
 
     PreviewImageProvider* provider_ = nullptr;
@@ -84,6 +105,8 @@ private:
     // Film parameters — declared now, wired in Task 4.
     double filmExposure_ = 0.0;
     double shadowLift_ = 0.0;
+    QVariantMap filmControls_;
+    bool grainResolving_ = false;
 
     // Coalescing state (read/written only on GUI thread).
     // dirty_ = a deferred op is pending while the worker is busy.

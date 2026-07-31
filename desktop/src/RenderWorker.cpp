@@ -20,21 +20,18 @@ RenderWorker::RenderWorker(dfee::EngineSession* session,
     , provider_(provider)
 {}
 
-void RenderWorker::openAndRender(const QString& file,
-                                  const QString& stock,
-                                  double filmExposureEv,
-                                  double shadowLift)
+void RenderWorker::openAndRender(const dfee::NativePreviewRenderRequest& request)
 {
     // Notify controller we're busy.
     QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
                               Qt::QueuedConnection, Q_ARG(bool, true));
     try {
         dfee::NativeSelectRequest sel;
-        sel.filename = file.toStdString();
+        sel.filename = request.filename;
         session_->select_file(sel);
 
         dfee::NativeRawDecodeRequest dec;
-        dec.filename  = file.toStdString();
+        dec.filename  = request.filename;
         dec.draft_mode = true;
         session_->decode_raw(dec);
     } catch (const std::exception& e) {
@@ -46,35 +43,21 @@ void RenderWorker::openAndRender(const QString& file,
         return;
     }
 
-    doRender(file, stock, filmExposureEv, shadowLift);
+    doRender(request);
 }
 
-void RenderWorker::render(const QString& file,
-                           const QString& stock,
-                           double filmExposureEv,
-                           double shadowLift)
+void RenderWorker::render(const dfee::NativePreviewRenderRequest& request)
 {
     QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
                               Qt::QueuedConnection, Q_ARG(bool, true));
-    doRender(file, stock, filmExposureEv, shadowLift);
+    doRender(request);
 }
 
-void RenderWorker::exportImage(const QString& file,
-                               const QString& stock,
-                               double filmExposureEv,
-                               double shadowLift)
+void RenderWorker::exportImage(const dfee::NativeExportRequest& request)
 {
-    dfee::NativeExportRequest req;
-    req.filename               = file.toStdString();
-    req.stock                  = stock.toStdString();
-    req.effect_pipeline_version = "filmic_v3";
-    req.film_exposure_ev       = static_cast<float>(filmExposureEv);
-    req.shadow_lift            = static_cast<float>(shadowLift);
-    req.export_format          = "tiff";
-
     QString msg;
     try {
-        const dfee::NativeExportResponse resp = session_->export_image(req);
+        const dfee::NativeExportResponse resp = session_->export_image(request);
         if (resp.ok) {
             msg = "Exported: " + QString::fromStdString(resp.output_path.string());
             if (qEnvironmentVariableIsSet("DFEE_SELFTEST_EXPORT")) {
@@ -91,21 +74,28 @@ void RenderWorker::exportImage(const QString& file,
                               Qt::QueuedConnection, Q_ARG(QString, msg));
 }
 
-void RenderWorker::doRender(const QString& file,
-                             const QString& stock,
-                             double filmExposureEv,
-                             double shadowLift)
+void RenderWorker::resolveAutoGrain(const dfee::NativePreviewRenderRequest& request)
 {
-    dfee::NativePreviewRenderRequest req;
-    req.filename               = file.toStdString();
-    req.stock                  = stock.toStdString();
-    req.effect_pipeline_version = "filmic_v3";
-    req.film_exposure_ev       = static_cast<float>(filmExposureEv);
-    req.shadow_lift            = static_cast<float>(shadowLift);
+    try {
+        const dfee::NativeGrainResolutionResponse response = session_->resolve_auto_grain(request);
+        QMetaObject::invokeMethod(controller_, "onAutoGrainResolved", Qt::QueuedConnection,
+                                  Q_ARG(bool, response.ok),
+                                  Q_ARG(double, static_cast<double>(response.grain_strength)),
+                                  Q_ARG(double, static_cast<double>(response.grain_size)),
+                                  Q_ARG(double, static_cast<double>(response.grain_roughness)),
+                                  Q_ARG(QString, QString::fromStdString(response.error.user_message)));
+    } catch (const std::exception& e) {
+        QMetaObject::invokeMethod(controller_, "onAutoGrainResolved", Qt::QueuedConnection,
+                                  Q_ARG(bool, false), Q_ARG(double, 0.0), Q_ARG(double, 0.0),
+                                  Q_ARG(double, 0.0), Q_ARG(QString, QString::fromUtf8(e.what())));
+    }
+}
 
+void RenderWorker::doRender(const dfee::NativePreviewRenderRequest& request)
+{
     dfee::NativePreviewRenderResponse resp;
     try {
-        resp = session_->render_preview(req);
+        resp = session_->render_preview(request);
     } catch (const std::exception& e) {
         const QString msg = QString("Render failed: %1").arg(e.what());
         QMetaObject::invokeMethod(controller_, "onRenderFailed",

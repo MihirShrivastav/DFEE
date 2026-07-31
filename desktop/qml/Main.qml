@@ -25,6 +25,10 @@ Window {
     readonly property color accent: "#d7b46a"
     readonly property color accentDark: "#735a2b"
     readonly property color danger: "#e28a8a"
+    property bool exposureOpen: true
+    property bool toneOpen: true
+    property bool colorOpen: true
+    property bool materialOpen: true
 
     FileDialog {
         id: openDialog
@@ -116,6 +120,65 @@ Window {
         }
     }
 
+    component FilmSlider: Column {
+        id: sliderRow
+        property string controlKey: ""
+        property string label: ""
+        property string tooltip: ""
+        property real minimum: 0
+        property real maximum: 100
+        property real increment: 1
+        property real neutral: 0
+        property bool bipolar: false
+        property bool decimals: false
+        property bool available: true
+        property bool autoValue: false
+        width: parent.width
+        spacing: 4
+
+        readonly property real currentValue: Number(engine.filmControls[controlKey])
+        readonly property bool dirty: Math.abs(currentValue - neutral) > 0.0001
+
+        Row {
+            width: parent.width
+            InspectorLabel {
+                width: parent.width - valueLabel.width - resetButton.width - 8
+                text: sliderRow.label
+                color: sliderRow.available ? root.textSecondary : root.textMuted
+                elide: Text.ElideRight
+            }
+            Button {
+                id: resetButton
+                visible: sliderRow.available && sliderRow.dirty
+                width: visible ? 38 : 0
+                height: 18
+                text: "Reset"
+                font.pixelSize: 10
+                onClicked: engine.setFilmControl(sliderRow.controlKey, sliderRow.neutral)
+                contentItem: Text { text: parent.text; color: root.accent; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font: parent.font }
+                background: Rectangle { color: "transparent" }
+            }
+            Text {
+                id: valueLabel
+                width: sliderRow.autoValue ? 34 : 42
+                text: sliderRow.autoValue ? "Auto" : ((sliderRow.bipolar && sliderRow.currentValue > 0 ? "+" : "") + (sliderRow.decimals ? sliderRow.currentValue.toFixed(2) : sliderRow.currentValue.toFixed(0)))
+                color: sliderRow.available && sliderRow.dirty ? root.accent : root.textMuted
+                horizontalAlignment: Text.AlignRight
+                font.pixelSize: 12
+            }
+        }
+        InspectorSlider {
+            width: parent.width
+            enabled: sliderRow.available
+            from: sliderRow.minimum
+            to: sliderRow.maximum
+            stepSize: sliderRow.increment
+            value: sliderRow.autoValue ? sliderRow.neutral : sliderRow.currentValue
+            opacity: sliderRow.available ? 1.0 : 0.35
+            onMoved: engine.setFilmControl(sliderRow.controlKey, value)
+        }
+    }
+
     Rectangle {
         id: previewCanvas
         anchors.left: parent.left
@@ -186,10 +249,20 @@ Window {
         border.width: 1
         border.color: root.border
 
-        Column {
+        Flickable {
             anchors.fill: parent
-            anchors.margins: 20
-            spacing: 16
+            clip: true
+            contentWidth: width
+            contentHeight: controls.implicitHeight + 40
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            Column {
+                id: controls
+                x: 20
+                y: 20
+                width: parent.width - 40
+                spacing: 16
 
             Column {
                 width: parent.width
@@ -297,50 +370,108 @@ Window {
                 }
             }
 
+            Rectangle { width: parent.width; height: 1; color: root.border }
+
+            Item {
+                width: parent.width
+                height: 30
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film exposure"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.exposureOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.exposureOpen = !root.exposureOpen }
+            }
             Column {
                 width: parent.width
-                spacing: 5
-
+                visible: root.exposureOpen
+                spacing: 9
+                InspectorLabel { text: "Scene placement" }
                 Row {
                     width: parent.width
-                    InspectorLabel { text: "Film exposure" }
-                    Text {
-                        width: parent.width - x
-                        text: (engine.filmExposure >= 0 ? "+" : "") + engine.filmExposure.toFixed(1) + " EV"
-                        color: root.textMuted
-                        horizontalAlignment: Text.AlignRight
-                        font.pixelSize: 12
+                    spacing: 6
+                    Repeater {
+                        model: [{ label: "Auto balanced", value: "auto_balanced" }, { label: "As shot", value: "as_shot" }]
+                        delegate: Button {
+                            width: (parent.width - 6) / 2
+                            height: 32
+                            text: modelData.label
+                            readonly property bool selected: engine.filmControls.exposure_placement === modelData.value
+                            onClicked: engine.setFilmControl("exposure_placement", modelData.value)
+                            contentItem: Text { text: parent.text; color: parent.selected ? root.bg : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.DemiBold }
+                            background: Rectangle { radius: 4; color: parent.selected ? root.accent : root.panelRaised; border.width: 1; border.color: parent.selected ? root.accent : root.border }
+                        }
                     }
                 }
-                InspectorSlider {
-                    from: -5
-                    to: 5
-                    value: engine.filmExposure
-                    onMoved: engine.filmExposure = value
-                }
+                FilmSlider { controlKey: "film_exposure_ev"; label: "Film exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true }
             }
 
+            Item {
+                width: parent.width
+                height: 30
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film tone"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.toneOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.toneOpen = !root.toneOpen }
+            }
             Column {
                 width: parent.width
-                spacing: 5
+                visible: root.toneOpen
+                spacing: 10
+                CheckBox {
+                    text: "Adaptive scene tone"
+                    checked: engine.filmControls.adaptive
+                    onToggled: engine.setFilmControl("adaptive", checked)
+                    contentItem: Text { text: parent.text; color: root.textSecondary; leftPadding: parent.indicator.width + 8; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
+                }
+                FilmSlider { controlKey: "highlight_rolloff"; label: "Highlight rolloff"; minimum: 0; maximum: 200; neutral: 100 }
+                FilmSlider { controlKey: "film_contrast"; label: "Film contrast"; minimum: 0; maximum: 200; neutral: 100 }
+            }
 
-                Row {
-                    width: parent.width
-                    InspectorLabel { text: "Shadow lift" }
-                    Text {
-                        width: parent.width - x
-                        text: (engine.shadowLift >= 0 ? "+" : "") + engine.shadowLift.toFixed(0)
-                        color: root.textMuted
-                        horizontalAlignment: Text.AlignRight
-                        font.pixelSize: 12
-                    }
+            Item {
+                width: parent.width
+                height: 30
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color character"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.colorOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.colorOpen = !root.colorOpen }
+            }
+            Column {
+                width: parent.width
+                visible: root.colorOpen
+                spacing: 10
+                opacity: engine.currentStockMonochrome ? 0.45 : 1.0
+                Text { visible: engine.currentStockMonochrome; text: "Unavailable for monochrome stocks"; color: root.textMuted; font.pixelSize: 11 }
+                FilmSlider { controlKey: "film_color_density"; label: "Color density"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
+                FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                FilmSlider { controlKey: "palette_range"; label: "Palette range"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                FilmSlider { controlKey: "film_color_compression"; label: "Color compression"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
+            }
+
+            Item {
+                width: parent.width
+                height: 30
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.DemiBold }
+                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.materialOpen ? "-" : "+"; color: root.textMuted; font.pixelSize: 16 }
+                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.materialOpen = !root.materialOpen }
+            }
+            Column {
+                width: parent.width
+                visible: root.materialOpen
+                spacing: 10
+                InspectorLabel { text: "Grain" }
+                CheckBox {
+                    text: engine.grainResolving ? "Resolving stock grain" : "Match grain to film speed"
+                    checked: engine.filmControls.grain_auto
+                    enabled: !engine.grainResolving
+                    onToggled: engine.setAutoGrain(checked)
+                    contentItem: Text { text: parent.text; color: parent.enabled ? root.textSecondary : root.textMuted; leftPadding: parent.indicator.width + 8; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
                 }
-                InspectorSlider {
-                    from: -100
-                    to: 100
-                    value: engine.shadowLift
-                    onMoved: engine.shadowLift = value
-                }
+                FilmSlider { controlKey: "grain_strength"; label: "Strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto }
+                FilmSlider { controlKey: "grain_size"; label: "Size"; minimum: 0.1; maximum: 2; increment: 0.05; decimals: true; neutral: 0.6; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto }
+                FilmSlider { controlKey: "grain_roughness"; label: "Roughness"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 0.5; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto }
+                InspectorLabel { text: "Halation" }
+                FilmSlider { controlKey: "halation_strength"; label: "Strength"; minimum: 0; maximum: 200; neutral: 100 }
+                FilmSlider { controlKey: "halation_threshold"; label: "Threshold"; minimum: 0; maximum: 100; neutral: 50 }
+                InspectorLabel { text: "Bloom" }
+                FilmSlider { controlKey: "bloom"; label: "Amount"; minimum: 0; maximum: 100 }
             }
 
             Text {
@@ -349,6 +480,7 @@ Window {
                 color: root.textMuted
                 font.pixelSize: 11
             }
+        }
         }
     }
 }

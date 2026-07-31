@@ -43,6 +43,11 @@ int main(int argc, char* argv[]) {
     // dimensions, not A's.
     if (qEnvironmentVariableIsSet("DFEE_SELFTEST")) {
         const QString pathA = qEnvironmentVariable("DFEE_SELFTEST");
+        if (qEnvironmentVariableIsSet("DFEE_SELFTEST_FILM_LAB")) {
+            // Exercise the native Film Lab request snapshot with controls from
+            // every primary group, rather than only the legacy exposure knob.
+            controller.setStock("portra_400");
+        }
         controller.openFile(QUrl::fromLocalFile(pathA));
 
         if (qEnvironmentVariableIsSet("DFEE_SELFTEST2")) {
@@ -63,6 +68,25 @@ int main(int argc, char* argv[]) {
             qDebug() << "SELFTEST nudging filmExposure to 2.0 to trigger re-render";
             controller.setFilmExposure(2.0);
         });
+
+        if (qEnvironmentVariableIsSet("DFEE_SELFTEST_FILM_LAB")) {
+            QTimer::singleShot(5000, &controller, [&controller]() {
+                qDebug() << "SELFTEST applying Film Lab snapshot controls";
+                controller.setFilmControl("highlight_rolloff", 125.0);
+                controller.setFilmControl("film_contrast", 115.0);
+                controller.setFilmControl("emulsion_color_density", 20.0);
+                controller.setFilmControl("palette_range", -15.0);
+                controller.setFilmControl("halation_strength", 80.0);
+                controller.setFilmControl("bloom", 12.0);
+            });
+        }
+
+        if (qEnvironmentVariableIsSet("DFEE_SELFTEST_GRAIN")) {
+            QTimer::singleShot(7000, &controller, [&controller]() {
+                qDebug() << "SELFTEST materializing Auto grain";
+                controller.setAutoGrain(false);
+            });
+        }
 
         // Task-5 export self-test: after render completes, trigger an export.
         // When DFEE_SELFTEST_EXPORT is set, we also install a status watcher that

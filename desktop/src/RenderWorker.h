@@ -3,6 +3,8 @@
 #include <QObject>
 #include <QString>
 
+#include "dfee/bridge_types.hpp"
+
 namespace dfee { class EngineSession; }
 class EngineController;
 class PreviewImageProvider;
@@ -19,28 +21,19 @@ public:
 
 public slots:
     // Decode (select + decode_raw) then render.  Called when a new file is opened.
-    void openAndRender(const QString& file,
-                       const QString& stock,
-                       double filmExposureEv,
-                       double shadowLift);
+    void openAndRender(const dfee::NativePreviewRenderRequest& request);
 
     // Re-render only (file already decoded in session cache).
-    void render(const QString& file,
-                const QString& stock,
-                double filmExposureEv,
-                double shadowLift);
+    void render(const dfee::NativePreviewRenderRequest& request);
 
     // Export full-resolution TIFF (writes beside the source file).
-    void exportImage(const QString& file,
-                     const QString& stock,
-                     double filmExposureEv,
-                     double shadowLift);
+    void exportImage(const dfee::NativeExportRequest& request);
+
+    // Resolves Auto grain through the same native solver without rendering.
+    void resolveAutoGrain(const dfee::NativePreviewRenderRequest& request);
 
 private:
-    void doRender(const QString& file,
-                  const QString& stock,
-                  double filmExposureEv,
-                  double shadowLift);
+    void doRender(const dfee::NativePreviewRenderRequest& request);
 
     dfee::EngineSession* session_;       // not owned
     EngineController*    controller_;    // not owned, GUI thread

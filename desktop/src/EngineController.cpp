@@ -9,6 +9,8 @@
 #include <QMetaObject>
 #include <QDebug>
 
+#include <algorithm>
+
 #ifndef DFEE_REPO_ROOT
 #  define DFEE_REPO_ROOT "."
 #endif
@@ -20,6 +22,27 @@ EngineController::EngineController(PreviewImageProvider* provider,
           std::filesystem::path(DFEE_REPO_ROOT)))
     , provider_(provider)
 {
+    filmControls_ = {
+        {"exposure_placement", "auto_balanced"},
+        {"film_exposure_ev", 0.0},
+        {"adaptive", true},
+        {"highlight_rolloff", 100.0},
+        {"film_contrast", 100.0},
+        {"shadow_lift", 0.0},
+        {"film_color_density", 100.0},
+        {"emulsion_color_density", 0.0},
+        {"highlight_color_hold", 0.0},
+        {"shadow_color_retention", 0.0},
+        {"palette_range", 0.0},
+        {"film_color_compression", 100.0},
+        {"grain_auto", true},
+        {"grain_strength", -1.0},
+        {"grain_size", -1.0},
+        {"grain_roughness", -1.0},
+        {"halation_strength", 100.0},
+        {"halation_threshold", 50.0},
+        {"bloom", 0.0},
+    };
     // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
     // so there is no concurrent access.
     loadStocks();
@@ -49,6 +72,8 @@ void EngineController::loadStocks()
     for (const auto& s : profiles.stocks) {
         stockNames_ << QString::fromStdString(s.stock_name);
         stockIds_ << QString::fromStdString(s.stock_id);
+        monochromeStocks_.insert(QString::fromStdString(s.stock_id),
+                                 s.stock_type == "monochrome");
     }
     emit stocksChanged();
 }
@@ -63,18 +88,104 @@ void EngineController::setStock(const QString& id)
 
 void EngineController::setFilmExposure(double v)
 {
-    if (qFuzzyCompare(filmExposure_, v)) return;
-    filmExposure_ = v;
+    if (!updateNumericFilmControl("film_exposure_ev", v)) return;
+    filmExposure_ = filmControls_.value("film_exposure_ev").toDouble();
     emit paramsChanged();
-    scheduleRender();
 }
 
 void EngineController::setShadowLift(double v)
 {
-    if (qFuzzyCompare(shadowLift_, v)) return;
-    shadowLift_ = v;
+    if (!updateNumericFilmControl("shadow_lift", v)) return;
+    shadowLift_ = filmControls_.value("shadow_lift").toDouble();
     emit paramsChanged();
+}
+
+bool EngineController::currentStockMonochrome() const
+{
+    return monochromeStocks_.value(stockId_, false);
+}
+
+bool EngineController::updateNumericFilmControl(const QString& key, double value)
+{
+    struct Range { double minimum; double maximum; };
+    static const QHash<QString, Range> ranges = {
+        {"film_exposure_ev", {-3.0, 3.0}},
+        {"highlight_rolloff", {0.0, 200.0}},
+        {"film_contrast", {0.0, 200.0}},
+        {"shadow_lift", {-100.0, 100.0}},
+        {"film_color_density", {0.0, 200.0}},
+        {"emulsion_color_density", {-100.0, 100.0}},
+        {"highlight_color_hold", {-100.0, 100.0}},
+        {"shadow_color_retention", {-100.0, 100.0}},
+        {"palette_range", {-100.0, 100.0}},
+        {"film_color_compression", {0.0, 200.0}},
+        {"grain_strength", {0.0, 2.0}},
+        {"grain_size", {0.1, 2.0}},
+        {"grain_roughness", {0.0, 1.0}},
+        {"halation_strength", {0.0, 200.0}},
+        {"halation_threshold", {0.0, 100.0}},
+        {"bloom", {0.0, 100.0}},
+    };
+    const auto it = ranges.constFind(key);
+    if (it == ranges.cend()) {
+        qWarning() << "DFEE: unsupported film control" << key;
+        return false;
+    }
+    const double bounded = std::clamp(value, it->minimum, it->maximum);
+    if (qFuzzyCompare(filmControls_.value(key).toDouble() + 1.0, bounded + 1.0)) {
+        return false;
+    }
+    filmControls_.insert(key, bounded);
+    emit filmControlsChanged();
     scheduleRender();
+    return true;
+}
+
+void EngineController::setFilmControl(const QString& key, const QVariant& value)
+{
+    if (key == "adaptive" || key == "grain_auto") {
+        const bool enabled = value.toBool();
+        if (filmControls_.value(key).toBool() == enabled) return;
+        filmControls_.insert(key, enabled);
+        emit filmControlsChanged();
+        scheduleRender();
+        return;
+    }
+    if (key == "exposure_placement") {
+        const QString placement = value.toString() == "as_shot" ? "as_shot" : "auto_balanced";
+        if (filmControls_.value(key).toString() == placement) return;
+        filmControls_.insert(key, placement);
+        emit filmControlsChanged();
+        scheduleRender();
+        return;
+    }
+    updateNumericFilmControl(key, value.toDouble());
+}
+
+void EngineController::setAutoGrain(bool enabled)
+{
+    const bool isAuto = filmControls_.value("grain_auto").toBool();
+    if (enabled == isAuto || grainResolving_) return;
+    if (enabled) {
+        filmControls_.insert("grain_auto", true);
+        filmControls_.insert("grain_strength", -1.0);
+        filmControls_.insert("grain_size", -1.0);
+        filmControls_.insert("grain_roughness", -1.0);
+        emit filmControlsChanged();
+        scheduleRender();
+        return;
+    }
+    if (currentFile_.isEmpty() || stockId_ == "none") {
+        status_ = "Select an image and film stock before customizing grain.";
+        emit statusChanged();
+        return;
+    }
+    grainResolving_ = true;
+    emit grainResolvingChanged();
+    const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
+    QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
+        worker->resolveAutoGrain(request);
+    }, Qt::QueuedConnection);
 }
 
 void EngineController::openFile(const QUrl& url)
@@ -98,12 +209,10 @@ void EngineController::openFile(const QUrl& url)
 
     currentFile_ = file;
     workerBusy_  = true;
-    QMetaObject::invokeMethod(worker_, "openAndRender",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, currentFile_),
-                              Q_ARG(QString, stockId_),
-                              Q_ARG(double, filmExposure_),
-                              Q_ARG(double, shadowLift_));
+    const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
+    QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
+        worker->openAndRender(request);
+    }, Qt::QueuedConnection);
 }
 
 void EngineController::scheduleRender()
@@ -116,12 +225,48 @@ void EngineController::scheduleRender()
     }
 
     workerBusy_ = true;
-    QMetaObject::invokeMethod(worker_, "render",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, currentFile_),
-                              Q_ARG(QString, stockId_),
-                              Q_ARG(double, filmExposure_),
-                              Q_ARG(double, shadowLift_));
+    const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
+    QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
+        worker->render(request);
+    }, Qt::QueuedConnection);
+}
+
+dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
+{
+    dfee::NativePreviewRenderRequest request;
+    request.filename = currentFile_.toStdString();
+    request.stock = stockId_.toStdString();
+    request.effect_pipeline_version = "filmic_v3";
+    request.exposure_placement = filmControls_.value("exposure_placement").toString().toStdString();
+    request.film_exposure_ev = static_cast<float>(filmControls_.value("film_exposure_ev").toDouble());
+    request.adaptive = filmControls_.value("adaptive").toBool();
+    request.highlight_rolloff = static_cast<float>(filmControls_.value("highlight_rolloff").toDouble());
+    request.film_contrast = static_cast<float>(filmControls_.value("film_contrast").toDouble());
+    request.shadow_lift = static_cast<float>(filmControls_.value("shadow_lift").toDouble());
+    request.film_color_density = static_cast<float>(filmControls_.value("film_color_density").toDouble());
+    request.emulsion_color_density = static_cast<float>(filmControls_.value("emulsion_color_density").toDouble());
+    request.highlight_color_hold = static_cast<float>(filmControls_.value("highlight_color_hold").toDouble());
+    request.shadow_color_retention = static_cast<float>(filmControls_.value("shadow_color_retention").toDouble());
+    request.palette_range = static_cast<float>(filmControls_.value("palette_range").toDouble());
+    request.film_color_compression = static_cast<float>(filmControls_.value("film_color_compression").toDouble());
+    const bool grainAuto = filmControls_.value("grain_auto").toBool();
+    request.grain = grainAuto ? "Auto" : "Custom";
+    request.grain_strength = static_cast<float>(filmControls_.value("grain_strength").toDouble());
+    request.grain_size = static_cast<float>(filmControls_.value("grain_size").toDouble());
+    request.grain_roughness = static_cast<float>(filmControls_.value("grain_roughness").toDouble());
+    request.halation = "Auto";
+    request.halation_strength = static_cast<float>(filmControls_.value("halation_strength").toDouble());
+    request.halation_threshold = static_cast<float>(filmControls_.value("halation_threshold").toDouble());
+    request.bloom = static_cast<float>(filmControls_.value("bloom").toDouble());
+    return request;
+}
+
+dfee::NativeExportRequest EngineController::buildExportRequest() const
+{
+    dfee::NativeExportRequest request;
+    static_cast<dfee::NativePreviewRenderRequest&>(request) = buildPreviewRequest();
+    request.export_format = "tiff";
+    return request;
 }
 
 // --- Callbacks marshalled back to the GUI thread ---
@@ -141,12 +286,10 @@ void EngineController::exportImage()
     if (currentFile_.isEmpty()) return;
     status_ = "Exporting…";
     emit statusChanged();
-    QMetaObject::invokeMethod(worker_, "exportImage",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, currentFile_),
-                              Q_ARG(QString, stockId_),
-                              Q_ARG(double, filmExposure_),
-                              Q_ARG(double, shadowLift_));
+    const dfee::NativeExportRequest request = buildExportRequest();
+    QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
+        worker->exportImage(request);
+    }, Qt::QueuedConnection);
 }
 
 void EngineController::onExportDone(const QString& msg)
@@ -154,6 +297,30 @@ void EngineController::onExportDone(const QString& msg)
     status_ = msg;
     emit statusChanged();
     qDebug() << "DFEE export:" << msg;
+}
+
+void EngineController::onAutoGrainResolved(bool ok, double strength, double size,
+                                           double roughness, const QString& error)
+{
+    grainResolving_ = false;
+    emit grainResolvingChanged();
+    if (!ok) {
+        status_ = "Could not resolve Auto grain: " + error;
+        emit statusChanged();
+        if (qEnvironmentVariableIsSet("DFEE_SELFTEST_GRAIN")) {
+            qDebug() << "SELFTEST Auto grain resolution failed:" << error;
+        }
+        return;
+    }
+    filmControls_.insert("grain_auto", false);
+    filmControls_.insert("grain_strength", strength);
+    filmControls_.insert("grain_size", size);
+    filmControls_.insert("grain_roughness", roughness);
+    emit filmControlsChanged();
+    if (qEnvironmentVariableIsSet("DFEE_SELFTEST_GRAIN")) {
+        qDebug() << "SELFTEST Auto grain materialized" << strength << size << roughness;
+    }
+    scheduleRender();
 }
 
 void EngineController::onRenderFailed(const QString& msg)
@@ -178,12 +345,10 @@ void EngineController::onWorkerBusyChanged(bool busy)
             pendingFile_.clear();
 
             workerBusy_ = true;
-            QMetaObject::invokeMethod(worker_, "openAndRender",
-                                      Qt::QueuedConnection,
-                                      Q_ARG(QString, currentFile_),
-                                      Q_ARG(QString, stockId_),
-                                      Q_ARG(double, filmExposure_),
-                                      Q_ARG(double, shadowLift_));
+            const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
+            QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
+                worker->openAndRender(request);
+            }, Qt::QueuedConnection);
         } else {
             // Just a parameter change (stock / exposure / shadow lift); the
             // file is already decoded — a render-only kick is correct.
