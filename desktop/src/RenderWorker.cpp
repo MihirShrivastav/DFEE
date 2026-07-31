@@ -89,12 +89,15 @@ void RenderWorker::doRender(const QString& file,
                          static_cast<int>(resp.jpeg_bytes.size()), "JPG");
     }
 
-    qDebug() << "SELFTEST preview" << img.width() << img.height();
+    if (qEnvironmentVariableIsSet("DFEE_SELFTEST") ||
+        qEnvironmentVariableIsSet("DFEE_SELFTEST2")) {
+        qDebug() << "SELFTEST preview" << img.width() << img.height();
+    }
 
     if (provider_) provider_->setImage(img);
 
     QMetaObject::invokeMethod(controller_, "onPreviewReady",
-                              Qt::QueuedConnection, Q_ARG(QImage, img));
+                              Qt::QueuedConnection);
     QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
                               Qt::QueuedConnection, Q_ARG(bool, false));
 }

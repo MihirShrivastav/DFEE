@@ -13,17 +13,19 @@
 #  define DFEE_REPO_ROOT "."
 #endif
 
-EngineController::EngineController(QObject* parent)
+EngineController::EngineController(PreviewImageProvider* provider,
+                                   QObject* parent)
     : QObject(parent)
     , session_(std::make_unique<dfee::EngineSession>(
           std::filesystem::path(DFEE_REPO_ROOT)))
+    , provider_(provider)
 {
     // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
     // so there is no concurrent access.
     loadStocks();
 
-    // Create the worker and move it to its thread.
-    // provider_ may still be null here; it will be set before any openFile() call.
+    // provider_ is already set (constructor arg); worker receives it before the
+    // thread starts, so provider_ is never written after workerThread_.start().
     worker_ = new RenderWorker(session_.get(), this, provider_);
     worker_->moveToThread(&workerThread_);
     workerThread_.start();
@@ -51,12 +53,6 @@ void EngineController::loadStocks()
     emit stocksChanged();
 }
 
-void EngineController::setProvider(PreviewImageProvider* p)
-{
-    provider_ = p;
-    if (worker_) worker_->setProvider(p);
-}
-
 void EngineController::setStock(const QString& id)
 {
     if (stockId_ == id) return;
@@ -70,16 +66,25 @@ void EngineController::setStock(const QString& id)
 
 void EngineController::openFile(const QUrl& url)
 {
-    currentFile_ = url.toLocalFile();
-    status_ = "Loading " + QFileInfo(currentFile_).fileName();
+    const QString file = url.toLocalFile();
+    status_ = "Loading " + QFileInfo(file).fileName();
     emit statusChanged();
 
     if (workerBusy_) {
-        dirty_ = true;
+        // Latch the latest file for the pending open; mark it as an open (not
+        // a plain re-render) so onWorkerBusyChanged posts openAndRender, which
+        // runs select_file + decode_raw before rendering.
+        pendingFile_  = file;
+        dirty_        = true;
+        dirtyIsOpen_  = true;
+        // Do NOT update currentFile_ yet — the in-flight operation still owns
+        // the session's decoded buffer.  currentFile_ is updated when the
+        // deferred open actually fires.
         return;
     }
 
-    workerBusy_ = true;
+    currentFile_ = file;
+    workerBusy_  = true;
     QMetaObject::invokeMethod(worker_, "openAndRender",
                               Qt::QueuedConnection,
                               Q_ARG(QString, currentFile_),
@@ -108,7 +113,7 @@ void EngineController::scheduleRender()
 
 // --- Callbacks marshalled back to the GUI thread ---
 
-void EngineController::onPreviewReady(const QImage& /*img*/)
+void EngineController::onPreviewReady()
 {
     hasImage_ = true;
     emit hasImageChanged();
@@ -130,6 +135,26 @@ void EngineController::onWorkerBusyChanged(bool busy)
     workerBusy_ = busy;
     if (!busy && dirty_) {
         dirty_ = false;
-        scheduleRender();
+
+        if (dirtyIsOpen_) {
+            // A new file was opened while the worker was busy.  We must run
+            // select_file + decode_raw for the new file before rendering — a
+            // plain render() would use the OLD decoded buffer.
+            dirtyIsOpen_  = false;
+            currentFile_  = pendingFile_;
+            pendingFile_.clear();
+
+            workerBusy_ = true;
+            QMetaObject::invokeMethod(worker_, "openAndRender",
+                                      Qt::QueuedConnection,
+                                      Q_ARG(QString, currentFile_),
+                                      Q_ARG(QString, stockId_),
+                                      Q_ARG(double, filmExposure_),
+                                      Q_ARG(double, shadowLift_));
+        } else {
+            // Just a parameter change (stock / exposure / shadow lift); the
+            // file is already decoded — a render-only kick is correct.
+            scheduleRender();
+        }
     }
 }

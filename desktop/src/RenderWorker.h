@@ -17,8 +17,6 @@ public:
                           PreviewImageProvider* provider,
                           QObject* parent = nullptr);
 
-    void setProvider(PreviewImageProvider* p) { provider_ = p; }
-
 public slots:
     // Decode (select + decode_raw) then render.  Called when a new file is opened.
     void openAndRender(const QString& file,

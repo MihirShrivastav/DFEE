@@ -20,7 +20,11 @@ class EngineController : public QObject {
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
 
 public:
-    explicit EngineController(QObject* parent = nullptr);
+    // provider must be non-null; it must outlive EngineController (the
+    // QQmlApplicationEngine that takes ownership is destroyed after main()
+    // returns, which is after the controller's dtor).
+    explicit EngineController(PreviewImageProvider* provider,
+                              QObject* parent = nullptr);
     ~EngineController() override;
 
     QStringList stockNames() const { return stockNames_; }
@@ -33,15 +37,12 @@ public:
 
     Q_INVOKABLE void openFile(const QUrl& url);
 
-    void setProvider(PreviewImageProvider* p);
-
-
     bool hasImage() const { return hasImage_; }
     int previewRevision() const { return previewRevision_; }
     QString status() const { return status_; }
 
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
-    Q_INVOKABLE void onPreviewReady(const QImage& img);
+    Q_INVOKABLE void onPreviewReady();
     Q_INVOKABLE void onRenderFailed(const QString& msg);
     Q_INVOKABLE void onWorkerBusyChanged(bool busy);
 
@@ -75,6 +76,11 @@ private:
     double shadowLift_ = 0.0;
 
     // Coalescing state (read/written only on GUI thread).
+    // dirty_ = a deferred op is pending while the worker is busy.
+    // dirtyIsOpen_ = the pending op is an openAndRender (not just a re-render).
+    // pendingFile_ = the file for the pending open (latches the latest openFile call).
     bool workerBusy_ = false;
     bool dirty_ = false;
+    bool dirtyIsOpen_ = false;
+    QString pendingFile_;
 };
