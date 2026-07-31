@@ -34,6 +34,11 @@ placement without a stock bias, tone curve, grain, or color response.
 before the emulation stage and is therefore different from the legacy advanced
 `exposure` correction.
 
+For RAWs, upward Auto Balanced placement is guarded by the broad highlight
+population rather than isolated bright pixels. Small speculars, dappled light,
+and limited sky areas are handled by the film shoulder instead of causing the
+whole scene to be metered darker.
+
 For API compatibility, omitted `exposure_placement` defaults to `as_shot`.
 The Film Lab UI explicitly sends `auto_balanced` by default.
 

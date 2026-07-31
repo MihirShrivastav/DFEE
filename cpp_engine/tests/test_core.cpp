@@ -287,7 +287,7 @@ void test_neutral_scene_placement() {
     dfee::SolverInput input;
     input.tonal_distribution.tonal_skew = "low_key";
     input.tonal_distribution.midtone_anchor = 0.09F;
-    input.tonal_distribution.luma_p99 = 0.36F;
+    input.tonal_distribution.luma_p95 = 0.36F;
     input.tonal_distribution.highlight_headroom = 0.64F;
 
     dfee::SolverControls auto_controls;
@@ -306,14 +306,26 @@ void test_neutral_scene_placement() {
     const auto as_shot_plan = solver.solve_neutral(input, auto_controls);
     require_close(as_shot_plan.pre_film_normalization.exposure_compensation_stops, 0.0F, 1.0e-6F);
 
-    // A bright p99 limits the automatic lift before it pushes useful highlight
+    // A bright broad-highlight p95 limits the automatic lift before it pushes useful highlight
     // detail above the neutral display ceiling.
-    input.tonal_distribution.luma_p99 = 0.70F;
+    input.tonal_distribution.luma_p95 = 0.70F;
     const auto protected_plan = solver.solve_neutral(input, dfee::SolverControls{
         .adaptation_strength = 1.0F,
         .exposure_intent = "Auto",
     });
     assert(protected_plan.pre_film_normalization.exposure_compensation_stops < 0.25F);
+
+    // Sparse speculars must not meter a normally exposed scene as high-key.
+    // The solver protects diffuse highlight mass (p95); p99 is left for the
+    // tone shoulder to manage.
+    input.tonal_distribution.midtone_anchor = 0.055F;
+    input.tonal_distribution.luma_p95 = 0.181F;
+    input.tonal_distribution.luma_p99 = 0.519F;
+    const auto sparse_specular_plan = solver.solve_neutral(input, dfee::SolverControls{
+        .adaptation_strength = 1.0F,
+        .exposure_intent = "Auto",
+    });
+    assert(sparse_specular_plan.pre_film_normalization.exposure_compensation_stops > 1.5F);
 }
 
 void test_render_plan_solver_rich_grain_profile_fields() {

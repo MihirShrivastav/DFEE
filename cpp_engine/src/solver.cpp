@@ -328,12 +328,14 @@ RenderPlan RenderPlanSolver::solve(
 
     // filmic_v3 highlight-priority metering: a scene-referred auto exposure that only
     // targets the midtone anchor will brighten a high-key scene until the highlights
-    // clip. Cap the UPWARD push so the brightest tones (p99) stay under a soft ceiling,
-    // leaving the tone shoulder + highlight rolloff room to render them with detail.
+    // clip. Cap the UPWARD push from the broad-highlight population (p95), leaving
+    // sparse speculars and dappled light to the film shoulder + highlight rolloff.
+    // p99 made ordinary contrasty scenes read as high-key and underexposed their
+    // important midtones merely because of a small amount of bright foliage or sky.
     // Gated to the subtractive pipeline so parity_v1/filmic_v2 stay byte-identical.
     if (controls.subtractive_pipeline && exposure_comp > 0.0F) {
         constexpr float kAutoHighlightCeiling = 0.82F;
-        const float highlights = std::max(tonal.luma_p99, 1.0e-4F);
+        const float highlights = std::max(tonal.luma_p95, 1.0e-4F);
         const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
         exposure_comp = std::min(exposure_comp, std::max(headroom_up, 0.0F));
     }
@@ -780,13 +782,13 @@ RenderPlan RenderPlanSolver::solve_neutral(
 
     // RAW values are scene-referred and intentionally decoded with LibRaw auto
     // bright disabled. Auto Balanced therefore meters a robust scene midtone to
-    // 18% linear. The p99 ceiling protects genuinely high-key scenes from being
-    // raised until their highlight structure clips.
+    // 18% linear. The broad-highlight p95 ceiling protects genuinely high-key
+    // scenes without treating sparse speculars as the scene's exposure key.
     float exposure_compensation = 0.0F;
     if (controls.exposure_intent == "Auto") {
         exposure_compensation = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
         constexpr float kAutoHighlightCeiling = 0.82F;
-        const float highlights = std::max(tonal.luma_p99, 1.0e-4F);
+        const float highlights = std::max(tonal.luma_p95, 1.0e-4F);
         const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
         if (exposure_compensation > 0.0F) {
             exposure_compensation = std::min(exposure_compensation, std::max(headroom_up, 0.0F));
