@@ -8,6 +8,8 @@
 #include <QFileInfo>
 #include <QMetaObject>
 #include <QDebug>
+#include <QTimer>
+#include <QCoreApplication>
 
 #include <algorithm>
 
@@ -347,9 +349,16 @@ void EngineController::onExportDone(const QString& msg)
 {
     exporting_ = false;
     emit exportingChanged();
-    status_ = msg;
+    const bool savedToLightroom = lightroomRoundTrip_ && msg.startsWith("Exported:");
+    status_ = savedToLightroom ? "Saved. Returning to Lightroom..." : msg;
     emit statusChanged();
     qDebug() << "DFEE export:" << msg;
+    if (savedToLightroom) {
+        // Lightroom owns the external-editor session and refreshes its TIFF
+        // after the editor process returns. Close only after the atomic
+        // replacement has completed; failed exports intentionally stay open.
+        QTimer::singleShot(350, this, []() { QCoreApplication::quit(); });
+    }
 }
 
 void EngineController::onAutoGrainResolved(bool ok, double strength, double size,

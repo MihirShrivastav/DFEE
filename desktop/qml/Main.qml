@@ -301,7 +301,7 @@ Window {
             }
 
             SecondaryButton {
-                text: engine.exporting ? (engine.lightroomRoundTrip ? "Saving back..." : "Exporting...") : (engine.lightroomRoundTrip ? "Save Back to Lightroom" : "Export " + root.exportFormatLabel(engine.exportFormat))
+                text: engine.exporting ? (engine.lightroomRoundTrip ? "Saving back..." : "Exporting...") : (engine.lightroomRoundTrip ? "Save & Return to Lightroom" : "Export " + root.exportFormatLabel(engine.exportFormat))
                 enabled: engine.hasImage && !engine.exporting
                 onClicked: engine.exportImage()
             }

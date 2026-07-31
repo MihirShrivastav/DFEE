@@ -26,13 +26,15 @@ integration. Both forms accept only an existing absolute `.tif` or `.tiff` path.
 
 1. enters `lightroomRoundTrip` mode and locks image selection and export format;
 2. decodes the working TIFF on the serial engine worker;
-3. labels its primary command **Save Back to Lightroom**;
+3. labels its primary command **Save & Return to Lightroom**;
 4. renders a 16-bit TIFF to a temporary sibling; and
 5. atomically replaces the working TIFF only after encoding and metadata work succeed.
 
-If encoding, metadata patching, or replacement fails, the original Lightroom working
-file remains intact. A photographer can close DFEE without saving; Lightroom receives
-no partial derivative.
+After a successful save, DFEE exits so Lightroom can complete its external-editor
+session and refresh the derivative. If encoding, metadata patching, or replacement
+fails, the original Lightroom working file remains intact and DFEE remains open. A
+photographer can also close DFEE without saving; Lightroom receives no partial
+derivative.
 
 ## Lightroom Setup (Phase A)
 
@@ -49,7 +51,7 @@ Additional External Editor preset:
 | Resolution | Photographer's normal print setting |
 
 Then select a RAW/DNG, use **Photo > Edit In > DFEE**, edit normally, and press
-**Save Back to Lightroom**. Lightroom owns the resulting TIFF and its stack placement.
+**Save & Return to Lightroom**. Lightroom owns the resulting TIFF and its stack placement.
 
 ## Color-Space Scope
 

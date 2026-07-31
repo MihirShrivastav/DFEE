@@ -52,8 +52,9 @@ Run this checklist from a Release build of `DFEE.exe`. The app must use the nati
 2. Use **Photo > Edit In > DFEE** on a RAW/DNG. Confirm DFEE opens with the subtitle
    `Lightroom round-trip TIFF`, image opening is unavailable, and export format options
    are hidden.
-3. Apply a stock and one Film Lab control, then select **Save Back to Lightroom**.
+3. Apply a stock and one Film Lab control, then select **Save & Return to Lightroom**.
 4. Confirm the status reports the original handed-off TIFF path, no `*_dfee.*` sibling
-   is created, and Lightroom shows the edited TIFF beside/stacked with the source.
+   is created, DFEE closes automatically, and Lightroom shows the edited TIFF
+   beside/stacked with the source.
 5. Repeat with DFEE closed without saving. Confirm Lightroom's working TIFF remains
    unchanged and readable.

@@ -64,9 +64,10 @@ TIFF as a standard positional argument:
 DFEE.exe "C:\\path\\to\\working-file.tif"
 ```
 
-In this mode, the regular export controls are intentionally replaced with **Save Back
-to Lightroom**. DFEE encodes a temporary sibling and atomically replaces only the
-working TIFF on success, never the original RAW/DNG.
+In this mode, the regular export controls are intentionally replaced with **Save &
+Return to Lightroom**. DFEE encodes a temporary sibling and atomically replaces only
+the working TIFF on success, never the original RAW/DNG, then closes so Lightroom can
+refresh its external-edit session. Failed exports keep DFEE open.
 
 Phase A requires Lightroom to create an **uncompressed 16-bit sRGB TIFF**. The engine
 does not yet retain embedded ICC profiles, so ProPhoto RGB, Adobe RGB, HDR, and custom
