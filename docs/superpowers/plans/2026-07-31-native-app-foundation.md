@@ -19,6 +19,7 @@
 - Pipeline version: always pass **`effect_pipeline_version = "filmic_v3"`**.
 - Everything lives under **`desktop/`**, separate from `cpp_engine/`, `frontend/`, and the Python code.
 - Engine request/response types live in `cpp_engine/include/dfee/bridge_types.hpp`; the session API in `cpp_engine/include/dfee/session.hpp`.
+- **Verified toolchain (this machine):** Qt = `C:/Qt/6.8.3/msvc2022_64`; vcpkg = `D:/vcpkg`; generator = **Visual Studio 17 2022** (`-A x64`). Because it's a multi-config generator: build with `--config Release`, the exe is at `desktop/out/build/Release/DFEE.exe`, and re-run `windeployqt --qmldir desktop/qml <exe>` after adding/removing QML files. Configure once (Task 1); later tasks just re-run `cmake --build desktop/out/build --config Release`.
 
 ---
 
@@ -123,32 +124,45 @@ Window {
 }
 ```
 
+- [ ] **Step 3b: Write `desktop/vcpkg.json`** (so the desktop build resolves the engine's deps; vcpkg reuses the already-built binaries from cache, so this is fast, not a full rebuild)
+
+```json
+{
+  "name": "dfee-desktop",
+  "version-string": "0.1.0",
+  "dependencies": ["libraw", "opencv", "yaml-cpp", "nlohmann-json", "tiff", "libpng", "libjpeg-turbo"]
+}
+```
+
 - [ ] **Step 4: Configure the build**
 
-Run (from repo root; substitute your paths):
+This machine (verified): Qt at `C:/Qt/6.8.3/msvc2022_64`, vcpkg at `D:/vcpkg`, generator **Visual Studio 17 2022** (matches the engine's `windows-msvc-vcpkg` preset). Run from the repo root:
 ```
-cmake -S desktop -B desktop/out/build -G Ninja ^
-  -DCMAKE_BUILD_TYPE=Release ^
-  -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
+cmake -S desktop -B desktop/out/build -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_TOOLCHAIN_FILE=D:/vcpkg/scripts/buildsystems/vcpkg.cmake ^
   -DVCPKG_TARGET_TRIPLET=x64-windows ^
-  -DCMAKE_PREFIX_PATH=C:/Qt/6.8.1/msvc2022_64
+  -DCMAKE_PREFIX_PATH=C:/Qt/6.8.3/msvc2022_64
 ```
-Expected: configures without error; prints `DFEE: OpenCV enabled`, `DFEE: LibRaw enabled`, `DFEE: yaml-cpp enabled`, and finds Qt6.
+Expected: configures without error; prints `DFEE: OpenCV enabled`, `DFEE: LibRaw enabled`, `DFEE: yaml-cpp enabled`, and finds Qt6 6.8.3.
 
 - [ ] **Step 5: Build**
 
-Run: `cmake --build desktop/out/build`
-Expected: builds `dfee_core` then links `DFEE.exe` with no errors.
+Run: `cmake --build desktop/out/build --config Release`
+Expected: builds `dfee_core` then links `DFEE.exe` (under `desktop/out/build/Release/`) with no errors.
 
 - [ ] **Step 6: Run and observe**
 
-Run: `desktop/out/build/DFEE.exe` (Qt deploys its DLLs in-tree for a dev run; if it complains about a missing Qt DLL, run `C:/Qt/6.8.1/msvc2022_64/bin/windeployqt.exe desktop/out/build/DFEE.exe` once, then rerun).
+Deploy Qt DLLs next to the exe once, then run:
+```
+C:/Qt/6.8.3/msvc2022_64/bin/windeployqt.exe --qmldir desktop/qml desktop/out/build/Release/DFEE.exe
+desktop/out/build/Release/DFEE.exe
+```
 Expected: a dark 1280×800 window titled "DFEE" with centered text "DFEE — native".
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add desktop/CMakeLists.txt desktop/src/main.cpp desktop/qml/Main.qml
+git add desktop/CMakeLists.txt desktop/src/main.cpp desktop/qml/Main.qml desktop/vcpkg.json
 git commit -m "desktop: Qt Quick window linking dfee_core (Phase 1 Task 1)"
 ```
 
