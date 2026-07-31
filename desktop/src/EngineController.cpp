@@ -33,8 +33,6 @@ EngineController::EngineController(PreviewImageProvider* provider,
         {"emulsion_color_density", 0.0},
         {"highlight_color_hold", 0.0},
         {"shadow_color_retention", 0.0},
-        {"palette_range", 0.0},
-        {"film_color_compression", 100.0},
         {"grain_auto", true},
         {"grain_strength", -1.0},
         {"grain_size", -1.0},
@@ -117,8 +115,6 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
         {"emulsion_color_density", {-100.0, 100.0}},
         {"highlight_color_hold", {-100.0, 100.0}},
         {"shadow_color_retention", {-100.0, 100.0}},
-        {"palette_range", {-100.0, 100.0}},
-        {"film_color_compression", {0.0, 200.0}},
         {"grain_strength", {0.0, 2.0}},
         {"grain_size", {0.1, 2.0}},
         {"grain_roughness", {0.0, 1.0}},
@@ -247,8 +243,6 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
     request.emulsion_color_density = static_cast<float>(filmControls_.value("emulsion_color_density").toDouble());
     request.highlight_color_hold = static_cast<float>(filmControls_.value("highlight_color_hold").toDouble());
     request.shadow_color_retention = static_cast<float>(filmControls_.value("shadow_color_retention").toDouble());
-    request.palette_range = static_cast<float>(filmControls_.value("palette_range").toDouble());
-    request.film_color_compression = static_cast<float>(filmControls_.value("film_color_compression").toDouble());
     const bool grainAuto = filmControls_.value("grain_auto").toBool();
     request.grain = grainAuto ? "Auto" : "Custom";
     request.grain_strength = static_cast<float>(filmControls_.value("grain_strength").toDouble());

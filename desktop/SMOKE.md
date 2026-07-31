@@ -17,8 +17,8 @@ Run this checklist from a Release build of `DFEE.exe`. The app must use the nati
 4. Change Scene placement, Film exposure, Film contrast, and a Color Character control.
    Confirm the final slider positions render without a backlog of obsolete preview frames.
 5. For a colour stock, adjust Color density, Color boost, Highlight saturation,
-   Shadow saturation, Palette range, and Color compression. Open a monochrome stock
-   and confirm those controls are visibly unavailable.
+   and Shadow saturation. Open a monochrome stock and confirm those controls are
+   visibly unavailable.
 6. In Material Finish, turn off **Match grain to film speed**. Confirm the solver
    supplies editable Strength, Size, and Roughness values rather than generic defaults.
 7. Adjust Halation Strength, Halation Threshold, and Bloom Amount. Confirm only the

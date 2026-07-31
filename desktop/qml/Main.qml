@@ -441,8 +441,6 @@ Window {
                 FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
                 FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
                 FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
-                FilmSlider { controlKey: "palette_range"; label: "Palette range"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
-                FilmSlider { controlKey: "film_color_compression"; label: "Color compression"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
             }
 
             Item {
