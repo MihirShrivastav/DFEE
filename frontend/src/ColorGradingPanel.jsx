@@ -2,7 +2,7 @@ import { useRef, useCallback } from 'react';
 
 // A draggable colour wheel: angle = hue (0=red/right, 90=yellow/up, matching the OKLab
 // a/b grading convention), radius = saturation. Double-click to reset to neutral.
-function ColorWheel({ label, hue, sat, onChange, size = 108 }) {
+function ColorWheel({ label, hue, sat, onChange, size = 96 }) {
   const ref = useRef(null);
 
   const pick = useCallback((e) => {
@@ -31,7 +31,7 @@ function ColorWheel({ label, hue, sat, onChange, size = 108 }) {
       <div
         ref={ref}
         className="cg-wheel"
-        style={{ width: size, height: size }}
+        style={{ width: '100%', maxWidth: size, aspectRatio: '1 / 1' }}
         onPointerDown={onDown}
         onPointerMove={onMove}
         onDoubleClick={() => onChange({ hue: 0, sat: 0 })}
@@ -58,18 +58,15 @@ export default function ColorGradingPanel({ cg, onChange }) {
       <div className="slider-row cg-lum-row">
         <div className="slider-header">
           <span className="slider-label">Luminance</span>
-          <div className="slider-controls">
-            {cg[`${z}_lum`] !== 0 && (
-              <button className="revert-btn" title="Reset" onClick={() => patch({ [`${z}_lum`]: 0 })}>Reset</button>
-            )}
-            <span className={`slider-value${cg[`${z}_lum`] !== 0 ? ' slider-value--dirty' : ''}`}>
-              {(cg[`${z}_lum`] > 0 ? '+' : '') + cg[`${z}_lum`]}
-            </span>
-          </div>
+          <span className={`slider-value${cg[`${z}_lum`] !== 0 ? ' slider-value--dirty' : ''}`}>
+            {(cg[`${z}_lum`] > 0 ? '+' : '') + cg[`${z}_lum`]}
+          </span>
         </div>
         <input
           type="range" min={-100} max={100} step={1} value={cg[`${z}_lum`]}
           onChange={(e) => patch({ [`${z}_lum`]: Number(e.target.value) })}
+          onDoubleClick={() => patch({ [`${z}_lum`]: 0 })}
+          title="Luminance — double-click to reset"
           className={`slider${cg[`${z}_lum`] !== 0 ? ' slider--dirty' : ''}`}
         />
       </div>

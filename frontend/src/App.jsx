@@ -3,6 +3,17 @@ import './index.css';
 import CurvesPanel, { DEFAULT_POINTS as DEFAULT_CURVES } from './CurvesPanel';
 import HslPanel from './HslPanel';
 import ColorGradingPanel from './ColorGradingPanel';
+import FancySelect from './FancySelect';
+
+const STOCK_TYPE_LABEL = {
+  color_negative: 'Colour negative',
+  color_reversal: 'Colour reversal',
+  monochrome: 'Monochrome',
+};
+
+// Per-stock boxart tile (generated SVG in /public/boxart). Null for "None".
+const stockBoxart = (opt) =>
+  (opt && opt.id && opt.id !== 'none') ? `/boxart/${opt.id}.svg` : null;
 
 const API = 'http://localhost:8000';
 const EFFECT_PIPELINE_VERSION = 'filmic_v3';
@@ -1564,36 +1575,31 @@ export default function App() {
               {openSections.Profile && (
                 <div className="section-body">
                   <div className="field">
-                    <label className="field-label">Film Stock</label>
-                    <select className="select" value={params.stock} onChange={set('stock')}>
-                      <option value="none">None</option>
-                      <optgroup label="Color Negative">
-                        {profiles.stocks.filter(p => p.type === 'color_negative').map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Color Reversal">
-                        {profiles.stocks.filter(p => p.type === 'color_reversal').map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Monochrome">
-                        {profiles.stocks.filter(p => p.type === 'monochrome').map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </optgroup>
-                    </select>
+                    <label className="field-label">Film stock</label>
+                    <FancySelect
+                      value={params.stock}
+                      onChange={(id) => setParams(p => ({ ...p, stock: id }))}
+                      swatchSrc={stockBoxart}
+                      placeholder="None"
+                      groups={[
+                        { label: '', options: [{ id: 'none', name: 'None', sub: 'No film stock' }] },
+                        { label: 'Colour negative', options: profiles.stocks.filter(p => p.type === 'color_negative').map(p => ({ id: p.id, name: p.name, sub: STOCK_TYPE_LABEL[p.type], type: p.type })) },
+                        { label: 'Colour reversal', options: profiles.stocks.filter(p => p.type === 'color_reversal').map(p => ({ id: p.id, name: p.name, sub: STOCK_TYPE_LABEL[p.type], type: p.type })) },
+                        { label: 'Monochrome', options: profiles.stocks.filter(p => p.type === 'monochrome').map(p => ({ id: p.id, name: p.name, sub: STOCK_TYPE_LABEL[p.type], type: p.type })) },
+                      ]}
+                    />
                   </div>
 
                   <div className="field">
                     <label className="field-label" title="Applies a theatrical positive print stock emulation on top of the camera negative, adding characteristic shadow lift and contrast.">
-                      Print Finish
+                      Print finish
                     </label>
-                    <select className="select" value={params.print_stock} onChange={set('print_stock')}>
-                      {profiles.print_stocks.map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
+                    <FancySelect
+                      value={params.print_stock}
+                      onChange={(id) => setParams(p => ({ ...p, print_stock: id }))}
+                      placeholder="None"
+                      groups={[{ label: '', options: profiles.print_stocks.map(p => ({ id: p.id, name: p.name })) }]}
+                    />
                   </div>
                   {params.print_stock !== 'none' && (
                     <div style={{ marginTop: 8, padding: '12px 10px', backgroundColor: '#181818', borderRadius: 6, border: '1px solid #282828' }}>
@@ -1730,7 +1736,7 @@ export default function App() {
               {openSections['Film Tone'] && (
                 <div className="section-body">
                   <label className="slider-row" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} title="Let the film read the scene and auto-adjust tone for flat, high-dynamic-range files. Turn off for a fixed, predictable look.">
-                    <input type="checkbox" checked={params.adaptive} onChange={(e) => setParams(p => ({ ...p, adaptive: e.target.checked }))} />
+                    <input type="checkbox" className="checkbox-input" checked={params.adaptive} onChange={(e) => setParams(p => ({ ...p, adaptive: e.target.checked }))} />
                     <span className="slider-label">Adaptive (scene-aware tone)</span>
                   </label>
                   {[
