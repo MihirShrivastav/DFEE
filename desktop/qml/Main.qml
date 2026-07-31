@@ -1,18 +1,23 @@
 import QtQuick
 import QtQuick.Window
+import QtQuick.Controls
 
 Window {
-    id: root
-    width: 1280
-    height: 800
-    visible: true
-    title: "DFEE"
-    color: "#0f0f10"
+    width: 1280; height: 800; visible: true; title: "DFEE"; color: "#0f0f10"
 
-    Text {
-        anchors.centerIn: parent
-        text: "DFEE — native"
-        color: "#c7c7cc"
-        font.pixelSize: 20
+    Column {
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: 20
+        width: 300
+        spacing: 12
+
+        Text { text: "Film stock"; color: "#8b8b90"; font.pixelSize: 12 }
+        ComboBox {
+            id: stockBox
+            width: parent.width
+            model: engine.stockNames
+            onActivated: engine.stock = engine.stockIdAt(currentIndex)
+        }
     }
 }
