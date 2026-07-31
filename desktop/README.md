@@ -58,10 +58,10 @@ compatibility. Lossless TIFF compression is a separate export-engine task.
 
 Configure Lightroom Classic's **Additional External Editor** to launch `DFEE.exe`, then
 use `Photo > Edit In > DFEE`. The application receives Lightroom's rendered working
-TIFF as:
+TIFF as a standard positional argument:
 
 ```text
-DFEE.exe --lightroom-edit "C:\\path\\to\\working-file.tif"
+DFEE.exe "C:\\path\\to\\working-file.tif"
 ```
 
 In this mode, the regular export controls are intentionally replaced with **Save Back

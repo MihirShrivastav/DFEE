@@ -15,13 +15,14 @@ not need catalog write access, a blocking Lua plug-in, or a second import path.
 
 ## Contract
 
-Lightroom launches:
+Lightroom's standard Additional External Editor launch is:
 
 ```text
-DFEE.exe --lightroom-edit "C:\\absolute\\path\\to\\Lightroom-working-file.tif"
+DFEE.exe "C:\\absolute\\path\\to\\Lightroom-working-file.tif"
 ```
 
-`--lightroom-edit` accepts only an existing absolute `.tif` or `.tiff` path. The app:
+DFEE also accepts `--lightroom-edit <tiff>` for deterministic automation and installer
+integration. Both forms accept only an existing absolute `.tif` or `.tiff` path. The app:
 
 1. enters `lightroomRoundTrip` mode and locks image selection and export format;
 2. decodes the working TIFF on the serial engine worker;

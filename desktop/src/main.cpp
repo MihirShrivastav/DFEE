@@ -25,6 +25,8 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption lightroomEditOption(
         "lightroom-edit", "Open a Lightroom-provided TIFF and save back to that exact working file.", "tiff");
     commandLine.addOption(lightroomEditOption);
+    commandLine.addPositionalArgument(
+        "tiff", "A Lightroom-provided TIFF working file. This is the standard Additional External Editor launch form.");
     commandLine.process(app);
 
     // Construct the provider BEFORE EngineController so it can be passed to
@@ -46,8 +48,18 @@ int main(int argc, char* argv[]) {
         &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("DFEE", "Main");
 
+    const QStringList positionalArguments = commandLine.positionalArguments();
+    if (commandLine.isSet(lightroomEditOption) && !positionalArguments.isEmpty()) {
+        qCritical() << "DFEE accepts either --lightroom-edit <tiff> or one TIFF positional argument, not both.";
+        return -1;
+    }
     if (commandLine.isSet(lightroomEditOption)) {
         controller.beginLightroomRoundTrip(commandLine.value(lightroomEditOption));
+    } else if (positionalArguments.size() == 1) {
+        controller.beginLightroomRoundTrip(positionalArguments.constFirst());
+    } else if (positionalArguments.size() > 1) {
+        qCritical() << "DFEE accepts at most one Lightroom TIFF positional argument.";
+        return -1;
     }
 
     // Headless self-test: set DFEE_SELFTEST=<path-to-tiff> to verify end-to-end.
