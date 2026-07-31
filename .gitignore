@@ -55,3 +55,12 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+# SDD subagent scratch workspace (ledgers, briefs, reports, review diffs)
+.superpowers/
+
+# Desktop Qt build output
+desktop/out/
+
+# aqtinstall log
+aqtinstall.log
