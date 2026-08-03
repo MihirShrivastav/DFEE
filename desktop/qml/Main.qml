@@ -582,6 +582,9 @@ Window {
             id: imageArea
             anchors.fill: parent
             anchors.margins: 28
+            // Reserve room for the floating compare switch so it never overlaps the
+            // image (matters for tall/portrait frames that fill the height).
+            anchors.topMargin: (engine.hasImage && engine.hasBefore) ? 62 : 28
             visible: engine.hasImage
 
             readonly property string afterSrc: engine.hasImage ? ("image://preview/frame?rev=" + engine.previewRevision) : ""
