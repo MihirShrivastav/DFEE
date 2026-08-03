@@ -1205,58 +1205,27 @@ void apply_rendered_input_adjustments(RenderPlan& plan, const float rendered_inp
 // contrast S around mid-grey (preserved) plus a soft highlight shoulder so bright
 // tones roll off instead of running away. Applied AFTER exposure placement.
 // Per-channel (like a camera RGB tone curve) — adds pleasing contrast + saturation.
-// Tunable baseline-develop parameters (approximate a camera "Standard"/Adobe-Color
-// render: medium-high contrast + boosted saturation, so RAW reaches the film stage
-// as rich as a Lightroom TIFF rather than flat/hazy). Dial these against reference
-// frames.
-constexpr float kBaselinePivot = 0.18F;       // mid-grey anchor, preserved
-constexpr float kBaselineContrast = 1.32F;    // midtone punch / shadow depth
-constexpr float kBaselineShoulder = 0.70F;    // linear level where highlights roll off
-constexpr float kBaselineSaturation = 1.16F;  // colour richness (Adobe-Color-like)
-
-// Per-channel contrast S around mid-grey (adds midtone punch + pleasing saturation).
-// The highlight SHOULDER is applied separately, hue-preservingly, in the develop.
-[[nodiscard]] float baseline_contrast_channel(float v) {
-    v = std::max(v, 0.0F);
-    return kBaselinePivot * std::pow(v / kBaselinePivot, kBaselineContrast);
-}
-
-// Soft rolloff of a single value (the pixel's max channel) into [shoulder, 1).
-[[nodiscard]] float baseline_shoulder(float m) {
-    if (m <= kBaselineShoulder) {
-        return m;
-    }
-    const float e = m - kBaselineShoulder;
-    return kBaselineShoulder + e / (1.0F + e / (1.0F - kBaselineShoulder));
-}
+// Baseline-develop parameters. Kept GENTLE and gamut-safe on purpose: heavy
+// per-channel contrast + a saturation boost in the narrow sRGB working space push
+// saturated bright colours (sky, red car) past the gamut; per-channel clipping then
+// shifts hues (green banding) and dims highlights. Richer development needs the
+// wide-gamut working space (Phase B) first. Until then this only adds mild midtone
+// contrast and leaves highlight rolloff + colour entirely to the film stage.
+constexpr float kBaselinePivot = 0.18F;      // mid-grey anchor, preserved
+constexpr float kBaselineContrast = 1.12F;   // gentle midtone contrast (gamut-safe)
 
 [[nodiscard]] Image apply_raw_baseline_develop(const Image& rgb_linear) {
     if (rgb_linear.channels != 3) {
         return rgb_linear;
     }
     Image out(rgb_linear.width, rgb_linear.height, rgb_linear.channels);
-    const std::size_t px = rgb_linear.pixel_count();
-    for (std::size_t i = 0; i < px; ++i) {
-        const std::size_t b = i * 3U;
-        float r = baseline_contrast_channel(rgb_linear.pixels[b + 0]);
-        float g = baseline_contrast_channel(rgb_linear.pixels[b + 1]);
-        float bl = baseline_contrast_channel(rgb_linear.pixels[b + 2]);
-        // Hue-preserving highlight shoulder: roll off the MAX channel and scale all
-        // three by the same factor. Keeps saturated highlights (a red hood, a flower)
-        // coloured instead of desaturating the dominant channel into a pale patch.
-        const float m = std::max(r, std::max(g, bl));
-        if (m > kBaselineShoulder) {
-            const float f = baseline_shoulder(m) / std::max(m, 1.0e-4F);
-            r *= f; g *= f; bl *= f;
-        }
-        // Luma-preserving saturation lift for camera-standard colour richness.
-        const float luma = 0.2126F * r + 0.7152F * g + 0.0722F * bl;
-        r = std::max(luma + (r - luma) * kBaselineSaturation, 0.0F);
-        g = std::max(luma + (g - luma) * kBaselineSaturation, 0.0F);
-        bl = std::max(luma + (bl - luma) * kBaselineSaturation, 0.0F);
-        out.pixels[b + 0] = r;
-        out.pixels[b + 1] = g;
-        out.pixels[b + 2] = bl;
+    const std::size_t count = rgb_linear.pixels.size();
+    for (std::size_t i = 0; i < count; ++i) {
+        const float v = std::max(rgb_linear.pixels[i], 0.0F);
+        // Mild contrast S around mid-grey (pivot preserved); clamp to gamut. No
+        // saturation boost and no extra shoulder — the film stage owns those.
+        const float c = kBaselinePivot * std::pow(v / kBaselinePivot, kBaselineContrast);
+        out.pixels[i] = std::min(c, 1.0F);
     }
     return out;
 }
