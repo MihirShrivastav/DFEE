@@ -18,10 +18,15 @@ namespace {
 // robust diffuse highlight just below the film shoulder knee and lets the shoulder
 // roll off the rest. A soft midtone term lifts dim scenes without overriding the
 // highlight anchor. Returns exposure compensation in stops (pre-clamp).
+// How strongly a clipping colour channel cancels the upward exposure push. Clip
+// ratios are pixel fractions, so a small but visually-dominant blown channel (a red
+// car hood, a neon sign) should already bite — hence a high gain.
+constexpr float kClipGuardGain = 14.0F;
+
 [[nodiscard]] float compute_scene_placement(
     const float luma_p95, const float luma_p98, const float large_highlight_area_ratio,
     const float midtone_anchor, const float hl_target, const float mid_target,
-    const float stock_bias) {
+    const float stock_bias, const float channel_clip) {
     constexpr float eps = 1.0e-4F;
     // Diffuse-highlight level: p95, nudged toward p98 when the bright region is a
     // large diffuse area (a big sky), so we place the whole sky, not just its edge.
@@ -39,7 +44,13 @@ namespace {
     if (desired >= 0.0F) {
         // Lift toward the desired exposure, but never push diffuse highlights past
         // the shoulder knee.
-        return std::min(desired, std::max(hl_comp, 0.0F));
+        const float up = std::min(desired, std::max(hl_comp, 0.0F));
+        // Channel-aware guard: a saturated single-channel highlight (red hood, flower)
+        // has high R/G/B but only moderate luma, so the luma anchor misses it and the
+        // push would clip that channel — which the film then bleaches to a pale patch.
+        // A clipping channel cancels the up-push (never affects pull-down).
+        const float clip_guard = std::clamp(channel_clip * kClipGuardGain, 0.0F, 1.0F);
+        return up * (1.0F - clip_guard);
     }
     // Stock/scene doesn't want to brighten. Only ever pull DOWN here (never up): if
     // the diffuse highlight is above the knee, gently darken toward it; otherwise
@@ -359,7 +370,8 @@ RenderPlan RenderPlanSolver::solve(
                                                                    0.72F;  // monochrome
         const float placement = compute_scene_placement(
             tonal.luma_p95, tonal.luma_p98, spatial.large_highlight_area_ratio,
-            tonal.midtone_anchor, hl_target, 0.15F, stock_bias);
+            tonal.midtone_anchor, hl_target, 0.15F, stock_bias,
+            max_clip_ratio(input.clipping_ratios));
         if (controls.exposure_intent == "Auto") {
             exposure_comp = placement;
         } else if (controls.exposure_intent == "Lift") {
@@ -846,7 +858,8 @@ RenderPlan RenderPlanSolver::solve_neutral(
             constexpr float kNeutralHlTarget = 0.68F;
             exposure_compensation = compute_scene_placement(
                 tonal.luma_p95, tonal.luma_p98, spatial.large_highlight_area_ratio,
-                tonal.midtone_anchor, kNeutralHlTarget, 0.15F, 0.0F);
+                tonal.midtone_anchor, kNeutralHlTarget, 0.15F, 0.0F,
+                max_clip_ratio(input.clipping_ratios));
         } else {
             exposure_compensation = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
             constexpr float kAutoHighlightCeiling = 0.82F;

@@ -2782,6 +2782,17 @@ void test_solver_auto_exposure_protects_highlights() {
             std::to_string(placed_hl));
     }
 
+    // Channel-aware guard: the same dim-luma scene but with a clipping red channel
+    // (a saturated red highlight the luma anchor misses). The up-push must be
+    // cancelled so we don't clip the red channel (which the film would then bleach).
+    auto dim_clip = make_input(0.14F, 0.30F);
+    dim_clip.clipping_ratios["r"] = 0.08F;
+    const float c_v3 = solver.solve(dim_clip, stock, v3).pre_film_normalization.exposure_compensation_stops;
+    if (!(c_v3 < d_v3 - 0.1F)) {
+        throw std::runtime_error("a clipping channel must cancel the up-push: clipped=" +
+            std::to_string(c_v3) + " unclipped=" + std::to_string(d_v3));
+    }
+
     // Over-bright scene (diffuse highlights well past target) -> gentle pull-down,
     // not a hard slam (negative film has wide over-exposure latitude).
     const auto over = make_input(0.40F, 0.95F);
