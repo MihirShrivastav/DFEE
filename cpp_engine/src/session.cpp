@@ -901,6 +901,23 @@ NativeRawPreviewResponse encode_preview_jpeg_bytes(const Image& preview_rgb, con
     return response;
 }
 
+// Debug: when DFEE_STAGE_DUMP=<dir> is set, write the pipeline image at a named
+// stage (sRGB-encoded JPEG) so we can see exactly which stage introduces an
+// artifact. No-op when the env var is unset. Never used in normal operation.
+void dump_stage(const Image& img, const std::string& name) {
+    const char* dir = std::getenv("DFEE_STAGE_DUMP");
+    if (dir == nullptr || img.channels != 3 || img.width <= 0 || img.height <= 0) {
+        return;
+    }
+    const auto enc = encode_preview_jpeg_bytes(img, name);
+    if (!enc.ok) {
+        return;
+    }
+    std::ofstream out(std::string(dir) + "/" + name + ".jpg", std::ios::binary);
+    out.write(reinterpret_cast<const char*>(enc.jpeg_bytes.data()),
+              static_cast<std::streamsize>(enc.jpeg_bytes.size()));
+}
+
 struct NativeRenderWorkResult {
     SolverInput solver_input;
     ZoneMasks zone_masks;
@@ -2641,6 +2658,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     render_plan.film_response.tone_response_strength = std::clamp(
                         1.0F - (request.rendered_input / 100.0F) * kMaxToneAtten, 0.0F, 1.0F);
                 }
+                dump_stage(rendered, "10_baseline");
             }
             if (render_plan.stock_type == "monochrome") {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_panchromatic");
@@ -2650,6 +2668,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_tone_response");
                 rendered = renderer.apply_film_tone_response(rendered, render_plan.film_response);
             }
+            dump_stage(rendered, "20_tone");
             {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_dye_contamination");
                 rendered = renderer.apply_dye_contamination(rendered, render_plan.film_response);
@@ -2663,6 +2682,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     &response.engine,
                     "render_preview_film_stage_color_response");
             }
+            dump_stage(rendered, "30_color");
             if (render_plan.stock_type != "monochrome" &&
                 is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_density");
@@ -2736,6 +2756,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     : apply_post_bloom(rendered, request.bloom);
             }
         }
+        dump_stage(rendered, "40_final");
         {
             ScopedStageTimer stage(response.engine, "render_preview_encode_jpeg");
             const auto encoded = encode_preview_jpeg_bytes(rendered, response.filename);
