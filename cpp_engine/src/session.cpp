@@ -1205,22 +1205,44 @@ void apply_rendered_input_adjustments(RenderPlan& plan, const float rendered_inp
 // contrast S around mid-grey (preserved) plus a soft highlight shoulder so bright
 // tones roll off instead of running away. Applied AFTER exposure placement.
 // Per-channel (like a camera RGB tone curve) — adds pleasing contrast + saturation.
+// Tunable baseline-develop parameters (approximate a camera "Standard"/Adobe-Color
+// render: medium-high contrast + boosted saturation, so RAW reaches the film stage
+// as rich as a Lightroom TIFF rather than flat/hazy). Dial these against reference
+// frames.
+constexpr float kBaselinePivot = 0.18F;       // mid-grey anchor, preserved
+constexpr float kBaselineContrast = 1.32F;    // midtone punch / shadow depth
+constexpr float kBaselineShoulder = 0.70F;    // linear level where highlights roll off
+constexpr float kBaselineSaturation = 1.16F;  // colour richness (Adobe-Color-like)
+
+[[nodiscard]] float baseline_tone_channel(float v) {
+    v = std::max(v, 0.0F);
+    float c = kBaselinePivot * std::pow(v / kBaselinePivot, kBaselineContrast);
+    if (c > kBaselineShoulder) {  // Reinhard-style soft shoulder: c in [shoulder, 1)
+        const float e = c - kBaselineShoulder;
+        c = kBaselineShoulder + e / (1.0F + e / (1.0F - kBaselineShoulder));
+    }
+    return c;
+}
+
 [[nodiscard]] Image apply_raw_baseline_develop(const Image& rgb_linear) {
-    constexpr float kPivot = 0.18F;      // mid-grey anchor, preserved
-    constexpr float kContrast = 1.18F;   // gentle midtone punch
-    constexpr float kShoulder = 0.72F;   // linear level where the highlight shoulder starts
+    if (rgb_linear.channels != 3) {
+        return rgb_linear;
+    }
     Image out(rgb_linear.width, rgb_linear.height, rgb_linear.channels);
-    const std::size_t count = rgb_linear.pixels.size();
-    for (std::size_t i = 0; i < count; ++i) {
-        const float v = std::max(rgb_linear.pixels[i], 0.0F);
-        // Contrast S around mid-grey (gamma pivot keeps 0.18 fixed).
-        float c = kPivot * std::pow(v / kPivot, kContrast);
-        // Reinhard-style soft shoulder above the knee: c in [kShoulder, 1).
-        if (c > kShoulder) {
-            const float e = c - kShoulder;
-            c = kShoulder + e / (1.0F + e / (1.0F - kShoulder));
-        }
-        out.pixels[i] = c;
+    const std::size_t px = rgb_linear.pixel_count();
+    for (std::size_t i = 0; i < px; ++i) {
+        const std::size_t b = i * 3U;
+        float r = baseline_tone_channel(rgb_linear.pixels[b + 0]);
+        float g = baseline_tone_channel(rgb_linear.pixels[b + 1]);
+        float bl = baseline_tone_channel(rgb_linear.pixels[b + 2]);
+        // Luma-preserving saturation lift for that camera-standard colour richness.
+        const float luma = 0.2126F * r + 0.7152F * g + 0.0722F * bl;
+        r = std::max(luma + (r - luma) * kBaselineSaturation, 0.0F);
+        g = std::max(luma + (g - luma) * kBaselineSaturation, 0.0F);
+        bl = std::max(luma + (bl - luma) * kBaselineSaturation, 0.0F);
+        out.pixels[b + 0] = r;
+        out.pixels[b + 1] = g;
+        out.pixels[b + 2] = bl;
     }
     return out;
 }
