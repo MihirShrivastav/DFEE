@@ -379,6 +379,7 @@ void EngineController::openFile(const QUrl& url)
     }
 
     currentFile_ = file;
+    applyDefaultPlacement();
     workerBusy_  = true;
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
     QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
@@ -605,6 +606,16 @@ void EngineController::onRenderFailed(const QString& msg)
     qDebug() << "DFEE:" << msg;
 }
 
+void EngineController::applyDefaultPlacement()
+{
+    const QString want = renderedInput() ? QStringLiteral("as_shot")
+                                         : QStringLiteral("auto_balanced");
+    if (filmControls_.value("exposure_placement").toString() != want) {
+        filmControls_.insert("exposure_placement", want);
+        emit filmControlsChanged();
+    }
+}
+
 void EngineController::onWorkerBusyChanged(bool busy)
 {
     workerBusy_ = busy;
@@ -618,6 +629,7 @@ void EngineController::onWorkerBusyChanged(bool busy)
             dirtyIsOpen_  = false;
             currentFile_  = pendingFile_;
             pendingFile_.clear();
+            applyDefaultPlacement();
 
             workerBusy_ = true;
             const dfee::NativePreviewRenderRequest request = buildPreviewRequest();

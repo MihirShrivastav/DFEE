@@ -134,6 +134,10 @@ signals:
 private:
     void loadStocks();
     void scheduleRender();
+    // Pick the sensible default exposure placement for the just-opened file:
+    // already-developed inputs (TIFF / Lightroom round-trip) default to "as shot"
+    // (they're exposed already); RAWs default to "auto balanced".
+    void applyDefaultPlacement();
     [[nodiscard]] dfee::NativePreviewRenderRequest buildPreviewRequest() const;
     [[nodiscard]] dfee::NativeExportRequest buildExportRequest() const;
     bool updateNumericFilmControl(const QString& key, double value);
