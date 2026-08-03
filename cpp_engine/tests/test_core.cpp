@@ -2755,29 +2755,50 @@ void test_solver_auto_exposure_protects_highlights() {
     dfee::SolverControls v3 = base; v3.subtractive_pipeline = true;
     dfee::SolverControls v2 = base; v2.subtractive_pipeline = false;
 
-    // High-key scene (dark mids wanting a big push, but highlights already near the
-    // ceiling) -> v3 caps the upward push; parity/filmic_v2 does not (byte-identical).
+    // High-key scene (dark mids wanting a big push, but diffuse highlights already at
+    // the shoulder knee) -> filmic_v3 scene placement refuses to push (highlights would
+    // clip); parity/filmic_v2 still meters mids to grey and blows them.
     const auto bright = make_input(0.07F, 0.92F);
     const float e_v3 = solver.solve(bright, stock, v3).pre_film_normalization.exposure_compensation_stops;
     const float e_v2 = solver.solve(bright, stock, v2).pre_film_normalization.exposure_compensation_stops;
     if (!(e_v2 > 0.2F)) {
         throw std::runtime_error("v2 auto exposure should push a dark-mid scene up: " + std::to_string(e_v2));
     }
-    if (!(e_v3 < e_v2 - 0.1F && e_v3 <= 0.05F)) {
-        throw std::runtime_error("v3 must cap the upward push when highlights are bright: v3=" +
+    if (!(e_v3 < e_v2 - 0.1F && e_v3 <= 0.10F)) {
+        throw std::runtime_error("v3 must not push when diffuse highlights are at the knee: v3=" +
             std::to_string(e_v3) + " v2=" + std::to_string(e_v2));
     }
 
-    // Modest push with real highlight headroom -> the cap does not bite (v3 == v2), so the
-    // protection only engages when highlights would actually clip.
-    const auto headroom = make_input(0.14F, 0.30F);
-    const float d_v3 = solver.solve(headroom, stock, v3).pre_film_normalization.exposure_compensation_stops;
-    const float d_v2 = solver.solve(headroom, stock, v2).pre_film_normalization.exposure_compensation_stops;
+    // Dim scene with real highlight headroom -> v3 lifts, placing the diffuse
+    // highlight near the negative shoulder target (~0.74), not to a grey midtone.
+    const auto dim = make_input(0.14F, 0.30F);
+    const float d_v3 = solver.solve(dim, stock, v3).pre_film_normalization.exposure_compensation_stops;
     if (!(d_v3 > 0.05F)) {
-        throw std::runtime_error("v3 should still brighten a scene with highlight headroom: " + std::to_string(d_v3));
+        throw std::runtime_error("v3 should brighten a dim scene with headroom: " + std::to_string(d_v3));
     }
-    if (std::fabs(d_v3 - d_v2) > 1.0e-4F) {
-        throw std::runtime_error("highlight cap must not change exposure when highlights have headroom");
+    const float placed_hl = (0.30F - 0.03F) * std::pow(2.0F, d_v3);  // diffuse_hl(=p95) after lift
+    if (placed_hl > 0.80F) {
+        throw std::runtime_error("v3 lift must not drive the diffuse highlight past the shoulder: " +
+            std::to_string(placed_hl));
+    }
+
+    // Over-bright scene (diffuse highlights well past target) -> gentle pull-down,
+    // not a hard slam (negative film has wide over-exposure latitude).
+    const auto over = make_input(0.40F, 0.95F);
+    const float o_v3 = solver.solve(over, stock, v3).pre_film_normalization.exposure_compensation_stops;
+    if (!(o_v3 < 0.0F && o_v3 > -1.2F)) {
+        throw std::runtime_error("v3 should gently pull down an over-bright scene: " + std::to_string(o_v3));
+    }
+
+    // Reversal protects highlights harder than negative on the same scene (lower target).
+    const auto reversal = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "astia_100.yaml");
+    const auto dim2 = make_input(0.14F, 0.30F);
+    const float neg_lift = solver.solve(dim2, stock, v3).pre_film_normalization.exposure_compensation_stops;
+    const float rev_lift = solver.solve(dim2, reversal, v3).pre_film_normalization.exposure_compensation_stops;
+    if (!(rev_lift <= neg_lift + 1.0e-3F)) {
+        throw std::runtime_error("reversal should not lift more than negative: rev=" +
+            std::to_string(rev_lift) + " neg=" + std::to_string(neg_lift));
     }
 }
 

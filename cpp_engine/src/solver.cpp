@@ -12,6 +12,42 @@ namespace {
     return std::clamp(value, low, high);
 }
 
+// Film-sensible "scene placement" auto exposure (see
+// docs/superpowers/specs/2026-08-01-film-auto-exposure.md). Instead of metering the
+// midtone to a fixed grey (an averaging meter that blows skies), it anchors the
+// robust diffuse highlight just below the film shoulder knee and lets the shoulder
+// roll off the rest. A soft midtone term lifts dim scenes without overriding the
+// highlight anchor. Returns exposure compensation in stops (pre-clamp).
+[[nodiscard]] float compute_scene_placement(
+    const float luma_p95, const float luma_p98, const float large_highlight_area_ratio,
+    const float midtone_anchor, const float hl_target, const float mid_target,
+    const float stock_bias) {
+    constexpr float eps = 1.0e-4F;
+    // Diffuse-highlight level: p95, nudged toward p98 when the bright region is a
+    // large diffuse area (a big sky), so we place the whole sky, not just its edge.
+    // Speculars (top ~1-2%) are intentionally excluded.
+    const float area = std::clamp(large_highlight_area_ratio * 1.5F, 0.0F, 1.0F);
+    const float diffuse_hl = luma_p95 + (luma_p98 - luma_p95) * area;
+
+    const float hl_comp = std::log2(hl_target / std::max(diffuse_hl, eps));
+    // Desired upward push = scene midtone lift + the stock's rating bias (e.g. Portra
+    // "expose slightly over"). The stock bias is part of the DESIRE so it too is
+    // capped by the highlight knee — a stock that loves overexposure still can't push
+    // diffuse highlights past the shoulder.
+    const float desired = std::log2(mid_target / std::max(midtone_anchor, eps)) + stock_bias;
+
+    if (desired >= 0.0F) {
+        // Lift toward the desired exposure, but never push diffuse highlights past
+        // the shoulder knee.
+        return std::min(desired, std::max(hl_comp, 0.0F));
+    }
+    // Stock/scene doesn't want to brighten. Only ever pull DOWN here (never up): if
+    // the diffuse highlight is above the knee, gently darken toward it; otherwise
+    // leave exposure alone. Negative film has wide over-exposure latitude, so the
+    // pull-down is gentle.
+    return std::min(0.0F, std::max(desired, hl_comp)) * 0.6F;
+}
+
 [[nodiscard]] float max_clip_ratio(const std::unordered_map<std::string, float>& ratios) {
     float value = 0.0F;
     for (const auto& [_, ratio] : ratios) {
@@ -309,35 +345,46 @@ RenderPlan RenderPlanSolver::solve(
         "adaptation.default_strength",
         1.0F);
     const float adaptation_mult = controls.adaptation_strength * profile_adaptation_strength;
-    const float raw_comp = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
     const float stock_bias = compute_stock_bias(stock_profile, tonal);
 
     float exposure_comp = 0.0F;
-    if (controls.exposure_intent == "Auto") {
-        exposure_comp = raw_comp + stock_bias;
-    } else if (controls.exposure_intent == "Lift") {
-        exposure_comp = raw_comp + stock_bias + 0.5F;
-    } else if (controls.exposure_intent == "Darken") {
-        exposure_comp = raw_comp + stock_bias - 0.5F;
+    if (controls.subtractive_pipeline) {
+        // filmic_v3: film-sensible scene placement — anchor diffuse highlights just
+        // below the shoulder knee and let the film shoulder roll off the rest, rather
+        // than metering the midtone to grey (which blows skies). Per-stock highlight
+        // targets set the latitude: negative trusts the shoulder most, reversal least.
+        const float hl_target =
+            stock_profile.stock_type == StockType::ColorNegative ? 0.74F :
+            stock_profile.stock_type == StockType::ColorReversal ? 0.64F :
+                                                                   0.72F;  // monochrome
+        const float placement = compute_scene_placement(
+            tonal.luma_p95, tonal.luma_p98, spatial.large_highlight_area_ratio,
+            tonal.midtone_anchor, hl_target, 0.15F, stock_bias);
+        if (controls.exposure_intent == "Auto") {
+            exposure_comp = placement;
+        } else if (controls.exposure_intent == "Lift") {
+            exposure_comp = placement + 0.5F;
+        } else if (controls.exposure_intent == "Darken") {
+            exposure_comp = placement - 0.5F;
+        } else {  // Preserve / as shot — trust the input, apply placement only gently
+            exposure_comp = placement * 0.25F;
+        }
+        exposure_comp = clampf(exposure_comp * adaptation_mult, -1.5F, 2.0F);
     } else {
-        exposure_comp = stock_profile.stock_type == StockType::ColorReversal
-            ? raw_comp * 0.45F + stock_bias
-            : raw_comp * 0.25F + stock_bias;
-    }
-    exposure_comp = clampf(exposure_comp * adaptation_mult, -2.5F, 2.5F);
-
-    // filmic_v3 highlight-priority metering: a scene-referred auto exposure that only
-    // targets the midtone anchor will brighten a high-key scene until the highlights
-    // clip. Cap the UPWARD push from p98. It retains meaningful skies and broad
-    // daylight highlights while leaving only the brightest 1% (speculars and small
-    // dappled regions) to the film shoulder + highlight rolloff. p99 made ordinary
-    // contrasty scenes read as high-key; p95 allowed normal daylight skies to clip.
-    // Gated to the subtractive pipeline so parity_v1/filmic_v2 stay byte-identical.
-    if (controls.subtractive_pipeline && exposure_comp > 0.0F) {
-        constexpr float kAutoHighlightCeiling = 0.82F;
-        const float highlights = std::max(tonal.luma_p98, 1.0e-4F);
-        const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
-        exposure_comp = std::min(exposure_comp, std::max(headroom_up, 0.0F));
+        // parity_v1 / filmic_v2: unchanged averaging-meter behaviour (byte-identical).
+        const float raw_comp = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
+        if (controls.exposure_intent == "Auto") {
+            exposure_comp = raw_comp + stock_bias;
+        } else if (controls.exposure_intent == "Lift") {
+            exposure_comp = raw_comp + stock_bias + 0.5F;
+        } else if (controls.exposure_intent == "Darken") {
+            exposure_comp = raw_comp + stock_bias - 0.5F;
+        } else {
+            exposure_comp = stock_profile.stock_type == StockType::ColorReversal
+                ? raw_comp * 0.45F + stock_bias
+                : raw_comp * 0.25F + stock_bias;
+        }
+        exposure_comp = clampf(exposure_comp * adaptation_mult, -2.5F, 2.5F);
     }
 
     const float neutral_conf = bias.has_value() ? bias->neutral_confidence : 0.8F;
@@ -387,31 +434,40 @@ RenderPlan RenderPlanSolver::solve(
     float blacks_comp = 0.0F;
     float whites_comp = 0.0F;
     float midtones_comp = 0.0F;
-    const float toe_strength_profile = get_numeric(stock_profile.numeric_values, "tone_response.toe_strength", 0.40F);
 
-    if (stock_profile.stock_type == StockType::ColorReversal) {
-        if (tonal.dynamic_range_stops > 10.0F) {
-            contrast_comp = -12.0F * (tonal.dynamic_range_stops - 10.0F);
-        }
-        if (tonal.luma_p95 > 0.80F) {
-            highlights_comp = -30.0F * ((tonal.luma_p95 - 0.80F) / 0.20F);
-        }
-        shadows_comp = 12.0F * (1.0F + toe_strength_profile);
-    } else if (stock_profile.stock_type == StockType::ColorNegative) {
-        if (tonal.dynamic_range_stops < 7.0F) {
-            contrast_comp = 15.0F * (7.0F - tonal.dynamic_range_stops);
-        }
-        if (tonal.tonal_skew == "low_key") {
-            shadows_comp = 15.0F;
-        }
-    } else if (stock_profile.stock_type == StockType::Monochrome) {
-        contrast_comp = stock_profile.stock_id == "delta_3200" ? 8.0F : 5.0F;
-    }
+    // filmic_v3 "trust the curve": the auto path no longer stretches dynamic range
+    // (shadow-lift / highlight-recovery / contrast / midtone re-centering) — that is
+    // what produced the flat, HDR-like look. The film's own tone curve provides
+    // contrast and shoulder rolloff; scene placement (above) sets exposure; genuine
+    // clipped-channel recovery + colour-cast normalisation are kept below. The legacy
+    // parity_v1/filmic_v2 behaviour is preserved unchanged.
+    if (!controls.subtractive_pipeline) {
+        const float toe_strength_profile = get_numeric(stock_profile.numeric_values, "tone_response.toe_strength", 0.40F);
 
-    if (tonal.midtone_anchor < 0.12F) {
-        midtones_comp = clampf((0.15F - tonal.midtone_anchor) * 100.0F, 0.0F, 30.0F);
-    } else if (tonal.midtone_anchor > 0.35F) {
-        midtones_comp = clampf((0.25F - tonal.midtone_anchor) * 100.0F, -25.0F, 0.0F);
+        if (stock_profile.stock_type == StockType::ColorReversal) {
+            if (tonal.dynamic_range_stops > 10.0F) {
+                contrast_comp = -12.0F * (tonal.dynamic_range_stops - 10.0F);
+            }
+            if (tonal.luma_p95 > 0.80F) {
+                highlights_comp = -30.0F * ((tonal.luma_p95 - 0.80F) / 0.20F);
+            }
+            shadows_comp = 12.0F * (1.0F + toe_strength_profile);
+        } else if (stock_profile.stock_type == StockType::ColorNegative) {
+            if (tonal.dynamic_range_stops < 7.0F) {
+                contrast_comp = 15.0F * (7.0F - tonal.dynamic_range_stops);
+            }
+            if (tonal.tonal_skew == "low_key") {
+                shadows_comp = 15.0F;
+            }
+        } else if (stock_profile.stock_type == StockType::Monochrome) {
+            contrast_comp = stock_profile.stock_id == "delta_3200" ? 8.0F : 5.0F;
+        }
+
+        if (tonal.midtone_anchor < 0.12F) {
+            midtones_comp = clampf((0.15F - tonal.midtone_anchor) * 100.0F, 0.0F, 30.0F);
+        } else if (tonal.midtone_anchor > 0.35F) {
+            midtones_comp = clampf((0.25F - tonal.midtone_anchor) * 100.0F, -25.0F, 0.0F);
+        }
     }
 
     plan.pre_film_normalization = {
@@ -780,18 +836,25 @@ RenderPlan RenderPlanSolver::solve_neutral(
         .specular_candidate_strength = spatial.specular_point_ratio,
     };
 
-    // RAW values are scene-referred and intentionally decoded with LibRaw auto
-    // bright disabled. Auto Balanced therefore meters a robust scene midtone to
-    // 18% linear. The p98 ceiling protects genuine skies and high-key scenes
-    // without treating the brightest 1% as the scene's exposure key.
+    // No-stock preview. There is no film shoulder to roll off highlights here, so
+    // Auto placement is the most conservative (lowest highlight target). filmic_v3
+    // uses the shared highlight-anchored scene placement; legacy pipelines keep the
+    // old midtone-to-18% averaging meter for byte-identical parity.
     float exposure_compensation = 0.0F;
     if (controls.exposure_intent == "Auto") {
-        exposure_compensation = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
-        constexpr float kAutoHighlightCeiling = 0.82F;
-        const float highlights = std::max(tonal.luma_p98, 1.0e-4F);
-        const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
-        if (exposure_compensation > 0.0F) {
-            exposure_compensation = std::min(exposure_compensation, std::max(headroom_up, 0.0F));
+        if (controls.subtractive_pipeline) {
+            constexpr float kNeutralHlTarget = 0.68F;
+            exposure_compensation = compute_scene_placement(
+                tonal.luma_p95, tonal.luma_p98, spatial.large_highlight_area_ratio,
+                tonal.midtone_anchor, kNeutralHlTarget, 0.15F, 0.0F);
+        } else {
+            exposure_compensation = std::log2(0.18F / std::max(tonal.midtone_anchor, 1.0e-4F));
+            constexpr float kAutoHighlightCeiling = 0.82F;
+            const float highlights = std::max(tonal.luma_p98, 1.0e-4F);
+            const float headroom_up = std::log2(kAutoHighlightCeiling / highlights);
+            if (exposure_compensation > 0.0F) {
+                exposure_compensation = std::min(exposure_compensation, std::max(headroom_up, 0.0F));
+            }
         }
         exposure_compensation = clampf(
             exposure_compensation * std::clamp(controls.adaptation_strength, 0.0F, 1.0F),
