@@ -1198,6 +1198,33 @@ void apply_rendered_input_adjustments(RenderPlan& plan, const float rendered_inp
     norm.midtones_compensation *= keep;
 }
 
+// Baseline develop for RAW inputs (filmic_v3). Flat scene-linear RAW carries no tone
+// development, unlike a Lightroom TIFF whose developed tone is baked into its
+// (linearised) values. This adds a camera-standard tone SHAPE in linear->linear so a
+// RAW reaches the film stage as a clean "developed" image, like a TIFF: a gentle
+// contrast S around mid-grey (preserved) plus a soft highlight shoulder so bright
+// tones roll off instead of running away. Applied AFTER exposure placement.
+// Per-channel (like a camera RGB tone curve) — adds pleasing contrast + saturation.
+[[nodiscard]] Image apply_raw_baseline_develop(const Image& rgb_linear) {
+    constexpr float kPivot = 0.18F;      // mid-grey anchor, preserved
+    constexpr float kContrast = 1.18F;   // gentle midtone punch
+    constexpr float kShoulder = 0.72F;   // linear level where the highlight shoulder starts
+    Image out(rgb_linear.width, rgb_linear.height, rgb_linear.channels);
+    const std::size_t count = rgb_linear.pixels.size();
+    for (std::size_t i = 0; i < count; ++i) {
+        const float v = std::max(rgb_linear.pixels[i], 0.0F);
+        // Contrast S around mid-grey (gamma pivot keeps 0.18 fixed).
+        float c = kPivot * std::pow(v / kPivot, kContrast);
+        // Reinhard-style soft shoulder above the knee: c in [kShoulder, 1).
+        if (c > kShoulder) {
+            const float e = c - kShoulder;
+            c = kShoulder + e / (1.0F + e / (1.0F - kShoulder));
+        }
+        out.pixels[i] = c;
+    }
+    return out;
+}
+
 Image apply_pre_film_preview_sliders(
     const Image& rgb_input,
     const NativePreviewRenderRequest& request,
@@ -2449,6 +2476,12 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     rendered,
                     zone_masks,
                     render_plan.pre_film_normalization);
+                // RAW baseline develop: give flat scene-linear RAW a camera-standard
+                // tone so a no-stock preview looks like a developed photo, not linear.
+                if (!is_tiff_filename(response.filename) &&
+                    is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                    rendered = apply_raw_baseline_develop(rendered);
+                }
             }
             {
                 ScopedStageTimer stage(response.engine, "render_preview_neutral_post");
@@ -2594,6 +2627,15 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     rendered,
                     zone_masks,
                     render_plan.pre_film_normalization);
+                // RAW baseline develop: bring flat scene-linear RAW to a developed,
+                // TIFF-like baseline, then apply the stock's tone gently on top (same
+                // "Film tone strength" control as TIFF) so we don't double tone-map.
+                if (!is_tiff_filename(response.filename) &&
+                    is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                    rendered = apply_raw_baseline_develop(rendered);
+                    render_plan.film_response.tone_response_strength = std::clamp(
+                        1.0F - (request.rendered_input / 100.0F) * kMaxToneAtten, 0.0F, 1.0F);
+                }
             }
             if (render_plan.stock_type == "monochrome") {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_panchromatic");
@@ -3012,6 +3054,16 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             render_plan->pre_film_normalization);
                     }
                     fullres_prefilm = Image();
+                    // RAW baseline develop (matches the preview path) so exports of a
+                    // RAW get the same developed baseline + gentle film tone as a TIFF.
+                    if (!is_tiff_filename(response.filename) &&
+                        is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                        rendered = apply_raw_baseline_develop(rendered);
+                        if (request.stock != "none") {
+                            render_plan->film_response.tone_response_strength = std::clamp(
+                                1.0F - (request.rendered_input / 100.0F) * kMaxToneAtten, 0.0F, 1.0F);
+                        }
+                    }
                     if (request.stock != "none" && render_plan->stock_type == "monochrome") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_panchromatic");
                         rendered = renderer.apply_panchromatic_conversion(rendered, render_plan->film_response);

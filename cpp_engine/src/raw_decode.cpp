@@ -410,6 +410,9 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
     params->output_bps = 16;
     params->gamm[0] = 1.0;
     params->gamm[1] = 1.0;
+    // Reconstruct blown highlights (blend) instead of hard-clipping to white, so the
+    // baseline develop has soft, recoverable skies/speculars for the film shoulder.
+    params->highlight = 2;
 
     err = raw_processor.unpack();
     if (err != LIBRAW_SUCCESS) {
