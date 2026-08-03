@@ -410,9 +410,11 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
     params->output_bps = 16;
     params->gamm[0] = 1.0;
     params->gamm[1] = 1.0;
-    // Reconstruct blown highlights (blend) instead of hard-clipping to white, so the
-    // baseline develop has soft, recoverable skies/speculars for the film shoulder.
-    params->highlight = 2;
+    // Clip highlights at decode (mode 0). LibRaw's blend/reconstruct modes average
+    // clipped and unclipped channels, which turns blown single-channel highlights
+    // (a red car hood, a flower) into pale/pink patches. The baseline-develop shoulder
+    // + the film shoulder handle graceful rolloff instead, hue-preservingly.
+    params->highlight = 0;
 
     err = raw_processor.unpack();
     if (err != LIBRAW_SUCCESS) {

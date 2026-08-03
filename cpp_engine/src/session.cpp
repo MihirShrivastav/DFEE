@@ -1214,14 +1214,20 @@ constexpr float kBaselineContrast = 1.32F;    // midtone punch / shadow depth
 constexpr float kBaselineShoulder = 0.70F;    // linear level where highlights roll off
 constexpr float kBaselineSaturation = 1.16F;  // colour richness (Adobe-Color-like)
 
-[[nodiscard]] float baseline_tone_channel(float v) {
+// Per-channel contrast S around mid-grey (adds midtone punch + pleasing saturation).
+// The highlight SHOULDER is applied separately, hue-preservingly, in the develop.
+[[nodiscard]] float baseline_contrast_channel(float v) {
     v = std::max(v, 0.0F);
-    float c = kBaselinePivot * std::pow(v / kBaselinePivot, kBaselineContrast);
-    if (c > kBaselineShoulder) {  // Reinhard-style soft shoulder: c in [shoulder, 1)
-        const float e = c - kBaselineShoulder;
-        c = kBaselineShoulder + e / (1.0F + e / (1.0F - kBaselineShoulder));
+    return kBaselinePivot * std::pow(v / kBaselinePivot, kBaselineContrast);
+}
+
+// Soft rolloff of a single value (the pixel's max channel) into [shoulder, 1).
+[[nodiscard]] float baseline_shoulder(float m) {
+    if (m <= kBaselineShoulder) {
+        return m;
     }
-    return c;
+    const float e = m - kBaselineShoulder;
+    return kBaselineShoulder + e / (1.0F + e / (1.0F - kBaselineShoulder));
 }
 
 [[nodiscard]] Image apply_raw_baseline_develop(const Image& rgb_linear) {
@@ -1232,10 +1238,18 @@ constexpr float kBaselineSaturation = 1.16F;  // colour richness (Adobe-Color-li
     const std::size_t px = rgb_linear.pixel_count();
     for (std::size_t i = 0; i < px; ++i) {
         const std::size_t b = i * 3U;
-        float r = baseline_tone_channel(rgb_linear.pixels[b + 0]);
-        float g = baseline_tone_channel(rgb_linear.pixels[b + 1]);
-        float bl = baseline_tone_channel(rgb_linear.pixels[b + 2]);
-        // Luma-preserving saturation lift for that camera-standard colour richness.
+        float r = baseline_contrast_channel(rgb_linear.pixels[b + 0]);
+        float g = baseline_contrast_channel(rgb_linear.pixels[b + 1]);
+        float bl = baseline_contrast_channel(rgb_linear.pixels[b + 2]);
+        // Hue-preserving highlight shoulder: roll off the MAX channel and scale all
+        // three by the same factor. Keeps saturated highlights (a red hood, a flower)
+        // coloured instead of desaturating the dominant channel into a pale patch.
+        const float m = std::max(r, std::max(g, bl));
+        if (m > kBaselineShoulder) {
+            const float f = baseline_shoulder(m) / std::max(m, 1.0e-4F);
+            r *= f; g *= f; bl *= f;
+        }
+        // Luma-preserving saturation lift for camera-standard colour richness.
         const float luma = 0.2126F * r + 0.7152F * g + 0.0722F * bl;
         r = std::max(luma + (r - luma) * kBaselineSaturation, 0.0F);
         g = std::max(luma + (g - luma) * kBaselineSaturation, 0.0F);
