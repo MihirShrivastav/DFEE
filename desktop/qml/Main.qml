@@ -14,7 +14,7 @@ Window {
     title: "DFEE"
     color: bg
 
-    // Graphite palette — charcoal, monochrome. Colour lives only in the photo + boxart.
+    // Graphite palette — charcoal, monochrome. Color lives only in the photo + boxart.
     readonly property color bg: "#0f0f10"
     readonly property color canvas: "#0f0f10"
     readonly property color panel: "#1a1a1c"
@@ -187,7 +187,7 @@ Window {
         }
     }
 
-    // Draggable colour-grading wheel: angle = hue, radius = saturation. Reads/writes
+    // Draggable color-grading wheel: angle = hue, radius = saturation. Reads/writes
     // engine.filmControls["cg_<zone>_hue"/"_sat"]. Double-click resets to neutral.
     component ColorWheel: Item {
         id: wheel
@@ -254,7 +254,7 @@ Window {
                 x: 0
                 y: wheel.height + 4
                 visible: wheelHover.hovered
-                text: "Tints the " + wheel.label.toLowerCase() + " — drag from the centre to add colour, double-click to reset."
+                text: "Tints the " + wheel.label.toLowerCase() + " — drag from the centre to add color, double-click to reset."
             }
         }
 
@@ -537,7 +537,7 @@ Window {
                     Text {
                         anchors.left: parent.left
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Film lab"
+                        text: "Film Lab"
                         color: root.textPrimary
                         font.pixelSize: 20
                         font.weight: Font.Medium
@@ -658,7 +658,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film recipe"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Recipe"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: recipeCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: recipeCard.open = !recipeCard.open }
                         }
@@ -708,7 +708,7 @@ Window {
                                             }
                                             Text {
                                                 width: parent.width
-                                                text: engine.currentStockMonochrome ? "Monochrome negative" : (engine.stock === "none" ? "No film stock" : "Colour negative")
+                                                text: engine.currentStockMonochrome ? "Monochrome negative" : (engine.stock === "none" ? "No film stock" : "Color negative")
                                                 color: root.textMuted
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 11
@@ -802,7 +802,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Print finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Print Finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             Text { anchors.right: chev1.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: printCard.active && !printCard.open; text: "On"; color: root.textValue; font.pixelSize: 11 }
                             ChevronToggle { id: chev1; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: printCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: printCard.open = !printCard.open }
@@ -870,9 +870,9 @@ Window {
                                 visible: printCard.active
                                 opacity: printCard.active ? 1.0 : 0.4
                                 FilmSlider { controlKey: "print_strength"; label: "Print strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0; tooltip: "How strongly the print-stock emulation is applied over the negative." }
-                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger colour head — subtractive cyan filtration (removes red). Forward cools the print." }
-                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger colour head — subtractive magenta filtration (removes green)." }
-                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger colour head — subtractive yellow filtration (removes blue). Forward warms the print." }
+                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger color head — subtractive cyan filtration (removes red). Forward cools the print." }
+                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger color head — subtractive magenta filtration (removes green)." }
+                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger color head — subtractive yellow filtration (removes blue). Forward warms the print." }
                                 FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Steepness of the print's tone curve — the paper grade." }
                                 FilmSlider { controlKey: "print_black_point"; label: "Black point (lift)"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Print base density — lifts or deepens the darkest blacks of the print." }
                             }
@@ -904,7 +904,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film exposure"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Exposure"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: exposureCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: exposureCard.open = !exposureCard.open }
                         }
@@ -956,7 +956,7 @@ Window {
                                     }
                                 }
                             }
-                            FilmSlider { controlKey: "film_exposure_ev"; label: "Film exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Virtual exposure (in stops) reaching the film before its tone and colour response — like rating the stock faster or slower." }
+                            FilmSlider { controlKey: "film_exposure_ev"; label: "Film exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Virtual exposure (in stops) reaching the film before its tone and color response — like rating the stock faster or slower." }
                         }
                     }
                 }
@@ -985,7 +985,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film tone"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Tone"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: toneCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: toneCard.open = !toneCard.open }
                         }
@@ -1040,7 +1040,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color character"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Character"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colorCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorCard.open = !colorCard.open }
                         }
@@ -1052,17 +1052,17 @@ Window {
                             opacity: engine.currentStockMonochrome ? 0.45 : 1.0
 
                             Text { visible: engine.currentStockMonochrome; text: "Unavailable for monochrome stocks"; color: root.textMuted; font.pixelSize: 11 }
-                            FilmSlider { controlKey: "film_color_density"; label: "Color density"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome; tooltip: "How dense and cohesive the film's colours are — forward for richer, deeper, more film-like colour; back for a thinner, more digital look." }
-                            FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "Overall saturation of the stock's colour dyes — forward for punchier colour, back for a muted look." }
-                            FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much colour survives in the highlights — back bleaches bright areas toward clean white (rescues blown, over-warm highlights)." }
-                            FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much colour survives in the shadows — forward keeps darks colourful, back mutes them toward neutral." }
+                            FilmSlider { controlKey: "film_color_density"; label: "Color density"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome; tooltip: "How dense and cohesive the film's colors are — forward for richer, deeper, more film-like color; back for a thinner, more digital look." }
+                            FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "Overall saturation of the stock's color dyes — forward for punchier color, back for a muted look." }
+                            FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much color survives in the highlights — back bleaches bright areas toward clean white (rescues blown, over-warm highlights)." }
+                            FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much color survives in the shadows — forward keeps darks colorful, back mutes them toward neutral." }
                         }
                     }
                 }
 
-                // ── Colour balance card ────────────────────────────────
+                // ── Color balance card ────────────────────────────────
                 Rectangle {
-                    id: colourCard
+                    id: colorCard
                     property bool open: false
                     width: parent.width
                     radius: 14
@@ -1072,11 +1072,11 @@ Window {
                     }
                     border.width: 1
                     border.color: root.hair
-                    implicitHeight: colourCol.implicitHeight + 32
+                    implicitHeight: colorCol.implicitHeight + 32
                     Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
 
                     Column {
-                        id: colourCol
+                        id: colorCol
                         x: 16; y: 16
                         width: parent.width - 32
                         spacing: 14
@@ -1084,19 +1084,19 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Colour balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
-                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colourCard.open }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colourCard.open = !colourCard.open }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colorCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorCard.open = !colorCard.open }
                         }
 
                         Column {
                             width: parent.width
                             spacing: 12
-                            visible: colourCard.open
+                            visible: colorCard.open
                             FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance warmth — forward warms (more amber), back cools (more blue)." }
                             FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance green/magenta — forward toward magenta, back toward green." }
-                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Smart saturation that protects skin tones and already-saturated colours." }
-                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall colour intensity, applied evenly to all hues." }
+                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Smart saturation that protects skin tones and already-saturated colors." }
+                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall color intensity, applied evenly to all hues." }
                         }
                     }
                 }
@@ -1276,7 +1276,7 @@ Window {
                     }
                 }
 
-                // ── Colour grading card ────────────────────────────────
+                // ── Color grading card ────────────────────────────────
                 Rectangle {
                     id: gradeCard
                     property bool open: false
@@ -1300,7 +1300,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Colour grading"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Grading"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: gradeCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: gradeCard.open = !gradeCard.open }
                         }
@@ -1358,7 +1358,7 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material Finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: materialCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: materialCard.open = !materialCard.open }
                         }
