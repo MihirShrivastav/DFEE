@@ -131,7 +131,13 @@ Window {
         implicitHeight: 20
 
         HoverHandler { id: cbHover; enabled: cb.tooltip.length > 0 }
-        GraphiteTip { visible: cbHover.hovered && cb.tooltip.length > 0; text: cb.tooltip }
+        GraphiteTip {
+            parent: cb
+            x: 0
+            y: cb.height + 4
+            visible: cbHover.hovered && cb.tooltip.length > 0
+            text: cb.tooltip
+        }
 
         indicator: Rectangle {
             implicitWidth: 18
@@ -238,7 +244,13 @@ Window {
             }
 
             HoverHandler { id: wheelHover }
-            GraphiteTip { visible: wheelHover.hovered; text: "Tints the " + wheel.label.toLowerCase() + " — drag from the centre to add colour, double-click to reset." }
+            GraphiteTip {
+                parent: wheel
+                x: 0
+                y: wheel.height + 4
+                visible: wheelHover.hovered
+                text: "Tints the " + wheel.label.toLowerCase() + " — drag from the centre to add colour, double-click to reset."
+            }
         }
 
         Text {
@@ -413,7 +425,13 @@ Window {
         }
 
         HoverHandler { id: sliderHover; enabled: sliderRow.tooltip.length > 0 }
-        GraphiteTip { visible: sliderHover.hovered && sliderRow.tooltip.length > 0; text: sliderRow.tooltip }
+        GraphiteTip {
+            parent: sliderRow
+            x: 0
+            y: sliderRow.height + 4
+            visible: sliderHover.hovered && sliderRow.tooltip.length > 0
+            text: sliderRow.tooltip
+        }
     }
 
     Rectangle {
@@ -887,6 +905,7 @@ Window {
 
                             InspectorLabel { text: "Scene placement" }
                             Rectangle {                              // recessed segmented track
+                                id: placementTrack
                                 width: parent.width
                                 height: 36
                                 radius: 9
@@ -894,7 +913,13 @@ Window {
                                 border.width: 1
                                 border.color: root.hair
                                 HoverHandler { id: placementHover }
-                                GraphiteTip { visible: placementHover.hovered; text: "Auto balanced sets a stock-aware starting exposure for the scene. As shot preserves the RAW's own exposure placement before the film response." }
+                                GraphiteTip {
+                                    parent: placementTrack
+                                    x: 0
+                                    y: placementTrack.height + 4
+                                    visible: placementHover.hovered
+                                    text: "Auto balanced sets a stock-aware starting exposure for the scene. As shot preserves the RAW's own exposure placement before the film response."
+                                }
                                 Row {
                                     anchors.fill: parent
                                     anchors.margins: 3
