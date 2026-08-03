@@ -8,7 +8,33 @@
 
 #include <QImage>
 #include <QMetaObject>
+#include <QVariantList>
 #include <QDebug>
+
+namespace {
+// Compute a 256-bin per-channel histogram from a preview image. Runs on the
+// worker thread; the preview is small (~1k px edge) so a full scan is cheap.
+void computeHistogram(const QImage& src, QVariantList& r, QVariantList& g, QVariantList& b) {
+    int binR[256] = {0}, binG[256] = {0}, binB[256] = {0};
+    const QImage im = src.convertToFormat(QImage::Format_RGB888);
+    for (int y = 0; y < im.height(); ++y) {
+        const uchar* line = im.constScanLine(y);
+        for (int x = 0; x < im.width(); ++x) {
+            const uchar* px = line + x * 3;
+            ++binR[px[0]];
+            ++binG[px[1]];
+            ++binB[px[2]];
+        }
+    }
+    r.clear(); g.clear(); b.clear();
+    r.reserve(256); g.reserve(256); b.reserve(256);
+    for (int i = 0; i < 256; ++i) {
+        r.append(binR[i]);
+        g.append(binG[i]);
+        b.append(binB[i]);
+    }
+}
+}  // namespace
 
 RenderWorker::RenderWorker(dfee::EngineSession* session,
                            EngineController*    controller,
@@ -117,6 +143,14 @@ void RenderWorker::doRender(const dfee::NativePreviewRenderRequest& request)
     }
 
     if (provider_) provider_->setImage(img);
+
+    if (!img.isNull()) {
+        QVariantList hr, hg, hb;
+        computeHistogram(img, hr, hg, hb);
+        QMetaObject::invokeMethod(controller_, "onHistogram", Qt::QueuedConnection,
+                                  Q_ARG(QVariantList, hr), Q_ARG(QVariantList, hg),
+                                  Q_ARG(QVariantList, hb));
+    }
 
     QMetaObject::invokeMethod(controller_, "onPreviewReady",
                               Qt::QueuedConnection);

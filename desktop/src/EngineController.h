@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QVariant>
 #include <QVariantMap>
+#include <QVariantList>
 #include <memory>
 
 #include "dfee/bridge_types.hpp"
@@ -35,6 +36,10 @@ class EngineController : public QObject {
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
+    // 256-bin per-channel histogram of the current preview (raw counts).
+    Q_PROPERTY(QVariantList histogramR READ histogramR NOTIFY histogramChanged)
+    Q_PROPERTY(QVariantList histogramG READ histogramG NOTIFY histogramChanged)
+    Q_PROPERTY(QVariantList histogramB READ histogramB NOTIFY histogramChanged)
 
 public:
     // provider must be non-null; it must outlive EngineController (the
@@ -89,9 +94,13 @@ public:
     bool hasImage() const { return hasImage_; }
     int previewRevision() const { return previewRevision_; }
     QString status() const { return status_; }
+    QVariantList histogramR() const { return histogramR_; }
+    QVariantList histogramG() const { return histogramG_; }
+    QVariantList histogramB() const { return histogramB_; }
 
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
     Q_INVOKABLE void onPreviewReady();
+    Q_INVOKABLE void onHistogram(const QVariantList& r, const QVariantList& g, const QVariantList& b);
     Q_INVOKABLE void onRenderFailed(const QString& msg);
     Q_INVOKABLE void onWorkerBusyChanged(bool busy);
     Q_INVOKABLE void onExportDone(const QString& msg);
@@ -110,6 +119,7 @@ signals:
     void hasImageChanged();
     void previewChanged();
     void statusChanged();
+    void histogramChanged();
 
 private:
     void loadStocks();
@@ -134,6 +144,9 @@ private:
     bool hasImage_ = false;
     int previewRevision_ = 0;
     QString status_;
+    QVariantList histogramR_;
+    QVariantList histogramG_;
+    QVariantList histogramB_;
 
     // Film parameters — declared now, wired in Task 4.
     double filmExposure_ = 0.0;

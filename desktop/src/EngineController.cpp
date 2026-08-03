@@ -497,6 +497,15 @@ void EngineController::onPreviewReady()
     emit statusChanged();
 }
 
+void EngineController::onHistogram(const QVariantList& r, const QVariantList& g,
+                                  const QVariantList& b)
+{
+    histogramR_ = r;
+    histogramG_ = g;
+    histogramB_ = b;
+    emit histogramChanged();
+}
+
 void EngineController::exportImage()
 {
     if (currentFile_.isEmpty()) return;

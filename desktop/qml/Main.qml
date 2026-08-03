@@ -102,6 +102,68 @@ Window {
         }
     }
 
+    // Live RGB histogram of the current preview — additive channel fills, sqrt-scaled
+    // so low counts stay visible. Reads engine.histogramR/G/B (256 raw-count bins).
+    component Histogram: Rectangle {
+        width: parent.width
+        height: 84
+        radius: 10
+        color: root.inset
+        border.width: 1
+        border.color: root.hair
+
+        Canvas {
+            anchors.fill: parent
+            anchors.margins: 7
+            property var hr: engine.histogramR
+            property var hg: engine.histogramG
+            property var hb: engine.histogramB
+            onHrChanged: requestPaint()
+            onHgChanged: requestPaint()
+            onHbChanged: requestPaint()
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                var w = width, hgt = height;
+                ctx.clearRect(0, 0, w, hgt);
+                if (!hr || hr.length < 2) return;
+                var n = hr.length;
+                var mx = 1;
+                for (var i = 1; i < n - 1; ++i) {
+                    if (hr[i] > mx) mx = hr[i];
+                    if (hg[i] > mx) mx = hg[i];
+                    if (hb[i] > mx) mx = hb[i];
+                }
+                function drawCh(arr, style) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, hgt);
+                    for (var i = 0; i < n; ++i) {
+                        var v = Math.sqrt(arr[i] / mx);
+                        if (v > 1) v = 1;
+                        ctx.lineTo(i / (n - 1) * w, hgt - v * hgt);
+                    }
+                    ctx.lineTo(w, hgt);
+                    ctx.closePath();
+                    ctx.fillStyle = style;
+                    ctx.fill();
+                }
+                ctx.globalCompositeOperation = "lighter";
+                drawCh(hb, "rgba(70,120,235,0.5)");
+                drawCh(hg, "rgba(70,200,110,0.5)");
+                drawCh(hr, "rgba(235,80,80,0.5)");
+                ctx.globalCompositeOperation = "source-over";
+            }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: !engine.hasImage
+            text: "Histogram"
+            color: root.textMuted
+            font.pixelSize: 11
+        }
+    }
+
     // Small down/up chevron used in card headers (and reused as the combo indicator style).
     component ChevronToggle: Canvas {
         property bool open: true
@@ -550,6 +612,9 @@ Window {
                         font.pixelSize: 12
                     }
                 }
+
+                // ── Histogram ──────────────────────────────────────────
+                Histogram {}
 
                 // ── Actions ────────────────────────────────────────────
                 PrimaryButton {
@@ -1062,7 +1127,7 @@ Window {
 
                 // ── Color balance card ────────────────────────────────
                 Rectangle {
-                    id: colorCard
+                    id: colorBalanceCard
                     property bool open: false
                     width: parent.width
                     radius: 14
@@ -1072,11 +1137,11 @@ Window {
                     }
                     border.width: 1
                     border.color: root.hair
-                    implicitHeight: colorCol.implicitHeight + 32
+                    implicitHeight: colorBalanceCol.implicitHeight + 32
                     Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
 
                     Column {
-                        id: colorCol
+                        id: colorBalanceCol
                         x: 16; y: 16
                         width: parent.width - 32
                         spacing: 14
@@ -1085,14 +1150,14 @@ Window {
                             width: parent.width
                             height: 20
                             Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
-                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colorCard.open }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorCard.open = !colorCard.open }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colorBalanceCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorBalanceCard.open = !colorBalanceCard.open }
                         }
 
                         Column {
                             width: parent.width
                             spacing: 12
-                            visible: colorCard.open
+                            visible: colorBalanceCard.open
                             FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance warmth — forward warms (more amber), back cools (more blue)." }
                             FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance green/magenta — forward toward magenta, back toward green." }
                             FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Smart saturation that protects skin tones and already-saturated colors." }
