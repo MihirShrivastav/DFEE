@@ -125,6 +125,34 @@ void EngineController::loadStocks()
         printStockNames_ << QString::fromStdString(p.print_stock_name);
         printStockIds_ << QString::fromStdString(p.print_stock_id);
     }
+
+    // Category-grouped model for the stock picker (None first, then by type).
+    stockModel_.clear();
+    {
+        QVariantMap none;
+        none["id"] = "none";
+        none["name"] = "None";
+        none["type"] = "";
+        none["typeLabel"] = "";
+        stockModel_.append(none);
+    }
+    const auto typeLabel = [](const std::string& t) -> QString {
+        if (t == "color_negative") return QStringLiteral("Color negative");
+        if (t == "color_reversal") return QStringLiteral("Color reversal");
+        if (t == "monochrome") return QStringLiteral("Monochrome");
+        return QStringLiteral("Other");
+    };
+    for (const char* cat : {"color_negative", "color_reversal", "monochrome"}) {
+        for (const auto& s : profiles.stocks) {
+            if (s.stock_type != cat) continue;
+            QVariantMap m;
+            m["id"] = QString::fromStdString(s.stock_id);
+            m["name"] = QString::fromStdString(s.stock_name);
+            m["type"] = QString::fromStdString(s.stock_type);
+            m["typeLabel"] = typeLabel(s.stock_type);
+            stockModel_.append(m);
+        }
+    }
     emit stocksChanged();
 }
 

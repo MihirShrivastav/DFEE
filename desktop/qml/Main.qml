@@ -359,6 +359,7 @@ Window {
             }
 
             MouseArea {
+                id: wheelDrag
                 anchors.fill: parent
                 cursorShape: Qt.CrossCursor
                 onPressed: (mouse) => wheel.pick(mouse.x, mouse.y)
@@ -374,7 +375,7 @@ Window {
                 parent: wheel
                 x: 0
                 y: wheel.height + 4
-                visible: wheelHover.hovered
+                visible: wheelHover.hovered && !wheelDrag.pressed
                 text: "Tints the " + wheel.label.toLowerCase() + " — drag from the centre to add color, double-click to reset."
             }
         }
@@ -546,6 +547,7 @@ Window {
             }
         }
         InspectorSlider {
+            id: sliderControl
             width: parent.width
             enabled: sliderRow.available
             from: sliderRow.minimum
@@ -561,7 +563,8 @@ Window {
             parent: sliderRow
             x: 0
             y: sliderRow.height + 4
-            visible: sliderHover.hovered && sliderRow.tooltip.length > 0
+            // Hide while dragging the slider — a tooltip over a moving control is distracting.
+            visible: sliderHover.hovered && !sliderControl.pressed && sliderRow.tooltip.length > 0
             text: sliderRow.tooltip
         }
     }
@@ -798,13 +801,11 @@ Window {
                                 id: stockBox
                                 width: parent.width
                                 height: 52
-                                model: engine.stockNames
-                                currentIndex: {
-                                    for (var i = 0; i < engine.stockNames.length; ++i)
-                                        if (engine.stockIdAt(i) === engine.stock) return i;
-                                    return 0;
-                                }
-                                onActivated: engine.stock = engine.stockIdAt(currentIndex)
+                                model: engine.stockModel
+                                textRole: "name"
+                                valueRole: "id"
+                                currentIndex: stockBox.indexOfValue(engine.stock)
+                                onActivated: engine.stock = stockBox.currentValue
 
                                 contentItem: Item {
                                     Row {
@@ -817,7 +818,7 @@ Window {
                                         BoxartSwatch {
                                             anchors.verticalCenter: parent.verticalCenter
                                             cell: 34
-                                            stockId: engine.stockIdAt(stockBox.currentIndex)
+                                            stockId: engine.stock
                                         }
                                         Column {
                                             anchors.verticalCenter: parent.verticalCenter
@@ -833,7 +834,9 @@ Window {
                                             }
                                             Text {
                                                 width: parent.width
-                                                text: engine.currentStockMonochrome ? "Monochrome negative" : (engine.stock === "none" ? "No film stock" : "Color negative")
+                                                text: engine.stock === "none" ? "No film stock"
+                                                      : (stockBox.currentIndex >= 0 && engine.stockModel[stockBox.currentIndex]
+                                                         ? engine.stockModel[stockBox.currentIndex].typeLabel : "")
                                                 color: root.textMuted
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 11
@@ -863,6 +866,23 @@ Window {
                                         model: stockBox.popup.visible ? stockBox.delegateModel : null
                                         currentIndex: stockBox.highlightedIndex
                                         ScrollIndicator.vertical: ScrollIndicator { }
+                                        section.property: "typeLabel"
+                                        section.criteria: ViewSection.FullString
+                                        section.delegate: Item {
+                                            width: ListView.view.width
+                                            height: section === "" ? 0 : 24
+                                            visible: section !== ""
+                                            Text {
+                                                anchors.left: parent.left
+                                                anchors.leftMargin: 10
+                                                anchors.bottom: parent.bottom
+                                                anchors.bottomMargin: 4
+                                                text: section
+                                                color: root.textMuted
+                                                font.pixelSize: 10
+                                                font.weight: Font.Medium
+                                            }
+                                        }
                                     }
                                     background: Rectangle {
                                         radius: 10
@@ -881,12 +901,12 @@ Window {
                                         spacing: 12
                                         BoxartSwatch {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            cell: 34
-                                            stockId: engine.stockIdAt(index)
+                                            cell: 32
+                                            stockId: modelData.id
                                         }
                                         Text {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            text: modelData
+                                            text: modelData.name
                                             color: root.textPrimary
                                             elide: Text.ElideRight
                                             font.pixelSize: 13

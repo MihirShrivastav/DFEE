@@ -20,6 +20,9 @@ class RenderWorker;
 class EngineController : public QObject {
     Q_OBJECT
     Q_PROPERTY(QStringList stockNames READ stockNames NOTIFY stocksChanged)
+    // Category-grouped stock list for the picker: rows of {id, name, type, typeLabel},
+    // ordered None -> color negative -> color reversal -> monochrome.
+    Q_PROPERTY(QVariantList stockModel READ stockModel NOTIFY stocksChanged)
     Q_PROPERTY(QStringList printStockNames READ printStockNames NOTIFY stocksChanged)
     Q_PROPERTY(QString stock READ stock WRITE setStock NOTIFY stockChanged)
     Q_PROPERTY(double filmExposure READ filmExposure WRITE setFilmExposure NOTIFY paramsChanged)
@@ -50,6 +53,7 @@ public:
     ~EngineController() override;
 
     QStringList stockNames() const { return stockNames_; }
+    QVariantList stockModel() const { return stockModel_; }
     QStringList printStockNames() const { return printStockNames_; }
     QString stock() const { return stockId_; }
     void setStock(const QString& id);
@@ -131,6 +135,7 @@ private:
     std::unique_ptr<dfee::EngineSession> session_;
     QStringList stockNames_;
     QStringList stockIds_;
+    QVariantList stockModel_;
     QStringList printStockNames_;
     QStringList printStockIds_;
     QHash<QString, bool> monochromeStocks_;
