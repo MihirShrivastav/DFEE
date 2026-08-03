@@ -31,6 +31,8 @@ Window {
     readonly property color accentText: "#161618"       // text on a light accent fill
     readonly property color knob: "#c4c4c9"             // slider knob
     readonly property color danger: "#e0655b"
+    property bool libraryOpen: true       // left folders pane
+    property bool filmstripOpen: true     // bottom thumbnail strip
 
     function exportFormatLabel(format) {
         if (format === "png8") return "8-bit PNG"
@@ -602,22 +604,36 @@ Window {
         }
     }
 
-    // ── Library pane (left) — pinned folders + thumbnail grid. Standalone only. ──
+    // ── Library pane (left) — pinned FOLDERS only. Collapsible. Standalone only. ──
     Rectangle {
         id: libraryPane
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: filmstrip.top
-        width: engine.lightroomRoundTrip ? 0 : 232
+        width: engine.lightroomRoundTrip ? 0 : (root.libraryOpen ? 232 : 22)
         visible: !engine.lightroomRoundTrip
         color: root.bg
         border.width: 1
         border.color: root.border
 
+        // Collapsed: a slim rail with a reopen chevron.
+        Item {
+            anchors.fill: parent
+            visible: !root.libraryOpen
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.libraryOpen = true }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top; anchors.topMargin: 18
+                text: "›"; color: root.textSecondary; font.pixelSize: 16
+            }
+        }
+
+        // Expanded content.
         Column {
             anchors.fill: parent
             anchors.margins: 14
             spacing: 12
+            visible: root.libraryOpen
 
             Item {
                 width: parent.width
@@ -626,119 +642,132 @@ Window {
                     anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
                     text: "Library"; color: root.textPrimary; font.pixelSize: 14; font.weight: Font.Medium
                 }
-                Button {
-                    id: addFolderBtn
+                Row {
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    width: 54; height: 24
-                    text: "Add"
-                    onClicked: folderDialog.open()
-                    contentItem: Text { text: addFolderBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                    background: Rectangle {
-                        radius: 6; color: addFolderBtn.down ? "#26262b" : "#2e2e34"
-                        border.width: 1; border.color: root.hair
+                    spacing: 6
+                    Button {
+                        id: addFolderBtn
+                        width: 50; height: 24
+                        text: "Add"
+                        onClicked: folderDialog.open()
+                        contentItem: Text { text: addFolderBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
+                        background: Rectangle { radius: 6; color: addFolderBtn.down ? "#26262b" : "#2e2e34"; border.width: 1; border.color: root.hair }
+                    }
+                    Button {
+                        id: libCollapseBtn
+                        width: 24; height: 24
+                        text: "‹"
+                        onClicked: root.libraryOpen = false
+                        contentItem: Text { text: libCollapseBtn.text; color: root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 16 }
+                        background: Rectangle { radius: 6; color: libCollapseBtn.down ? "#20ffffff" : "transparent" }
                     }
                 }
             }
 
-            // Pinned folders
-            Column {
-                width: parent.width
-                spacing: 2
-                Repeater {
-                    model: library.folders
-                    delegate: Rectangle {
-                        width: parent.width
-                        height: 26
-                        radius: 6
-                        readonly property bool selected: library.currentFolder === modelData.path
-                        color: selected ? "#20ffffff" : (folderHover.hovered ? "#12ffffff" : "transparent")
-                        Text {
-                            anchors.left: parent.left; anchors.leftMargin: 8
-                            anchors.right: rmBtn.left; anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.name; elide: Text.ElideMiddle
-                            color: parent.selected ? root.textPrimary : root.textSecondary
-                            font.pixelSize: 12
-                        }
-                        HoverHandler { id: folderHover }
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: library.selectFolder(modelData.path) }
-                        Button {
-                            id: rmBtn
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                            width: 22; height: 22
-                            visible: folderHover.hovered
-                            text: "×"
-                            onClicked: library.removeFolder(modelData.path)
-                            contentItem: Text { text: rmBtn.text; color: root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 14 }
-                            background: Rectangle { color: "transparent" }
-                        }
-                    }
-                }
-                Text {
-                    visible: library.folders.length === 0
-                    width: parent.width
-                    text: "Add a folder to browse your shots."
-                    color: root.textMuted; font.pixelSize: 11; wrapMode: Text.WordWrap
-                }
-            }
-
-            // Thumbnail grid of the current folder
-            GridView {
-                id: libraryGrid
+            // Pinned folders (folders only — thumbnails live in the filmstrip)
+            ListView {
+                id: folderList
                 width: parent.width
                 height: parent.height - y
                 clip: true
-                cellWidth: parent.width / 2
-                cellHeight: cellWidth
-                model: library.files
+                model: library.folders
+                spacing: 2
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 8 }
-                delegate: Item {
-                    width: libraryGrid.cellWidth
-                    height: libraryGrid.cellHeight
-                    ThumbTile {
-                        anchors.fill: parent
-                        anchors.margins: 3
-                        edge: 256
-                        path: modelData.path
-                        name: modelData.name
+                delegate: Rectangle {
+                    width: folderList.width
+                    height: 30
+                    radius: 6
+                    readonly property bool selected: library.currentFolder === modelData.path
+                    color: selected ? "#20ffffff" : (folderHover.hovered ? "#12ffffff" : "transparent")
+                    Text {
+                        anchors.left: parent.left; anchors.leftMargin: 10
+                        anchors.right: rmBtn.left; anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.name; elide: Text.ElideMiddle
+                        color: parent.selected ? root.textPrimary : root.textSecondary
+                        font.pixelSize: 12
+                    }
+                    HoverHandler { id: folderHover }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: library.selectFolder(modelData.path) }
+                    Button {
+                        id: rmBtn
+                        anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                        width: 22; height: 22
+                        visible: folderHover.hovered
+                        text: "×"
+                        onClicked: library.removeFolder(modelData.path)
+                        contentItem: Text { text: rmBtn.text; color: root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 14 }
+                        background: Rectangle { color: "transparent" }
                     }
                 }
             }
         }
+        // Empty-state hint
+        Text {
+            visible: root.libraryOpen && library.folders.length === 0
+            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+            anchors.margins: 14; anchors.topMargin: 56
+            text: "Add a folder to browse your shots."
+            color: root.textMuted; font.pixelSize: 11; wrapMode: Text.WordWrap
+        }
     }
 
-    // ── Filmstrip (bottom) — current folder's shots. Standalone only. ──
+    // ── Filmstrip (bottom) — current folder's thumbnails. Collapsible. Standalone only. ──
     Rectangle {
         id: filmstrip
         anchors.left: parent.left
         anchors.right: inspector.left
         anchors.bottom: parent.bottom
-        height: engine.lightroomRoundTrip ? 0 : 104
+        height: engine.lightroomRoundTrip ? 0 : (root.filmstripOpen ? 108 : 22)
         visible: !engine.lightroomRoundTrip
         color: root.bg
         border.width: 1
         border.color: root.border
 
-        ListView {
+        // Collapsed: a slim rail with a reopen chevron.
+        Item {
             anchors.fill: parent
-            anchors.margins: 8
-            orientation: ListView.Horizontal
-            clip: true
-            spacing: 6
-            model: library.files
-            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded; height: 7 }
-            delegate: ThumbTile {
-                width: height * 1.2
-                height: filmstrip.height - 24
-                edge: 160
-                path: modelData.path
-                name: modelData.name
-            }
+            visible: !root.filmstripOpen
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.filmstripOpen = true }
+            Text { anchors.centerIn: parent; text: "▴"; color: root.textSecondary; font.pixelSize: 12 }
         }
-        Text {
-            anchors.centerIn: parent
-            visible: library.files.length === 0
-            text: engine.lightroomRoundTrip ? "" : "No images in this folder"
-            color: root.textMuted; font.pixelSize: 12
+
+        // Expanded: thumbnails + collapse toggle.
+        Item {
+            anchors.fill: parent
+            visible: root.filmstripOpen
+
+            ListView {
+                anchors.fill: parent
+                anchors.margins: 8
+                anchors.rightMargin: 28
+                orientation: ListView.Horizontal
+                clip: true
+                spacing: 6
+                model: library.files
+                ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded; height: 7 }
+                delegate: ThumbTile {
+                    width: height * 1.4
+                    height: filmstrip.height - 26
+                    edge: 200
+                    path: modelData.path
+                    name: modelData.name
+                }
+            }
+            Button {
+                id: filmCollapseBtn
+                anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 4
+                width: 22; height: 22
+                text: "▾"
+                onClicked: root.filmstripOpen = false
+                contentItem: Text { text: filmCollapseBtn.text; color: root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
+                background: Rectangle { radius: 6; color: filmCollapseBtn.down ? "#20ffffff" : "transparent" }
+            }
+            Text {
+                anchors.centerIn: parent
+                visible: library.files.length === 0
+                text: "No images in this folder"
+                color: root.textMuted; font.pixelSize: 12
+            }
         }
     }
 
