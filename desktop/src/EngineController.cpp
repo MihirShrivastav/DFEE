@@ -28,15 +28,12 @@ EngineController::EngineController(PreviewImageProvider* provider,
         {"exposure_placement", "auto_balanced"},
         {"film_exposure_ev", 0.0},
         {"adaptive", true},
-        {"adaptation", 1.0},
         {"rendered_input", 80.0},
         {"highlight_rolloff", 100.0},
         {"film_contrast", 100.0},
         {"shadow_lift", 0.0},
         {"film_color_density", 100.0},
-        {"film_color_compression", 100.0},
         {"emulsion_color_density", 0.0},
-        {"palette_range", 0.0},
         {"highlight_color_hold", 0.0},
         {"shadow_color_retention", 0.0},
         {"grain_auto", true},
@@ -221,11 +218,8 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
         {"halation_strength", {0.0, 200.0}},
         {"halation_threshold", {0.0, 100.0}},
         {"bloom", {0.0, 100.0}},
-        // Film emulsion extras
-        {"adaptation", {0.0, 2.0}},
+        // Rendered-input handling (TIFF/already-developed files only)
         {"rendered_input", {0.0, 100.0}},
-        {"film_color_compression", {0.0, 200.0}},
-        {"palette_range", {-100.0, 100.0}},
         // Basic tone/colour
         {"exposure", {-3.0, 3.0}},
         {"contrast", {-100.0, 100.0}},
@@ -411,11 +405,12 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
         return static_cast<float>(filmControls_.value(key).toDouble());
     };
 
-    // Film emulsion extras
-    request.adaptation = f("adaptation");
+    // Rendered-input handling (TIFF/already-developed files only). We deliberately
+    // do NOT plumb film_color_compression or palette_range: both are retired in the
+    // engine (compression follows film_color_density; the palette_range pass was
+    // removed), so their neutral struct defaults are correct. adaptation is a live
+    // engine control but intentionally not surfaced, so its 1.0 default stands too.
     request.rendered_input = f("rendered_input");
-    request.film_color_compression = f("film_color_compression");
-    request.palette_range = f("palette_range");
 
     // Basic tone/colour
     request.exposure = f("exposure");
