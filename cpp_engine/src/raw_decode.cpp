@@ -509,4 +509,102 @@ NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& reque
     return response;
 }
 
+#if DFEE_HAS_OPENCV
+namespace {
+// Downscale a BGR Mat so its long edge is ~max_edge and JPEG-encode it.
+[[nodiscard]] ThumbnailResponse finalize_thumbnail(cv::Mat bgr, int max_edge) {
+    ThumbnailResponse r;
+    if (bgr.empty()) {
+        r.error = "empty thumbnail";
+        return r;
+    }
+    const int longer = std::max(bgr.cols, bgr.rows);
+    if (longer > max_edge && longer > 0) {
+        const double s = static_cast<double>(max_edge) / static_cast<double>(longer);
+        cv::resize(bgr, bgr, cv::Size(), s, s, cv::INTER_AREA);
+    }
+    std::vector<std::uint8_t> bytes;
+    const std::vector<int> params{cv::IMWRITE_JPEG_QUALITY, 82};
+    if (!cv::imencode(".jpg", bgr, bytes, params)) {
+        r.error = "jpeg encode failed";
+        return r;
+    }
+    r.ok = true;
+    r.width = bgr.cols;
+    r.height = bgr.rows;
+    r.jpeg_bytes = std::move(bytes);
+    return r;
+}
+
+// Apply LibRaw's EXIF flip code to an oriented upright image.
+[[nodiscard]] cv::Mat apply_libraw_flip(cv::Mat img, int flip) {
+    switch (flip) {
+        case 3: cv::rotate(img, img, cv::ROTATE_180); break;
+        case 5: cv::rotate(img, img, cv::ROTATE_90_COUNTERCLOCKWISE); break;
+        case 6: cv::rotate(img, img, cv::ROTATE_90_CLOCKWISE); break;
+        default: break;  // 0/1 = already upright
+    }
+    return img;
+}
+}  // namespace
+
+ThumbnailResponse extract_thumbnail_jpeg(const std::string& filename, int max_edge) {
+    ThumbnailResponse r;
+    if (filename.empty()) {
+        r.error = "empty filename";
+        return r;
+    }
+    if (max_edge < 16) {
+        max_edge = 16;
+    }
+
+    if (is_tiff_filename(filename)) {
+        cv::Mat img = cv::imread(filename, cv::IMREAD_COLOR);  // 8-bit BGR
+        if (img.empty()) {
+            r.error = "tiff read failed";
+            return r;
+        }
+        return finalize_thumbnail(std::move(img), max_edge);
+    }
+
+    // RAW: use the embedded preview thumbnail (fast, no full decode).
+    LibRaw processor;
+    if (processor.open_file(filename.c_str()) != LIBRAW_SUCCESS) {
+        r.error = "libraw open failed";
+        return r;
+    }
+    if (processor.unpack_thumb() != LIBRAW_SUCCESS) {
+        r.error = "no embedded thumbnail";
+        return r;
+    }
+    int err = 0;
+    libraw_processed_image_t* thumb = processor.dcraw_make_mem_thumb(&err);
+    if (thumb == nullptr) {
+        r.error = "thumbnail extract failed";
+        return r;
+    }
+    cv::Mat bgr;
+    if (thumb->type == LIBRAW_IMAGE_JPEG) {
+        const cv::Mat buf(1, static_cast<int>(thumb->data_size), CV_8U, thumb->data);
+        bgr = cv::imdecode(buf, cv::IMREAD_COLOR);
+    } else if (thumb->type == LIBRAW_IMAGE_BITMAP && thumb->colors == 3) {
+        const cv::Mat rgb(thumb->height, thumb->width, CV_8UC3, thumb->data);
+        cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+    }
+    const int flip = processor.imgdata.sizes.flip;
+    LibRaw::dcraw_clear_mem(thumb);
+    if (bgr.empty()) {
+        r.error = "thumbnail decode failed";
+        return r;
+    }
+    return finalize_thumbnail(apply_libraw_flip(std::move(bgr), flip), max_edge);
+}
+#else
+ThumbnailResponse extract_thumbnail_jpeg(const std::string&, int) {
+    ThumbnailResponse r;
+    r.error = "OpenCV not available";
+    return r;
+}
+#endif  // DFEE_HAS_OPENCV
+
 }  // namespace dfee

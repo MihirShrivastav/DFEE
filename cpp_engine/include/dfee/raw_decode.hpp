@@ -34,4 +34,16 @@ struct DecodedRawImageResponse {
 [[nodiscard]] DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest& request);
 [[nodiscard]] NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& request);
 
+// Fast, session-free thumbnail for the library grid/filmstrip. Uses the RAW's
+// embedded preview (LibRaw) or a downscaled TIFF read, oriented and re-encoded as a
+// small JPEG with its long edge ~max_edge. Independent of the render session.
+struct ThumbnailResponse {
+    bool ok = false;
+    int width = 0;
+    int height = 0;
+    std::vector<std::uint8_t> jpeg_bytes;
+    std::string error;
+};
+[[nodiscard]] ThumbnailResponse extract_thumbnail_jpeg(const std::string& filename, int max_edge);
+
 }  // namespace dfee
