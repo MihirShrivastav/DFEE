@@ -78,6 +78,27 @@ Window {
         font.weight: Font.Medium
     }
 
+    // Graphite-styled hover tooltip. Pair with a HoverHandler: `visible: hh.hovered`.
+    component GraphiteTip: ToolTip {
+        id: tip
+        delay: 450
+        padding: 9
+        contentItem: Text {
+            text: tip.text
+            color: root.textPrimary
+            font.pixelSize: 11
+            lineHeight: 1.25
+            wrapMode: Text.WordWrap
+            width: Math.min(implicitWidth, 230)
+        }
+        background: Rectangle {
+            color: "#232327"
+            radius: 7
+            border.width: 1
+            border.color: root.hair
+        }
+    }
+
     // Small down/up chevron used in card headers (and reused as the combo indicator style).
     component ChevronToggle: Canvas {
         property bool open: true
@@ -102,8 +123,12 @@ Window {
     component GraphiteCheck: CheckBox {
         id: cb
         property string caption: ""
+        property string tooltip: ""
         spacing: 9
         implicitHeight: 20
+
+        HoverHandler { id: cbHover; enabled: cb.tooltip.length > 0 }
+        GraphiteTip { visible: cbHover.hovered && cb.tooltip.length > 0; text: cb.tooltip }
 
         indicator: Rectangle {
             implicitWidth: 18
@@ -208,6 +233,9 @@ Window {
                     engine.setFilmControl("cg_" + wheel.zone + "_sat", 0);
                 }
             }
+
+            HoverHandler { id: wheelHover }
+            GraphiteTip { visible: wheelHover.hovered; text: "Tints the " + wheel.label.toLowerCase() + " — drag from the centre to add colour, double-click to reset." }
         }
 
         Text {
@@ -380,6 +408,9 @@ Window {
             opacity: sliderRow.available ? 1.0 : 0.35
             onMoved: engine.setFilmControl(sliderRow.controlKey, value)
         }
+
+        HoverHandler { id: sliderHover; enabled: sliderRow.tooltip.length > 0 }
+        GraphiteTip { visible: sliderHover.hovered && sliderRow.tooltip.length > 0; text: sliderRow.tooltip }
     }
 
     Rectangle {
@@ -806,12 +837,12 @@ Window {
                                 spacing: 12
                                 visible: printCard.active
                                 opacity: printCard.active ? 1.0 : 0.4
-                                FilmSlider { controlKey: "print_strength"; label: "Print strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0 }
-                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true }
-                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true }
-                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true }
-                                FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true }
-                                FilmSlider { controlKey: "print_black_point"; label: "Black point (lift)"; minimum: -100; maximum: 100; bipolar: true }
+                                FilmSlider { controlKey: "print_strength"; label: "Print strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0; tooltip: "How strongly the print-stock emulation is applied over the negative." }
+                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger colour head — subtractive cyan filtration (removes red). Forward cools the print." }
+                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger colour head — subtractive magenta filtration (removes green)." }
+                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger colour head — subtractive yellow filtration (removes blue). Forward warms the print." }
+                                FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Steepness of the print's tone curve — the paper grade." }
+                                FilmSlider { controlKey: "print_black_point"; label: "Black point (lift)"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Print base density — lifts or deepens the darkest blacks of the print." }
                             }
                         }
                     }
@@ -859,6 +890,8 @@ Window {
                                 color: root.inset
                                 border.width: 1
                                 border.color: root.hair
+                                HoverHandler { id: placementHover }
+                                GraphiteTip { visible: placementHover.hovered; text: "Auto balanced sets a stock-aware starting exposure for the scene. As shot preserves the RAW's own exposure placement before the film response." }
                                 Row {
                                     anchors.fill: parent
                                     anchors.margins: 3
@@ -884,7 +917,7 @@ Window {
                                     }
                                 }
                             }
-                            FilmSlider { controlKey: "film_exposure_ev"; label: "Film exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true }
+                            FilmSlider { controlKey: "film_exposure_ev"; label: "Film exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Virtual exposure (in stops) reaching the film before its tone and colour response — like rating the stock faster or slower." }
                         }
                     }
                 }
@@ -923,16 +956,23 @@ Window {
                             spacing: 12
                             visible: toneCard.open
 
+                            // Applies before the film tone, and only to already-rendered
+                            // (TIFF) inputs — disabled for RAW, Lightroom-style.
+                            FilmSlider {
+                                controlKey: "rendered_input"; label: "Preserve rendered tone"
+                                minimum: 0; maximum: 100; neutral: 80
+                                available: engine.renderedInput
+                                tooltip: "For files that are already developed (TIFF/JPEG, e.g. sent from Lightroom): higher keeps the file's existing exposure and tone and applies the film look gently, protecting skies and bright highlights from being re-pushed. Lower treats it like a RAW and applies the full film tone. Has no effect on RAW files."
+                            }
                             GraphiteCheck {
                                 caption: "Adaptive scene tone"
                                 checked: engine.filmControls.adaptive
                                 onToggled: engine.setFilmControl("adaptive", checked)
+                                tooltip: "Lets the film read the scene and auto-adjust its tone for flat, high-dynamic-range files. Turn off for a fixed, predictable response."
                             }
-                            FilmSlider { controlKey: "highlight_rolloff"; label: "Highlight rolloff"; minimum: 0; maximum: 200; neutral: 100 }
-                            FilmSlider { controlKey: "film_contrast"; label: "Film contrast"; minimum: 0; maximum: 200; neutral: 100 }
-                            FilmSlider { controlKey: "shadow_lift"; label: "Shadow lift"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "adaptation"; label: "Tone adaptation"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0 }
-                            FilmSlider { controlKey: "rendered_input"; label: "Rendered input (TIFF)"; minimum: 0; maximum: 100; neutral: 80 }
+                            FilmSlider { controlKey: "highlight_rolloff"; label: "Highlight rolloff"; minimum: 0; maximum: 200; neutral: 100; tooltip: "How gently the brightest tones roll off instead of clipping — higher for softer, glowier film highlights." }
+                            FilmSlider { controlKey: "film_contrast"; label: "Film contrast"; minimum: 0; maximum: 200; neutral: 100; tooltip: "The punch of the film's tone curve — higher for a deeper, more contrasty look; lower for flatter." }
+                            FilmSlider { controlKey: "shadow_lift"; label: "Shadow lift"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Base-fog fade in the deepest shadows, the way negative film never quite reaches pure black. Forward lifts shadows into a soft matte; back deepens them toward true black." }
                         }
                     }
                 }
@@ -973,12 +1013,12 @@ Window {
                             opacity: engine.currentStockMonochrome ? 0.45 : 1.0
 
                             Text { visible: engine.currentStockMonochrome; text: "Unavailable for monochrome stocks"; color: root.textMuted; font.pixelSize: 11 }
-                            FilmSlider { controlKey: "film_color_density"; label: "Color density"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
-                            FilmSlider { controlKey: "film_color_compression"; label: "Color compression"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome }
-                            FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
-                            FilmSlider { controlKey: "palette_range"; label: "Palette range"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
-                            FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
-                            FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome }
+                            FilmSlider { controlKey: "film_color_density"; label: "Color density"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome; tooltip: "How dense and cohesive the film's colours are — forward for richer, deeper, more film-like colour; back for a thinner, more digital look." }
+                            FilmSlider { controlKey: "film_color_compression"; label: "Color compression"; minimum: 0; maximum: 200; neutral: 100; available: !engine.currentStockMonochrome; tooltip: "Harmonises the palette toward the stock's characteristic hues — higher gathers colours into a more cohesive film palette." }
+                            FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "Overall saturation of the stock's colour dyes — forward for punchier colour, back for a muted look." }
+                            FilmSlider { controlKey: "palette_range"; label: "Palette range"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How far colours are allowed to diverge from the stock's core hues — forward widens the palette, back pulls it tighter." }
+                            FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much colour survives in the highlights — back bleaches bright areas toward clean white (rescues blown, over-warm highlights)." }
+                            FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much colour survives in the shadows — forward keeps darks colourful, back mutes them toward neutral." }
                         }
                     }
                 }
@@ -1016,13 +1056,13 @@ Window {
                             width: parent.width
                             spacing: 12
                             visible: lightCard.open
-                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true }
-                            FilmSlider { controlKey: "contrast"; label: "Contrast"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "highlights"; label: "Highlights"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "shadows"; label: "Shadows"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "whites"; label: "Whites"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "blacks"; label: "Blacks"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "midtones"; label: "Midtones"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Overall image brightness, in stops. A general grade on top of the film response." }
+                            FilmSlider { controlKey: "contrast"; label: "Contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Global contrast — spreads or compresses the tonal range around the midtones." }
+                            FilmSlider { controlKey: "highlights"; label: "Highlights"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Recovers or brightens the brighter tones without moving whites." }
+                            FilmSlider { controlKey: "shadows"; label: "Shadows"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Opens or deepens the darker tones without moving blacks." }
+                            FilmSlider { controlKey: "whites"; label: "Whites"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Sets the white clipping point — how bright the brightest tones become." }
+                            FilmSlider { controlKey: "blacks"; label: "Blacks"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Sets the black clipping point — how deep the darkest tones become." }
+                            FilmSlider { controlKey: "midtones"; label: "Midtones"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Brightness of the mid-tones, leaving the extremes anchored." }
                         }
                     }
                 }
@@ -1060,10 +1100,10 @@ Window {
                             width: parent.width
                             spacing: 12
                             visible: colourCard.open
-                            FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance warmth — forward warms (more amber), back cools (more blue)." }
+                            FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance green/magenta — forward toward magenta, back toward green." }
+                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Smart saturation that protects skin tones and already-saturated colours." }
+                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall colour intensity, applied evenly to all hues." }
                         }
                     }
                 }
@@ -1101,11 +1141,11 @@ Window {
                             width: parent.width
                             spacing: 12
                             visible: detailCard.open
-                            FilmSlider { controlKey: "texture"; label: "Texture"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "clarity"; label: "Clarity"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "dehaze"; label: "Dehaze"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "sharpness"; label: "Detail sharpness"; minimum: 0; maximum: 2; increment: 0.05; decimals: true }
-                            FilmSlider { controlKey: "sharpness_mask"; label: "Luminance mask"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 0.5 }
+                            FilmSlider { controlKey: "texture"; label: "Texture"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Medium-scale detail like skin and foliage — forward enhances, back smooths." }
+                            FilmSlider { controlKey: "clarity"; label: "Clarity"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Midtone local contrast — forward adds punch and presence, back softens." }
+                            FilmSlider { controlKey: "dehaze"; label: "Dehaze"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Cuts or adds atmospheric haze and low-contrast veiling." }
+                            FilmSlider { controlKey: "sharpness"; label: "Detail sharpness"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; tooltip: "Edge sharpening amount." }
+                            FilmSlider { controlKey: "sharpness_mask"; label: "Luminance mask"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 0.5; tooltip: "Limits sharpening to edges, protecting smooth areas (like skies) from being sharpened into noise." }
                         }
                     }
                 }
@@ -1244,15 +1284,15 @@ Window {
                                 ColorWheel { zone: "global"; label: "Global" }
                             }
 
-                            FilmSlider { controlKey: "cg_shadow_lum"; label: "Shadow luminance"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "cg_midtone_lum"; label: "Midtone luminance"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "cg_highlight_lum"; label: "Highlight luminance"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "cg_global_lum"; label: "Global luminance"; minimum: -100; maximum: 100; bipolar: true }
+                            FilmSlider { controlKey: "cg_shadow_lum"; label: "Shadow luminance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Brightness of the shadow zone only." }
+                            FilmSlider { controlKey: "cg_midtone_lum"; label: "Midtone luminance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Brightness of the midtone zone only." }
+                            FilmSlider { controlKey: "cg_highlight_lum"; label: "Highlight luminance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Brightness of the highlight zone only." }
+                            FilmSlider { controlKey: "cg_global_lum"; label: "Global luminance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall brightness applied by the grade." }
 
                             InspectorLabel { text: "Grade" }
-                            FilmSlider { controlKey: "cg_crossbalance"; label: "Film crossbalance"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "cg_balance"; label: "Balance"; minimum: -100; maximum: 100; bipolar: true }
-                            FilmSlider { controlKey: "cg_blending"; label: "Blending"; minimum: 0; maximum: 100 }
+                            FilmSlider { controlKey: "cg_crossbalance"; label: "Film crossbalance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "One-knob split-tone: forward for teal shadows and warm highlights, back for the inverse." }
+                            FilmSlider { controlKey: "cg_balance"; label: "Balance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Shifts where shadows end and highlights begin, weighting the grade toward darks or lights." }
+                            FilmSlider { controlKey: "cg_blending"; label: "Blending"; minimum: 0; maximum: 100; tooltip: "How softly the shadow, midtone and highlight zones overlap." }
                         }
                     }
                 }
@@ -1297,15 +1337,16 @@ Window {
                                 checked: engine.filmControls.grain_auto
                                 enabled: !engine.grainResolving
                                 onToggled: engine.setAutoGrain(checked)
+                                tooltip: "Automatically matches grain to the film speed (ISO) and stock. Turn off to seed and edit Strength, Size and Roughness manually."
                             }
-                            FilmSlider { controlKey: "grain_strength"; label: "Strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto }
-                            FilmSlider { controlKey: "grain_size"; label: "Size"; minimum: 0.1; maximum: 2; increment: 0.05; decimals: true; neutral: 0.6; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto }
-                            FilmSlider { controlKey: "grain_roughness"; label: "Roughness"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 0.5; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto }
+                            FilmSlider { controlKey: "grain_strength"; label: "Strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto; tooltip: "How visible the grain is — the apparent film speed." }
+                            FilmSlider { controlKey: "grain_size"; label: "Size"; minimum: 0.1; maximum: 2; increment: 0.05; decimals: true; neutral: 0.6; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto; tooltip: "Particle size — larger reads as a coarser, higher-ISO stock." }
+                            FilmSlider { controlKey: "grain_roughness"; label: "Roughness"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 0.5; available: !engine.filmControls.grain_auto; autoValue: engine.filmControls.grain_auto; tooltip: "Irregularity of the grain clumping — higher is grittier and more organic, lower is finer and more even." }
                             InspectorLabel { text: "Halation" }
-                            FilmSlider { controlKey: "halation_strength"; label: "Strength"; minimum: 0; maximum: 200; neutral: 100 }
-                            FilmSlider { controlKey: "halation_threshold"; label: "Threshold"; minimum: 0; maximum: 100; neutral: 50 }
+                            FilmSlider { controlKey: "halation_strength"; label: "Strength"; minimum: 0; maximum: 200; neutral: 100; tooltip: "Strength of the warm red-orange glow that bleeds around bright edges against dark backgrounds." }
+                            FilmSlider { controlKey: "halation_threshold"; label: "Threshold"; minimum: 0; maximum: 100; neutral: 50; tooltip: "How bright an area must be before it starts to halate — higher restricts the glow to the brightest highlights." }
                             InspectorLabel { text: "Bloom" }
-                            FilmSlider { controlKey: "bloom"; label: "Amount"; minimum: 0; maximum: 100 }
+                            FilmSlider { controlKey: "bloom"; label: "Amount"; minimum: 0; maximum: 100; tooltip: "Soft optical glow spreading from the highlights, like light diffusing in the lens." }
                         }
                     }
                 }

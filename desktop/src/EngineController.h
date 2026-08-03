@@ -26,6 +26,7 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantMap filmControls READ filmControls NOTIFY filmControlsChanged)
     Q_PROPERTY(bool grainResolving READ grainResolving NOTIFY grainResolvingChanged)
     Q_PROPERTY(bool currentStockMonochrome READ currentStockMonochrome NOTIFY stockChanged)
+    Q_PROPERTY(bool renderedInput READ renderedInput NOTIFY previewChanged)
     Q_PROPERTY(QString exportFormat READ exportFormat WRITE setExportFormat NOTIFY exportSettingsChanged)
     Q_PROPERTY(int jpegQuality READ jpegQuality WRITE setJpegQuality NOTIFY exportSettingsChanged)
     Q_PROPERTY(int exportDpi READ exportDpi WRITE setExportDpi NOTIFY exportSettingsChanged)
@@ -55,6 +56,14 @@ public:
     QVariantMap filmControls() const { return filmControls_; }
     bool grainResolving() const { return grainResolving_; }
     bool currentStockMonochrome() const;
+    // True when the loaded file is an already-rendered input (TIFF, or a Lightroom
+    // round-trip working file) — the only case where the "Preserve rendered tone"
+    // control does anything. Used to disable it (Lightroom-style) for RAW files.
+    bool renderedInput() const {
+        if (lightroomRoundTrip_) return true;
+        const QString lower = currentFile_.toLower();
+        return lower.endsWith(".tif") || lower.endsWith(".tiff");
+    }
     QString exportFormat() const { return exportFormat_; }
     void setExportFormat(const QString& format);
     int jpegQuality() const { return jpegQuality_; }
