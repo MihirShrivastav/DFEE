@@ -79,17 +79,20 @@ Window {
     }
 
     // Graphite-styled hover tooltip. Pair with a HoverHandler: `visible: hh.hovered`.
+    // Caps its own width so long copy wraps instead of stretching across the screen.
     component GraphiteTip: ToolTip {
         id: tip
         delay: 450
-        padding: 9
+        padding: 10
+        // Cap the tooltip width; short copy shrinks, long copy wraps at 260.
+        width: Math.min(implicitWidth, 260)
         contentItem: Text {
             text: tip.text
             color: root.textPrimary
             font.pixelSize: 11
-            lineHeight: 1.25
+            lineHeight: 1.3
             wrapMode: Text.WordWrap
-            width: Math.min(implicitWidth, 230)
+            width: tip.availableWidth
         }
         background: Rectangle {
             color: "#232327"
