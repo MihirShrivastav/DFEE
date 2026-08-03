@@ -21,6 +21,9 @@ qt_add_executable(DFEE
     src/RenderWorker.cpp
     src/RenderWorker.h
     src/PreviewImageProvider.h
+    src/ThumbnailImageProvider.h
+    src/LibraryController.cpp
+    src/LibraryController.h
 )
 
 qt_add_qml_module(DFEE

@@ -12,6 +12,8 @@
 #include <QTextStream>
 #include "EngineController.h"
 #include "PreviewImageProvider.h"
+#include "ThumbnailImageProvider.h"
+#include "LibraryController.h"
 
 int main(int argc, char* argv[]) {
     // Native Windows controls cannot be safely restyled from QML.  Basic keeps
@@ -56,9 +58,13 @@ int main(int argc, char* argv[]) {
 
     EngineController controller(provider);
 
+    LibraryController library;
+
     QQmlApplicationEngine engine;
     engine.addImageProvider("preview", provider);   // engine takes ownership
+    engine.addImageProvider("thumb", new ThumbnailImageProvider());  // engine takes ownership
     engine.rootContext()->setContextProperty("engine", &controller);
+    engine.rootContext()->setContextProperty("library", &library);
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

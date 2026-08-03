@@ -72,6 +72,39 @@ Window {
         onAccepted: engine.openFile(selectedFile)
     }
 
+    FolderDialog {
+        id: folderDialog
+        title: "Add folder to library"
+        onAccepted: library.addFolder(selectedFolder)
+    }
+
+    // A library thumbnail tile (grid + filmstrip share it).
+    component ThumbTile: Rectangle {
+        property string path: ""
+        property string name: ""
+        property int edge: 128
+        radius: 6
+        color: root.inset
+        border.width: 1
+        border.color: root.hair
+        clip: true
+        Image {
+            anchors.fill: parent
+            anchors.margins: 1
+            asynchronous: true
+            cache: true
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.width: parent.edge
+            sourceSize.height: parent.edge
+            source: parent.path !== "" ? ("image://thumb/" + encodeURIComponent(parent.path)) : ""
+        }
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: engine.openFile(Qt.resolvedUrl("file:///" + parent.path.replace(/\\/g, "/")))
+        }
+    }
+
     component InspectorLabel: Text {
         color: root.textSecondary
         font.pixelSize: 12
@@ -569,11 +602,151 @@ Window {
         }
     }
 
+    // ── Library pane (left) — pinned folders + thumbnail grid. Standalone only. ──
     Rectangle {
-        id: previewCanvas
+        id: libraryPane
         anchors.left: parent.left
         anchors.top: parent.top
+        anchors.bottom: filmstrip.top
+        width: engine.lightroomRoundTrip ? 0 : 232
+        visible: !engine.lightroomRoundTrip
+        color: root.bg
+        border.width: 1
+        border.color: root.border
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 12
+
+            Item {
+                width: parent.width
+                height: 26
+                Text {
+                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                    text: "Library"; color: root.textPrimary; font.pixelSize: 14; font.weight: Font.Medium
+                }
+                Button {
+                    id: addFolderBtn
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    width: 54; height: 24
+                    text: "Add"
+                    onClicked: folderDialog.open()
+                    contentItem: Text { text: addFolderBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
+                    background: Rectangle {
+                        radius: 6; color: addFolderBtn.down ? "#26262b" : "#2e2e34"
+                        border.width: 1; border.color: root.hair
+                    }
+                }
+            }
+
+            // Pinned folders
+            Column {
+                width: parent.width
+                spacing: 2
+                Repeater {
+                    model: library.folders
+                    delegate: Rectangle {
+                        width: parent.width
+                        height: 26
+                        radius: 6
+                        readonly property bool selected: library.currentFolder === modelData.path
+                        color: selected ? "#20ffffff" : (folderHover.hovered ? "#12ffffff" : "transparent")
+                        Text {
+                            anchors.left: parent.left; anchors.leftMargin: 8
+                            anchors.right: rmBtn.left; anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.name; elide: Text.ElideMiddle
+                            color: parent.selected ? root.textPrimary : root.textSecondary
+                            font.pixelSize: 12
+                        }
+                        HoverHandler { id: folderHover }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: library.selectFolder(modelData.path) }
+                        Button {
+                            id: rmBtn
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            width: 22; height: 22
+                            visible: folderHover.hovered
+                            text: "×"
+                            onClicked: library.removeFolder(modelData.path)
+                            contentItem: Text { text: rmBtn.text; color: root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 14 }
+                            background: Rectangle { color: "transparent" }
+                        }
+                    }
+                }
+                Text {
+                    visible: library.folders.length === 0
+                    width: parent.width
+                    text: "Add a folder to browse your shots."
+                    color: root.textMuted; font.pixelSize: 11; wrapMode: Text.WordWrap
+                }
+            }
+
+            // Thumbnail grid of the current folder
+            GridView {
+                id: libraryGrid
+                width: parent.width
+                height: parent.height - y
+                clip: true
+                cellWidth: parent.width / 2
+                cellHeight: cellWidth
+                model: library.files
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 8 }
+                delegate: Item {
+                    width: libraryGrid.cellWidth
+                    height: libraryGrid.cellHeight
+                    ThumbTile {
+                        anchors.fill: parent
+                        anchors.margins: 3
+                        edge: 256
+                        path: modelData.path
+                        name: modelData.name
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Filmstrip (bottom) — current folder's shots. Standalone only. ──
+    Rectangle {
+        id: filmstrip
+        anchors.left: parent.left
+        anchors.right: inspector.left
         anchors.bottom: parent.bottom
+        height: engine.lightroomRoundTrip ? 0 : 104
+        visible: !engine.lightroomRoundTrip
+        color: root.bg
+        border.width: 1
+        border.color: root.border
+
+        ListView {
+            anchors.fill: parent
+            anchors.margins: 8
+            orientation: ListView.Horizontal
+            clip: true
+            spacing: 6
+            model: library.files
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded; height: 7 }
+            delegate: ThumbTile {
+                width: height * 1.2
+                height: filmstrip.height - 24
+                edge: 160
+                path: modelData.path
+                name: modelData.name
+            }
+        }
+        Text {
+            anchors.centerIn: parent
+            visible: library.files.length === 0
+            text: engine.lightroomRoundTrip ? "" : "No images in this folder"
+            color: root.textMuted; font.pixelSize: 12
+        }
+    }
+
+    Rectangle {
+        id: previewCanvas
+        anchors.left: libraryPane.right
+        anchors.top: parent.top
+        anchors.bottom: filmstrip.top
         anchors.right: inspector.left
         color: root.canvas
         property int compareMode: 0   // 0 = Edited, 1 = Split, 2 = Side by side
