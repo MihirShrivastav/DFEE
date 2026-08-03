@@ -249,6 +249,65 @@ Window {
         }
     }
 
+    // Number field in Graphite style: recessed inset value + raised bevel -/+ chips.
+    component GraphiteSpin: SpinBox {
+        id: spin
+        implicitHeight: 30
+        implicitWidth: 118
+        font.pixelSize: 12
+
+        contentItem: TextInput {
+            z: 2
+            text: spin.textFromValue(spin.value, spin.locale)
+            color: root.textPrimary
+            font: spin.font
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            readOnly: !spin.editable
+            validator: spin.validator
+            inputMethodHints: Qt.ImhFormattedNumbersOnly
+            selectByMouse: true
+            selectionColor: root.textSecondary
+        }
+
+        background: Rectangle {
+            radius: 8
+            color: root.inset
+            border.width: 1
+            border.color: root.hair
+        }
+
+        down.indicator: Rectangle {
+            x: 0; y: 0
+            width: 32
+            height: spin.height
+            topLeftRadius: 8; bottomLeftRadius: 8
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: spin.down.pressed ? "#26262b" : "#33333a" }
+                GradientStop { position: 1.0; color: spin.down.pressed ? "#1d1d20" : "#242429" }
+            }
+            border.width: 1
+            border.color: root.hair
+            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; color: "#16ffffff" }
+            Text { anchors.centerIn: parent; text: "−"; color: root.textPrimary; font.pixelSize: 15 }
+        }
+
+        up.indicator: Rectangle {
+            x: spin.width - width; y: 0
+            width: 32
+            height: spin.height
+            topRightRadius: 8; bottomRightRadius: 8
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: spin.up.pressed ? "#26262b" : "#33333a" }
+                GradientStop { position: 1.0; color: spin.up.pressed ? "#1d1d20" : "#242429" }
+            }
+            border.width: 1
+            border.color: root.hair
+            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; color: "#16ffffff" }
+            Text { anchors.centerIn: parent; text: "+"; color: root.textPrimary; font.pixelSize: 15 }
+        }
+    }
+
     // Draggable color-grading wheel: angle = hue, radius = saturation. Reads/writes
     // engine.filmControls["cg_<zone>_hue"/"_sat"]. Double-click resets to neutral.
     component ColorWheel: Item {
@@ -674,7 +733,17 @@ Window {
             contentWidth: width
             contentHeight: controls.implicitHeight + 40
             boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                width: 9
+                contentItem: Rectangle {
+                    implicitWidth: 5
+                    radius: 3
+                    color: "#5a5a60"
+                    opacity: parent.pressed ? 0.9 : (parent.hovered ? 0.65 : 0.4)
+                }
+                background: Rectangle { color: "transparent" }
+            }
 
             Column {
                 id: controls
@@ -1507,7 +1576,7 @@ Window {
                                 visible: engine.exportFormat === "jpeg"
                                 spacing: 8
                                 InspectorLabel { text: "JPEG quality"; width: parent.width - qualityBox.width - 8; anchors.verticalCenter: parent.verticalCenter }
-                                SpinBox {
+                                GraphiteSpin {
                                     id: qualityBox
                                     from: 1; to: 100
                                     value: engine.jpegQuality
@@ -1521,7 +1590,7 @@ Window {
                                 visible: engine.exportFormat === "tiff"
                                 spacing: 8
                                 InspectorLabel { text: "TIFF DPI"; width: parent.width - dpiBox.width - 8; anchors.verticalCenter: parent.verticalCenter }
-                                SpinBox {
+                                GraphiteSpin {
                                     id: dpiBox
                                     from: 72; to: 1200; stepSize: 1
                                     value: engine.exportDpi
