@@ -37,6 +37,8 @@ class EngineController : public QObject {
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportingChanged)
     Q_PROPERTY(bool lightroomRoundTrip READ lightroomRoundTrip NOTIFY lightroomRoundTripChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
+    Q_PROPERTY(bool hasBefore READ hasBefore NOTIFY beforeChanged)
+    Q_PROPERTY(int beforeRevision READ beforeRevision NOTIFY beforeChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     // 256-bin per-channel histogram of the current preview (raw counts).
@@ -96,6 +98,8 @@ public:
     void beginLightroomRoundTrip(const QString& tiffPath);
 
     bool hasImage() const { return hasImage_; }
+    bool hasBefore() const { return hasBefore_; }
+    int beforeRevision() const { return beforeRevision_; }
     int previewRevision() const { return previewRevision_; }
     QString status() const { return status_; }
     QVariantList histogramR() const { return histogramR_; }
@@ -104,6 +108,7 @@ public:
 
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
     Q_INVOKABLE void onPreviewReady();
+    Q_INVOKABLE void onBeforeReady(bool ok);
     Q_INVOKABLE void onHistogram(const QVariantList& r, const QVariantList& g, const QVariantList& b);
     Q_INVOKABLE void onRenderFailed(const QString& msg);
     Q_INVOKABLE void onWorkerBusyChanged(bool busy);
@@ -122,6 +127,7 @@ signals:
     void lightroomRoundTripChanged();
     void hasImageChanged();
     void previewChanged();
+    void beforeChanged();
     void statusChanged();
     void histogramChanged();
 
@@ -147,6 +153,8 @@ private:
 
     QString currentFile_;
     bool hasImage_ = false;
+    bool hasBefore_ = false;
+    int beforeRevision_ = 0;
     int previewRevision_ = 0;
     QString status_;
     QVariantList histogramR_;

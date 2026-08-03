@@ -576,14 +576,129 @@ Window {
         anchors.bottom: parent.bottom
         anchors.right: inspector.left
         color: root.canvas
+        property int compareMode: 0   // 0 = Edited, 1 = Split, 2 = Side by side
 
-        Image {
+        Item {
+            id: imageArea
             anchors.fill: parent
             anchors.margins: 28
-            fillMode: Image.PreserveAspectFit
-            cache: false
-            source: engine.hasImage ? ("image://preview/frame?rev=" + engine.previewRevision) : ""
             visible: engine.hasImage
+
+            readonly property string afterSrc: engine.hasImage ? ("image://preview/frame?rev=" + engine.previewRevision) : ""
+            readonly property string beforeSrc: engine.hasBefore ? ("image://preview/before?rev=" + engine.beforeRevision) : ""
+            readonly property bool split: previewCanvas.compareMode === 1 && engine.hasBefore
+            readonly property bool sideBySide: previewCanvas.compareMode === 2 && engine.hasBefore
+
+            // Edited / Split — the film ("after") fills; "before" is clipped on the left.
+            Image {
+                id: afterImg
+                anchors.fill: parent
+                fillMode: Image.PreserveAspectFit
+                cache: false
+                source: imageArea.afterSrc
+                visible: !imageArea.sideBySide
+            }
+            Item {
+                anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+                width: divider.x
+                clip: true
+                visible: imageArea.split
+                Image {
+                    width: imageArea.width
+                    height: imageArea.height
+                    fillMode: Image.PreserveAspectFit
+                    cache: false
+                    source: imageArea.beforeSrc
+                }
+            }
+            Text {
+                visible: imageArea.split
+                anchors { left: parent.left; top: parent.top; margins: 6 }
+                text: "Before"
+                color: "#e9e9ec"
+                font.pixelSize: 11
+                style: Text.Outline; styleColor: "#80000000"
+            }
+            Item {
+                id: divider
+                visible: imageArea.split
+                y: 0
+                x: imageArea.width / 2
+                width: 2
+                height: imageArea.height
+                Rectangle { anchors.fill: parent; color: "#e9e9ec" }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 28; height: 28; radius: 14
+                    color: "#e9e9ec"
+                    border.width: 1; border.color: "#40000000"
+                    Text { anchors.centerIn: parent; text: "↔"; color: "#161618"; font.pixelSize: 14 }
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -14
+                    cursorShape: Qt.SizeHorCursor
+                    drag.target: divider
+                    drag.axis: Drag.XAxis
+                    drag.minimumX: 0
+                    drag.maximumX: imageArea.width
+                }
+            }
+
+            // Side by side — before | after.
+            Row {
+                anchors.fill: parent
+                visible: imageArea.sideBySide
+                spacing: 2
+                Item {
+                    width: (parent.width - 2) / 2
+                    height: parent.height
+                    Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; cache: false; source: imageArea.beforeSrc }
+                    Text { anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 2 } text: "Before"; color: root.textSecondary; font.pixelSize: 11 }
+                }
+                Item {
+                    width: (parent.width - 2) / 2
+                    height: parent.height
+                    Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; cache: false; source: imageArea.afterSrc }
+                    Text { anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 2 } text: "After"; color: root.textSecondary; font.pixelSize: 11 }
+                }
+            }
+        }
+
+        // Floating before/after mode switch (only when a "before" is available).
+        Rectangle {
+            visible: engine.hasImage && engine.hasBefore
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.topMargin: 16
+            width: compareRow.width + 8
+            height: 32
+            radius: 9
+            color: "#cc161618"
+            border.width: 1
+            border.color: root.hair
+            Row {
+                id: compareRow
+                anchors.centerIn: parent
+                spacing: 4
+                Repeater {
+                    model: [{ label: "Edited", m: 0 }, { label: "Split", m: 1 }, { label: "Side by side", m: 2 }]
+                    delegate: Button {
+                        id: cmpBtn
+                        height: 26
+                        width: cmpText.implicitWidth + 20
+                        readonly property bool selected: previewCanvas.compareMode === modelData.m
+                        onClicked: previewCanvas.compareMode = modelData.m
+                        contentItem: Text { id: cmpText; text: modelData.label; color: cmpBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
+                        background: Rectangle {
+                            radius: 7
+                            color: cmpBtn.selected ? "#33333a" : "transparent"
+                            border.width: cmpBtn.selected ? 1 : 0
+                            border.color: root.hair
+                        }
+                    }
+                }
+            }
         }
 
         Column {

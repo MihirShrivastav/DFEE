@@ -525,6 +525,13 @@ void EngineController::onPreviewReady()
     emit statusChanged();
 }
 
+void EngineController::onBeforeReady(bool ok)
+{
+    hasBefore_ = ok;
+    beforeRevision_++;
+    emit beforeChanged();
+}
+
 void EngineController::onHistogram(const QVariantList& r, const QVariantList& g,
                                   const QVariantList& b)
 {

@@ -69,6 +69,27 @@ void RenderWorker::openAndRender(const dfee::NativePreviewRenderRequest& request
         return;
     }
 
+    // Neutral "before" preview for the before/after compare view. Cheap + cached
+    // in the session; produced once per open (it does not change with edits).
+    try {
+        dfee::NativeRawPreviewRequest rp;
+        rp.filename = request.filename;
+        rp.max_edge = 1600;
+        const dfee::NativeRawPreviewResponse before = session_->raw_preview(rp);
+        QImage bimg;
+        if (before.ok && !before.jpeg_bytes.empty()) {
+            bimg.loadFromData(before.jpeg_bytes.data(),
+                              static_cast<int>(before.jpeg_bytes.size()), "JPG");
+        }
+        if (provider_) provider_->setBeforeImage(bimg);
+        QMetaObject::invokeMethod(controller_, "onBeforeReady", Qt::QueuedConnection,
+                                  Q_ARG(bool, !bimg.isNull()));
+    } catch (const std::exception&) {
+        if (provider_) provider_->setBeforeImage(QImage());
+        QMetaObject::invokeMethod(controller_, "onBeforeReady", Qt::QueuedConnection,
+                                  Q_ARG(bool, false));
+    }
+
     doRender(request);
 }
 
