@@ -145,15 +145,20 @@ Window {
             x: 0
             y: (cb.height - height) / 2
             radius: 5
-            color: cb.checked ? root.accent : root.inset
+            // Tactile: recessed inset when off, raised dark bevel chip when on
+            // (matches the buttons and segmented — no clashing flat white).
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: cb.checked ? "#34343a" : root.inset }
+                GradientStop { position: 1.0; color: cb.checked ? "#242429" : root.inset }
+            }
             border.width: 1
-            border.color: cb.checked ? root.accent : root.hair
+            border.color: root.hair
             opacity: cb.enabled ? 1.0 : 0.5
             // top bevel highlight when checked
             Rectangle {
                 visible: cb.checked
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
-                height: 1; radius: 1; color: "#40ffffff"
+                height: 1; radius: 1; color: "#16ffffff"
             }
             Canvas {
                 anchors.fill: parent
@@ -162,7 +167,7 @@ Window {
                 onPaint: {
                     var c = getContext("2d");
                     c.reset();
-                    c.strokeStyle = "#161618";
+                    c.strokeStyle = "#d7d7db";
                     c.lineWidth = 2;
                     c.lineCap = "round";
                     c.lineJoin = "round";
@@ -385,9 +390,13 @@ Window {
         readonly property real currentValue: Number(engine.filmControls[controlKey])
         readonly property bool dirty: Math.abs(currentValue - neutral) > 0.0001
 
+        // Fixed height so the row never grows when the Reset button appears —
+        // the slider below must not shift. Children are vertically centred.
         Row {
             width: parent.width
+            height: 18
             InspectorLabel {
+                anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - valueLabel.width - resetButton.width - 8
                 text: sliderRow.label
                 color: sliderRow.available ? root.textSecondary : root.textMuted
@@ -395,6 +404,7 @@ Window {
             }
             Button {
                 id: resetButton
+                anchors.verticalCenter: parent.verticalCenter
                 visible: sliderRow.available && sliderRow.dirty
                 width: visible ? 38 : 0
                 height: 18
@@ -406,6 +416,7 @@ Window {
             }
             Text {
                 id: valueLabel
+                anchors.verticalCenter: parent.verticalCenter
                 width: sliderRow.autoValue ? 34 : 42
                 text: sliderRow.autoValue ? "Auto" : ((sliderRow.bipolar && sliderRow.currentValue > 0 ? "+" : "") + (sliderRow.decimals ? sliderRow.currentValue.toFixed(2) : sliderRow.currentValue.toFixed(0)))
                 color: sliderRow.available && sliderRow.dirty ? root.textPrimary : root.textValue
@@ -1049,6 +1060,47 @@ Window {
                     }
                 }
 
+                // ── Colour balance card ────────────────────────────────
+                Rectangle {
+                    id: colourCard
+                    property bool open: false
+                    width: parent.width
+                    radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: "#1d1d20" }
+                        GradientStop { position: 1.0; color: "#191a1c" }
+                    }
+                    border.width: 1
+                    border.color: root.hair
+                    implicitHeight: colourCol.implicitHeight + 32
+                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                    Column {
+                        id: colourCol
+                        x: 16; y: 16
+                        width: parent.width - 32
+                        spacing: 14
+
+                        Item {
+                            width: parent.width
+                            height: 20
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Colour balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colourCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colourCard.open = !colourCard.open }
+                        }
+
+                        Column {
+                            width: parent.width
+                            spacing: 12
+                            visible: colourCard.open
+                            FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance warmth — forward warms (more amber), back cools (more blue)." }
+                            FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance green/magenta — forward toward magenta, back toward green." }
+                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Smart saturation that protects skin tones and already-saturated colours." }
+                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall colour intensity, applied evenly to all hues." }
+                        }
+                    }
+                }
+
                 // ── Light card (basic tone) ────────────────────────────
                 Rectangle {
                     id: lightCard
@@ -1089,47 +1141,6 @@ Window {
                             FilmSlider { controlKey: "whites"; label: "Whites"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Sets the white clipping point — how bright the brightest tones become." }
                             FilmSlider { controlKey: "blacks"; label: "Blacks"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Sets the black clipping point — how deep the darkest tones become." }
                             FilmSlider { controlKey: "midtones"; label: "Midtones"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Brightness of the mid-tones, leaving the extremes anchored." }
-                        }
-                    }
-                }
-
-                // ── Colour balance card ────────────────────────────────
-                Rectangle {
-                    id: colourCard
-                    property bool open: false
-                    width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
-                    implicitHeight: colourCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
-                    Column {
-                        id: colourCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
-
-                        Item {
-                            width: parent.width
-                            height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Colour balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
-                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colourCard.open }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colourCard.open = !colourCard.open }
-                        }
-
-                        Column {
-                            width: parent.width
-                            spacing: 12
-                            visible: colourCard.open
-                            FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance warmth — forward warms (more amber), back cools (more blue)." }
-                            FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance green/magenta — forward toward magenta, back toward green." }
-                            FilmSlider { controlKey: "vibrance"; label: "Vibrance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Smart saturation that protects skin tones and already-saturated colours." }
-                            FilmSlider { controlKey: "saturation"; label: "Saturation"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall colour intensity, applied evenly to all hues." }
                         }
                     }
                 }
