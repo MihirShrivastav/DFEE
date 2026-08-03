@@ -569,6 +569,7 @@ Window {
 
     Rectangle {
         id: inspector
+        property int activeTab: 0                     // 0 = Develop, 1 = Export
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -577,127 +578,117 @@ Window {
         border.width: 1
         border.color: root.border
 
+        // Fixed top: header + histogram + tab switcher (pinned, does not scroll).
+        Column {
+            id: inspectorTop
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: 18
+            spacing: 12
+
+            Item {
+                width: parent.width
+                height: 32
+                Text {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Film Lab"
+                    color: root.textPrimary
+                    font.pixelSize: 20
+                    font.weight: Font.Medium
+                }
+                Button {
+                    id: openBtn
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 68
+                    height: 27
+                    visible: !engine.lightroomRoundTrip
+                    text: "Open"
+                    onClicked: openDialog.open()
+                    contentItem: Text { text: openBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
+                    background: Rectangle {
+                        radius: 7
+                        color: openBtn.down ? "#26262b" : "#2e2e34"
+                        border.width: 1
+                        border.color: root.hair
+                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                    }
+                }
+            }
+
+            Histogram {}
+
+            Text {
+                width: parent.width
+                text: engine.lightroomRoundTrip ? "Lightroom round-trip" : (engine.hasImage ? "Native preview" : "No image loaded")
+                color: root.textMuted
+                font.pixelSize: 11
+                elide: Text.ElideMiddle
+            }
+
+            // Tab switcher — hidden in Lightroom edit-in mode (Develop only there).
+            Rectangle {
+                width: parent.width
+                height: 34
+                radius: 9
+                color: root.inset
+                border.width: 1
+                border.color: root.hair
+                visible: !engine.lightroomRoundTrip
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    spacing: 4
+                    Repeater {
+                        model: ["Develop", "Export"]
+                        delegate: Button {
+                            id: tabBtn
+                            width: (parent.width - 4) / 2
+                            height: parent.height
+                            text: modelData
+                            readonly property bool selected: inspector.activeTab === index
+                            onClicked: inspector.activeTab = index
+                            contentItem: Text { text: tabBtn.text; color: tabBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
+                            background: Rectangle {
+                                radius: 7
+                                color: tabBtn.selected ? "#33333a" : "transparent"
+                                border.width: tabBtn.selected ? 1 : 0
+                                border.color: root.hair
+                                Rectangle { visible: tabBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Flickable {
-            anchors.fill: parent
+            anchors.top: inspectorTop.bottom
+            anchors.topMargin: 14
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
             clip: true
             contentWidth: width
-            contentHeight: controls.implicitHeight + 44
+            contentHeight: controls.implicitHeight + 40
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
             Column {
                 id: controls
                 x: 18
-                y: 20
+                y: 4
                 width: parent.width - 36
                 spacing: 14
 
-                // ── Header ─────────────────────────────────────────────
-                Item {
-                    width: parent.width
-                    height: 40
-                    Text {
-                        anchors.left: parent.left
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Film Lab"
-                        color: root.textPrimary
-                        font.pixelSize: 20
-                        font.weight: Font.Medium
-                    }
-                    Text {
-                        anchors.right: parent.right
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: engine.hasImage ? "Native preview" : "No image"
-                        color: root.textMuted
-                        font.pixelSize: 12
-                    }
-                }
-
-                // ── Histogram ──────────────────────────────────────────
-                Histogram {}
-
-                // ── Actions ────────────────────────────────────────────
-                PrimaryButton {
-                    text: "Open image"
-                    enabled: !engine.lightroomRoundTrip
-                    onClicked: openDialog.open()
-                }
-
-                SecondaryButton {
-                    text: engine.exporting ? (engine.lightroomRoundTrip ? "Saving back..." : "Exporting...") : (engine.lightroomRoundTrip ? "Save & Return to Lightroom" : "Export " + root.exportFormatLabel(engine.exportFormat))
-                    enabled: engine.hasImage && !engine.exporting
-                    onClicked: engine.exportImage()
-                }
-
+                // ── Develop tab ────────────────────────────────────────
                 Column {
+                    id: developContent
                     width: parent.width
-                    visible: engine.hasImage && !engine.lightroomRoundTrip
-                    spacing: 7
-
-                    InspectorLabel { text: "Export format" }
-                    Grid {
-                        width: parent.width
-                        columns: 2
-                        columnSpacing: 6
-                        rowSpacing: 6
-                        Repeater {
-                            model: [
-                                { id: "png8", label: "8-bit PNG" },
-                                { id: "png16", label: "16-bit PNG" },
-                                { id: "tiff", label: "16-bit TIFF" },
-                                { id: "jpeg", label: "JPEG" }
-                            ]
-                            delegate: Button {
-                                id: fmtBtn
-                                width: (parent.width - 6) / 2
-                                height: 31
-                                text: modelData.label
-                                readonly property bool selected: engine.exportFormat === modelData.id
-                                enabled: !engine.exporting
-                                onClicked: engine.exportFormat = modelData.id
-                                contentItem: Text { text: fmtBtn.text; color: fmtBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                                background: Rectangle {
-                                    radius: 6
-                                    color: fmtBtn.selected ? "#2f2f35" : "transparent"
-                                    border.width: 1
-                                    border.color: fmtBtn.selected ? root.hair : root.border
-                                    Rectangle { visible: fmtBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#14ffffff" }
-                                }
-                            }
-                        }
-                    }
-                    Row {
-                        width: parent.width
-                        visible: engine.exportFormat === "jpeg"
-                        spacing: 8
-                        InspectorLabel { text: "JPEG quality"; width: parent.width - qualityBox.width - 8; anchors.verticalCenter: parent.verticalCenter }
-                        SpinBox {
-                            id: qualityBox
-                            from: 1
-                            to: 100
-                            value: engine.jpegQuality
-                            editable: true
-                            enabled: !engine.exporting
-                            onValueModified: engine.jpegQuality = value
-                        }
-                    }
-                    Row {
-                        width: parent.width
-                        visible: engine.exportFormat === "tiff"
-                        spacing: 8
-                        InspectorLabel { text: "TIFF DPI"; width: parent.width - dpiBox.width - 8; anchors.verticalCenter: parent.verticalCenter }
-                        SpinBox {
-                            id: dpiBox
-                            from: 72
-                            to: 1200
-                            stepSize: 1
-                            value: engine.exportDpi
-                            editable: true
-                            enabled: !engine.exporting
-                            onValueModified: engine.exportDpi = value
-                        }
-                    }
-                }
+                    spacing: 14
+                    visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
 
                 // ── Film recipe card ───────────────────────────────────
                 Rectangle {
@@ -1452,9 +1443,122 @@ Window {
                         }
                     }
                 }
+                }
+
+                // ── Export tab ─────────────────────────────────────────
+                Column {
+                    id: exportContent
+                    width: parent.width
+                    spacing: 14
+                    visible: inspector.activeTab === 1 && !engine.lightroomRoundTrip
+
+                    Rectangle {
+                        width: parent.width
+                        radius: 14
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#1d1d20" }
+                            GradientStop { position: 1.0; color: "#191a1c" }
+                        }
+                        border.width: 1
+                        border.color: root.hair
+                        implicitHeight: exportCol.implicitHeight + 32
+                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                        Column {
+                            id: exportCol
+                            x: 16; y: 16
+                            width: parent.width - 32
+                            spacing: 12
+
+                            InspectorLabel { text: "Format" }
+                            Grid {
+                                width: parent.width
+                                columns: 2
+                                columnSpacing: 6
+                                rowSpacing: 6
+                                Repeater {
+                                    model: [
+                                        { id: "png8", label: "8-bit PNG" },
+                                        { id: "png16", label: "16-bit PNG" },
+                                        { id: "tiff", label: "16-bit TIFF" },
+                                        { id: "jpeg", label: "JPEG" }
+                                    ]
+                                    delegate: Button {
+                                        id: fmtBtn
+                                        width: (parent.width - 6) / 2
+                                        height: 32
+                                        text: modelData.label
+                                        readonly property bool selected: engine.exportFormat === modelData.id
+                                        enabled: !engine.exporting
+                                        onClicked: engine.exportFormat = modelData.id
+                                        contentItem: Text { text: fmtBtn.text; color: fmtBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
+                                        background: Rectangle {
+                                            radius: 6
+                                            color: fmtBtn.selected ? "#33333a" : "transparent"
+                                            border.width: 1
+                                            border.color: fmtBtn.selected ? root.hair : root.border
+                                            Rectangle { visible: fmtBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                                        }
+                                    }
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                visible: engine.exportFormat === "jpeg"
+                                spacing: 8
+                                InspectorLabel { text: "JPEG quality"; width: parent.width - qualityBox.width - 8; anchors.verticalCenter: parent.verticalCenter }
+                                SpinBox {
+                                    id: qualityBox
+                                    from: 1; to: 100
+                                    value: engine.jpegQuality
+                                    editable: true
+                                    enabled: !engine.exporting
+                                    onValueModified: engine.jpegQuality = value
+                                }
+                            }
+                            Row {
+                                width: parent.width
+                                visible: engine.exportFormat === "tiff"
+                                spacing: 8
+                                InspectorLabel { text: "TIFF DPI"; width: parent.width - dpiBox.width - 8; anchors.verticalCenter: parent.verticalCenter }
+                                SpinBox {
+                                    id: dpiBox
+                                    from: 72; to: 1200; stepSize: 1
+                                    value: engine.exportDpi
+                                    editable: true
+                                    enabled: !engine.exporting
+                                    onValueModified: engine.exportDpi = value
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: "Saved as a new file beside the original. 16-bit TIFF is uncompressed sRGB."
+                        color: root.textMuted
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                    }
+
+                    PrimaryButton {
+                        text: engine.exporting ? "Exporting…" : ("Export " + root.exportFormatLabel(engine.exportFormat))
+                        enabled: engine.hasImage && !engine.exporting
+                        onClicked: engine.exportImage()
+                    }
+                }
+
+                // Save & Return — Lightroom edit-in mode only
+                PrimaryButton {
+                    visible: engine.lightroomRoundTrip
+                    text: engine.exporting ? "Saving back…" : "Save & Return to Lightroom"
+                    enabled: engine.hasImage && !engine.exporting
+                    onClicked: engine.exportImage()
+                }
 
                 Text {
                     width: parent.width
+                    topPadding: 4
                     text: "DFEE Native Engine"
                     color: root.textMuted
                     font.pixelSize: 11
