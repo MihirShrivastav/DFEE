@@ -170,6 +170,20 @@ less vivid than UltraMax, while the real-RAW material-off assay on
 `9339116563.rw2` confirms Gold, UltraMax, and Portra 400 all remain above the
 `0.0100` RGB MAE near-duplicate guardrail.
 
+**ColorPlus 200** is retained as a softer, lower-fidelity daylight consumer
+negative, with visibly more texture and less color energy than Gold. There is
+no current Kodak technical sheet suitable for a sensitometric claim, so this is
+a conservative role based on ISO 200 daylight positioning, retailer material,
+and reference-scan consensus. It must not be presented as a generic yellow
+cast, added halation, or intentionally broken scan.
+
+**Initial native calibration (2026-08-04).** The previous profile reached
+`1.76x` skin-like chroma and `-10.8 degrees` orange rotation. The revised,
+softer response measures `1.32x` and `-0.7 degrees`. The material-off assay on
+`9339116563.rw2` places it below Gold and UltraMax in tonal spread, while still
+above the `0.0100` RGB MAE near-duplicate guardrail against each. This profile
+needs later portrait/reference-scan review before any stronger material claim.
+
 ### VISION3 Motion-Picture Negatives
 
 VISION3 profiles must emulate their camera-negative role, not the exaggerated
@@ -321,6 +335,11 @@ calibration context rather than attributed blindly to the emulsion.
   broad exposure latitude, fine grain, vivid consistent colour, and PGI 44:
   <https://www.kodak.com/en/still-film/product/consumer/gold-200-film/>
   <https://www.kodak.com/global/plugins/acrobat/en/consumer/products/techInfo/e7022/E7022.pdf>
+- ColorPlus 200 third-party product specification: ISO 200 daylight balance,
+  fine grain, sharpness, rich colour saturation, and wide latitude. Kodak does
+  not currently publish a comparable technical sheet, so treat this only as
+  provisional support for the calibration hypothesis:
+  <https://www.bhphotovideo.com/c/product/1476366-REG/kodak_603147_color_print_film_200_36.html/specs>
 - VISION3 250D technical data: daylight balance, DLT shadow detail, and two
   stops of extended highlight latitude:
   <https://www.kodak.com/content/products-brochures/Film/VISION3-250D-Technical-Data-EN.pdf>

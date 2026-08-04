@@ -697,6 +697,8 @@ void test_color_negative_profiles_are_distinct() {
         repo_root / "profiles" / "stocks" / "ultramax_400.yaml");
     const auto gold_200 = dfee::load_film_stock_profile(
         repo_root / "profiles" / "stocks" / "gold_200.yaml");
+    const auto colorplus_200 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "colorplus_200.yaml");
 
     const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
         return static_cast<float>(stock.numeric_values.at(key));
@@ -760,6 +762,16 @@ void test_color_negative_profiles_are_distinct() {
            value(ultramax_400, "tone_response.toe_length"));
     assert(value(gold_200, "hue_saturation_response.saturation_boost") <
            value(ultramax_400, "hue_saturation_response.saturation_boost"));
+
+    // ColorPlus is the softer, lower-fidelity consumer 200-speed option. It
+    // keeps visibly more texture than Gold while avoiding Gold's stronger
+    // colour energy and broad-latitude role.
+    assert(value(colorplus_200, "grain.size") > value(gold_200, "grain.size"));
+    assert(value(colorplus_200, "grain.strength") > value(gold_200, "grain.strength"));
+    assert(value(colorplus_200, "tone_response.midtone_contrast") <
+           value(gold_200, "tone_response.midtone_contrast"));
+    assert(value(colorplus_200, "hue_saturation_response.saturation_boost") <
+           value(gold_200, "hue_saturation_response.saturation_boost"));
 }
 
 void test_shadow_lift_floor_and_footprint() {

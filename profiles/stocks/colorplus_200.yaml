@@ -5,15 +5,15 @@ adaptation:
   base_iso: 200
   default_strength: 1.0
   camera_cast_compensation_sensitivity: 0.6
-  highlight_stress_sensitivity: 0.7
-  shadow_noise_sensitivity: 0.65
+  highlight_stress_sensitivity: 0.68
+  shadow_noise_sensitivity: 0.60
 tone_response:
-  toe_strength: 0.52
-  toe_length: 0.26
-  midtone_contrast: 1.04
-  shoulder_strength: 0.5
-  highlight_rolloff_start: 0.68
-  black_density_floor: 0.016
+  toe_strength: 0.42
+  toe_length: 0.40
+  midtone_contrast: 0.96
+  shoulder_strength: 0.62
+  highlight_rolloff_start: 0.69
+  black_density_floor: 0.014
   channel_toe_mult:
   - 0.95
   - 1.0
@@ -28,45 +28,45 @@ tone_response:
   - 0.92
 color_response:
   shadow_bias_lab:
-  - 1.0
-  - 0.5
-  - 0.5
+  - 0.0
+  - -0.3
+  - -0.5
   midtone_bias_lab:
   - 0.0
-  - 1.5
-  - 3.5
+  - 0.20
+  - 0.45
   highlight_bias_lab:
-  - 0.0
-  - 1.0
-  - 4.0
-  blue_cast_suppression: 0.55
-  green_magenta_stabilization: 0.2
+  - 0.05
+  - 0.35
+  - 0.60
+  blue_cast_suppression: 0.40
+  green_magenta_stabilization: 0.30
 hue_saturation_response:
-  saturation_boost: 1.15
-  red_orange_midtone_compression: 0.25
-  yellow_green_muting: 0.2
-  cyan_blue_highlight_compression: 0.55
-  neon_compression: 0.65
-  highlight_desaturation: 0.45
+  saturation_boost: 1.10
+  red_orange_midtone_compression: 0.34
+  yellow_green_muting: 0.28
+  cyan_blue_highlight_compression: 0.44
+  neon_compression: 0.75
+  highlight_desaturation: 0.60
 grain:
-  size: 0.5
-  strength: 0.42
+  size: 0.48
+  strength: 0.34
   chroma_strength: 0.14
   peak_zone: midtones_heavy
   texture_masking: 0.65
   family: consumer_color_negative
   target_pgi_35mm_4x6: 46
-  clumpiness: 0.55
-  micro_grit: 0.30
-  layer_correlation: 0.64
-  shadow_response: 0.86
-  midtone_response: 1.07
-  highlight_response: 0.31
-  underexposure_coarsening: 0.36
-  overexposure_smoothing: 0.20
+  clumpiness: 0.50
+  micro_grit: 0.26
+  layer_correlation: 0.70
+  shadow_response: 0.74
+  midtone_response: 1.00
+  highlight_response: 0.28
+  underexposure_coarsening: 0.30
+  overexposure_smoothing: 0.24
 halation:
   trigger: specular_only
-  strength: 0.22
+  strength: 0.08
   radius_inner: 5
   radius_outer: 20
   warm_core:
@@ -78,11 +78,11 @@ halation:
   - 0.15
   - 0.02
 chroma_coupling:
-  hi_rolloff_start: 0.68
-  hi_rolloff_rate: 1.8
-  hi_compression: 0.55
-  sh_rolloff_start: 0.2
-  sh_compression: 0.5
+  hi_rolloff_start: 0.69
+  hi_rolloff_rate: 1.45
+  hi_compression: 0.48
+  sh_rolloff_start: 0.16
+  sh_compression: 0.40
   hi_hue_conv_rad: 0.22
   hi_hue_conv_str: 0.15
 dye_contamination:
@@ -93,25 +93,26 @@ dye_contamination:
   r_to_b: 0.002
   g_to_b: 0.01
 color_character:
-  highlight_hold_sensitivity: 0.55
-  shadow_retention_sensitivity: 0.60
-  emulsion_density_sensitivity: 0.50
+  highlight_hold_sensitivity: 0.64
+  shadow_retention_sensitivity: 0.58
+  emulsion_density_sensitivity: 0.48
   palette:
     range_sensitivity: 0.45
 density:
-  strength: 0.50
+  strength: 0.46
   low_luma_limit: 0.10
 compression:
-  strength: 0.50
-  threshold: 0.45
-  crosstalk: 0.25
+  strength: 0.48
+  threshold: 0.46
+  crosstalk: 0.22
 hue_chroma_gain:
-  yellow: 0.08
-  orange: 0.06
-  red: 0.04
+  yellow: 0.06
+  orange: 0.04
+  red: 0.02
+  blue: -0.05
 crossover:
-  shadow_cast_a: -0.05
-  shadow_cast_b: -0.20
-  highlight_cast_a: 0.45
-  highlight_cast_b: 0.62
-  exposure_sensitivity: 0.38
+  shadow_cast_a: -0.04
+  shadow_cast_b: -0.18
+  highlight_cast_a: 0.18
+  highlight_cast_b: 0.28
+  exposure_sensitivity: 0.34
