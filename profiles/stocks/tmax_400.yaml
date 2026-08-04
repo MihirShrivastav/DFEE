@@ -10,9 +10,9 @@ adaptation:
 tone_response:
   toe_strength: 0.42
   toe_length: 0.32
-  midtone_contrast: 1.04
+  midtone_contrast: 1.08
   shoulder_strength: 0.72
-  highlight_rolloff_start: 0.76
+  highlight_rolloff_start: 0.78
   black_density_floor: 0.006
   channel_toe_mult:
   - 1.0
@@ -41,9 +41,9 @@ color_response:
   - 0.0
   blue_cast_suppression: 0.0
   green_magenta_stabilization: 0.0
-  pan_weight_r: 0.26
-  pan_weight_g: 0.56
-  pan_weight_b: 0.18
+  pan_weight_r: 0.3
+  pan_weight_g: 0.54
+  pan_weight_b: 0.16
 hue_saturation_response:
   saturation_boost: 1.0
   red_orange_midtone_compression: 1.0

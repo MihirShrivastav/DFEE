@@ -11,8 +11,8 @@ tone_response:
   toe_strength: 0.44
   toe_length: 0.32
   midtone_contrast: 1.08
-  shoulder_strength: 0.72
-  highlight_rolloff_start: 0.74
+  shoulder_strength: 0.7
+  highlight_rolloff_start: 0.76
   black_density_floor: 0.008
   channel_toe_mult:
   - 1.0
@@ -41,8 +41,8 @@ color_response:
   - 0.0
   blue_cast_suppression: 0.0
   green_magenta_stabilization: 0.0
-  pan_weight_r: 0.22
-  pan_weight_g: 0.6
+  pan_weight_r: 0.26
+  pan_weight_g: 0.56
   pan_weight_b: 0.18
 hue_saturation_response:
   saturation_boost: 1.0
