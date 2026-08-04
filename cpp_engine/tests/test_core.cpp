@@ -549,6 +549,7 @@ void test_cinestill_profile_exposure_ramps_are_distinct() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto stock_50d = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "cinestill_50d.yaml");
     const auto stock_400d = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "cinestill_400d.yaml");
+    const auto stock_800t = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "cinestill_800t.yaml");
     const dfee::RenderPlanSolver solver;
 
     dfee::SolverInput input;
@@ -567,6 +568,7 @@ void test_cinestill_profile_exposure_ramps_are_distinct() {
 
     const auto plan_50d = solver.solve(input, stock_50d, controls);
     const auto plan_400d = solver.solve(input, stock_400d, controls);
+    const auto plan_800t = solver.solve(input, stock_800t, controls);
 
     dfee::Image ramp(6, 1, 3);
     const float values[6] = {0.02F, 0.08F, 0.18F, 0.42F, 0.70F, 0.92F};
@@ -577,12 +579,21 @@ void test_cinestill_profile_exposure_ramps_are_distinct() {
     const dfee::FilmRenderer renderer;
     const auto response_50d = renderer.apply_film_tone_response(ramp, plan_50d.film_response);
     const auto response_400d = renderer.apply_film_tone_response(ramp, plan_400d.film_response);
+    const auto response_800t = renderer.apply_film_tone_response(ramp, plan_800t.film_response);
 
     // 400D's authored long toe carries denser lower-mid shadows than 50D.
     assert(response_400d.at(1, 0, 0) < response_50d.at(1, 0, 0) - 0.005F);
     assert(response_400d.at(2, 0, 0) < response_50d.at(2, 0, 0) - 0.003F);
     // 50D enters its protective shoulder earlier, retaining more headroom.
     assert(response_50d.at(5, 0, 0) < response_400d.at(5, 0, 0) - 0.003F);
+    // 800T's high-speed tungsten role carries the longest, densest toe. Its
+    // rem-jet-free halation is stronger than 400D, but colour casts are kept
+    // bounded so scene white balance remains a development decision.
+    assert(response_800t.at(1, 0, 0) < response_400d.at(1, 0, 0) - 0.004F);
+    assert(response_800t.at(2, 0, 0) < response_400d.at(2, 0, 0) - 0.004F);
+    assert(stock_800t.grain.size > stock_400d.grain.size);
+    assert(stock_800t.grain.strength > stock_400d.grain.strength);
+    assert(stock_800t.halation.strength > stock_400d.halation.strength);
 }
 
 void test_monochrome_profile_exposure_ramps_are_distinct() {

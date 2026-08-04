@@ -102,6 +102,20 @@ exposure ramp. It protects the authored distinction: 400D must retain denser
 lower-mid shadows through its longer toe, while 50D must enter a more protective
 highlight shoulder earlier.
 
+**CineStill material review (2026-08-04).** The calibrated 50D/400D tone roles
+remain valid. 400D is a purpose-built C-41 still film with a soft palette,
+natural saturated color, warm skin, and broad EI 200-800 latitude; its default
+halation was therefore reduced rather than treating it as a weaker 800T. 800T
+remains the high-speed tungsten and mixed-light profile with the strongest
+specular point-light red halation, but its prior large scene-wide cool-shadow
+bias was removed. It now expresses its speed through the longest, densest toe,
+larger controlled grain, and shadow latitude; source white balance remains a
+development decision. On `9339116563.rw2` with material finish disabled, the
+three profiles have no pair at or below `0.0100` normalized RGB MAE. Native
+tests now also protect the 800T toe, grain, and halation hierarchy. This does
+not weaken 800T's signature red glow: the effect remains strong and
+specular-only, as documented by CineStill.
+
 ### Kodak Professional Still Negatives
 
 The Portra line is a matched professional family, not three progressively more

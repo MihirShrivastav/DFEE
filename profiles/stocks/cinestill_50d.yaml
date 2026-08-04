@@ -66,9 +66,9 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.38
+  strength: 0.22
   radius_inner: 8
-  radius_outer: 32
+  radius_outer: 26
   warm_core:
   - 1.0
   - 0.5
