@@ -24,7 +24,21 @@ EngineController::EngineController(PreviewImageProvider* provider,
           std::filesystem::path(DFEE_REPO_ROOT)))
     , provider_(provider)
 {
-    filmControls_ = {
+    filmControls_ = defaultFilmControls();
+    // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
+    // so there is no concurrent access.
+    loadStocks();
+
+    // provider_ is already set (constructor arg); worker receives it before the
+    // thread starts, so provider_ is never written after workerThread_.start().
+    worker_ = new RenderWorker(session_.get(), this, provider_);
+    worker_->moveToThread(&workerThread_);
+    workerThread_.start();
+}
+
+QVariantMap EngineController::defaultFilmControls()
+{
+    return QVariantMap{
         {"exposure_placement", "auto_balanced"},
         {"film_exposure_ev", 0.0},
         {"adaptive", true},
@@ -85,15 +99,6 @@ EngineController::EngineController(PreviewImageProvider* provider,
         {"hsl_purple_h", 0.0}, {"hsl_purple_s", 0.0}, {"hsl_purple_l", 0.0},
         {"hsl_magenta_h", 0.0}, {"hsl_magenta_s", 0.0}, {"hsl_magenta_l", 0.0},
     };
-    // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
-    // so there is no concurrent access.
-    loadStocks();
-
-    // provider_ is already set (constructor arg); worker receives it before the
-    // thread starts, so provider_ is never written after workerThread_.start().
-    worker_ = new RenderWorker(session_.get(), this, provider_);
-    worker_->moveToThread(&workerThread_);
-    workerThread_.start();
 }
 
 EngineController::~EngineController()
@@ -331,6 +336,27 @@ void EngineController::setFilmControl(const QString& key, const QVariant& value)
         return;
     }
     updateNumericFilmControl(key, value.toDouble());
+}
+
+void EngineController::resetAllEdits()
+{
+    // A no-op guard so a stray click before any image is loaded does nothing
+    // visible, and a fresh reset never fires a pointless render.
+    filmControls_ = defaultFilmControls();
+    filmExposure_ = filmControls_.value("film_exposure_ev").toDouble();
+    shadowLift_ = filmControls_.value("shadow_lift").toDouble();
+    // exposure_placement default depends on the loaded file (as_shot for
+    // already-developed TIFFs, auto_balanced for RAW); applyDefaultPlacement
+    // corrects the map's generic default to the right one for this image.
+    applyDefaultPlacement();
+
+    if (stockId_ != "none") {
+        stockId_ = "none";
+        emit stockChanged();
+    }
+    emit filmControlsChanged();
+    emit paramsChanged();
+    scheduleRender();
 }
 
 void EngineController::setAutoGrain(bool enabled)

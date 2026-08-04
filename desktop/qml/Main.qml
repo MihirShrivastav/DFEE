@@ -980,22 +980,55 @@ Window {
                     font.pixelSize: 20
                     font.weight: Font.Medium
                 }
-                Button {
-                    id: openBtn
+                Row {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 68
-                    height: 27
-                    visible: !engine.lightroomRoundTrip
-                    text: "Open"
-                    onClicked: openDialog.open()
-                    contentItem: Text { text: openBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
-                    background: Rectangle {
-                        radius: 7
-                        color: openBtn.down ? "#26262b" : "#2e2e34"
-                        border.width: 1
-                        border.color: root.hair
-                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                    spacing: 8
+
+                    Button {
+                        id: resetAllBtn
+                        width: visible ? 68 : 0
+                        height: 27
+                        // Reset is meaningless with no image; disable rather than hide it
+                        // so its slot in the header never jumps around (Lightroom-style).
+                        enabled: engine.hasImage
+                        visible: true
+                        text: "Reset"
+                        onClicked: engine.resetAllEdits()
+                        contentItem: Text { text: resetAllBtn.text; color: resetAllBtn.enabled ? root.textPrimary : root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
+                        background: Rectangle {
+                            radius: 7
+                            color: resetAllBtn.down ? "#26262b" : "#2e2e34"
+                            border.width: 1
+                            border.color: root.hair
+                            opacity: resetAllBtn.enabled ? 1.0 : 0.5
+                            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                        }
+                        HoverHandler { id: resetAllHover }
+                        GraphiteTip {
+                            parent: resetAllBtn
+                            x: 0
+                            y: resetAllBtn.height + 4
+                            visible: resetAllHover.hovered && resetAllBtn.enabled
+                            text: "Reset every edit — film stock, exposure and all develop controls — back to how this image first opened."
+                        }
+                    }
+
+                    Button {
+                        id: openBtn
+                        width: visible ? 68 : 0
+                        height: 27
+                        visible: !engine.lightroomRoundTrip
+                        text: "Open"
+                        onClicked: openDialog.open()
+                        contentItem: Text { text: openBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
+                        background: Rectangle {
+                            radius: 7
+                            color: openBtn.down ? "#26262b" : "#2e2e34"
+                            border.width: 1
+                            border.color: root.hair
+                            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                        }
                     }
                 }
             }
@@ -1521,6 +1554,7 @@ Window {
                             FilmSlider { controlKey: "emulsion_color_density"; label: "Color boost"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "Overall saturation of the stock's color dyes — forward for punchier color, back for a muted look." }
                             FilmSlider { controlKey: "highlight_color_hold"; label: "Highlight saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much color survives in the highlights — back bleaches bright areas toward clean white (rescues blown, over-warm highlights)." }
                             FilmSlider { controlKey: "shadow_color_retention"; label: "Shadow saturation"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "How much color survives in the shadows — forward keeps darks colorful, back mutes them toward neutral." }
+                            FilmSlider { controlKey: "cg_crossbalance"; label: "Film crossbalance"; minimum: -100; maximum: 100; bipolar: true; available: !engine.currentStockMonochrome; tooltip: "One-knob split-tone: forward for teal shadows and warm highlights, back for the inverse." }
                         }
                     }
                 }
@@ -1792,7 +1826,6 @@ Window {
                             FilmSlider { controlKey: "cg_global_lum"; label: "Global luminance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Overall brightness applied by the grade." }
 
                             InspectorLabel { text: "Grade" }
-                            FilmSlider { controlKey: "cg_crossbalance"; label: "Film crossbalance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "One-knob split-tone: forward for teal shadows and warm highlights, back for the inverse." }
                             FilmSlider { controlKey: "cg_balance"; label: "Balance"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Shifts where shadows end and highlights begin, weighting the grade toward darks or lights." }
                             FilmSlider { controlKey: "cg_blending"; label: "Blending"; minimum: 0; maximum: 100; tooltip: "How softly the shadow, midtone and highlight zones overlap." }
                         }

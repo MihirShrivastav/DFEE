@@ -95,6 +95,9 @@ public:
     Q_INVOKABLE void exportImage();
     Q_INVOKABLE void setFilmControl(const QString& key, const QVariant& value);
     Q_INVOKABLE void setAutoGrain(bool enabled);
+    // Reset every edit — film stock, exposure placement and all develop
+    // controls — back to the just-opened baseline for the current image.
+    Q_INVOKABLE void resetAllEdits();
     void beginLightroomRoundTrip(const QString& tiffPath);
 
     bool hasImage() const { return hasImage_; }
@@ -132,6 +135,9 @@ signals:
     void histogramChanged();
 
 private:
+    // Factory for the default film-control values — the single source of truth
+    // shared by the constructor and resetAllEdits().
+    static QVariantMap defaultFilmControls();
     void loadStocks();
     void scheduleRender();
     // Pick the sensible default exposure placement for the just-opened file:
