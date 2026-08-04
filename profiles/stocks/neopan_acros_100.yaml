@@ -8,12 +8,12 @@ adaptation:
   highlight_stress_sensitivity: 0.88
   shadow_noise_sensitivity: 0.92
 tone_response:
-  toe_strength: 0.36
-  toe_length: 0.36
+  toe_strength: 0.24
+  toe_length: 0.34
   midtone_contrast: 1.04
-  shoulder_strength: 0.7
-  highlight_rolloff_start: 0.84
-  black_density_floor: 0.003
+  shoulder_strength: 0.76
+  highlight_rolloff_start: 0.82
+  black_density_floor: 0.002
   channel_toe_mult:
   - 1.0
   - 1.0

@@ -116,6 +116,38 @@ and tabular emulsions should not differ only by subtle toe/shoulder changes;
 their highlight transition, local acutance, shadow separation, and grain
 placement need distinct calibration.
 
+**Initial native calibration (2026-08-04).** The first monochrome pass moves
+the material-off curves out of their prior near-duplicate cluster without
+inventing scanner-specific colour-filter behaviour. Pan F is now the crispest
+low-speed curve; FP4 is deliberately more moderate. Delta 100 and T-Max 100
+are clean, fine-grain curves with firmer midtone separation. Acros is tuned for
+smooth gradation and restrained grain. HP5, T-Max 400, Delta 400, Tri-X, and
+Double-X now use materially longer or denser toes according to their intended
+latitude and image structure. Delta 3200 is explicitly the most compressed,
+coarsest high-speed starting point, not simply a brighter ISO 400 profile.
+
+This reflects manufacturer-level evidence, not a claim to reproduce a specific
+developer, scanner, filtration, or print process. Ilford characterises Pan F
+as high contrast and very fine grain; FP4 as fine grain and medium contrast;
+and HP5 as a medium-contrast, broad-latitude ISO 400 stock. Fujifilm describes
+ACROS II as ISO 100 with extremely fine grain and rich gradation. Kodak
+describes Tri-X as a broad-latitude, push-capable classic-grain stock and
+Double-X as an ISO 250 daylight / ISO 200 tungsten motion-picture negative.
+Delta 3200 remains process-sensitive: ILFORD rates it for EI 400–6400 use and
+notes its standard daylight ISO rating is 1000, so its push/pull behaviour is
+reserved for the planned sensitometry stage.
+
+On the baseline RAW fixture, with Auto placement and material effects disabled,
+the first pass reduced pairings at or below the `0.0100` normalized RGB MAE
+threshold from 29 to 11. This is a guardrail rather than a quality score: it
+proves the authored curves are no longer largely interchangeable, but it cannot
+certify film identity without controlled developer, scanner, and spectral-chart
+fixtures.
+
+Native tests now resolve the real YAML profiles and protect these intentional
+separations on a neutral exposure ramp. A future monochrome chart-scan fixture
+will validate the panchromatic weights; they remain conservative in this pass.
+
 ### Candidate Coverage Gaps
 
 Do not add a stock merely for catalog size. Candidates are accepted only after
@@ -151,6 +183,16 @@ calibration context rather than attributed blindly to the emulsion.
   <https://www.fujifilm.com/uk/en/consumer/support/films/negative-and-reversal>
 - ILFORD product information and technical documents:
   <https://www.ilfordphoto.com/>
+- ILFORD product guide: Pan F, FP4, HP5, Delta and process positioning:
+  <https://www.ilfordphoto.com/wp/wp-content/uploads/2017/05/Ilford-Product-Brochure-LOW-RES-WEB-1.pdf>
+- ILFORD Delta 3200 technical data: practical EI range and standard ISO rating:
+  <https://www.ilfordphoto.com/amfile/file/download/file/1913/product/683/>
+- Fujifilm NEOPAN 100 ACROS II data sheet:
+  <https://asset.fujifilm.com/master/emea/files/2021-11/1948347ece68885a07d688d9e21a217f/films_neopan100acros2_135_01_0.pdf>
+- Kodak TRI-X 400 product information:
+  <https://www.kodak.com/en/still-film/product/professional/tri-x-400-film/>
+- Kodak EASTMAN DOUBLE-X data sheet:
+  <https://www.kodak.com/content/products-brochures/EASTMAN-DOUBLE-X-Negative-Film-datasheet-US-180924-EN.pdf>
 
 ## Delivery Order
 

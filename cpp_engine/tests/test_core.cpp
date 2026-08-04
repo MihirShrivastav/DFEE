@@ -554,6 +554,60 @@ void test_cinestill_profile_exposure_ramps_are_distinct() {
     assert(response_50d.at(5, 0, 0) < response_400d.at(5, 0, 0) - 0.003F);
 }
 
+void test_monochrome_profile_exposure_ramps_are_distinct() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto pan_f = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "pan_f_plus_50.yaml");
+    const auto fp4 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "fp4_plus_125.yaml");
+    const auto tmax_100 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "tmax_100.yaml");
+    const auto tmax_400 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "tmax_400.yaml");
+    const auto delta_100 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "delta_100.yaml");
+    const auto delta_3200 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "delta_3200.yaml");
+    const dfee::RenderPlanSolver solver;
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 8.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.luma_p95 = 0.70F;
+    input.tonal_distribution.luma_p98 = 0.82F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+    input.raw_iso = 400;
+
+    dfee::SolverControls controls;
+    controls.exposure_intent = "Preserve";
+    controls.adaptive = false;
+    controls.subtractive_pipeline = true;
+
+    dfee::Image ramp(6, 1, 3);
+    const float values[6] = {0.02F, 0.08F, 0.18F, 0.42F, 0.70F, 0.92F};
+    for (int x = 0; x < 6; ++x) {
+        ramp.at(x, 0, 0) = ramp.at(x, 0, 1) = ramp.at(x, 0, 2) = values[x];
+    }
+
+    const dfee::FilmRenderer renderer;
+    const auto tone = [&](const dfee::FilmStockProfile& stock) {
+        return renderer.apply_film_tone_response(ramp, solver.solve(input, stock, controls).film_response);
+    };
+    const auto pan_f_response = tone(pan_f);
+    const auto fp4_response = tone(fp4);
+    const auto tmax_100_response = tone(tmax_100);
+    const auto tmax_400_response = tone(tmax_400);
+    const auto delta_100_response = tone(delta_100);
+    const auto delta_3200_response = tone(delta_3200);
+
+    // Pan F has the crispest low-speed curve, while FP4 is the more moderate
+    // general-purpose low-speed stock.
+    assert(pan_f_response.at(2, 0, 0) < fp4_response.at(2, 0, 0) - 0.004F);
+    assert(pan_f_response.at(4, 0, 0) > fp4_response.at(4, 0, 0) + 0.004F);
+
+    // T-Max 400 and Delta 3200 deliberately retain a longer, denser toe than
+    // their fine-grain ISO 100 counterparts; grain is separately authored.
+    assert(tmax_400_response.at(2, 0, 0) < tmax_100_response.at(2, 0, 0) - 0.004F);
+    assert(delta_3200_response.at(2, 0, 0) < delta_100_response.at(2, 0, 0) - 0.006F);
+    assert(delta_3200.grain.size > delta_100.grain.size);
+    assert(delta_3200.grain.strength > delta_100.grain.strength);
+}
+
 void test_shadow_lift_floor_and_footprint() {
     // Neutral dark-to-mid gradient; Shadow Lift acts on the deep-shadow base-fog floor.
     dfee::Image rgb(5, 1, 3);
@@ -3271,6 +3325,7 @@ int main() {
         test_film_tone_response();
         test_toe_length_controls_shadow_latitude();
         test_cinestill_profile_exposure_ramps_are_distinct();
+        test_monochrome_profile_exposure_ramps_are_distinct();
         test_shadow_lift_floor_and_footprint();
         test_color_response();
         test_yellow_green_muting();

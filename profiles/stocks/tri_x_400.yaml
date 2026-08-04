@@ -9,11 +9,11 @@ adaptation:
   shadow_noise_sensitivity: 0.6
 tone_response:
   toe_strength: 0.48
-  toe_length: 0.3
+  toe_length: 0.36
   midtone_contrast: 1.16
-  shoulder_strength: 0.82
+  shoulder_strength: 0.70
   highlight_rolloff_start: 0.7
-  black_density_floor: 0.012
+  black_density_floor: 0.014
   channel_toe_mult:
   - 1.0
   - 1.0
