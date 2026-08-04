@@ -102,6 +102,44 @@ exposure ramp. It protects the authored distinction: 400D must retain denser
 lower-mid shadows through its longer toe, while 50D must enter a more protective
 highlight shoulder earlier.
 
+### Kodak Professional Still Negatives
+
+The Portra line is a matched professional family, not three progressively more
+stylised looks. Kodak positions Portra 160 around natural skin tones and very
+fine grain; Portra 400 around warm, vibrant colour with exceptionally fine
+400-speed grain; and Portra 800 around low-light detail, well-balanced colour,
+and natural skin reproduction. The speed hierarchy belongs primarily in grain,
+shadow latitude, and toe behavior, not a large automatic saturation increase.
+
+- **Portra 160**: softest and cleanest portrait/fashion/commercial baseline;
+  restrained colour, fine grain, smooth shadow-to-midtone transition, and a
+  protective highlight shoulder.
+- **Portra 400**: flexible all-light professional baseline; slightly more
+  colour presence than 160, still skin-protected and fine-grained rather than
+  halation-heavy or aggressively warm.
+- **Portra 800**: low-light/high-action option; longer toe and visibly larger
+  but controlled grain, with colour held near the family baseline instead of
+  turning skin into a saturated orange response.
+- **Ektar 100**: separate low-speed, ultra-fine-grain high-definition option.
+  Kodak explicitly positions it for ultra-vivid colour, sharpness, and outdoor,
+  travel, fashion, product, and commercial imagery. Its stronger colour body
+  is concentrated in landscape/product hues while red-orange compression
+  prevents a false skin-tone saturation or large orange hue rotation.
+
+**Initial native calibration (2026-08-04).** The controlled native patch assay
+found that the old Ektar profile drove the skin-like patch to `1.95x` chroma
+and rotated orange by approximately `-22 degrees`; Portra 800 also produced a
+`1.51x` skin-like chroma ratio. The revised Ektar response measures `1.49x`
+on the skin-like patch and `-6 degrees` on orange, while retaining a stronger
+blue response (`1.27x`) than the Portra profiles. Portra 160 is now the
+softest/restrained curve, Portra 400 the firmer general-purpose curve, and
+Portra 800 the longest-toed, low-light curve. The material-off RAW assay on
+`9339116563.rw2` reports no pair at or below the `0.0100` normalized RGB MAE
+near-duplicate guardrail. These changes reduce zonal colour bias, limit
+red-orange response, and rationalise the fine-to-high-speed grain hierarchy.
+Profile-role tests protect the family relationships. This remains an emulation
+of stock character, not an assertion of a particular scanning or lab process.
+
 ### VISION3 Motion-Picture Negatives
 
 VISION3 profiles must emulate their camera-negative role, not the exaggerated
@@ -240,6 +278,12 @@ calibration context rather than attributed blindly to the emulsion.
   <https://cinestillfilm.com/blogs/news/cinestill-800t-in-your-toolbox>
 - Kodak technical education on sensitometry and stock choice:
   <https://www.kodak.com/en/motion/page/filmmaker-resources/>
+- Kodak professional color-negative brochure: Portra 160/400/800 role,
+  grain, skin-tone, and saturation guidance:
+  <https://www.kodak.com/global/plugins/acrobat/en/professional/products/films/2012Brochure.pdf>
+- Kodak Ektar 100 product information: low-speed daylight balance, ultra-vivid
+  colour, exceptional sharpness, enhanced saturation, and fine grain:
+  <https://www.kodak.com/en/still-film/product/professional/ektar-100-film/>
 - VISION3 250D technical data: daylight balance, DLT shadow detail, and two
   stops of extended highlight latitude:
   <https://www.kodak.com/content/products-brochures/Film/VISION3-250D-Technical-Data-EN.pdf>

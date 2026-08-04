@@ -687,6 +687,12 @@ void test_color_negative_profiles_are_distinct() {
         repo_root / "profiles" / "stocks" / "vision3_500t.yaml");
     const auto portra_400 = dfee::load_film_stock_profile(
         repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const auto portra_160 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_160.yaml");
+    const auto portra_800 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_800.yaml");
+    const auto ektar_100 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "ektar_100.yaml");
 
     const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
         return static_cast<float>(stock.numeric_values.at(key));
@@ -712,6 +718,22 @@ void test_color_negative_profiles_are_distinct() {
            vision_250d.numeric_arrays.at("color_response.midtone_bias_lab")[1]);
     assert(vision_500t.numeric_arrays.at("color_response.midtone_bias_lab")[2] >
            vision_250d.numeric_arrays.at("color_response.midtone_bias_lab")[2]);
+
+    // Portra remains the natural-skin professional-negative family. Speed adds
+    // usable grain/latitude, not a crude saturation escalation. Ektar is the
+    // separate low-speed vivid/definition option, but its skin and orange
+    // treatment remains protected by a stronger red-orange limiter.
+    assert(value(portra_160, "grain.size") < value(portra_400, "grain.size"));
+    assert(value(portra_400, "grain.size") < value(portra_800, "grain.size"));
+    assert(value(portra_160, "grain.strength") < value(portra_400, "grain.strength"));
+    assert(value(portra_400, "grain.strength") < value(portra_800, "grain.strength"));
+    assert(value(portra_800, "tone_response.toe_length") >
+           value(portra_160, "tone_response.toe_length"));
+    assert(value(ektar_100, "hue_saturation_response.saturation_boost") >
+           value(portra_800, "hue_saturation_response.saturation_boost"));
+    assert(value(ektar_100, "hue_saturation_response.red_orange_midtone_compression") >
+           value(portra_800, "hue_saturation_response.red_orange_midtone_compression"));
+    assert(value(ektar_100, "grain.size") < value(portra_160, "grain.size"));
 }
 
 void test_shadow_lift_floor_and_footprint() {
