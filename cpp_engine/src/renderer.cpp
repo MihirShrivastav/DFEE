@@ -1125,6 +1125,84 @@ void normalize_zero_mean_unit_variance(cv::Mat& mat) {
 
 }  // namespace
 
+Image apply_geometry(const Image& rgb, const GeometryParams& g) {
+    if (g.is_identity() || rgb.channels != 3 || rgb.width <= 0 || rgb.height <= 0) {
+        return rgb;
+    }
+    cv::Mat mat = rgb_image_to_mat(rgb, false);
+
+    // 1) Mirror.
+    if (g.flip_h && g.flip_v) {
+        cv::flip(mat, mat, -1);
+    } else if (g.flip_h) {
+        cv::flip(mat, mat, 1);
+    } else if (g.flip_v) {
+        cv::flip(mat, mat, 0);
+    }
+
+    // 2) 90-degree quadrant rotation (clockwise).
+    const int quadrant = ((g.rotate_quadrant % 4) + 4) % 4;
+    if (quadrant == 1) {
+        cv::rotate(mat, mat, cv::ROTATE_90_CLOCKWISE);
+    } else if (quadrant == 2) {
+        cv::rotate(mat, mat, cv::ROTATE_180);
+    } else if (quadrant == 3) {
+        cv::rotate(mat, mat, cv::ROTATE_90_COUNTERCLOCKWISE);
+    }
+
+    // 3) Straighten: rotate the fine angle about the centre, then crop to the largest
+    //    axis-aligned rectangle that still fits inside the rotated frame (no black
+    //    corners). Closed form for the max-area inscribed rect of a w x h rectangle
+    //    rotated by |angle|.
+    const float straighten = std::clamp(g.straighten_deg, -45.0F, 45.0F);
+    if (std::fabs(straighten) > 1.0e-3F) {
+        const int w = mat.cols;
+        const int h = mat.rows;
+        const cv::Point2f centre(static_cast<float>(w) / 2.0F, static_cast<float>(h) / 2.0F);
+        // OpenCV's positive angle is counter-clockwise; negate so positive = clockwise.
+        cv::Mat rot = cv::getRotationMatrix2D(centre, -static_cast<double>(straighten), 1.0);
+        cv::Mat rotated;
+        cv::warpAffine(mat, rotated, rot, cv::Size(w, h), cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+
+        const double a = std::fabs(static_cast<double>(straighten)) * 3.14159265358979323846 / 180.0;
+        const double sin_a = std::fabs(std::sin(a));
+        const double cos_a = std::fabs(std::cos(a));
+        const double side_long = std::max(w, h);
+        const double side_short = std::min(w, h);
+        double wr = 0.0;
+        double hr = 0.0;
+        if (side_short <= 2.0 * sin_a * cos_a * side_long || std::fabs(sin_a - cos_a) < 1.0e-10) {
+            const double x = 0.5 * side_short;
+            if (w >= h) { wr = x / sin_a; hr = x / cos_a; }
+            else { wr = x / cos_a; hr = x / sin_a; }
+        } else {
+            const double cos_2a = cos_a * cos_a - sin_a * sin_a;
+            wr = (static_cast<double>(w) * cos_a - static_cast<double>(h) * sin_a) / cos_2a;
+            hr = (static_cast<double>(h) * cos_a - static_cast<double>(w) * sin_a) / cos_2a;
+        }
+        const int rw = std::clamp(static_cast<int>(std::floor(wr)), 1, w);
+        const int rh = std::clamp(static_cast<int>(std::floor(hr)), 1, h);
+        const int rx = (w - rw) / 2;
+        const int ry = (h - rh) / 2;
+        mat = rotated(cv::Rect(rx, ry, rw, rh)).clone();
+    }
+
+    // 4) Normalized crop on the resulting image.
+    const float cx = std::clamp(g.crop_x, 0.0F, 1.0F);
+    const float cy = std::clamp(g.crop_y, 0.0F, 1.0F);
+    const float cw = std::clamp(g.crop_w, 0.0F, 1.0F - cx);
+    const float ch = std::clamp(g.crop_h, 0.0F, 1.0F - cy);
+    if (cw > 0.0F && ch > 0.0F && (cx > 0.0F || cy > 0.0F || cw < 1.0F || ch < 1.0F)) {
+        int x = std::clamp(static_cast<int>(std::lround(cx * mat.cols)), 0, mat.cols - 1);
+        int y = std::clamp(static_cast<int>(std::lround(cy * mat.rows)), 0, mat.rows - 1);
+        int cwid = std::clamp(static_cast<int>(std::lround(cw * mat.cols)), 1, mat.cols - x);
+        int chei = std::clamp(static_cast<int>(std::lround(ch * mat.rows)), 1, mat.rows - y);
+        mat = mat(cv::Rect(x, y, cwid, chei)).clone();
+    }
+
+    return mat_to_rgb_image(mat);
+}
+
 Image FilmRenderer::render(
     const Image& rgb_linear,
     const ZoneMasks& zone_masks,

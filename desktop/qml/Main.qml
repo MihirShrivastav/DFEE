@@ -219,6 +219,38 @@ Window {
         }
     }
 
+    // Beveled action button for the Geometry tab (rotate / flip / reset). `active`
+    // highlights it as an engaged toggle (used by the Flip buttons).
+    component GeoButton: Button {
+        id: geoBtn
+        property bool active: false
+        property string tooltip: ""
+        height: 30
+        contentItem: Text {
+            text: geoBtn.text
+            color: geoBtn.active ? root.textPrimary : root.textSecondary
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font.pixelSize: 12
+            font.weight: Font.Medium
+        }
+        background: Rectangle {
+            radius: 7
+            color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? "#26262b" : "#2e2e34")
+            border.width: 1
+            border.color: geoBtn.active ? "#4a4a52" : root.hair
+            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+        }
+        HoverHandler { id: geoHover }
+        GraphiteTip {
+            parent: geoBtn
+            x: 0
+            y: geoBtn.height + 4
+            visible: geoHover.hovered && geoBtn.tooltip.length > 0
+            text: geoBtn.tooltip
+        }
+    }
+
     // Tactile checkbox — recessed square when off, light chip with a drawn tick when on.
     component GraphiteCheck: CheckBox {
         id: cb
@@ -780,6 +812,82 @@ Window {
         color: root.canvas
         property int compareMode: 0   // 0 = Edited, 1 = Split, 2 = Side by side
 
+        // ── Crop tool state (Slice 1c) ──────────────────────────────────
+        // While cropMode is on, the engine renders the FULL frame (crop = whole
+        // image) and the overlay below lets the user draw the crop rect; the rect
+        // is applied to the engine only on "Apply". cropAspect 0 = free.
+        property bool cropMode: false
+        property real cropAspect: 0
+        property real cropX: 0
+        property real cropY: 0
+        property real cropW: 1
+        property real cropH: 1
+
+        function imageAspect() {
+            return (afterImg.paintedHeight > 0) ? (afterImg.paintedWidth / afterImg.paintedHeight) : 1.0;
+        }
+        function enterCropMode() {
+            cropX = engine.filmControls.crop_x;
+            cropY = engine.filmControls.crop_y;
+            cropW = engine.filmControls.crop_w;
+            cropH = engine.filmControls.crop_h;
+            compareMode = 0;
+            cropMode = true;
+            engine.setCrop(0, 0, 1, 1);   // show the whole frame underneath
+        }
+        function applyCropMode() {
+            cropMode = false;
+            engine.setCrop(cropX, cropY, cropW, cropH);
+        }
+        function selectAspect(r) {
+            if (r < 0) {                    // Original — clear the crop
+                cropAspect = 0;
+                cropX = 0; cropY = 0; cropW = 1; cropH = 1;
+                if (!cropMode) engine.setCrop(0, 0, 1, 1);
+                return;
+            }
+            if (!cropMode) enterCropMode();
+            if (r === 0) { cropAspect = 0; return; }   // free — keep current rect
+            cropAspect = r;
+            var A = imageAspect();
+            var R = r / A;                              // normalized width/height
+            var wN, hN;
+            if (R >= 1) { wN = 1; hN = 1 / R; } else { hN = 1; wN = R; }
+            cropW = wN; cropH = hN;
+            cropX = (1 - wN) / 2; cropY = (1 - hN) / 2;
+        }
+        // Resize the crop rect from a handle drag. grab is a 1-or-2 char code of
+        // edges (l/r/t/b); normalized pointer (nx,ny). Enforces a min size and,
+        // when an aspect is locked, keeps the ratio (corner grabs only).
+        function updateCrop(grab, nx, ny) {
+            var minS = 0.05;
+            nx = Math.max(0, Math.min(1, nx));
+            ny = Math.max(0, Math.min(1, ny));
+            var l = cropX, t = cropY, r = cropX + cropW, b = cropY + cropH;
+            if (grab.indexOf("l") >= 0) l = Math.min(nx, r - minS);
+            if (grab.indexOf("r") >= 0) r = Math.max(nx, l + minS);
+            if (grab.indexOf("t") >= 0) t = Math.min(ny, b - minS);
+            if (grab.indexOf("b") >= 0) b = Math.max(ny, t + minS);
+            if (cropAspect > 0 && grab.length === 2) {
+                var ratioN = cropAspect / imageAspect();     // normalized w/h
+                var ax = (grab.indexOf("l") >= 0) ? r : l;   // anchor = opposite corner
+                var ay = (grab.indexOf("t") >= 0) ? b : t;
+                var wN = Math.abs(((grab.indexOf("l") >= 0) ? l : r) - ax);
+                var hN = Math.abs(((grab.indexOf("t") >= 0) ? t : b) - ay);
+                var w2 = Math.max(wN, hN * ratioN);
+                if ((grab.indexOf("l") >= 0) && ax - w2 < 0) w2 = ax;
+                if ((grab.indexOf("r") >= 0) && ax + w2 > 1) w2 = 1 - ax;
+                var h2 = w2 / ratioN;
+                if ((grab.indexOf("t") >= 0) && ay - h2 < 0) { h2 = ay; w2 = h2 * ratioN; }
+                if ((grab.indexOf("b") >= 0) && ay + h2 > 1) { h2 = 1 - ay; w2 = h2 * ratioN; }
+                l = (grab.indexOf("l") >= 0) ? ax - w2 : ax;
+                r = (grab.indexOf("l") >= 0) ? ax : ax + w2;
+                t = (grab.indexOf("t") >= 0) ? ay - h2 : ay;
+                b = (grab.indexOf("t") >= 0) ? ay : ay + h2;
+            }
+            cropX = l; cropY = t; cropW = r - l; cropH = b - t;
+        }
+
         Item {
             id: imageArea
             anchors.fill: parent
@@ -868,6 +976,113 @@ Window {
                     Text { anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 2 } text: "After"; color: root.textSecondary; font.pixelSize: 11 }
                 }
             }
+
+            // ── Interactive crop overlay (Slice 1c) ──────────────────────
+            Item {
+                id: cropOverlay
+                anchors.fill: parent
+                visible: previewCanvas.cropMode && !imageArea.split && !imageArea.sideBySide && engine.hasImage
+                // Painted image rect (PreserveAspectFit) within imageArea.
+                readonly property real pw: afterImg.paintedWidth
+                readonly property real ph: afterImg.paintedHeight
+                readonly property real ox: (width - pw) / 2
+                readonly property real oy: (height - ph) / 2
+                // Crop rect in overlay/screen coords.
+                readonly property real rx: ox + previewCanvas.cropX * pw
+                readonly property real ry: oy + previewCanvas.cropY * ph
+                readonly property real rw: previewCanvas.cropW * pw
+                readonly property real rh: previewCanvas.cropH * ph
+                readonly property bool free: previewCanvas.cropAspect <= 0
+
+                // Dim the four regions outside the crop rect.
+                Rectangle { color: "#99000000"; x: cropOverlay.ox; y: cropOverlay.oy; width: cropOverlay.pw; height: Math.max(0, cropOverlay.ry - cropOverlay.oy) }
+                Rectangle { color: "#99000000"; x: cropOverlay.ox; y: cropOverlay.ry + cropOverlay.rh; width: cropOverlay.pw; height: Math.max(0, (cropOverlay.oy + cropOverlay.ph) - (cropOverlay.ry + cropOverlay.rh)) }
+                Rectangle { color: "#99000000"; x: cropOverlay.ox; y: cropOverlay.ry; width: Math.max(0, cropOverlay.rx - cropOverlay.ox); height: cropOverlay.rh }
+                Rectangle { color: "#99000000"; x: cropOverlay.rx + cropOverlay.rw; y: cropOverlay.ry; width: Math.max(0, (cropOverlay.ox + cropOverlay.pw) - (cropOverlay.rx + cropOverlay.rw)); height: cropOverlay.rh }
+
+                // Crop frame + rule-of-thirds grid.
+                Rectangle {
+                    x: cropOverlay.rx; y: cropOverlay.ry; width: cropOverlay.rw; height: cropOverlay.rh
+                    color: "transparent"; border.width: 1; border.color: "#f0ffffff"
+                    Rectangle { color: "#40ffffff"; width: 1; height: parent.height; x: Math.round(parent.width / 3) }
+                    Rectangle { color: "#40ffffff"; width: 1; height: parent.height; x: Math.round(2 * parent.width / 3) }
+                    Rectangle { color: "#40ffffff"; height: 1; width: parent.width; y: Math.round(parent.height / 3) }
+                    Rectangle { color: "#40ffffff"; height: 1; width: parent.width; y: Math.round(2 * parent.height / 3) }
+                }
+
+                // Handles: 4 corners always, 4 edge-midpoints only when aspect is free.
+                Repeater {
+                    model: [
+                        { k: "lt", hx: cropOverlay.rx,                    hy: cropOverlay.ry,                    corner: true },
+                        { k: "rt", hx: cropOverlay.rx + cropOverlay.rw,   hy: cropOverlay.ry,                    corner: true },
+                        { k: "lb", hx: cropOverlay.rx,                    hy: cropOverlay.ry + cropOverlay.rh,   corner: true },
+                        { k: "rb", hx: cropOverlay.rx + cropOverlay.rw,   hy: cropOverlay.ry + cropOverlay.rh,   corner: true },
+                        { k: "t",  hx: cropOverlay.rx + cropOverlay.rw/2, hy: cropOverlay.ry,                    corner: false },
+                        { k: "b",  hx: cropOverlay.rx + cropOverlay.rw/2, hy: cropOverlay.ry + cropOverlay.rh,   corner: false },
+                        { k: "l",  hx: cropOverlay.rx,                    hy: cropOverlay.ry + cropOverlay.rh/2, corner: false },
+                        { k: "r",  hx: cropOverlay.rx + cropOverlay.rw,   hy: cropOverlay.ry + cropOverlay.rh/2, corner: false }
+                    ]
+                    delegate: Rectangle {
+                        visible: modelData.corner || cropOverlay.free
+                        width: modelData.corner ? 12 : 10
+                        height: width
+                        radius: modelData.corner ? 2 : 5
+                        color: "#f2ffffff"
+                        border.width: 1; border.color: "#60000000"
+                        x: modelData.hx - width / 2
+                        y: modelData.hy - height / 2
+                    }
+                }
+
+                MouseArea {
+                    id: cropMouse
+                    anchors.fill: parent
+                    enabled: previewCanvas.cropMode
+                    cursorShape: grab === "" ? Qt.ArrowCursor : (grab === "move" ? Qt.SizeAllCursor : Qt.CrossCursor)
+                    property string grab: ""
+                    property real startNx: 0
+                    property real startNy: 0
+                    property real startCropX: 0
+                    property real startCropY: 0
+                    onPressed: (m) => {
+                        var hs = 16;
+                        var l = cropOverlay.rx, t = cropOverlay.ry;
+                        var r = cropOverlay.rx + cropOverlay.rw, b = cropOverlay.ry + cropOverlay.rh;
+                        var cx = (l + r) / 2, cy = (t + b) / 2;
+                        var near = function(px, py) { return Math.abs(m.x - px) <= hs && Math.abs(m.y - py) <= hs; };
+                        var free = cropOverlay.free;
+                        grab = "";
+                        if (near(l, t)) grab = "lt";
+                        else if (near(r, t)) grab = "rt";
+                        else if (near(l, b)) grab = "lb";
+                        else if (near(r, b)) grab = "rb";
+                        else if (free && near(cx, t)) grab = "t";
+                        else if (free && near(cx, b)) grab = "b";
+                        else if (free && near(l, cy)) grab = "l";
+                        else if (free && near(r, cy)) grab = "r";
+                        else if (m.x > l && m.x < r && m.y > t && m.y < b) {
+                            grab = "move";
+                            startNx = (m.x - cropOverlay.ox) / cropOverlay.pw;
+                            startNy = (m.y - cropOverlay.oy) / cropOverlay.ph;
+                            startCropX = previewCanvas.cropX;
+                            startCropY = previewCanvas.cropY;
+                        }
+                    }
+                    onPositionChanged: (m) => {
+                        if (grab === "" || cropOverlay.pw <= 0 || cropOverlay.ph <= 0) return;
+                        var nx = (m.x - cropOverlay.ox) / cropOverlay.pw;
+                        var ny = (m.y - cropOverlay.oy) / cropOverlay.ph;
+                        if (grab === "move") {
+                            var dx = nx - startNx, dy = ny - startNy;
+                            previewCanvas.cropX = Math.max(0, Math.min(1 - previewCanvas.cropW, startCropX + dx));
+                            previewCanvas.cropY = Math.max(0, Math.min(1 - previewCanvas.cropH, startCropY + dy));
+                        } else {
+                            previewCanvas.updateCrop(grab, nx, ny);
+                        }
+                    }
+                    onReleased: grab = ""
+                }
+            }
         }
 
         // Floating before/after mode switch (only when a "before" is available).
@@ -951,7 +1166,10 @@ Window {
 
     Rectangle {
         id: inspector
-        property int activeTab: 0                     // 0 = Develop, 1 = Export
+        property int activeTab: 0                     // 0 = Develop, 1 = Geometry, 2 = Export
+        // Leaving the Geometry tab commits an in-progress crop so the overlay never
+        // lingers over the preview on another tab.
+        onActiveTabChanged: if (activeTab !== 1 && previewCanvas.cropMode) previewCanvas.applyCropMode()
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -1057,10 +1275,10 @@ Window {
                     anchors.margins: 3
                     spacing: 4
                     Repeater {
-                        model: ["Develop", "Export"]
+                        model: ["Develop", "Geometry", "Export"]
                         delegate: Button {
                             id: tabBtn
-                            width: (parent.width - 4) / 2
+                            width: (parent.width - 8) / 3
                             height: parent.height
                             text: modelData
                             readonly property bool selected: inspector.activeTab === index
@@ -1633,7 +1851,7 @@ Window {
                             width: parent.width
                             spacing: 12
                             visible: lightCard.open
-                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Overall image brightness, in stops. A general grade on top of the film response." }
+                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Overall brightness of the finished image, in stops — a grade applied after the film response. For the film's own exposure (which drives its tone and rolloff), use Film exposure in the Film Recipe." }
                             FilmSlider { controlKey: "contrast"; label: "Contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Global contrast — spreads or compresses the tonal range around the midtones." }
                             FilmSlider { controlKey: "highlights"; label: "Highlights"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Recovers or brightens the brighter tones without moving whites." }
                             FilmSlider { controlKey: "shadows"; label: "Shadows"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Opens or deepens the darker tones without moving blacks." }
@@ -1887,12 +2105,153 @@ Window {
                 }
                 }
 
+                // ── Geometry tab ───────────────────────────────────────
+                Column {
+                    id: geometryContent
+                    width: parent.width
+                    spacing: 14
+                    visible: inspector.activeTab === 1 && !engine.lightroomRoundTrip
+
+                    // ── Crop card ──────────────────────────────────────
+                    Rectangle {
+                        id: cropCard
+                        property bool open: true
+                        width: parent.width
+                        radius: 14
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#1d1d20" }
+                            GradientStop { position: 1.0; color: "#191a1c" }
+                        }
+                        border.width: 1
+                        border.color: root.hair
+                        implicitHeight: cropCol.implicitHeight + 32
+                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                        Column {
+                            id: cropCol
+                            x: 16; y: 16
+                            width: parent.width - 32
+                            spacing: 14
+
+                            Item {
+                                width: parent.width
+                                height: 20
+                                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Crop"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                                ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: cropCard.open }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: cropCard.open = !cropCard.open }
+                            }
+
+                            Column {
+                                width: parent.width
+                                spacing: 12
+                                visible: cropCard.open
+
+                                InspectorLabel { text: "Aspect ratio" }
+                                ComboBox {
+                                    id: aspectBox
+                                    width: parent.width
+                                    height: 34
+                                    textRole: "label"
+                                    model: [
+                                        { label: "Original", r: -1 },
+                                        { label: "Free", r: 0 },
+                                        { label: "1:1", r: 1 },
+                                        { label: "3:2", r: 1.5 },
+                                        { label: "2:3", r: 0.6666667 },
+                                        { label: "4:5", r: 0.8 },
+                                        { label: "5:4", r: 1.25 },
+                                        { label: "16:9", r: 1.7777778 },
+                                        { label: "9:16", r: 0.5625 }
+                                    ]
+                                    onActivated: previewCanvas.selectAspect(model[currentIndex].r)
+                                    contentItem: Text { leftPadding: 10; text: aspectBox.displayText; color: root.textPrimary; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
+                                    background: Rectangle { radius: 7; color: "#26262b"; border.width: 1; border.color: root.hair }
+                                }
+
+                                GeoButton {
+                                    width: parent.width
+                                    text: previewCanvas.cropMode ? "Apply crop" : "Crop image"
+                                    active: previewCanvas.cropMode
+                                    onClicked: previewCanvas.cropMode ? previewCanvas.applyCropMode() : previewCanvas.enterCropMode()
+                                    tooltip: "Draw a crop on the image — drag the handles or inside to reposition. Pick an aspect ratio to lock the shape."
+                                }
+                                Text {
+                                    width: parent.width
+                                    visible: previewCanvas.cropMode
+                                    text: "Drag the handles to crop; drag inside to move. Click Apply crop when done."
+                                    color: root.textMuted
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WordWrap
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Rotate & Flip card ─────────────────────────────
+                    Rectangle {
+                        id: orientCard
+                        property bool open: true
+                        width: parent.width
+                        radius: 14
+                        gradient: Gradient {
+                            GradientStop { position: 0.0; color: "#1d1d20" }
+                            GradientStop { position: 1.0; color: "#191a1c" }
+                        }
+                        border.width: 1
+                        border.color: root.hair
+                        implicitHeight: orientCol.implicitHeight + 32
+                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
+
+                        Column {
+                            id: orientCol
+                            x: 16; y: 16
+                            width: parent.width - 32
+                            spacing: 14
+
+                            Item {
+                                width: parent.width
+                                height: 20
+                                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Rotate & Flip"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                                ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: orientCard.open }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: orientCard.open = !orientCard.open }
+                            }
+
+                            Column {
+                                width: parent.width
+                                spacing: 12
+                                visible: orientCard.open
+
+                                FilmSlider { controlKey: "straighten_deg"; label: "Straighten"; minimum: -45; maximum: 45; increment: 0.1; decimals: true; bipolar: true; tooltip: "Level a tilted horizon — rotates by a fine angle and trims the corners so there's no black edge." }
+
+                                InspectorLabel { text: "Rotate" }
+                                Row {
+                                    width: parent.width
+                                    spacing: 8
+                                    GeoButton { text: "⟲ 90°"; width: (parent.width - 8) / 2; onClicked: engine.rotateQuadrant(-1); tooltip: "Rotate 90° counter-clockwise." }
+                                    GeoButton { text: "⟳ 90°"; width: (parent.width - 8) / 2; onClicked: engine.rotateQuadrant(1); tooltip: "Rotate 90° clockwise." }
+                                }
+
+                                InspectorLabel { text: "Flip" }
+                                Row {
+                                    width: parent.width
+                                    spacing: 8
+                                    GeoButton { text: "⇄ Horizontal"; width: (parent.width - 8) / 2; active: engine.filmControls.flip_h; onClicked: engine.setFilmControl("flip_h", !engine.filmControls.flip_h); tooltip: "Mirror the image left to right." }
+                                    GeoButton { text: "⇅ Vertical"; width: (parent.width - 8) / 2; active: engine.filmControls.flip_v; onClicked: engine.setFilmControl("flip_v", !engine.filmControls.flip_v); tooltip: "Mirror the image top to bottom." }
+                                }
+
+                                Item { width: parent.width; height: 2 }
+                                GeoButton { width: parent.width; text: "Reset geometry"; onClicked: engine.resetGeometry(); tooltip: "Clear crop, straighten, rotation and flips." }
+                            }
+                        }
+                    }
+                }
+
                 // ── Export tab ─────────────────────────────────────────
                 Column {
                     id: exportContent
                     width: parent.width
                     spacing: 14
-                    visible: inspector.activeTab === 1 && !engine.lightroomRoundTrip
+                    visible: inspector.activeTab === 2 && !engine.lightroomRoundTrip
 
                     Rectangle {
                         width: parent.width

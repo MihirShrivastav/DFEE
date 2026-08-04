@@ -98,6 +98,12 @@ public:
     // Reset every edit — film stock, exposure placement and all develop
     // controls — back to the just-opened baseline for the current image.
     Q_INVOKABLE void resetAllEdits();
+    // Geometry (Phase 1). setCrop takes a normalized rect on the
+    // flipped/rotated/straightened image; rotateQuadrant advances the 90-degree
+    // orientation; resetGeometry clears crop/straighten/rotate/flip only.
+    Q_INVOKABLE void setCrop(double x, double y, double w, double h);
+    Q_INVOKABLE void rotateQuadrant(int steps);
+    Q_INVOKABLE void resetGeometry();
     void beginLightroomRoundTrip(const QString& tiffPath);
 
     bool hasImage() const { return hasImage_; }

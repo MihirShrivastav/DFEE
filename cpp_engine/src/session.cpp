@@ -1253,19 +1253,25 @@ Image apply_pre_film_preview_sliders(
     RenderPlan& plan) {
     Image adjusted = rgb_input;
 
-    plan.pre_film_normalization.exposure_compensation_stops +=
-        request.exposure + std::clamp(request.film_exposure_ev, -3.0F, 3.0F);
-    const float contrast_value = request.contrast + plan.pre_film_normalization.contrast_compensation;
-    const float highlights_value = request.highlights + plan.pre_film_normalization.highlights_compensation;
-    const float shadows_value = request.shadows + plan.pre_film_normalization.shadows_compensation;
-    const float whites_value = request.whites + plan.pre_film_normalization.whites_compensation;
-    const float blacks_value = request.blacks + plan.pre_film_normalization.blacks_compensation;
-    const float midtones_value = request.midtones + plan.pre_film_normalization.midtones_compensation;
+    const bool is_filmic_v3 = request.effect_pipeline_version == "filmic_v3";
 
-    if (request.effect_pipeline_version == "filmic_v3") {
-        apply_scene_referred_tone(adjusted, contrast_value, highlights_value,
-                                  shadows_value, whites_value, blacks_value, midtones_value);
-    } else {
+    // filmic_v3: the whole Light panel (Exposure + Contrast/Highlights/Shadows/Whites/
+    // Blacks/Midtones) is a POST-film finishing stage (see apply_post_film_light_panel),
+    // so its sliders act on the developed image and Highlights/Whites are no longer eaten
+    // by the film shoulder. Only Film Exposure — which must drive the film curve — is
+    // applied pre-film here. Legacy parity_v1/filmic_v2 keep the original pre-film
+    // additive tone, byte-identical.
+    plan.pre_film_normalization.exposure_compensation_stops +=
+        std::clamp(request.film_exposure_ev, -3.0F, 3.0F) +
+        (is_filmic_v3 ? 0.0F : request.exposure);
+
+    if (!is_filmic_v3) {
+        const float contrast_value = request.contrast + plan.pre_film_normalization.contrast_compensation;
+        const float highlights_value = request.highlights + plan.pre_film_normalization.highlights_compensation;
+        const float shadows_value = request.shadows + plan.pre_film_normalization.shadows_compensation;
+        const float whites_value = request.whites + plan.pre_film_normalization.whites_compensation;
+        const float blacks_value = request.blacks + plan.pre_film_normalization.blacks_compensation;
+        const float midtones_value = request.midtones + plan.pre_film_normalization.midtones_compensation;
         apply_gamma_additive_tone(adjusted, contrast_value, highlights_value,
                                   shadows_value, whites_value, blacks_value, midtones_value);
     }
@@ -1279,6 +1285,52 @@ Image apply_pre_film_preview_sliders(
         adjusted = oklab_to_rgb(oklab);
     }
 
+    return adjusted;
+}
+
+// Build the geometry transform params from the request (Geometry tab, Phase 1).
+[[nodiscard]] GeometryParams make_geometry_params(const NativePreviewRenderRequest& request) {
+    GeometryParams g;
+    g.crop_x = request.crop_x;
+    g.crop_y = request.crop_y;
+    g.crop_w = request.crop_w;
+    g.crop_h = request.crop_h;
+    g.straighten_deg = request.straighten_deg;
+    g.rotate_quadrant = request.rotate_quadrant;
+    g.flip_h = request.flip_h;
+    g.flip_v = request.flip_v;
+    return g;
+}
+
+// filmic_v3 Light panel — POST-film finishing tone. Runs on the developed image, so
+// Highlights/Whites carry real authority (the film shoulder has already run and can no
+// longer undo them) and every Light slider behaves predictably, editor-style. Exposure
+// here is a brightness grade on the result — distinct from the pre-film Film Exposure
+// that drives the film curve. Early-outs when everything is neutral, so default and
+// saved-stock renders are byte-unchanged. No-op for legacy pipelines (which apply these
+// pre-film instead).
+[[nodiscard]] Image apply_post_film_light_panel(
+    const Image& rendered,
+    const NativePreviewRenderRequest& request) {
+    if (request.effect_pipeline_version != "filmic_v3") {
+        return rendered;
+    }
+    Image adjusted = rendered;
+
+    // Exposure: post-film brightness in stops (a plain gain on the developed image).
+    const float exposure_stops = std::clamp(request.exposure, -3.0F, 3.0F);
+    if (exposure_stops != 0.0F) {
+        const float gain = std::exp2(exposure_stops);
+        for (float& p : adjusted.pixels) {
+            p = std::max(0.0F, p * gain);
+        }
+    }
+
+    // Contrast / Highlights / Shadows / Whites / Blacks / Midtones on the developed
+    // image. apply_scene_referred_tone early-outs internally when all six are 0.
+    apply_scene_referred_tone(adjusted, request.contrast, request.highlights,
+                              request.shadows, request.whites, request.blacks,
+                              request.midtones);
     return adjusted;
 }
 
@@ -2507,6 +2559,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             }
             {
                 ScopedStageTimer stage(response.engine, "render_preview_neutral_post");
+                rendered = apply_post_film_light_panel(rendered, request);
                 rendered = apply_post_film_color(rendered, request);
                 rendered = apply_curves(rendered, request.curves);
                 rendered = apply_hsl(rendered, request);
@@ -2517,6 +2570,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                     ? apply_post_bloom_filmic(rendered, request.bloom)
                     : apply_post_bloom(rendered, request.bloom);
+                rendered = apply_geometry(rendered, make_geometry_params(request));
             }
             {
                 ScopedStageTimer stage(response.engine, "render_preview_neutral_encode_jpeg");
@@ -2649,9 +2703,9 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     rendered,
                     zone_masks,
                     render_plan.pre_film_normalization);
-                // RAW baseline develop: bring flat scene-linear RAW to a developed,
-                // TIFF-like baseline, then apply the stock's tone gently on top (same
-                // "Film tone strength" control as TIFF) so we don't double tone-map.
+                // RAW baseline develop establishes the working baseline, but RAW has
+                // no baked display curve to protect. The stock must therefore retain
+                // its full tone response. `rendered_input` is TIFF-only.
                 if (!is_tiff_filename(response.filename) &&
                     is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
@@ -2728,6 +2782,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         }
         {
             ScopedStageTimer stage(response.engine, "render_preview_post_color");
+            rendered = apply_post_film_light_panel(rendered, request);
             rendered = apply_post_film_color(rendered, request);
         }
         {
@@ -2753,6 +2808,10 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     ? apply_post_bloom_filmic(rendered, request.bloom)
                     : apply_post_bloom(rendered, request.bloom);
             }
+        }
+        {
+            ScopedStageTimer stage(response.engine, "render_preview_geometry");
+            rendered = apply_geometry(rendered, make_geometry_params(request));
         }
         dump_stage(rendered, "40_final");
         {
@@ -3078,8 +3137,9 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             render_plan->pre_film_normalization);
                     }
                     fullres_prefilm = Image();
-                    // RAW baseline develop (matches the preview path) so exports of a
-                    // RAW get the same developed baseline + gentle film tone as a TIFF.
+                    // RAW baseline develop (matches the preview path). The full stock
+                    // curve stays active; only already-rendered TIFF inputs attenuate
+                    // it through the rendered-input control.
                     if (!is_tiff_filename(response.filename) &&
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         rendered = apply_raw_baseline_develop(rendered);
@@ -3158,6 +3218,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 append_export_trace(project_root_, "export_image:fullres_post:start");
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_post_fullres");
+                    rendered = apply_post_film_light_panel(rendered, request);
                     rendered = apply_post_film_color(rendered, request);
                     rendered = apply_curves(rendered, request.curves);
                     rendered = apply_hsl(rendered, request);
@@ -3168,6 +3229,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                         ? apply_post_bloom_filmic(rendered, request.bloom)
                         : apply_post_bloom(rendered, request.bloom);
+                    rendered = apply_geometry(rendered, make_geometry_params(request));
                 }
                 append_export_trace(project_root_, "export_image:fullres_post:done");
                 append_export_trace(project_root_, "export_image:render:done");

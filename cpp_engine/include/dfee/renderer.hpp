@@ -8,6 +8,30 @@
 
 namespace dfee {
 
+// Phase 1 geometry (Geometry tab): a final spatial transform on the rendered image.
+// Composition order: flip -> 90-degree quadrant rotate -> straighten (fine angle,
+// auto-cropped to the largest inscribed axis-aligned rect so there are no black
+// corners) -> normalized crop. crop_* are in [0,1] on the flipped/rotated/straightened
+// image. Identity defaults leave the image untouched (byte-identical, no resample).
+struct GeometryParams {
+    float crop_x = 0.0F;
+    float crop_y = 0.0F;
+    float crop_w = 1.0F;
+    float crop_h = 1.0F;
+    float straighten_deg = 0.0F;  // -45..45, positive = clockwise
+    int rotate_quadrant = 0;      // 0..3, 90-degree clockwise steps
+    bool flip_h = false;
+    bool flip_v = false;
+
+    [[nodiscard]] bool is_identity() const {
+        return crop_x == 0.0F && crop_y == 0.0F && crop_w == 1.0F && crop_h == 1.0F &&
+               straighten_deg == 0.0F && rotate_quadrant == 0 && !flip_h && !flip_v;
+    }
+};
+
+// Applies the geometry transform. No-op (returns the input) when g.is_identity().
+[[nodiscard]] Image apply_geometry(const Image& rgb, const GeometryParams& g);
+
 class FilmRenderer {
 public:
     [[nodiscard]] Image render(

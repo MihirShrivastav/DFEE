@@ -273,6 +273,18 @@ struct NativePreviewRenderRequest {
     float print_y = 0.0F;
     float print_contrast = 0.0F;
     float print_black_point = 0.0F;
+    // Geometry (Phase 1): a final spatial transform applied after the full render.
+    // Composition order: flip -> 90-degree quadrant rotate -> straighten (fine angle,
+    // auto-cropped to the largest inscribed rect) -> normalized crop. crop_* are in
+    // [0,1] on the flipped/rotated/straightened image. Identity defaults = whole frame.
+    float crop_x = 0.0F;
+    float crop_y = 0.0F;
+    float crop_w = 1.0F;
+    float crop_h = 1.0F;
+    float straighten_deg = 0.0F;  // -45..45, positive rotates the image clockwise
+    int rotate_quadrant = 0;      // 0..3, number of 90-degree clockwise rotations
+    bool flip_h = false;
+    bool flip_v = false;
 };
 
 struct NativePreviewRenderResponse {

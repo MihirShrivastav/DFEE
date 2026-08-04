@@ -83,6 +83,13 @@ QVariantMap EngineController::defaultFilmControls()
         {"print_y", 0.0},
         {"print_contrast", 0.0},
         {"print_black_point", 0.0},
+        // Geometry (Phase 1) — normalized crop rect, fine straighten, 90-degree
+        // quadrant, mirror. Identity defaults = whole frame, no transform.
+        {"crop_x", 0.0}, {"crop_y", 0.0}, {"crop_w", 1.0}, {"crop_h", 1.0},
+        {"straighten_deg", 0.0},
+        {"rotate_quadrant", 0},
+        {"flip_h", false},
+        {"flip_v", false},
         // Colour grading — 3-way + global (hue 0..360, sat 0..100, lum -100..100)
         {"cg_shadow_hue", 0.0}, {"cg_shadow_sat", 0.0}, {"cg_shadow_lum", 0.0},
         {"cg_midtone_hue", 0.0}, {"cg_midtone_sat", 0.0}, {"cg_midtone_lum", 0.0},
@@ -278,6 +285,8 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
         {"print_y", {-100.0, 100.0}},
         {"print_contrast", {-100.0, 100.0}},
         {"print_black_point", {-100.0, 100.0}},
+        // Geometry
+        {"straighten_deg", {-45.0, 45.0}},
         // Colour grading
         {"cg_shadow_hue", {0.0, 360.0}}, {"cg_shadow_sat", {0.0, 100.0}}, {"cg_shadow_lum", {-100.0, 100.0}},
         {"cg_midtone_hue", {0.0, 360.0}}, {"cg_midtone_sat", {0.0, 100.0}}, {"cg_midtone_lum", {-100.0, 100.0}},
@@ -319,10 +328,18 @@ void EngineController::setFilmControl(const QString& key, const QVariant& value)
         scheduleRender();
         return;
     }
-    if (key == "adaptive" || key == "grain_auto") {
+    if (key == "adaptive" || key == "grain_auto" || key == "flip_h" || key == "flip_v") {
         const bool enabled = value.toBool();
         if (filmControls_.value(key).toBool() == enabled) return;
         filmControls_.insert(key, enabled);
+        emit filmControlsChanged();
+        scheduleRender();
+        return;
+    }
+    if (key == "rotate_quadrant") {
+        const int q = ((value.toInt() % 4) + 4) % 4;
+        if (filmControls_.value(key).toInt() == q) return;
+        filmControls_.insert(key, q);
         emit filmControlsChanged();
         scheduleRender();
         return;
@@ -356,6 +373,48 @@ void EngineController::resetAllEdits()
     }
     emit filmControlsChanged();
     emit paramsChanged();
+    scheduleRender();
+}
+
+void EngineController::setCrop(double x, double y, double w, double h)
+{
+    const double cx = std::clamp(x, 0.0, 1.0);
+    const double cy = std::clamp(y, 0.0, 1.0);
+    const double cw = std::clamp(w, 0.0, 1.0 - cx);
+    const double ch = std::clamp(h, 0.0, 1.0 - cy);
+    const bool unchanged =
+        qFuzzyCompare(filmControls_.value("crop_x").toDouble() + 1.0, cx + 1.0) &&
+        qFuzzyCompare(filmControls_.value("crop_y").toDouble() + 1.0, cy + 1.0) &&
+        qFuzzyCompare(filmControls_.value("crop_w").toDouble() + 1.0, cw + 1.0) &&
+        qFuzzyCompare(filmControls_.value("crop_h").toDouble() + 1.0, ch + 1.0);
+    if (unchanged) return;
+    filmControls_.insert("crop_x", cx);
+    filmControls_.insert("crop_y", cy);
+    filmControls_.insert("crop_w", cw);
+    filmControls_.insert("crop_h", ch);
+    emit filmControlsChanged();
+    scheduleRender();
+}
+
+void EngineController::rotateQuadrant(int steps)
+{
+    const int q = ((filmControls_.value("rotate_quadrant").toInt() + steps) % 4 + 4) % 4;
+    filmControls_.insert("rotate_quadrant", q);
+    emit filmControlsChanged();
+    scheduleRender();
+}
+
+void EngineController::resetGeometry()
+{
+    filmControls_.insert("crop_x", 0.0);
+    filmControls_.insert("crop_y", 0.0);
+    filmControls_.insert("crop_w", 1.0);
+    filmControls_.insert("crop_h", 1.0);
+    filmControls_.insert("straighten_deg", 0.0);
+    filmControls_.insert("rotate_quadrant", 0);
+    filmControls_.insert("flip_h", false);
+    filmControls_.insert("flip_v", false);
+    emit filmControlsChanged();
     scheduleRender();
 }
 
@@ -495,6 +554,16 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
     request.print_y = f("print_y");
     request.print_contrast = f("print_contrast");
     request.print_black_point = f("print_black_point");
+
+    // Geometry (Phase 1)
+    request.crop_x = f("crop_x");
+    request.crop_y = f("crop_y");
+    request.crop_w = f("crop_w");
+    request.crop_h = f("crop_h");
+    request.straighten_deg = f("straighten_deg");
+    request.rotate_quadrant = filmControls_.value("rotate_quadrant").toInt();
+    request.flip_h = filmControls_.value("flip_h").toBool();
+    request.flip_v = filmControls_.value("flip_v").toBool();
 
     // Colour grading — 3-way + global
     request.cg_shadow_hue = f("cg_shadow_hue");
