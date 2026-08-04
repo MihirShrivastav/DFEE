@@ -695,6 +695,8 @@ void test_color_negative_profiles_are_distinct() {
         repo_root / "profiles" / "stocks" / "ektar_100.yaml");
     const auto ultramax_400 = dfee::load_film_stock_profile(
         repo_root / "profiles" / "stocks" / "ultramax_400.yaml");
+    const auto gold_200 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "gold_200.yaml");
 
     const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
         return static_cast<float>(stock.numeric_values.at(key));
@@ -748,6 +750,16 @@ void test_color_negative_profiles_are_distinct() {
            value(portra_400, "hue_saturation_response.saturation_boost"));
     assert(value(ultramax_400, "hue_saturation_response.saturation_boost") <
            value(ektar_100, "hue_saturation_response.saturation_boost"));
+
+    // Gold is the lower-speed, fine-grain consumer negative with broad
+    // latitude. It is slightly less vivid and materially finer than UltraMax,
+    // but remains a separate warm-neutral consumer role rather than Portra.
+    assert(value(gold_200, "grain.size") < value(ultramax_400, "grain.size"));
+    assert(value(gold_200, "grain.strength") < value(ultramax_400, "grain.strength"));
+    assert(value(gold_200, "tone_response.toe_length") >
+           value(ultramax_400, "tone_response.toe_length"));
+    assert(value(gold_200, "hue_saturation_response.saturation_boost") <
+           value(ultramax_400, "hue_saturation_response.saturation_boost"));
 }
 
 void test_shadow_lift_floor_and_footprint() {

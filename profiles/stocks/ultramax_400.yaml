@@ -49,21 +49,21 @@ hue_saturation_response:
   neon_compression: 0.72
   highlight_desaturation: 0.54
 grain:
-  size: 0.43
-  strength: 0.30
+  size: 0.46
+  strength: 0.34
   chroma_strength: 0.12
   peak_zone: lower_mid_to_mid
   texture_masking: 0.7
   family: consumer_color_negative
-  target_pgi_35mm_4x6: 40
-  clumpiness: 0.42
-  micro_grit: 0.22
-  layer_correlation: 0.74
-  shadow_response: 0.66
-  midtone_response: 0.98
-  highlight_response: 0.26
-  underexposure_coarsening: 0.28
-  overexposure_smoothing: 0.28
+  target_pgi_35mm_4x6: 48
+  clumpiness: 0.46
+  micro_grit: 0.24
+  layer_correlation: 0.72
+  shadow_response: 0.70
+  midtone_response: 1.00
+  highlight_response: 0.28
+  underexposure_coarsening: 0.30
+  overexposure_smoothing: 0.26
 halation:
   trigger: specular_only
   strength: 0.10

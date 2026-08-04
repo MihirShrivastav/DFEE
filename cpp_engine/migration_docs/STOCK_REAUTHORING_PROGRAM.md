@@ -154,7 +154,20 @@ revised response measures `1.45x` skin-like chroma and `-1.7 degrees` on
 orange, while preserving vivid blue/cyan and a moderate ISO-400 grain role.
 On `9339116563.rw2` with material finish disabled, UltraMax is distinct from
 both Gold 200 and Portra 400 at the `0.0100` RGB MAE near-duplicate guardrail.
-Gold 200 remains a separate, not-yet-reauthored consumer-negative pass.
+
+**Gold 200** is the lower-speed daylight consumer negative: fine-grained,
+vibrant, consistently coloured, and deliberately forgiving. Kodak specifies
+that it tolerates approximately two stops of underexposure and three stops of
+overexposure. Its DFEE role therefore has the longest, softest consumer toe and
+a protective shoulder, with PGI 44 fine consumer grain. It is warm-neutral and
+vivid, but its color is bounded rather than a large yellow-orange bias.
+
+**Initial native calibration (2026-08-04).** The prior profile produced `1.89x`
+skin-like chroma and `-16 degrees` orange rotation. The reauthored profile
+measures `1.43x` and `-0.9 degrees` respectively. Gold is finer and slightly
+less vivid than UltraMax, while the real-RAW material-off assay on
+`9339116563.rw2` confirms Gold, UltraMax, and Portra 400 all remain above the
+`0.0100` RGB MAE near-duplicate guardrail.
 
 ### VISION3 Motion-Picture Negatives
 
@@ -303,6 +316,10 @@ calibration context rather than attributed blindly to the emulsion.
 - Kodak UltraMax 400 product information: daylight balance, high-speed use,
   fine grain, vivid but consistent colour, and sharp detail:
   <https://www.kodak.com/en/still-film/product/consumer/ultramax-400-film/>
+- Kodak Gold 200 product information and technical data: daylight balance,
+  broad exposure latitude, fine grain, vivid consistent colour, and PGI 44:
+  <https://www.kodak.com/en/still-film/product/consumer/gold-200-film/>
+  <https://www.kodak.com/global/plugins/acrobat/en/consumer/products/techInfo/e7022/E7022.pdf>
 - VISION3 250D technical data: daylight balance, DLT shadow detail, and two
   stops of extended highlight latitude:
   <https://www.kodak.com/content/products-brochures/Film/VISION3-250D-Technical-Data-EN.pdf>
