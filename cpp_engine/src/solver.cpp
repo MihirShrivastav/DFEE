@@ -229,13 +229,20 @@ struct CompressionDefaults {
     return {0.50F, 0.45F, 0.25F};
 }
 
-// filmic_v3 tone steering (Slice 2) gains.
-constexpr float kToeContrast     = 0.40F; // Film Contrast -> toe deepening
-constexpr float kMidContrast     = 0.45F; // Film Contrast -> midtone punch
-constexpr float kRolloffStart    = 0.10F; // Highlight Rolloff -> earlier shoulder start
-constexpr float kShoulderRolloff = 0.30F; // Highlight Rolloff -> firmer shoulder
-constexpr float kRolloffBase     = 0.60F; // Highlight Rolloff -> renderer shoulder at control 100
-constexpr float kRolloffMax      = 1.50F; // Highlight Rolloff -> renderer shoulder cap
+// filmic_v3 tone steering (Slice 2) gains. These scale how far each control moves
+// its target params away from the stock default per unit of (gain - 1), where
+// gain = control/100. Neutral (control 100 -> gain 1) is a byte-exact no-op for
+// every term below, so raising these strengthens the *ends* of the 0-200 range
+// without touching the default look. Highlight Rolloff acts on a single luma
+// shoulder (chroma-safe) so it gets the full boost; Film Contrast runs per-channel
+// through the tone curve, so it's pushed hard but kept just short of the knee where
+// saturated colors start clipping to gamut.
+constexpr float kToeContrast     = 0.52F; // Film Contrast -> toe deepening
+constexpr float kMidContrast     = 0.62F; // Film Contrast -> midtone punch
+constexpr float kRolloffStart    = 0.22F; // Highlight Rolloff -> earlier shoulder start
+constexpr float kShoulderRolloff = 0.50F; // Highlight Rolloff -> firmer shoulder
+constexpr float kRolloffBase     = 0.60F; // Highlight Rolloff -> renderer shoulder at control 100 (neutral; unchanged)
+constexpr float kRolloffMax      = 1.80F; // Highlight Rolloff -> renderer shoulder cap
 
 [[nodiscard]] std::vector<float> get_numeric_vector(
     const std::unordered_map<std::string, std::vector<double>>& values,
