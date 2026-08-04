@@ -148,6 +148,34 @@ Native tests now resolve the real YAML profiles and protect these intentional
 separations on a neutral exposure ramp. A future monochrome chart-scan fixture
 will validate the panchromatic weights; they remain conservative in this pass.
 
+### Colour Reversal
+
+Reversal profiles are calibrated as transparency material, not as a uniform
+"more contrast and saturation" switch. The first native pass establishes the
+following distinct roles:
+
+- **Astia 100F**: the softest portrait-oriented option, with restrained
+  saturation, longer tonal transitions, and greater highlight desaturation.
+- **Provia 100F**: a faithful, vivid general-purpose ISO 100 reversal baseline
+  with rich gradation and extremely fine grain.
+- **Velvia 50**: the most contrast-forward, saturated nature/product option;
+  its vivid rendering is not used as the default for every reversal stock.
+- **Velvia 100**: still vivid, but a more moderate starting point than Velvia
+  50, with a less aggressive curve and saturation response.
+- **Ektachrome E100**: neutral balance, moderately enhanced saturation, low
+  contrast, low D-min, and extended highlight/shadow detail. The old profile
+  incorrectly assigned it a strong high-contrast, high-saturation curve and
+  was corrected in this pass.
+- **Kodachrome 64**: retained as a legacy, separately authored stock. Its
+  historical process is not approximated by claiming generic E-6 behaviour.
+
+On the baseline material-off fixture, this pass reduced reversal near-duplicate
+pairs from two to one; Astia/E100 remain close under that deliberately narrow
+assay. That is expected enough to retain until colour-chart and portrait-patch
+fixtures can measure their palette and skin-rendering distinction. Native tests
+now guard the calibrated family roles so E100 cannot regress to a generic
+high-contrast slide profile and the Velvia hierarchy remains explicit.
+
 ### Candidate Coverage Gaps
 
 Do not add a stock merely for catalog size. Candidates are accepted only after
@@ -193,6 +221,18 @@ calibration context rather than attributed blindly to the emulsion.
   <https://www.kodak.com/en/still-film/product/professional/tri-x-400-film/>
 - Kodak EASTMAN DOUBLE-X data sheet:
   <https://www.kodak.com/content/products-brochures/EASTMAN-DOUBLE-X-Negative-Film-datasheet-US-180924-EN.pdf>
+- Kodak EKTACHROME E100 technical data: neutral balance, moderately enhanced
+  saturation, low contrast, low D-min, and extended tonal detail:
+  <https://www.kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/e4000_ektachrome_100.pdf>
+- Fujifilm PROVIA 100F data sheet: fine grain, sharpness, faithful vivid colour,
+  rich gradation, and push/pull characteristics:
+  <https://asset.fujifilm.com/www/us/files/2020-03/6325e0d91ad8f74448c5968b5a954199/Provia100f.pdf>
+- Fujifilm Velvia 50 product information: high saturation, fine grain, deep
+  shadows, and -1/2 to +1 stop push/pull range:
+  <https://www.fujifilm.com.hk/m/products/professional_films/color_reversalfilms/velvia_50/index.html>
+- Fujifilm film-simulation reference: Provia as standard, Velvia as saturated
+  high contrast, and Astia as portrait/skin-tone oriented:
+  <https://fujifilm-dsc.com/en/manual/x100f/menu_shooting/film_simulation/index.html>
 
 ## Delivery Order
 

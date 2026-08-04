@@ -608,6 +608,36 @@ void test_monochrome_profile_exposure_ramps_are_distinct() {
     assert(delta_3200.grain.strength > delta_100.grain.strength);
 }
 
+void test_reversal_profile_roles_are_distinct() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto astia = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
+    const auto ektachrome = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "ektachrome_100.yaml");
+    const auto provia = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "provia_100f.yaml");
+    const auto velvia_50 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "velvia_50.yaml");
+    const auto velvia_100 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "velvia_100.yaml");
+
+    const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
+        return static_cast<float>(stock.numeric_values.at(key));
+    };
+
+    // Astia is the soft portrait option; Provia is the general faithful option.
+    // E100 keeps Kodak's documented low-contrast, neutral baseline rather than
+    // inheriting a generic high-contrast slide treatment.
+    assert(value(astia, "tone_response.midtone_contrast") < value(provia, "tone_response.midtone_contrast"));
+    assert(value(ektachrome, "tone_response.midtone_contrast") < value(provia, "tone_response.midtone_contrast"));
+    assert(value(astia, "hue_saturation_response.saturation_boost") <
+           value(provia, "hue_saturation_response.saturation_boost"));
+
+    // Velvia remains the vivid branch, with the ISO 50 profile deliberately the
+    // more saturated and contrast-forward starting point.
+    assert(value(velvia_50, "hue_saturation_response.saturation_boost") >
+           value(velvia_100, "hue_saturation_response.saturation_boost"));
+    assert(value(velvia_100, "hue_saturation_response.saturation_boost") >
+           value(provia, "hue_saturation_response.saturation_boost"));
+    assert(value(velvia_50, "tone_response.midtone_contrast") >
+           value(velvia_100, "tone_response.midtone_contrast"));
+}
+
 void test_shadow_lift_floor_and_footprint() {
     // Neutral dark-to-mid gradient; Shadow Lift acts on the deep-shadow base-fog floor.
     dfee::Image rgb(5, 1, 3);
@@ -3326,6 +3356,7 @@ int main() {
         test_toe_length_controls_shadow_latitude();
         test_cinestill_profile_exposure_ramps_are_distinct();
         test_monochrome_profile_exposure_ramps_are_distinct();
+        test_reversal_profile_roles_are_distinct();
         test_shadow_lift_floor_and_footprint();
         test_color_response();
         test_yellow_green_muting();
