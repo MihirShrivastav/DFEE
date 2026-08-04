@@ -46,6 +46,11 @@ The current `filmic_v3` implementation uses luminance-only scaling:
   `1.28`, selected against 20 edit-free Lightroom Adobe Standard TIFF references:
   mean preview MAE improved from `0.0788` at `1.12` to `0.0712`, while mean p95
   luminance error remained near zero (`+0.0052`).
+- Its contrast expansion now transitions into a smooth luminance shoulder above
+  `0.60`, asymptotically approaching display white instead of ending in a gamut
+  clamp. This leaves separation in bright RAW highlights after Auto Balanced
+  placement; it is not highlight reconstruction and does not recover sensor-clipped
+  detail.
 - It scales RGB channels together, preserving hue and chroma proportions.
 - It reduces gain before an individual channel would clip, avoiding the hue shifts
   caused by the former independent red/green/blue power curve.
@@ -101,3 +106,22 @@ increase the baseline power further.
   it; it is not a substitute for tone calibration.
 - Wide-gamut working-space support remains a later phase. It may be required for
   saturated-source accuracy, but should not be mixed into this baseline experiment.
+
+## Next RAW Development Phase
+
+The current baseline is intentionally only a neutral tone transform. It cannot make
+LibRaw's generic camera-to-sRGB result match Lightroom's Adobe Standard rendering,
+because Lightroom also applies camera-specific colour transforms, highlight handling,
+and display-referred tone mapping. The next phase must remain separate from stock
+authoring:
+
+1. Preserve RAW sensor clipping/white-level diagnostics through decode and use them
+   to cap positive Auto Balanced placement before development.
+2. Add bounded, camera-family colour calibration from controlled RAW/TIFF pairs,
+   before the Film Lab stages. Validate hue, chroma, and neutral balance per camera
+   family instead of adding a global saturation correction.
+3. Replace the single baseline calibration number with a measured raw-develop
+   contract: toe, midtone, diffuse-highlight, and channel-clipping error bands.
+4. Only then evaluate camera-profile and highlight-reconstruction support. LibRaw's
+   `no_auto_bright`, camera-WB, linear gamma configuration must remain explicit so
+   automatic decode brightening cannot hide an exposure-model defect.

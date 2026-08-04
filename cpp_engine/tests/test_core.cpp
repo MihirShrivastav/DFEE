@@ -488,11 +488,12 @@ void test_film_tone_response() {
 }
 
 void test_raw_baseline_develop_preserves_chroma_and_gamut() {
-    dfee::Image image(3, 1, 3);
+    dfee::Image image(4, 1, 3);
     image.pixels = {
         0.18F, 0.18F, 0.18F,
         0.36F, 0.18F, 0.09F,
         0.95F, 0.20F, 0.10F,
+        0.95F, 0.95F, 0.95F,
     };
 
     const auto developed = dfee::apply_raw_baseline_develop(image);
@@ -515,6 +516,12 @@ void test_raw_baseline_develop_preserves_chroma_and_gamut() {
     for (const float value : developed.pixels) {
         assert(value >= 0.0F && value <= 1.0F);
     }
+
+    // A bright but recoverable neutral RAW highlight must retain headroom. The
+    // previous power-only baseline reached exactly one here, causing Auto Balanced
+    // previews to turn broad bright regions into clipped white before film tone.
+    assert(developed.at(3, 0, 0) > 0.90F);
+    assert(developed.at(3, 0, 0) < 0.99F);
 }
 
 void test_toe_length_controls_shadow_latitude() {

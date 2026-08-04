@@ -13,6 +13,12 @@ constexpr float kMidGrey = 0.18F;
 // Calibrated against 20 edit-free Lightroom Adobe Standard TIFF references. 1.28
 // improves RAW tone agreement while retaining highlight headroom; see M6-010.
 constexpr float kMidtonePower = 1.28F;
+// The baseline's contrast expansion must never end in a hard display clamp. Auto
+// placement happens in scene-linear space, so bright RAW values can legitimately
+// arrive here above one after that placement. Reserve a smooth shoulder for those
+// values; this preserves local highlight separation for the stock renderer instead
+// of flattening it to uniform white before the film response sees it.
+constexpr float kHighlightShoulderStart = 0.60F;
 constexpr float kEpsilon = 1.0e-6F;
 
 [[nodiscard]] float resolved_midtone_power() noexcept {
@@ -31,7 +37,16 @@ constexpr float kEpsilon = 1.0e-6F;
 
 [[nodiscard]] float baseline_luminance(const float luminance, const float midtone_power) noexcept {
     const float nonnegative = std::max(luminance, 0.0F);
-    return kMidGrey * std::pow(nonnegative / kMidGrey, midtone_power);
+    const float expanded = kMidGrey * std::pow(nonnegative / kMidGrey, midtone_power);
+    if (expanded <= kHighlightShoulderStart) {
+        return expanded;
+    }
+
+    // Exponential roll-off is monotonic and asymptotically approaches one. Its
+    // slope is continuous at the knee, so it does not create a visible contour in
+    // skies or other broad diffuse highlights.
+    const float span = 1.0F - kHighlightShoulderStart;
+    return kHighlightShoulderStart + span * (1.0F - std::exp(-(expanded - kHighlightShoulderStart) / span));
 }
 
 }  // namespace
