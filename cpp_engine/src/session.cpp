@@ -2655,8 +2655,6 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 if (!is_tiff_filename(response.filename) &&
                     is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
-                    render_plan.film_response.tone_response_strength = std::clamp(
-                        1.0F - (request.rendered_input / 100.0F) * kMaxToneAtten, 0.0F, 1.0F);
                 }
                 dump_stage(rendered, "10_baseline");
             }
@@ -3085,10 +3083,6 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     if (!is_tiff_filename(response.filename) &&
                         is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
                         rendered = apply_raw_baseline_develop(rendered);
-                        if (request.stock != "none") {
-                            render_plan->film_response.tone_response_strength = std::clamp(
-                                1.0F - (request.rendered_input / 100.0F) * kMaxToneAtten, 0.0F, 1.0F);
-                        }
                     }
                     if (request.stock != "none" && render_plan->stock_type == "monochrome") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_panchromatic");
