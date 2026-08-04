@@ -514,6 +514,46 @@ void test_toe_length_controls_shadow_latitude() {
     require_close(long_result.at(4, 0, 0), short_result.at(4, 0, 0), 0.002F);
 }
 
+void test_cinestill_profile_exposure_ramps_are_distinct() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto stock_50d = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "cinestill_50d.yaml");
+    const auto stock_400d = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "cinestill_400d.yaml");
+    const dfee::RenderPlanSolver solver;
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 8.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.luma_p95 = 0.70F;
+    input.tonal_distribution.luma_p98 = 0.82F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+    input.raw_iso = 400;
+
+    dfee::SolverControls controls;
+    controls.exposure_intent = "Preserve";
+    controls.adaptive = false;
+    controls.subtractive_pipeline = true;
+
+    const auto plan_50d = solver.solve(input, stock_50d, controls);
+    const auto plan_400d = solver.solve(input, stock_400d, controls);
+
+    dfee::Image ramp(6, 1, 3);
+    const float values[6] = {0.02F, 0.08F, 0.18F, 0.42F, 0.70F, 0.92F};
+    for (int x = 0; x < 6; ++x) {
+        ramp.at(x, 0, 0) = ramp.at(x, 0, 1) = ramp.at(x, 0, 2) = values[x];
+    }
+
+    const dfee::FilmRenderer renderer;
+    const auto response_50d = renderer.apply_film_tone_response(ramp, plan_50d.film_response);
+    const auto response_400d = renderer.apply_film_tone_response(ramp, plan_400d.film_response);
+
+    // 400D's authored long toe carries denser lower-mid shadows than 50D.
+    assert(response_400d.at(1, 0, 0) < response_50d.at(1, 0, 0) - 0.005F);
+    assert(response_400d.at(2, 0, 0) < response_50d.at(2, 0, 0) - 0.003F);
+    // 50D enters its protective shoulder earlier, retaining more headroom.
+    assert(response_50d.at(5, 0, 0) < response_400d.at(5, 0, 0) - 0.003F);
+}
+
 void test_shadow_lift_floor_and_footprint() {
     // Neutral dark-to-mid gradient; Shadow Lift acts on the deep-shadow base-fog floor.
     dfee::Image rgb(5, 1, 3);
@@ -3230,6 +3270,7 @@ int main() {
         test_panchromatic_conversion();
         test_film_tone_response();
         test_toe_length_controls_shadow_latitude();
+        test_cinestill_profile_exposure_ramps_are_distinct();
         test_shadow_lift_floor_and_footprint();
         test_color_response();
         test_yellow_green_muting();

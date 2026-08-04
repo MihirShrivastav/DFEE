@@ -97,6 +97,11 @@ on the baseline fixture now measures 50D/400D at `0.0173` normalized RGB MAE,
 above the `0.0100` near-duplicate threshold. This is an implementation milestone,
 not final approval: the pair still needs exposure-ramp and human visual review.
 
+The native test suite now resolves both real YAML profiles and compares a neutral
+exposure ramp. It protects the authored distinction: 400D must retain denser
+lower-mid shadows through its longer toe, while 50D must enter a more protective
+highlight shoulder earlier.
+
 ### Monochrome
 
 Retain the meaningful families provisionally, but calibrate them by response
