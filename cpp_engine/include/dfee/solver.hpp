@@ -43,6 +43,7 @@ struct SolverControls {
     float film_color_compression = 100.0F;
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
+    float profile_strength = 100.0F;
     bool adaptive = true;              // scene-referred steering on/off
     bool subtractive_pipeline = false; // set true for filmic_v3 (gates v3 tone steering)
     float halation_strength = 100.0F;  // 0..200, 100 = stock default (0 = off)
@@ -134,6 +135,7 @@ struct FilmResponsePlan {
     float compression_crosstalk = 0.0F;    // neighbour-lean amount
     float highlight_rolloff = 100.0F;      // control value (0..200), 100 = stock default
     float film_contrast = 100.0F;          // control value (0..200), 100 = stock default
+    float profile_strength = 100.0F;       // master stock-tone control, 100 = authored baseline
     float tone_adaptive_factor = 1.0F;     // resolved scene-referred factor (report/diagnostic)
     float highlight_rolloff_knee = 1.0F;   // renderer highlight-shoulder knee (>=1.0 = off, filmic_v3)
     float highlight_rolloff_amount = 0.0F; // renderer highlight-shoulder strength (0 = off, filmic_v3)

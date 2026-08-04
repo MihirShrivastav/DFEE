@@ -34,7 +34,10 @@ The desktop app drives `filmic_v3` directly through immutable native request
 snapshots. The primary workflow currently includes Film Recipe, Film Exposure
 (scene placement and stock-relative exposure), Film Tone, Color Character, and
 Material Finish. Film Tone provides adaptive scene tone, highlight rolloff, film
-contrast, and Shadow Lift. Color Character provides the live supported controls:
+contrast, and Shadow Lift. Film Profile Strength is stock-aware: 100 is the
+profile's authored baseline, while lower and higher values soften or reinforce
+its toe, midtone, and shoulder response within safe profile/family limits.
+Color Character provides the live supported controls:
 Color Density, Color Boost, Highlight Saturation, and Shadow Saturation. These
 color controls automatically disable for monochrome stocks.
 

@@ -519,12 +519,39 @@ RenderPlan RenderPlanSolver::solve(
 
     float midtone_density = get_numeric(stock_profile.numeric_values, "tone_response.midtone_contrast", 0.0F);
 
+    // Film Profile Strength is a stock-aware master curve control. It is deliberately
+    // separate from Film Contrast: strength scales the profile's authored toe/mid/
+    // shoulder character as one unit, while Film Contrast remains a creative override.
+    const float profile_strength = std::clamp(controls.profile_strength / 100.0F, 0.0F, 2.0F);
+    const float profile_delta = profile_strength - 1.0F;
+    const bool reversal = stock_profile.stock_type == StockType::ColorReversal;
+    const bool monochrome = stock_profile.stock_type == StockType::Monochrome;
+    const float default_toe_sensitivity = reversal ? 0.24F : (monochrome ? 0.22F : 0.16F);
+    const float default_midtone_sensitivity = reversal ? 0.20F : (monochrome ? 0.24F : 0.14F);
+    const float default_shoulder_sensitivity = reversal ? 0.24F : (monochrome ? 0.14F : 0.16F);
+    const float default_rolloff_sensitivity = reversal ? 0.05F : (monochrome ? 0.03F : 0.04F);
+    const float toe_sensitivity = get_numeric(
+        stock_profile.numeric_values, "tone_response.profile_strength_toe_sensitivity", default_toe_sensitivity);
+    const float midtone_sensitivity = get_numeric(
+        stock_profile.numeric_values, "tone_response.profile_strength_midtone_sensitivity", default_midtone_sensitivity);
+    const float shoulder_sensitivity = get_numeric(
+        stock_profile.numeric_values, "tone_response.profile_strength_shoulder_sensitivity", default_shoulder_sensitivity);
+    const float rolloff_sensitivity = get_numeric(
+        stock_profile.numeric_values, "tone_response.profile_strength_rolloff_sensitivity", default_rolloff_sensitivity);
+
     // filmic_v3 tone steering (Slice 2): Film Contrast + Highlight Rolloff, resolved
     // from stock defaults x manual controls x a scene-referred adaptive factor.
     float tone_adaptive_factor = 1.0F;
     float highlight_rolloff_knee = 1.0F;    // >=1.0 keeps the renderer shoulder off (filmic_v2/parity)
     float highlight_rolloff_amount = 0.0F;  // 0 keeps the renderer shoulder off
     if (controls.subtractive_pipeline) {
+        toe_strength = std::clamp(toe_strength * (1.0F + toe_sensitivity * profile_delta), 0.0F, 1.5F);
+        midtone_density = std::clamp(
+            midtone_density * (1.0F + midtone_sensitivity * profile_delta), 0.0F, 2.0F);
+        shoulder_strength = std::clamp(
+            shoulder_strength * (1.0F + shoulder_sensitivity * profile_delta), 0.0F, 0.98F);
+        highlight_rolloff_start = std::clamp(
+            highlight_rolloff_start - rolloff_sensitivity * profile_delta, 0.35F, 1.0F);
         if (controls.adaptive) {
             // Flat / high-DR / log-like scenes get stronger filmic tone; contrasty scenes less.
             float adapt = 1.0F;
@@ -610,7 +637,16 @@ RenderPlan RenderPlanSolver::solve(
         .shadow_color_retention = controls.shadow_color_retention,
         .palette_range = controls.palette_range,
         .emulsion_color_density = controls.emulsion_color_density,
+        // RAW baseline development may already establish part of a stock's intended
+        // contrast. Profiles can reconcile only the RAW tone blend; TIFF input later
+        // overrides this through its rendered-input contract.
+        .tone_response_strength = controls.subtractive_pipeline
+            ? get_numeric(stock_profile.numeric_values, "tone_response.raw_baseline_strength", 1.0F) * profile_strength
+            : 1.0F,
     };
+    plan.film_response.tone_response_strength = std::clamp(
+        plan.film_response.tone_response_strength, 0.0F, 1.0F);
+    plan.film_response.profile_strength = controls.profile_strength;
 
     const ColorCharacterDefaults cc_defaults = color_character_defaults(stock_profile.stock_type);
     plan.film_response.highlight_hold_sensitivity = get_numeric(

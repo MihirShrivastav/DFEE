@@ -1725,6 +1725,7 @@ Window {
                                 onToggled: engine.setFilmControl("adaptive", checked)
                                 tooltip: "Lets the film read the scene and auto-adjust its tone for flat, high-dynamic-range files. Turn off for a fixed, predictable response."
                             }
+                            FilmSlider { controlKey: "profile_strength"; label: "Film profile strength"; minimum: 0; maximum: 200; neutral: 100; tooltip: "Master strength of this stock's authored tone curve. At 100, you get the stock's intended baseline; lower softens its toe, midtones, and shoulder together, while higher reinforces them within that stock's safe limits." }
                             FilmSlider { controlKey: "highlight_rolloff"; label: "Highlight rolloff"; minimum: 0; maximum: 200; neutral: 100; tooltip: "How gently the brightest tones roll off instead of clipping — higher for softer, glowier film highlights." }
                             FilmSlider { controlKey: "film_contrast"; label: "Film contrast"; minimum: 0; maximum: 200; neutral: 100; tooltip: "The punch of the film's tone curve — higher for a deeper, more contrasty look; lower for flatter." }
                             FilmSlider { controlKey: "shadow_lift"; label: "Shadow lift"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Base-fog fade in the deepest shadows, the way negative film never quite reaches pure black. Forward lifts shadows into a soft matte; back deepens them toward true black." }

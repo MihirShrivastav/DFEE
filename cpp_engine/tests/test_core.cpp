@@ -643,6 +643,7 @@ void test_reversal_profile_roles_are_distinct() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto astia = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
     const auto ektachrome = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "ektachrome_100.yaml");
+    const auto kodachrome = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "kodachrome_64.yaml");
     const auto provia = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "provia_100f.yaml");
     const auto velvia_50 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "velvia_50.yaml");
     const auto velvia_100 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "velvia_100.yaml");
@@ -666,7 +667,16 @@ void test_reversal_profile_roles_are_distinct() {
     assert(value(velvia_100, "hue_saturation_response.saturation_boost") >
            value(provia, "hue_saturation_response.saturation_boost"));
     assert(value(velvia_50, "tone_response.midtone_contrast") >
-           value(velvia_100, "tone_response.midtone_contrast"));
+             value(velvia_100, "tone_response.midtone_contrast"));
+
+    dfee::SolverInput input;
+    dfee::SolverControls controls;
+    controls.subtractive_pipeline = true;
+    const dfee::RenderPlanSolver solver;
+    require_close(
+        solver.solve(input, kodachrome, controls).film_response.tone_response_strength,
+        0.82F,
+        1.0e-5F);
 }
 
 void test_shadow_lift_floor_and_footprint() {
@@ -3063,6 +3073,40 @@ void test_solver_tone_steering() {
     }
 }
 
+void test_profile_strength_scales_authored_reversal_tone() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto stock = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "kodachrome_64.yaml");
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 8.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.highlight_headroom = 0.25F;
+    input.tonal_distribution.luma_p95 = 0.72F;
+
+    dfee::SolverControls controls;
+    controls.subtractive_pipeline = true;
+    controls.adaptive = false;
+    const dfee::RenderPlanSolver solver;
+    const auto baseline = solver.solve(input, stock, controls);
+    controls.profile_strength = 60.0F;
+    const auto softer = solver.solve(input, stock, controls);
+    controls.profile_strength = 140.0F;
+    const auto stronger = solver.solve(input, stock, controls);
+
+    require_close(baseline.film_response.tone_response_strength, 0.82F, 1.0e-5F);
+    assert(softer.film_response.tone_response_strength < baseline.film_response.tone_response_strength);
+    assert(stronger.film_response.tone_response_strength > baseline.film_response.tone_response_strength);
+    assert(softer.film_response.midtone_density < baseline.film_response.midtone_density);
+    assert(stronger.film_response.shoulder_strength > baseline.film_response.shoulder_strength);
+
+    controls.subtractive_pipeline = false;
+    controls.profile_strength = 140.0F;
+    const auto legacy = solver.solve(input, stock, controls);
+    require_close(legacy.film_response.tone_response_strength, 1.0F, 1.0e-5F);
+    require_close(legacy.film_response.profile_strength, 140.0F, 1.0e-5F);
+}
+
 void test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals() {
     const auto oklch_to_rgb_arr = [](float l, float c, float h) -> std::array<float, 3> {
         const float a = c * std::cos(h);
@@ -3423,6 +3467,7 @@ int main() {
         test_solver_density_defaults();
         test_solver_compression_defaults();
         test_solver_tone_steering();
+        test_profile_strength_scales_authored_reversal_tone();
         test_solver_auto_exposure_protects_highlights();
         test_hue_saturation_targets_hue_bounded();
         test_color_grading_zones();

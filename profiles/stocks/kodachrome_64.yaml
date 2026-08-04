@@ -14,6 +14,13 @@ tone_response:
   shoulder_strength: 0.70
   highlight_rolloff_start: 0.70
   black_density_floor: 0.002
+  # RAW is neutral-developed before film. This keeps Kodachrome's steep tonal
+  # character without applying its full reversal curve twice on that baseline.
+  raw_baseline_strength: 0.82
+  profile_strength_toe_sensitivity: 0.22
+  profile_strength_midtone_sensitivity: 0.16
+  profile_strength_shoulder_sensitivity: 0.25
+  profile_strength_rolloff_sensitivity: 0.06
   channel_toe_mult:
   - 1.0
   - 1.0

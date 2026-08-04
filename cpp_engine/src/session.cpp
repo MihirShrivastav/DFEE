@@ -952,6 +952,7 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.film_color_compression = request.film_color_compression;
     controls.highlight_rolloff = request.highlight_rolloff;
     controls.film_contrast = request.film_contrast;
+    controls.profile_strength = request.profile_strength;
     controls.adaptive = request.adaptive;
     controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
     controls.halation_strength = request.halation_strength;
@@ -1766,6 +1767,7 @@ std::string serialize_feature_report_json(
         << "\"compression_crosstalk\": " << json_number(render_plan.film_response.compression_crosstalk) << ",\n"
         << "\"highlight_rolloff\": " << json_number(render_plan.film_response.highlight_rolloff) << ",\n"
         << "\"film_contrast\": " << json_number(render_plan.film_response.film_contrast) << ",\n"
+        << "\"profile_strength\": " << json_number(render_plan.film_response.profile_strength) << ",\n"
         << "\"tone_adaptive_factor\": " << json_number(render_plan.film_response.tone_adaptive_factor)
         << "},\n";
     out << "    \"material_effects\": {"
@@ -2633,6 +2635,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.film_color_compression = request.film_color_compression;
             controls.highlight_rolloff = request.highlight_rolloff;
             controls.film_contrast = request.film_contrast;
+            controls.profile_strength = request.profile_strength;
             controls.adaptive = request.adaptive;
             controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
             controls.halation_strength = request.halation_strength;

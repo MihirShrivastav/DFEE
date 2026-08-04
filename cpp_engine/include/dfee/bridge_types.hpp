@@ -258,6 +258,8 @@ struct NativePreviewRenderRequest {
     float film_color_compression = 100.0F;
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
+    // Master stock-tone control. 100 = the profile's authored baseline.
+    float profile_strength = 100.0F;
     // Rendered-input (TIFF) handling: how much to trust the TIFF's baked exposure/tone
     // and apply the film's own tone subtly. 0 = full RAW-style auto exposure + tone,
     // 100 = fully trust the TIFF (film tone applied gently). Ignored for RAW inputs.
