@@ -108,6 +108,7 @@ Status values:
 
 | M6-010 | active | Calibrate neutral RAW baseline development against matched rendered references | Native baseline unit test plus `raw_rendered_pair_benchmark.py` corpus artifacts | `filmic_v3` now applies the RAW baseline through luminance-preserving, gamut-safe scaling rather than a per-channel power curve. The first 20-pair Adobe Standard corpus selected 1.28 midtone power; remaining camera-colour separation work is tracked separately from tone. |
 | M6-011 | planned | Add camera-family baseline colour calibration | Camera-grouped RAW/TIFF corpus tests plus visual QA | Design a bounded, profile-driven camera look transform after RAW decode and before film. Calibrate hue/chroma separation from edit-free Lightroom Adobe Standard references; do not approximate it with a global saturation slider or stock-specific compensation. |
+| M6-012 | active | Reauthor colour-negative stock families from manufacturer evidence | Native role tests, material-off stock assay, and visual QA | Vision3 250D/500T is complete as the first slice: distinct latitude-first daylight/tungsten camera-negative roles with low native halation. Next slices: Kodak professional/consumer and Fujifilm negative families. |
 
 ## Milestone M7 - Film Lab Product Flow
 

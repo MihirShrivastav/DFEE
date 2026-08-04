@@ -102,6 +102,41 @@ exposure ramp. It protects the authored distinction: 400D must retain denser
 lower-mid shadows through its longer toe, while 50D must enter a more protective
 highlight shoulder earlier.
 
+### VISION3 Motion-Picture Negatives
+
+VISION3 profiles must emulate their camera-negative role, not the exaggerated
+"cinematic" scan preset often attached to them online. Both stocks are ECN-2
+camera negatives intended for a color-timed/DI workflow, so their default
+responses prioritise recoverable scene information, neutral reproduction, and
+restrained halation rather than a baked teal-orange grade.
+
+- **VISION3 250D (5207/7207)**: daylight-balanced, medium-speed, fine-structure
+  exterior/general-purpose negative. Kodak specifies reduced shadow grain and
+  two stops of extended highlight latitude. Its DFEE profile therefore has the
+  smaller, more correlated grain field; restrained colour density; and an
+  earlier, protective shoulder with a clean shadow floor.
+- **VISION3 500T (5219/7219)**: tungsten-balanced, high-speed negative for
+  low-light and tungsten work. Kodak likewise specifies reduced shadow grain
+  and extended highlight latitude. Its profile keeps a longer, softer shadow
+  transition than 250D, modestly warmer midtone colour response, and a larger
+  but still controlled grain field. It is not given a blanket daylight-blue
+  cast: correct source white balance belongs to the input/development stage,
+  not a stock preset.
+- **Halation**: the default effect remains low for both. 250D uses rem-jet
+  backing and current 500T material uses an anti-halation undercoat; the
+  well-known pronounced red glow is a rem-jet-removal derivative behaviour,
+  not the native ECN-2 camera-negative baseline.
+
+**Initial native calibration (2026-08-04).** The baseline material-off assay
+previously measured 250D/500T at `0.00795` normalized RGB MAE, below the
+`0.0100` near-duplicate guard. The Vision3 profiles are now authored as a
+latitude-first pair with differentiated toe, color, density/compression, and
+grain behaviour. Native role tests protect their wide-shoulder, low-halation
+contract and 250D/500T material distinction. This is deliberately not an
+attempt to recreate a particular show LUT, DI, scanner, or rem-jet-removal
+process. The next negative-family passes cover portrait/professional still
+negatives, consumer stocks, and Fujifilm families with their own references.
+
 ### Monochrome
 
 Retain the meaningful families provisionally, but calibrate them by response
@@ -205,6 +240,12 @@ calibration context rather than attributed blindly to the emulsion.
   <https://cinestillfilm.com/blogs/news/cinestill-800t-in-your-toolbox>
 - Kodak technical education on sensitometry and stock choice:
   <https://www.kodak.com/en/motion/page/filmmaker-resources/>
+- VISION3 250D technical data: daylight balance, DLT shadow detail, and two
+  stops of extended highlight latitude:
+  <https://www.kodak.com/content/products-brochures/Film/VISION3-250D-Technical-Data-EN.pdf>
+- VISION3 500T technical data: tungsten balance, DLT shadow detail, extended
+  highlight latitude, and anti-halation undercoat:
+  <https://www.kodak.com/content/pdfs/motion/KODAK-VISION3-500T-5219-7219-technical-information.pdf>
 - Kodak reference on low-speed texture and low-contrast latitude:
   <https://www.kodak.com/content/products-brochures/Film/kodak-essential-reference-guide-for-filmmakers.pdf>
 - Fujifilm data-sheet index for C200, Superia, Pro 400H, Velvia, and Provia:

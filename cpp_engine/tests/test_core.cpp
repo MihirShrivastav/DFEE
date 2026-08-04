@@ -679,6 +679,41 @@ void test_reversal_profile_roles_are_distinct() {
         1.0e-5F);
 }
 
+void test_color_negative_profiles_are_distinct() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto vision_250d = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "vision3_250d.yaml");
+    const auto vision_500t = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "vision3_500t.yaml");
+    const auto portra_400 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "portra_400.yaml");
+
+    const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
+        return static_cast<float>(stock.numeric_values.at(key));
+    };
+
+    // VISION3 is a latitude-first motion-picture family, not an ISO-labelled
+    // duplicate of Portra. Both stocks retain more highlight detail than the
+    // portrait baseline, while their speed/balance roles remain distinct.
+    assert(value(vision_250d, "tone_response.shoulder_strength") >
+           value(portra_400, "tone_response.shoulder_strength"));
+    assert(value(vision_500t, "tone_response.shoulder_strength") >
+           value(portra_400, "tone_response.shoulder_strength"));
+    assert(value(vision_250d, "grain.size") < value(vision_500t, "grain.size"));
+    assert(value(vision_250d, "grain.strength") < value(vision_500t, "grain.strength"));
+    assert(value(vision_250d, "halation.strength") <= 0.06F);
+    assert(value(vision_500t, "halation.strength") <= 0.06F);
+
+    // 500T's tungsten/low-light role carries a warmer midtone balance and a
+    // longer shadow transition than the daylight-balanced 250D.
+    assert(value(vision_500t, "tone_response.toe_length") >
+           value(vision_250d, "tone_response.toe_length"));
+    assert(vision_500t.numeric_arrays.at("color_response.midtone_bias_lab")[1] >
+           vision_250d.numeric_arrays.at("color_response.midtone_bias_lab")[1]);
+    assert(vision_500t.numeric_arrays.at("color_response.midtone_bias_lab")[2] >
+           vision_250d.numeric_arrays.at("color_response.midtone_bias_lab")[2]);
+}
+
 void test_shadow_lift_floor_and_footprint() {
     // Neutral dark-to-mid gradient; Shadow Lift acts on the deep-shadow base-fog floor.
     dfee::Image rgb(5, 1, 3);
@@ -3433,6 +3468,7 @@ int main() {
         test_cinestill_profile_exposure_ramps_are_distinct();
         test_monochrome_profile_exposure_ramps_are_distinct();
         test_reversal_profile_roles_are_distinct();
+        test_color_negative_profiles_are_distinct();
         test_shadow_lift_floor_and_footprint();
         test_color_response();
         test_yellow_green_muting();
