@@ -140,6 +140,22 @@ red-orange response, and rationalise the fine-to-high-speed grain hierarchy.
 Profile-role tests protect the family relationships. This remains an emulation
 of stock character, not an assertion of a particular scanning or lab process.
 
+### Kodak Consumer Negatives
+
+**UltraMax 400** is a daylight-balanced, high-speed consumer C-41 negative for
+varied everyday and lower-light situations. Kodak describes it as fine-grained,
+vivid, sharp, and colour-consistent. Its DFEE role is therefore more practical
+and visibly textured than Portra 400, with a longer toe and controlled consumer
+grain, but it is not a generic orange/yellow grade or a halation-heavy effect.
+
+**Initial native calibration (2026-08-04).** The previous profile drove the
+skin-like patch to `1.91x` chroma and rotated orange by `-20 degrees`. The
+revised response measures `1.45x` skin-like chroma and `-1.7 degrees` on
+orange, while preserving vivid blue/cyan and a moderate ISO-400 grain role.
+On `9339116563.rw2` with material finish disabled, UltraMax is distinct from
+both Gold 200 and Portra 400 at the `0.0100` RGB MAE near-duplicate guardrail.
+Gold 200 remains a separate, not-yet-reauthored consumer-negative pass.
+
 ### VISION3 Motion-Picture Negatives
 
 VISION3 profiles must emulate their camera-negative role, not the exaggerated
@@ -284,6 +300,9 @@ calibration context rather than attributed blindly to the emulsion.
 - Kodak Ektar 100 product information: low-speed daylight balance, ultra-vivid
   colour, exceptional sharpness, enhanced saturation, and fine grain:
   <https://www.kodak.com/en/still-film/product/professional/ektar-100-film/>
+- Kodak UltraMax 400 product information: daylight balance, high-speed use,
+  fine grain, vivid but consistent colour, and sharp detail:
+  <https://www.kodak.com/en/still-film/product/consumer/ultramax-400-film/>
 - VISION3 250D technical data: daylight balance, DLT shadow detail, and two
   stops of extended highlight latitude:
   <https://www.kodak.com/content/products-brochures/Film/VISION3-250D-Technical-Data-EN.pdf>

@@ -693,6 +693,8 @@ void test_color_negative_profiles_are_distinct() {
         repo_root / "profiles" / "stocks" / "portra_800.yaml");
     const auto ektar_100 = dfee::load_film_stock_profile(
         repo_root / "profiles" / "stocks" / "ektar_100.yaml");
+    const auto ultramax_400 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "ultramax_400.yaml");
 
     const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
         return static_cast<float>(stock.numeric_values.at(key));
@@ -734,6 +736,18 @@ void test_color_negative_profiles_are_distinct() {
     assert(value(ektar_100, "hue_saturation_response.red_orange_midtone_compression") >
            value(portra_800, "hue_saturation_response.red_orange_midtone_compression"));
     assert(value(ektar_100, "grain.size") < value(portra_160, "grain.size"));
+
+    // UltraMax is a vivid, practical consumer 400-speed film. It remains
+    // coarser and longer-toed than Portra 400 without using a large warm cast
+    // or a generic saturation jump to create its identity.
+    assert(value(ultramax_400, "grain.size") > value(portra_400, "grain.size"));
+    assert(value(ultramax_400, "grain.strength") > value(portra_400, "grain.strength"));
+    assert(value(ultramax_400, "tone_response.toe_length") >
+           value(portra_400, "tone_response.toe_length"));
+    assert(value(ultramax_400, "hue_saturation_response.saturation_boost") >
+           value(portra_400, "hue_saturation_response.saturation_boost"));
+    assert(value(ultramax_400, "hue_saturation_response.saturation_boost") <
+           value(ektar_100, "hue_saturation_response.saturation_boost"));
 }
 
 void test_shadow_lift_floor_and_footprint() {
