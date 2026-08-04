@@ -496,6 +496,7 @@ void test_raw_baseline_develop_preserves_chroma_and_gamut() {
     };
 
     const auto developed = dfee::apply_raw_baseline_develop(image);
+    require_close(dfee::raw_baseline_midtone_power(), 1.28F, 1.0e-5F);
     require_close(developed.at(0, 0, 0), 0.18F, 1.0e-5F);
     require_close(developed.at(0, 0, 1), 0.18F, 1.0e-5F);
     require_close(developed.at(0, 0, 2), 0.18F, 1.0e-5F);

@@ -42,7 +42,10 @@ halation.
 The current `filmic_v3` implementation uses luminance-only scaling:
 
 - It preserves the 0.18 middle-gray anchor.
-- It applies a restrained monotonic midtone curve.
+- It applies a restrained monotonic midtone curve. The current production power is
+  `1.28`, selected against 20 edit-free Lightroom Adobe Standard TIFF references:
+  mean preview MAE improved from `0.0788` at `1.12` to `0.0712`, while mean p95
+  luminance error remained near zero (`+0.0052`).
 - It scales RGB channels together, preserving hue and chroma proportions.
 - It reduces gain before an individual channel would clip, avoiding the hue shifts
   caused by the former independent red/green/blue power curve.
@@ -85,6 +88,10 @@ toe, middle gray, upper tones, saturation, and visual evidence together.
   parameter changes.
 - RAW remains full-stock-tone; TIFF attenuation remains TIFF-only.
 - `parity_v1` and `filmic_v2` remain unchanged.
+
+The corpus still shows a mean RAW saturation deficit of about `0.094` after this
+tone correction. That is a separate camera-colour rendering problem, not a reason to
+increase the baseline power further.
 
 ## Risks And Deferred Work
 

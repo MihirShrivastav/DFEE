@@ -18,12 +18,20 @@ from typing import Any
 import cv2
 import numpy as np
 
+DEFAULT_BASELINE_POWER = 1.28
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("raw_path", type=Path, help="Absolute or project-relative RAW path.")
     parser.add_argument("rendered_path", type=Path, help="Matching TIFF/JPEG/PNG developed reference.")
     parser.add_argument("--stock", default="none", help="Native stock ID, or 'none' for baseline-only.")
+    parser.add_argument(
+        "--baseline-power",
+        type=float,
+        default=None,
+        help="Offline calibration override for DFEE_RAW_BASELINE_POWER (0.90 through 1.40).",
+    )
     parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--build-dir", type=Path, default=None)
     parser.add_argument(
@@ -106,6 +114,10 @@ def main() -> int:
     raw_path = resolve_path(project_root, args.raw_path)
     rendered_path = resolve_path(project_root, args.rendered_path)
     build_dir = resolve_build_dir(project_root, args.build_dir)
+    if args.baseline_power is not None:
+        if not 0.90 <= args.baseline_power <= 1.40:
+            raise ValueError("--baseline-power must be between 0.90 and 1.40")
+        os.environ["DFEE_RAW_BASELINE_POWER"] = str(args.baseline_power)
     configure_native_import(project_root, build_dir)
     import dfee_native_bridge as native
 
@@ -134,6 +146,7 @@ def main() -> int:
             "bloom": 0.0,
             "print_stock": "none",
             "stock": args.stock,
+            "baseline_midtone_power": args.baseline_power if args.baseline_power is not None else DEFAULT_BASELINE_POWER,
         },
         "raw": raw_result,
         "rendered": rendered_result,
