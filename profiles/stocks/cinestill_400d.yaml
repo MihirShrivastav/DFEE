@@ -8,12 +8,12 @@ adaptation:
   highlight_stress_sensitivity: 0.9
   shadow_noise_sensitivity: 0.75
 tone_response:
-  toe_strength: 0.28
-  toe_length: 0.38
-  midtone_contrast: 0.9
-  shoulder_strength: 0.56
-  highlight_rolloff_start: 0.82
-  black_density_floor: 0.01
+  toe_strength: 0.46
+  toe_length: 0.50
+  midtone_contrast: 0.91
+  shoulder_strength: 0.50
+  highlight_rolloff_start: 0.78
+  black_density_floor: 0.014
   channel_toe_mult:
   - 1.0
   - 0.95
@@ -42,12 +42,12 @@ color_response:
   blue_cast_suppression: 0.25
   green_magenta_stabilization: 0.35
 hue_saturation_response:
-  saturation_boost: 1.1
-  red_orange_midtone_compression: 0.45
-  yellow_green_muting: 0.25
-  cyan_blue_highlight_compression: 0.3
-  neon_compression: 0.7
-  highlight_desaturation: 0.6
+  saturation_boost: 1.08
+  red_orange_midtone_compression: 0.50
+  yellow_green_muting: 0.30
+  cyan_blue_highlight_compression: 0.34
+  neon_compression: 0.72
+  highlight_desaturation: 0.64
 grain:
   size: 0.34
   strength: 0.3

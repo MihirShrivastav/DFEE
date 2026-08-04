@@ -88,6 +88,15 @@ They are not approved YAML fields until that implementation exists.
 response before both remain first-class selections. Current values make them
 near-duplicates.
 
+**Initial native calibration (2026-08-04).** The renderer now consumes
+`tone_response.toe_length`, which had previously been loaded but inert. 50D was
+authored with a shorter, cleaner toe, firmer midtone separation, and an earlier,
+more protective highlight shoulder. 400D was authored with a longer, denser toe,
+softer midtone response, and restrained colour response. The material-off assay
+on the baseline fixture now measures 50D/400D at `0.0173` normalized RGB MAE,
+above the `0.0100` near-duplicate threshold. This is an implementation milestone,
+not final approval: the pair still needs exposure-ramp and human visual review.
+
 ### Monochrome
 
 Retain the meaningful families provisionally, but calibrate them by response

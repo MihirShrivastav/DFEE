@@ -1258,6 +1258,16 @@ Image FilmRenderer::apply_film_tone_response(
                 s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
             }
 
+            // Characteristic-curve toe latitude. toe_strength sets the depth of the
+            // shadow compression; toe_length sets how far that compression extends
+            // into the lower mids. Keeping the transition bounded and smooth avoids
+            // turning a longer toe into a global gamma change.
+            const float toe_end = std::clamp(0.10F + response.toe_length * 0.55F, 0.10F, 0.55F);
+            const float toe_t = clampf(s_curve / toe_end, 0.0F, 1.0F);
+            const float toe_weight = (1.0F - toe_t) * (1.0F - toe_t);
+            const float toe_curve = toe_end * std::pow(toe_t, 1.0F + response.toe_strength * 0.35F);
+            s_curve = s_curve * (1.0F - toe_weight) + toe_curve * toe_weight;
+
             // Highlight rolloff (filmic_v3): above the knee, compress highlights DOWN with a
             // Reinhard shoulder so bright regions retain gradation and ease into a soft,
             // creamy near-white instead of clipping to paper-white. Stronger amount pulls the

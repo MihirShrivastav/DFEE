@@ -486,6 +486,34 @@ void test_film_tone_response() {
     assert(toned.at(3, 0, 0) < toned.at(2, 0, 0));
 }
 
+void test_toe_length_controls_shadow_latitude() {
+    dfee::Image ramp(5, 1, 3);
+    const float values[5] = {0.02F, 0.08F, 0.18F, 0.45F, 0.80F};
+    for (int x = 0; x < 5; ++x) {
+        ramp.at(x, 0, 0) = ramp.at(x, 0, 1) = ramp.at(x, 0, 2) = values[x];
+    }
+
+    dfee::FilmResponsePlan short_toe;
+    short_toe.toe_strength = 0.40F;
+    short_toe.toe_length = 0.18F;
+    short_toe.midtone_density = 1.0F;
+    short_toe.shoulder_strength = 0.0F;
+    short_toe.black_density_floor = 0.0F;
+
+    dfee::FilmResponsePlan long_toe = short_toe;
+    long_toe.toe_length = 0.52F;
+
+    const dfee::FilmRenderer renderer;
+    const auto short_result = renderer.apply_film_tone_response(ramp, short_toe);
+    const auto long_result = renderer.apply_film_tone_response(ramp, long_toe);
+
+    // A longer toe extends shadow compression through the lower mids, while
+    // leaving upper-mid and highlight values materially intact.
+    assert(long_result.at(1, 0, 0) < short_result.at(1, 0, 0) - 0.005F);
+    assert(long_result.at(2, 0, 0) < short_result.at(2, 0, 0) - 0.001F);
+    require_close(long_result.at(4, 0, 0), short_result.at(4, 0, 0), 0.002F);
+}
+
 void test_shadow_lift_floor_and_footprint() {
     // Neutral dark-to-mid gradient; Shadow Lift acts on the deep-shadow base-fog floor.
     dfee::Image rgb(5, 1, 3);
@@ -3201,6 +3229,7 @@ int main() {
         test_pre_film_normalization();
         test_panchromatic_conversion();
         test_film_tone_response();
+        test_toe_length_controls_shadow_latitude();
         test_shadow_lift_floor_and_footprint();
         test_color_response();
         test_yellow_green_muting();
