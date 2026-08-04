@@ -9,6 +9,7 @@
 #include "dfee/native_error.hpp"
 #include "dfee/parallel.hpp"
 #include "dfee/raw_decode.hpp"
+#include "dfee/raw_development.hpp"
 #include "dfee/renderer.hpp"
 #include "dfee/raw_metadata.hpp"
 #include "dfee/solver.hpp"
@@ -1215,37 +1216,8 @@ void apply_rendered_input_adjustments(RenderPlan& plan, const float rendered_inp
     norm.midtones_compensation *= keep;
 }
 
-// Baseline develop for RAW inputs (filmic_v3). Flat scene-linear RAW carries no tone
-// development, unlike a Lightroom TIFF whose developed tone is baked into its
-// (linearised) values. This adds a camera-standard tone SHAPE in linear->linear so a
-// RAW reaches the film stage as a clean "developed" image, like a TIFF: a gentle
-// contrast S around mid-grey (preserved) plus a soft highlight shoulder so bright
-// tones roll off instead of running away. Applied AFTER exposure placement.
-// Per-channel (like a camera RGB tone curve) — adds pleasing contrast + saturation.
-// Baseline-develop parameters. Kept GENTLE and gamut-safe on purpose: heavy
-// per-channel contrast + a saturation boost in the narrow sRGB working space push
-// saturated bright colours (sky, red car) past the gamut; per-channel clipping then
-// shifts hues (green banding) and dims highlights. Richer development needs the
-// wide-gamut working space (Phase B) first. Until then this only adds mild midtone
-// contrast and leaves highlight rolloff + colour entirely to the film stage.
-constexpr float kBaselinePivot = 0.18F;      // mid-grey anchor, preserved
-constexpr float kBaselineContrast = 1.12F;   // gentle midtone contrast (gamut-safe)
-
-[[nodiscard]] Image apply_raw_baseline_develop(const Image& rgb_linear) {
-    if (rgb_linear.channels != 3) {
-        return rgb_linear;
-    }
-    Image out(rgb_linear.width, rgb_linear.height, rgb_linear.channels);
-    const std::size_t count = rgb_linear.pixels.size();
-    for (std::size_t i = 0; i < count; ++i) {
-        const float v = std::max(rgb_linear.pixels[i], 0.0F);
-        // Mild contrast S around mid-grey (pivot preserved); clamp to gamut. No
-        // saturation boost and no extra shoulder — the film stage owns those.
-        const float c = kBaselinePivot * std::pow(v / kBaselinePivot, kBaselineContrast);
-        out.pixels[i] = std::min(c, 1.0F);
-    }
-    return out;
-}
+// RAW baseline development is implemented in raw_development.cpp so it can be
+// independently tested and calibrated against matched rendered references.
 
 Image apply_pre_film_preview_sliders(
     const Image& rgb_input,

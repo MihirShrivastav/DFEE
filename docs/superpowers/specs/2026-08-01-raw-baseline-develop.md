@@ -1,104 +1,96 @@
-# RAW Baseline Develop + Unified Input Pipeline — Design Spec
+# RAW Baseline Develop And Input Contract
 
-**Status:** draft for review
+**Status:** active calibration work
 **Date:** 2026-08-01
-**Area:** `cpp_engine` — RAW decode (`raw_decode.cpp`) + session render flow (`session.cpp`)
+**Area:** `cpp_engine` RAW decode and session render flow
 
 ## Goal
 
-One-click, authentic film emulation that works **equally well from RAW and from a
-Lightroom TIFF, on any scene**. A processed photo should look as if it were shot on
-the chosen stock — robustly across high-key, low-key, high-DR, and saturated scenes.
+Make a RAW and an edit-free Lightroom-rendered TIFF of the same capture converge
+credibly after the same film recipe, without weakening stock profiles or applying a
+global exposure lift that destroys bright scenes.
 
-## Problem
+## Input Contract
 
-Today there are two quality tiers:
-- **TIFF** (already developed by Lightroom) → film applied gently → looks great.
-- **RAW** (flat scene-linear, generic sRGB matrix, no baseline tone) → film does all
-  the tone/colour work from scratch → muddy, un-film-like, fails on many scenes.
+RAW and rendered files do not start from the same photographic state:
 
-We are implicitly asking the film stage to also be a RAW developer. It isn't one.
+- RAW is scene-linear camera data. DFEE develops it to a neutral working baseline,
+  then applies the stock's full tone and colour response.
+- TIFF is already developed by Lightroom or another renderer. DFEE preserves its
+  input tone more carefully and uses `rendered_input` to attenuate stock tone only.
 
-## Architecture: two clean stages
+`rendered_input` is strictly a rendered-file control. It must never attenuate RAW
+stock tone. RAW has no baked display curve to protect, so its chosen stock keeps the
+complete authored tone response.
+
+## Pipeline
 
 ```
-RAW  → [ 1. Baseline develop (analysis-driven, scene-adaptive) ] ─┐
-                                                                   ├─→ [ 2. Film stage (fixed per stock) ] → output
-TIFF (already developed) ──────────────────────────────────────── ┘
+RAW  -> scene placement -> neutral RAW baseline -> full stock tone/colour/material -> output
+TIFF -> rendered-input adjustment ----------------> attenuated stock tone/colour/material -> output
 ```
 
-1. **Baseline develop** — make a clean, correctly-exposed, neutral photo (a great
-   "camera default"). Scene analysis drives THIS stage (that's its purpose):
-   white balance, exposure *placement*, highlight reconstruction, a camera-standard
-   tone curve. Robustness across scenes lives here.
-2. **Film stage** — the stock's *fixed* character (colour response, tone shoulder,
-   grain, halation) applied consistently on the clean baseline. Scene-independent.
+Scene analysis and Auto Balanced placement are baseline operations. They position a
+scene for development; they are not a stock-specific exposure boost.
 
-The current auto-exposure ("scene placement") and other analysis belong to **stage 1**
-(making a good photo), NOT to the film stage (which should be a fixed transform).
+## Neutral RAW Baseline
 
-## Stage 1 — RAW baseline develop (the new work)
+The baseline must be neutral. It may change luminance and should protect gamut, but
+it must not invent a stock's saturation, hue bias, highlight colour, grain, or
+halation.
 
-### 1a. Decode (`raw_decode.cpp`)
-- Keep as-shot WB (`use_camera_wb=1`).
-- **Highlight reconstruction:** set LibRaw `highlight = 2` (blend) instead of clip
-  (0), so blown skies/petals reconstruct softly instead of hard-clipping.
-- **Phase B (later):** decode into a **wide working gamut** (ProPhoto/`output_color`)
-  and convert to sRGB only at final output, so saturated subjects aren't dulled by
-  sRGB primaries mid-pipeline. Deferred — bigger change to the colour core.
+The current `filmic_v3` implementation uses luminance-only scaling:
 
-### 1b. Exposure placement
-Reuse the highlight-anchored scene placement already implemented
-(2026-08-01-film-auto-exposure.md), but understood as **baseline exposure** — place
-the scene into a sensible range for the tone curve below.
+- It preserves the 0.18 middle-gray anchor.
+- It applies a restrained monotonic midtone curve.
+- It scales RGB channels together, preserving hue and chroma proportions.
+- It reduces gain before an individual channel would clip, avoiding the hue shifts
+  caused by the former independent red/green/blue power curve.
 
-### 1c. Baseline tone curve (camera-standard)
-Apply a robust, filmic **base tone curve** mapping scene-linear → display-referred,
-tuned so the default output has camera-JPEG-like brightness/contrast (what Adobe's
-baseline profile does). This gives RAW a pleasing starting image before any stock.
-- A single, well-behaved global curve (e.g. ACES-/filmic-style with a soft shoulder),
-  parameterised so highlights roll off, midtones sit naturally, shadows keep depth.
-- Deterministic and scene-independent in shape (the *placement* in 1b adapts, the
-  curve shape does not) → consistent look across a shoot.
+This is a structural correction, not a claim that the current curve is final. Any
+future toe or shoulder modification must be measured against matched source pairs.
+It must not be used to compensate for a wrong camera matrix, embedded profile, or
+creative Lightroom edit.
 
-Result of stage 1: a clean, display-referred developed image comparable to a
-camera-standard / Lightroom-default render.
+## Calibration Method
 
-## Stage 2 — Film stage (unify RAW + TIFF)
+Use `cpp_engine/tools/raw_rendered_pair_benchmark.py` with an edit-free capture pair:
 
-Both a RAW (post-baseline) and a TIFF are now "developed input." Route them through
-the **same** film application:
-- Apply the stock's full **colour** character, **grain**, **halation**.
-- Apply the stock's **tone** as a refinement on the developed baseline (the existing
-  `rendered_input`/tone-strength behaviour), so we do not double tone-map. Rename the
-  user control to a clear **"Film tone strength"** and apply it to RAW and TIFF alike.
-- "As shot" vs "Auto balanced" now only affect **stage 1 placement**.
+```powershell
+python cpp_engine/tools/raw_rendered_pair_benchmark.py raw_files/2316908974.nef comparision/2316908974.tif --stock none
+python cpp_engine/tools/raw_rendered_pair_benchmark.py raw_files/2316908974.nef comparision/2316908974.tif --stock kodachrome_64
+```
 
-This means: full film colour signature (the authentic look) + a tone that complements
-the baseline instead of fighting it. Default strength gives a natural film look;
-users can push it.
+The tool renders both inputs through the same native `filmic_v3` request:
 
-## What we explicitly do NOT build
-Per-camera DCP colour science (HueSat/Look tables). Wide gamut (Phase B) + a good
-baseline curve get us the authentic look without reproducing Adobe's profile system.
+- Auto Balanced placement
+- adaptive adjustments disabled
+- grain, halation, bloom, and print finish disabled
 
-## Phasing
-- **Phase A (this spec, first):** highlight reconstruction + baseline tone curve for
-  RAW + unify RAW onto the developed-input film path. Biggest quality win.
-- **Phase B (later, if needed):** wide working gamut for last-mile saturated colour.
+It records display luminance percentiles, contrast, saturation, preview timing, and
+mean absolute RGB difference in `cpp_engine/out/benchmarks/raw_rendered_pair.json`.
+
+Evaluate `stock=none` first. If it does not converge, the defect belongs to neutral
+RAW development or input colour management, not the stock YAML. Then compare the
+same pair with a stock applied. Do not use a single scalar MAE as the decision: inspect
+toe, middle gray, upper tones, saturation, and visual evidence together.
 
 ## Acceptance
-Native tests: baseline curve is monotonic, maps mid-grey sensibly, rolls off
-highlights (no clip), preserves black depth; RAW and TIFF of the *same scene*
-produce close tone/colour after stage 2 (within tolerance). Existing tests +
-parity_v1/filmic_v2 byte-identical preserved (gate to filmic_v3).
 
-Visual (human): the four reference frames (dahlias, lighthouse, sea+house, loco)
-from **RAW** must look film-authentic and close to the LR-TIFF result of the same
-stock; robust across high-key/low-key/high-DR/saturated.
+- Native tests prove the baseline retains middle gray, chromatic RGB ratios, and
+  gamut bounds.
+- A representative corpus includes low contrast, normal daylight, high dynamic range,
+  and saturated scenes with known edit-free TIFF references.
+- Baseline-only and stock-applied output improve across the corpus before a curve
+  parameter changes.
+- RAW remains full-stock-tone; TIFF attenuation remains TIFF-only.
+- `parity_v1` and `filmic_v2` remain unchanged.
 
-## Risks
-Tone-core change; keep it gated to filmic_v3, update tests, validate on the frames.
-Double-tone-mapping is the main trap — the baseline curve + gentle film tone must be
-balanced so the result isn't over-contrasty. The `rendered_input` mechanism already
-exists to attenuate film tone on developed input; reuse it for RAW.
+## Risks And Deferred Work
+
+- Lightroom TIFFs may carry different ICC profiles or hidden develop edits. The pair
+  is invalid for calibration unless those conditions are controlled.
+- LibRaw highlight reconstruction must be changed only when source evidence supports
+  it; it is not a substitute for tone calibration.
+- Wide-gamut working-space support remains a later phase. It may be required for
+  saturated-source accuracy, but should not be mixed into this baseline experiment.

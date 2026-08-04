@@ -4,6 +4,7 @@
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
 #include "dfee/raw_decode.hpp"
+#include "dfee/raw_development.hpp"
 #include "dfee/renderer.hpp"
 #include "dfee/session.hpp"
 #include "dfee/solver.hpp"
@@ -484,6 +485,35 @@ void test_film_tone_response() {
     assert(toned.at(3, 0, 0) <= 1.0F);
     assert(toned.at(3, 0, 0) > toned.at(1, 0, 0));
     assert(toned.at(3, 0, 0) < toned.at(2, 0, 0));
+}
+
+void test_raw_baseline_develop_preserves_chroma_and_gamut() {
+    dfee::Image image(3, 1, 3);
+    image.pixels = {
+        0.18F, 0.18F, 0.18F,
+        0.36F, 0.18F, 0.09F,
+        0.95F, 0.20F, 0.10F,
+    };
+
+    const auto developed = dfee::apply_raw_baseline_develop(image);
+    require_close(developed.at(0, 0, 0), 0.18F, 1.0e-5F);
+    require_close(developed.at(0, 0, 1), 0.18F, 1.0e-5F);
+    require_close(developed.at(0, 0, 2), 0.18F, 1.0e-5F);
+
+    // Luminance-only development must keep the chromatic RGB proportions intact.
+    require_close(
+        developed.at(1, 0, 0) / developed.at(1, 0, 1),
+        image.at(1, 0, 0) / image.at(1, 0, 1),
+        1.0e-5F);
+    require_close(
+        developed.at(1, 0, 1) / developed.at(1, 0, 2),
+        image.at(1, 0, 1) / image.at(1, 0, 2),
+        1.0e-5F);
+
+    // Scaling is reduced before any channel can be clipped independently.
+    for (const float value : developed.pixels) {
+        assert(value >= 0.0F && value <= 1.0F);
+    }
 }
 
 void test_toe_length_controls_shadow_latitude() {
@@ -3351,6 +3381,7 @@ int main() {
         test_neutral_scene_placement();
         test_render_plan_solver_rich_grain_profile_fields();
         test_pre_film_normalization();
+        test_raw_baseline_develop_preserves_chroma_and_gamut();
         test_panchromatic_conversion();
         test_film_tone_response();
         test_toe_length_controls_shadow_latitude();

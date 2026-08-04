@@ -106,6 +106,8 @@ Status values:
 | M6-008 | done | Add native session cache byte accounting and budget pruning | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` and `pytest tests/test_native_bridge.py -q` | `cache_state()` now reports estimated bytes for draft decode, preview, raw preview JPEG, preview analysis, full decode, and export analysis caches. `DFEE_NATIVE_CACHE_BUDGET_MB` enables conservative pruning of lower-priority caches when a session exceeds the configured budget. |
 | M6-009 | done | Audit and enforce native stock-profile field consumption | `ctest --test-dir cpp_engine/out/build/windows-msvc-vcpkg -C Release --output-on-failure` | Native profile loading now rejects unknown/non-finite fields, every active stock is resolved through the C++ solver in tests, and previously unconsumed colour, grain, adaptation, halation, and monochrome fields are mapped into native render plans/stages. See `STOCK_PROFILE_CONTRACT.md`. |
 
+| M6-010 | active | Calibrate neutral RAW baseline development against matched rendered references | Native baseline unit test plus `raw_rendered_pair_benchmark.py` corpus artifacts | `filmic_v3` now applies the RAW baseline through luminance-preserving, gamut-safe scaling rather than a per-channel power curve. Establish an edit-free RAW/TIFF corpus and only then tune the shared curve; do not compensate through stock profiles or a global exposure lift. |
+
 ## Milestone M7 - Film Lab Product Flow
 
 | ID | Status | Task | Verification | Notes |
