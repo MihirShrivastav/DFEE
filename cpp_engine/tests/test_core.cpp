@@ -740,12 +740,12 @@ void test_color_negative_profiles_are_distinct() {
     assert(value(ektar_100, "grain.size") < value(portra_160, "grain.size"));
 
     // UltraMax is a vivid, practical consumer 400-speed film. It remains
-    // coarser and longer-toed than Portra 400 without using a large warm cast
-    // or a generic saturation jump to create its identity.
+    // coarser and firmer through the midtones than Portra 400 without using a
+    // large warm cast or a generic saturation jump to create its identity.
     assert(value(ultramax_400, "grain.size") > value(portra_400, "grain.size"));
     assert(value(ultramax_400, "grain.strength") > value(portra_400, "grain.strength"));
-    assert(value(ultramax_400, "tone_response.toe_length") >
-           value(portra_400, "tone_response.toe_length"));
+    assert(value(ultramax_400, "tone_response.midtone_contrast") >
+           value(portra_400, "tone_response.midtone_contrast"));
     assert(value(ultramax_400, "hue_saturation_response.saturation_boost") >
            value(portra_400, "hue_saturation_response.saturation_boost"));
     assert(value(ultramax_400, "hue_saturation_response.saturation_boost") <

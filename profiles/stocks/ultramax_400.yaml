@@ -8,12 +8,12 @@ adaptation:
   highlight_stress_sensitivity: 0.80
   shadow_noise_sensitivity: 0.62
 tone_response:
-  toe_strength: 0.36
-  toe_length: 0.42
-  midtone_contrast: 0.98
-  shoulder_strength: 0.62
-  highlight_rolloff_start: 0.70
-  black_density_floor: 0.012
+  toe_strength: 0.30
+  toe_length: 0.34
+  midtone_contrast: 1.08
+  shoulder_strength: 0.56
+  highlight_rolloff_start: 0.72
+  black_density_floor: 0.010
   channel_toe_mult:
   - 0.95
   - 0.98
@@ -42,12 +42,12 @@ color_response:
   blue_cast_suppression: 0.30
   green_magenta_stabilization: 0.34
 hue_saturation_response:
-  saturation_boost: 1.18
-  red_orange_midtone_compression: 0.3
+  saturation_boost: 1.20
+  red_orange_midtone_compression: 0.34
   yellow_green_muting: 0.24
-  cyan_blue_highlight_compression: 0.38
-  neon_compression: 0.72
-  highlight_desaturation: 0.54
+  cyan_blue_highlight_compression: 0.23
+  neon_compression: 0.68
+  highlight_desaturation: 0.36
 grain:
   size: 0.46
   strength: 0.34
@@ -79,8 +79,8 @@ halation:
   - 0.05
 chroma_coupling:
   hi_rolloff_start: 0.70
-  hi_rolloff_rate: 1.45
-  hi_compression: 0.48
+  hi_rolloff_rate: 1.30
+  hi_compression: 0.40
   sh_rolloff_start: 0.16
   sh_compression: 0.40
   hi_hue_conv_rad: 0.25
@@ -99,17 +99,20 @@ color_character:
   palette:
     range_sensitivity: 0.56
 density:
-  strength: 0.54
+  strength: 0.60
   low_luma_limit: 0.10
 compression:
-  strength: 0.54
+  strength: 0.50
   threshold: 0.45
   crosstalk: 0.28
 hue_chroma_gain:
-  red: 0.05
-  yellow: 0.05
-  orange: 0.03
-  blue: 0.01
+  red: 0.08
+  orange: 0.02
+  yellow: 0.08
+  green: 0.04
+  cyan: 0.08
+  blue: 0.12
+  magenta: 0.03
 crossover:
   shadow_cast_a: -0.07
   shadow_cast_b: -0.25

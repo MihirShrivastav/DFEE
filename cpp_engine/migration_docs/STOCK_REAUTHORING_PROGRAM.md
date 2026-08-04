@@ -144,13 +144,14 @@ of stock character, not an assertion of a particular scanning or lab process.
 
 **UltraMax 400** is a daylight-balanced, high-speed consumer C-41 negative for
 varied everyday and lower-light situations. Kodak describes it as fine-grained,
-vivid, sharp, and colour-consistent. Its DFEE role is therefore more practical
-and visibly textured than Portra 400, with a longer toe and controlled consumer
-grain, but it is not a generic orange/yellow grade or a halation-heavy effect.
+vivid, sharp, and colour-consistent. Its DFEE role is therefore more practical,
+visibly textured, and firmer through the midtones than Portra 400, with
+controlled consumer grain. It is not a generic orange/yellow grade or a
+halation-heavy effect.
 
 **Initial native calibration (2026-08-04).** The previous profile drove the
 skin-like patch to `1.91x` chroma and rotated orange by `-20 degrees`. The
-revised response measures `1.45x` skin-like chroma and `-1.7 degrees` on
+revised response measures `1.44x` skin-like chroma and `-1.6 degrees` on
 orange, while preserving vivid blue/cyan and a moderate ISO-400 grain role.
 On `9339116563.rw2` with material finish disabled, UltraMax is distinct from
 both Gold 200 and Portra 400 at the `0.0100` RGB MAE near-duplicate guardrail.
