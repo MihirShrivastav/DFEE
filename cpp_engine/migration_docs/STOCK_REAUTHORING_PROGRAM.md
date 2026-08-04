@@ -184,6 +184,43 @@ softer response measures `1.32x` and `-0.7 degrees`. The material-off assay on
 above the `0.0100` RGB MAE near-duplicate guardrail against each. This profile
 needs later portrait/reference-scan review before any stronger material claim.
 
+### Fujifilm Negatives
+
+Fujifilm's fourth-layer color technology is an input and mixed-light stability
+claim, not permission to make every Fujifilm profile a cyan-green grade. The
+profiles below retain modest Fuji palette emphasis only where it survives the
+native patch assay without compromising neutral gray or skin.
+
+- **Fujicolor C200**: daylight ISO 200, naturally rendered skin, wide exposure
+  latitude, sharpness, and fine grain. This is the cleaner, fine-grain
+  latitude-oriented consumer Fuji baseline.
+- **Superia X-TRA 400**: daylight ISO 400, high-speed/wide-latitude consumer
+  stock with fine grain, vivid natural color across reds, blues, yellows,
+  violets, and greens, plus neutral gray/skin stability. It has more color
+  energy and texture than C200, not a forced green cast.
+- **Pro 400H**: discontinued professional ISO 400 with a fourth color layer.
+  Its distinctive role is faithful gray and skin reproduction, smooth
+  highlight-to-shadow gradation, fine grain, and resilience under mixed or
+  fluorescent light. It is naturally colored, not globally desaturated.
+- **Eterna 250D (8563/8663)**: daylight ISO 250 motion-picture camera negative
+  with enhanced latitude, gradation balance, exceptional grain, and sharpness.
+  It remains a restrained, latitude-first camera negative. Do not substitute
+  the separate **Eterna Vivid 250D (8546/8646)**, which Fujifilm describes as
+  the highest-contrast, high-saturation Eterna variant.
+
+**Initial native calibration (2026-08-04).** The original C200/Superia pair
+measured `0.00855` normalized RGB MAE on the material-off RAW assay and was
+therefore a near duplicate. The reauthored C200 (`1.23x` skin-like chroma) and
+Superia (`1.42x`) separate natural/fine ISO 200 from vivid/broader-spectrum ISO
+400 behavior without large orange rotation. Pro 400H was corrected from an
+over-muted `0.86x` skin-like response to `1.11x`, preserving its neutral-gray
+and smooth-gradation role. Standard Eterna 250D was adjusted only to remove
+unnecessary color suppression; it measures `1.02x` and remains substantially
+more restrained than the non-active Vivid stock. The four-stock
+`9339116563.rw2` material-off assay now has no pair at or below the `0.0100`
+RGB MAE guardrail. These are stock-role calibrations, not claims to reproduce a
+particular lab, telecine, scanner, or Fuji camera film-simulation mode.
+
 ### VISION3 Motion-Picture Negatives
 
 VISION3 profiles must emulate their camera-negative role, not the exaggerated
@@ -340,6 +377,21 @@ calibration context rather than attributed blindly to the emulsion.
   not currently publish a comparable technical sheet, so treat this only as
   provisional support for the calibration hypothesis:
   <https://www.bhphotovideo.com/c/product/1476366-REG/kodak_603147_color_print_film_200_36.html/specs>
+- Fujifilm C200 data sheet: ISO 200 daylight balance, natural skin, wide
+  latitude, sharpness, and Super Uniform Fine Grain technology:
+  <https://asset.fujifilm.com/www/us/files/2019-09/cce1e1943550fc3e76c22411066f0100/films_c200_datasheet_01.pdf>
+- Fujifilm Superia X-TRA 400 data sheet: ISO 400, fine grain, wide latitude,
+  natural skin/gray, and vivid reproduction across the spectrum:
+  <https://asset.fujifilm.com/www/in/files/2020-07/32cf7e5def364084eb8cf03ff011df0f/films_superia-xtra400_datasheet_01.pdf>
+- Fujifilm Pro 400H product and technical data: fourth-layer neutral/mixed-light
+  stability, natural skin, smooth gradation, fine grain, and wide latitude:
+  <https://www.fujifilm.com/us/en/business/professional-photography/film/pro-400h>
+  <https://www.fujifilm.com.hk/products/professional_films/pdf/pro_400h_datasheet.pdf>
+- Fujifilm Eterna 250D motion-picture manual: daylight ISO 250, enhanced
+  latitude/gradation, grain, and sharpness; contrast with the separate Vivid
+  250D product documentation:
+  <https://manualzz.com/doc/27787292/fujifilm-motion-picture-film-manual>
+  <https://www.fujifilm.it/aree/motionPicture/PDF/brochure_vivid250d.pdf>
 - VISION3 250D technical data: daylight balance, DLT shadow detail, and two
   stops of extended highlight latitude:
   <https://www.kodak.com/content/products-brochures/Film/VISION3-250D-Technical-Data-EN.pdf>

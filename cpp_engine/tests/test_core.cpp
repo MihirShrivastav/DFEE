@@ -699,6 +699,14 @@ void test_color_negative_profiles_are_distinct() {
         repo_root / "profiles" / "stocks" / "gold_200.yaml");
     const auto colorplus_200 = dfee::load_film_stock_profile(
         repo_root / "profiles" / "stocks" / "colorplus_200.yaml");
+    const auto fujicolor_c200 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "fujicolor_c200.yaml");
+    const auto superia_400 = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "superia_400.yaml");
+    const auto pro_400h = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "pro_400h.yaml");
+    const auto eterna_250d = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "fuji_eterna_250d.yaml");
 
     const auto value = [](const dfee::FilmStockProfile& stock, const char* key) {
         return static_cast<float>(stock.numeric_values.at(key));
@@ -772,6 +780,26 @@ void test_color_negative_profiles_are_distinct() {
            value(gold_200, "tone_response.midtone_contrast"));
     assert(value(colorplus_200, "hue_saturation_response.saturation_boost") <
            value(gold_200, "hue_saturation_response.saturation_boost"));
+
+    // Fuji's consumer pair is not a generic green grade. C200 is the finer,
+    // natural-skin ISO-200 latitude option; Superia is the more vivid, broader
+    // spectrum ISO-400 option. Pro 400H adds 4th-layer neutral/mixed-light
+    // stability, while standard Eterna 250D remains a restrained, fine-grain
+    // daylight camera negative rather than Eterna Vivid 250D.
+    assert(value(fujicolor_c200, "grain.size") < value(superia_400, "grain.size"));
+    assert(value(fujicolor_c200, "grain.strength") < value(superia_400, "grain.strength"));
+    assert(value(fujicolor_c200, "tone_response.toe_length") >
+           value(superia_400, "tone_response.toe_length"));
+    assert(value(superia_400, "hue_saturation_response.saturation_boost") >
+           value(fujicolor_c200, "hue_saturation_response.saturation_boost"));
+    assert(value(pro_400h, "grain.size") < value(superia_400, "grain.size"));
+    assert(value(pro_400h, "tone_response.midtone_contrast") <
+           value(superia_400, "tone_response.midtone_contrast"));
+    assert(value(pro_400h, "color_response.green_magenta_stabilization") >
+           value(superia_400, "color_response.green_magenta_stabilization"));
+    assert(value(eterna_250d, "grain.size") < value(pro_400h, "grain.size"));
+    assert(value(eterna_250d, "hue_saturation_response.saturation_boost") <
+           value(pro_400h, "hue_saturation_response.saturation_boost"));
 }
 
 void test_shadow_lift_floor_and_footprint() {
