@@ -416,6 +416,37 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
     // + the film shoulder handle graceful rolloff instead, hue-preservingly.
     params->highlight = 0;
 
+    // Apply the DNG DefaultCrop (a.k.a. the sensor's intended visible frame). LibRaw
+    // does NOT auto-apply it: for files whose ActiveArea covers the full sensor it
+    // hands back the masked-border rows/cols, which demosaic into a gray-with-colored-
+    // speckle strip along one edge (rotated onto the top/side by the EXIF flip). Photo
+    // viewers and Lightroom honor DefaultCrop, which is why they look clean. LibRaw
+    // exposes it as sizes.raw_inset_crops[0]; cropbox is relative to the visible area
+    // (after top/left margin), so subtract the margins and clamp inside the frame. This
+    // is a no-op for RAWs without a DefaultCrop (cwidth/cheight == 0).
+    {
+        const auto& sizes = raw_processor.imgdata.sizes;
+        const auto& inset = sizes.raw_inset_crops[0];
+        if (inset.cwidth > 0 && inset.cheight > 0) {
+            const int vis_w = static_cast<int>(sizes.width);
+            const int vis_h = static_cast<int>(sizes.height);
+            int cl = static_cast<int>(inset.cleft) - static_cast<int>(sizes.left_margin);
+            int ct = static_cast<int>(inset.ctop) - static_cast<int>(sizes.top_margin);
+            cl = std::clamp(cl, 0, std::max(0, vis_w - 1));
+            ct = std::clamp(ct, 0, std::max(0, vis_h - 1));
+            int cw = std::min(static_cast<int>(inset.cwidth), vis_w - cl);
+            int ch = std::min(static_cast<int>(inset.cheight), vis_h - ct);
+            // Only engage when it actually trims something (avoids a pointless
+            // full-frame crop that could interact with flip/aspect handling).
+            if (cw > 0 && ch > 0 && (cl > 0 || ct > 0 || cw < vis_w || ch < vis_h)) {
+                params->cropbox[0] = static_cast<unsigned>(cl);
+                params->cropbox[1] = static_cast<unsigned>(ct);
+                params->cropbox[2] = static_cast<unsigned>(cw);
+                params->cropbox[3] = static_cast<unsigned>(ch);
+            }
+        }
+    }
+
     err = raw_processor.unpack();
     if (err != LIBRAW_SUCCESS) {
         response.status = "error";
