@@ -15,13 +15,13 @@ tone_response:
   highlight_rolloff_start: 0.7
   black_density_floor: 0.012
   channel_toe_mult:
+  - 0.98
   - 0.95
-  - 1.0
-  - 1.15
+  - 1.04
   channel_shoulder_mult:
-  - 0.92
-  - 1.0
-  - 1.2
+  - 0.94
+  - 0.98
+  - 1.10
   channel_midtone_mult:
   - 1.02
   - 1.0
@@ -113,8 +113,13 @@ hue_chroma_gain:
   blue: 0.06
   magenta: 0.02
 crossover:
-  shadow_cast_a: -0.05
-  shadow_cast_b: -0.20
-  highlight_cast_a: 0.18
-  highlight_cast_b: 0.28
+  # Fujicolor Superia X-TRA 400: the "typical Fuji" cool magenta/green look. Its signature
+  # is MOODY GREENISH SHADOWS on a punchy, saturated, medium-contrast base (4th cyan layer
+  # → cyan/green depth). So: pronounced green + cool shadows (a clearly -, b -), and only a
+  # MODEST warm lean in the highlights (from its poppy reds/oranges) — NOT the golden b of
+  # the Kodak stocks. Green toe held above so the curve supports the green shadow lean.
+  shadow_cast_a: -0.08
+  shadow_cast_b: -0.18
+  highlight_cast_a: 0.09
+  highlight_cast_b: 0.13
   exposure_sensitivity: 0.42

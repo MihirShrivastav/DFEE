@@ -15,13 +15,13 @@ tone_response:
   highlight_rolloff_start: 0.78
   black_density_floor: 0.010
   channel_toe_mult:
-  - 0.88
-  - 0.93
-  - 1.08
+  - 0.94
+  - 0.94
+  - 0.98
   channel_shoulder_mult:
-  - 0.82
-  - 0.93
-  - 1.15
+  - 0.90
+  - 0.94
+  - 1.02
   channel_midtone_mult:
   - 1.0
   - 1.0
@@ -111,8 +111,13 @@ hue_chroma_gain:
   blue: 0.02
   magenta: -0.02
 crossover:
-  shadow_cast_a: -0.03
-  shadow_cast_b: -0.15
-  highlight_cast_a: 0.10
-  highlight_cast_b: 0.20
-  exposure_sensitivity: 0.36
+  # Fujicolor Pro 400H: remarkably NEUTRAL, low-contrast, pastel/airy — the opposite of a
+  # Kodak warm crossover. Its signature is "green shadows + pink highlights" on a cool base
+  # with added depth in blue/green. So: gently green-cyan shadows (a slightly -, b -), and
+  # COOL-pastel highlights with only a faint PINK lean (a small +, b kept LOW — NOT the
+  # golden/yellow b of Kodak stocks). Subtle overall; the look is softness, not a strong cast.
+  shadow_cast_a: -0.04
+  shadow_cast_b: -0.14
+  highlight_cast_a: 0.07
+  highlight_cast_b: 0.06
+  exposure_sensitivity: 0.34
