@@ -110,8 +110,14 @@ hue_chroma_gain:
   cyan: 0.02
   blue: 0.01
 crossover:
+  # Fujifilm Eterna 250D (cinema neg): ultra-fine, soft-contrast, SUBDUED/muted "washed-off"
+  # palette with a PASTEL BLUE tone all around and muted greens — the cool Fuji answer to
+  # Vision3, NOT its warm teal-orange. So a gentle, LOW crossover: faintly green-cool shadows
+  # and cool/neutral highlights (b kept near-zero — removed the previous golden 0.16 that
+  # fought the pastel-blue look). The cool channel mults above (lifted blue toe, preserved
+  # blue shoulder) already carry the overall pastel-blue; this cast just stays out of its way.
   shadow_cast_a: -0.02
-  shadow_cast_b: -0.12
-  highlight_cast_a: 0.08
-  highlight_cast_b: 0.16
-  exposure_sensitivity: 0.30
+  shadow_cast_b: -0.14
+  highlight_cast_a: 0.03
+  highlight_cast_b: 0.04
+  exposure_sensitivity: 0.28
