@@ -255,6 +255,7 @@ int main(int argc, char** argv) {
     req.temp = temp;
     req.film_color_density = film_color_density;
     req.film_exposure_ev = film_exposure_ev;
+    req.crossover = env_f("DFEE_CROSSOVER", 100.0F);  // scale the stock's dye-layer crossover
 
     // Diagnostic: DFEE_EXPORT_OUT=<path.tif> reproduces the Lightroom round-trip
     // export (full-res render + write to output_path) and prints the failure reason.
