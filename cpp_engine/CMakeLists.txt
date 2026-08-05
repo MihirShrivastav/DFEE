@@ -12,6 +12,7 @@ option(DFEE_ENABLE_CUDA "Build optional CUDA acceleration target when CUDA is av
 option(DFEE_ENABLE_LIBRAW "Enable LibRaw integration when the library is discoverable" ON)
 option(DFEE_REQUIRE_LIBRAW "Fail configure if LibRaw is not discoverable" OFF)
 option(DFEE_ENABLE_OPENCV "Enable OpenCV integration when the library is discoverable" ON)
+option(DFEE_BUILD_EXPERIMENTS "Build standalone research spikes under experiments/" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -126,6 +127,14 @@ endif()
 add_executable(dfee_cli tools/dfee_cli.cpp)
 target_link_libraries(dfee_cli PRIVATE dfee_core)
 target_compile_definitions(dfee_cli PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+# Research spikes (opt-in, isolated from the shipping engine/app). Links dfee_core
+# only to inherit LibRaw + OpenCV; the spikes do not touch the production pipeline.
+if(DFEE_BUILD_EXPERIMENTS)
+    add_executable(dfee_bespoke_portra800 experiments/bespoke_portra800.cpp)
+    target_link_libraries(dfee_bespoke_portra800 PRIVATE dfee_core)
+    target_compile_definitions(dfee_bespoke_portra800 PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+endif()
 
 if(DFEE_BUILD_TESTS)
     enable_testing()
