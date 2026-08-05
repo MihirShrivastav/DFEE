@@ -15,13 +15,13 @@ tone_response:
   highlight_rolloff_start: 0.72
   black_density_floor: 0.010
   channel_toe_mult:
-  - 0.95
+  - 0.96
   - 0.98
-  - 1.15
+  - 1.0
   channel_shoulder_mult:
-  - 0.9
-  - 0.95
-  - 1.25
+  - 0.90
+  - 0.96
+  - 1.24
   channel_midtone_mult:
   - 1.03
   - 1.0
@@ -114,8 +114,12 @@ hue_chroma_gain:
   blue: 0.12
   magenta: 0.03
 crossover:
-  shadow_cast_a: -0.07
-  shadow_cast_b: -0.25
-  highlight_cast_a: 0.24
-  highlight_cast_b: 0.36
-  exposure_sensitivity: 0.44
+  # UltraMax 400: vivid consumer stock. Warm saturated highlights + its signature
+  # PRONOUNCED cool-cyan shadow cast (stronger than Gold; the "shadows go off in grey
+  # light" trait). Highlight cast kept warm but not over-yellow so blues/greens stay
+  # natural; skin's red lean comes from the warm midtone + red hue gain + high saturation.
+  shadow_cast_a: -0.06
+  shadow_cast_b: -0.26
+  highlight_cast_a: 0.20
+  highlight_cast_b: 0.30
+  exposure_sensitivity: 0.46

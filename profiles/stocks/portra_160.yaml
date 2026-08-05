@@ -15,17 +15,17 @@ tone_response:
   highlight_rolloff_start: 0.70
   black_density_floor: 0.008
   channel_toe_mult:
-  - 0.9
-  - 0.95
-  - 1.1
+  - 0.97
+  - 0.99
+  - 1.03
   channel_shoulder_mult:
-  - 0.85
-  - 0.95
-  - 1.15
+  - 0.94
+  - 0.98
+  - 1.08
   channel_midtone_mult:
   - 1.02
   - 1.0
-  - 0.97
+  - 0.98
 color_response:
   shadow_bias_lab:
   - 0.0
@@ -109,8 +109,10 @@ hue_chroma_gain:
   green: 0.02
   blue: 0.01
 crossover:
-  shadow_cast_a: -0.04
-  shadow_cast_b: -0.22
-  highlight_cast_a: 0.16
-  highlight_cast_b: 0.24
-  exposure_sensitivity: 0.38
+  # Portra 160: the most neutral Portra — subtlest crossover, clean near-neutral shadows,
+  # gentle warm highlights, warm-magenta skin.
+  shadow_cast_a: -0.02
+  shadow_cast_b: -0.07
+  highlight_cast_a: 0.09
+  highlight_cast_b: 0.14
+  exposure_sensitivity: 0.30

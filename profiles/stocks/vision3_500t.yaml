@@ -15,13 +15,13 @@ tone_response:
   highlight_rolloff_start: 0.68
   black_density_floor: 0.009
   channel_toe_mult:
-  - 0.94
+  - 0.95
   - 0.98
-  - 1.08
+  - 1.0
   channel_shoulder_mult:
-  - 0.9
-  - 0.98
-  - 1.15
+  - 0.90
+  - 0.97
+  - 1.22
   channel_midtone_mult:
   - 0.98
   - 1.0
@@ -111,8 +111,11 @@ hue_chroma_gain:
   red: 0.06
   orange: 0.04
 crossover:
-  shadow_cast_a: -0.12
-  shadow_cast_b: -0.38
-  highlight_cast_a: 0.24
-  highlight_cast_b: 0.28
-  exposure_sensitivity: 0.40
+  # Vision3 500T (tungsten cinema neg): the classic teal-orange crossover — warm/orange
+  # highlights and pronounced TEAL (green+blue) shadows, on a flat low-contrast base.
+  # Blue toe freed above so shadows read teal rather than being warmed by the curve.
+  shadow_cast_a: -0.10
+  shadow_cast_b: -0.32
+  highlight_cast_a: 0.18
+  highlight_cast_b: 0.26
+  exposure_sensitivity: 0.46

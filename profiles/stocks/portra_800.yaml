@@ -15,17 +15,17 @@ tone_response:
   highlight_rolloff_start: 0.69
   black_density_floor: 0.016
   channel_toe_mult:
-  - 0.9
-  - 0.95
-  - 1.15
-  channel_shoulder_mult:
-  - 0.85
-  - 0.95
-  - 1.15
-  channel_midtone_mult:
-  - 1.05
+  - 0.96
+  - 0.98
   - 1.0
-  - 0.95
+  channel_shoulder_mult:
+  - 0.90
+  - 0.96
+  - 1.20
+  channel_midtone_mult:
+  - 1.04
+  - 1.0
+  - 0.96
 color_response:
   shadow_bias_lab:
   - 0.0
@@ -111,8 +111,10 @@ hue_chroma_gain:
   red: 0.04
   magenta: 0.01
 crossover:
-  shadow_cast_a: -0.06
-  shadow_cast_b: -0.30
-  highlight_cast_a: 0.24
-  highlight_cast_b: 0.34
-  exposure_sensitivity: 0.48
+  # Portra 800: the strongest Portra crossover — warm highlights, and its signature
+  # murky COOL-MAGENTA shadows (a toward magenta, b toward blue), skin leaning magenta.
+  shadow_cast_a: 0.04
+  shadow_cast_b: -0.18
+  highlight_cast_a: 0.17
+  highlight_cast_b: 0.26
+  exposure_sensitivity: 0.45
