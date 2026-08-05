@@ -15,13 +15,13 @@ tone_response:
   highlight_rolloff_start: 0.75
   black_density_floor: 0.012
   channel_toe_mult:
-  - 1.0
-  - 0.95
-  - 0.9
-  channel_shoulder_mult:
   - 0.98
+  - 0.99
+  - 1.0
+  channel_shoulder_mult:
   - 0.96
-  - 0.9
+  - 0.98
+  - 1.10
   channel_midtone_mult:
   - 0.98
   - 1.0
@@ -66,7 +66,7 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.12
+  strength: 0.16
   radius_inner: 6
   radius_outer: 22
   warm_core:
@@ -110,8 +110,12 @@ hue_chroma_gain:
   yellow: 0.04
   cyan: 0.02
 crossover:
-  shadow_cast_a: -0.08
-  shadow_cast_b: -0.28
-  highlight_cast_a: 0.32
-  highlight_cast_b: 0.42
-  exposure_sensitivity: 0.42
+  # CineStill 400D (daylight cinema neg minus rem-jet): DAYLIGHT-balanced, versatile,
+  # natural colour with a gentle warm lean — between neutral 50D and tungsten 800T, but
+  # firmly on the daylight side (NOT teal-orange). Moderate warm highlights, faintly cool
+  # shadows. Halation slightly more present than 50D (below), less than 800T.
+  shadow_cast_a: -0.04
+  shadow_cast_b: -0.14
+  highlight_cast_a: 0.16
+  highlight_cast_b: 0.22
+  exposure_sensitivity: 0.36

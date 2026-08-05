@@ -15,12 +15,12 @@ tone_response:
   highlight_rolloff_start: 0.68
   black_density_floor: 0.018
   channel_toe_mult:
-  - 0.95
-  - 1.0
-  - 1.18
+  - 0.96
+  - 0.99
+  - 0.98
   channel_shoulder_mult:
-  - 0.9
-  - 1.0
+  - 0.90
+  - 0.98
   - 1.25
   channel_midtone_mult:
   - 1.0
@@ -110,8 +110,14 @@ hue_chroma_gain:
   orange: 0.05
   blue: 0.05
 crossover:
-  shadow_cast_a: -0.15
-  shadow_cast_b: -0.40
-  highlight_cast_a: 0.40
-  highlight_cast_b: 0.35
+  # CineStill 800T (Vision3 500T minus rem-jet): THE tungsten night look. In daylight it
+  # reads cool with shadows going strongly BLUE-GREEN (teal) — even more than 500T — while
+  # highlights carry the warm/orange tungsten glow. Blue toe freed above so the curve
+  # supports the teal shadows rather than warming them. Highlights kept warm-ORANGE (a
+  # moderate, b high) rather than red-magenta. The signature red halation is authored
+  # separately in the halation block (strength 0.48, red core) — its rem-jet-removed glow.
+  shadow_cast_a: -0.13
+  shadow_cast_b: -0.38
+  highlight_cast_a: 0.28
+  highlight_cast_b: 0.34
   exposure_sensitivity: 0.46

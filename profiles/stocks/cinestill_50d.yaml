@@ -15,13 +15,13 @@ tone_response:
   highlight_rolloff_start: 0.70
   black_density_floor: 0.006
   channel_toe_mult:
-  - 1.0
-  - 0.95
-  - 0.9
-  channel_shoulder_mult:
   - 0.98
-  - 0.96
-  - 0.9
+  - 0.99
+  - 0.99
+  channel_shoulder_mult:
+  - 0.97
+  - 0.99
+  - 1.04
   channel_midtone_mult:
   - 0.98
   - 1.0
@@ -110,8 +110,12 @@ hue_chroma_gain:
   yellow: 0.04
   cyan: 0.04
 crossover:
-  shadow_cast_a: -0.08
-  shadow_cast_b: -0.25
-  highlight_cast_a: 0.35
-  highlight_cast_b: 0.40
-  exposure_sensitivity: 0.40
+  # CineStill 50D (Vision3 250D minus rem-jet): DAYLIGHT-balanced, fine-grained, clean and
+  # neutral — NOT the tungsten teal-orange of 800T. Only a subtle crossover (gentle warm
+  # highlights, faintly cool shadows), like Vision3 250D. Its CineStill character is the
+  # halation glow (authored separately), not a strong colour cast.
+  shadow_cast_a: -0.03
+  shadow_cast_b: -0.10
+  highlight_cast_a: 0.10
+  highlight_cast_b: 0.14
+  exposure_sensitivity: 0.32
