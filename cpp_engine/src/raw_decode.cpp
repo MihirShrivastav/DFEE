@@ -329,7 +329,12 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     md.raw_height = height;
     md.camera_make = "Rendered";
     md.camera_model = "TIFF";
-    md.iso = 100;
+    // A rendered (already-developed) TIFF has no meaningful capture ISO. Leave it
+    // unknown (0) so the solver's Auto-grain ISO push/pull does NOT fire: raw_iso is
+    // used for nothing else, and a fabricated ISO 100 made every TIFF look 2-3 stops
+    // below box speed, cutting grain to ~0.35-0.56x on the Lightroom path (grain
+    // barely visible). Unknown ISO -> Auto grain uses the stock's authored strength.
+    md.iso = 0;
     md.metadata_json = serialize_native_raw_metadata_json(md);
     return response;
 }
