@@ -15,17 +15,17 @@ tone_response:
   highlight_rolloff_start: 0.70
   black_density_floor: 0.006
   channel_toe_mult:
-  - 0.95
-  - 1.0
-  - 1.12
+  - 0.97
+  - 0.99
+  - 1.03
   channel_shoulder_mult:
-  - 0.9
-  - 1.0
-  - 1.18
+  - 0.95
+  - 0.99
+  - 1.06
   channel_midtone_mult:
   - 1.02
   - 1.0
-  - 0.96
+  - 0.98
 color_response:
   shadow_bias_lab:
   - 0.0
@@ -112,8 +112,12 @@ hue_chroma_gain:
   yellow: 0.05
   red: 0.02
 crossover:
-  shadow_cast_a: -0.06
-  shadow_cast_b: -0.20
-  highlight_cast_a: 0.20
-  highlight_cast_b: 0.26
-  exposure_sensitivity: 0.34
+  # Ektar 100: its punch is SATURATION + high (shadow-weighted) contrast, not a warm
+  # crossover. Keep the crossover subtle and near-neutral — a touch of cool in the deep
+  # shadows to complement its vivid blues, near-neutral highlights (only a hint warm from
+  # its strong reds). NOT the warm-creamy highlights of Gold/consumer stocks.
+  shadow_cast_a: -0.03
+  shadow_cast_b: -0.10
+  highlight_cast_a: 0.06
+  highlight_cast_b: 0.06
+  exposure_sensitivity: 0.30

@@ -15,17 +15,17 @@ tone_response:
   highlight_rolloff_start: 0.69
   black_density_floor: 0.014
   channel_toe_mult:
-  - 0.95
-  - 1.0
-  - 1.18
+  - 0.97
+  - 0.99
+  - 1.03
   channel_shoulder_mult:
-  - 0.9
+  - 0.94
   - 0.98
-  - 1.25
+  - 1.12
   channel_midtone_mult:
-  - 1.06
+  - 1.04
   - 1.0
-  - 0.92
+  - 0.95
 color_response:
   shadow_bias_lab:
   - 0.0
@@ -111,8 +111,11 @@ hue_chroma_gain:
   red: 0.02
   blue: -0.05
 crossover:
-  shadow_cast_a: -0.04
-  shadow_cast_b: -0.18
-  highlight_cast_a: 0.18
-  highlight_cast_b: 0.28
-  exposure_sensitivity: 0.34
+  # ColorPlus 200: more neutral and slightly COOLER than Gold — quieter warmth, lower
+  # saturation/contrast, honest/documentary. Gentle crossover: modest (not golden)
+  # highlights, gentle cool shadows. Less warm than Gold across the board.
+  shadow_cast_a: -0.03
+  shadow_cast_b: -0.12
+  highlight_cast_a: 0.10
+  highlight_cast_b: 0.14
+  exposure_sensitivity: 0.32
