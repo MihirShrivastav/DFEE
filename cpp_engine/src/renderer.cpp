@@ -378,7 +378,7 @@ constexpr float kLeanBlueSign     = -1.0F;  // sign chosen so blue leans toward 
 
 // Film grain belongs in optical density, not as a display-space overlay. The
 // stock response and artist-facing Amount control apply the remaining shaping.
-constexpr float kGrainDensitySigma = 0.060F;
+constexpr float kGrainDensitySigma = 0.190F;
 constexpr float kGrainDensityFloor = 1.0e-5F;
 constexpr float kGrainMaxDensity = 12.0F;
 
@@ -2104,7 +2104,6 @@ Image FilmRenderer::apply_filmic_grain(
     // already fit the tile keep the exact old path (byte-identical).
     constexpr int kGrainTileMax = 2048;
     constexpr int kGrainTileMaxB = 1728;  // coprime-ish 2nd octave (gcd 64 -> lcm 55296 >> any image)
-    constexpr int kGrainWrapMargin = 24;  // >= 3x max blur sigma, so the wrapped blur is seamless
     const bool grain_tiled = (w > kGrainTileMax || h > kGrainTileMax);
     const int gen_w = grain_tiled ? std::min(w, kGrainTileMax) : w;
     const int gen_h = grain_tiled ? std::min(h, kGrainTileMax) : h;
@@ -2148,25 +2147,44 @@ Image FilmRenderer::apply_filmic_grain(
         // Gentler size response: allow the full slider range and grow grain size more slowly
         // so low/mid sizes are subtle and the top is not oversized.
         const float grain_cell = std::clamp(effects.grain_size, 0.05F, 2.0F) * std::max(scale_factor, 0.35F);
-        const float grain_sigma = std::clamp(0.30F + grain_cell * 0.55F, 0.30F, 3.0F);
-        // Gentler roughness/crispness response (less extreme at the top).
         const float roughness = std::clamp(effects.grain_roughness, 0.0F, 1.0F);
+        // Newson locally-Gaussian grain: correlate the noise with the grain's DISC
+        // autocorrelation (white noise convolved with a filled disc of radius = grain
+        // size), NOT a Gaussian blur. A Gaussian over-smooths -> soft, structureless
+        // "digital" noise; the disc kernel has crisp finite support (2r), giving real
+        // grain-cell texture. Radius is frame-referred (scales with resolution).
+        constexpr float kGrainRadiusScale = 2.4F;
+        const float grain_radius = std::clamp(grain_cell * kGrainRadiusScale, 0.5F, 8.0F);
+        const int grain_kr = std::max(1, static_cast<int>(std::ceil(grain_radius)));
+        cv::Mat disc_kernel(2 * grain_kr + 1, 2 * grain_kr + 1, CV_32F, cv::Scalar(0.0F));
+        {
+            int cnt = 0;
+            for (int ky = -grain_kr; ky <= grain_kr; ++ky) {
+                for (int kx = -grain_kr; kx <= grain_kr; ++kx) {
+                    if (static_cast<float>(kx * kx + ky * ky) <= grain_radius * grain_radius) {
+                        disc_kernel.at<float>(ky + grain_kr, kx + grain_kr) = 1.0F; ++cnt;
+                    }
+                }
+            }
+            disc_kernel /= std::sqrt(static_cast<float>(std::max(1, cnt)));  // unit-variance output
+        }
 
-        // Generate one correlated-noise tile at an explicit size. On the tiled path the blur
-        // is wrap-padded so the tile is periodic (seamless when wrap-sampled); when not tiled
-        // (tw==w, th==h) this is the exact original full-image path (byte-identical).
+        // Generate one grain tile: white noise convolved with the disc kernel. On the tiled
+        // path the convolution is wrap-padded so the tile stays periodic; otherwise it runs
+        // across the whole frame. Roughness then sharpens the particle edges further.
         auto make_tile = [&](std::mt19937_64& r, const int th, const int tw) {
             cv::Mat m = make_standard_normal_mat(th, tw, r);
-            if (grain_sigma > 0.35F) {
-                if (grain_tiled) {
-                    cv::Mat padded;
-                    cv::copyMakeBorder(m, padded, kGrainWrapMargin, kGrainWrapMargin,
-                                       kGrainWrapMargin, kGrainWrapMargin, cv::BORDER_WRAP);
-                    cv::GaussianBlur(padded, padded, cv::Size(0, 0), grain_sigma);
-                    m = padded(cv::Rect(kGrainWrapMargin, kGrainWrapMargin, tw, th)).clone();
-                } else {
-                    cv::GaussianBlur(m, m, cv::Size(0, 0), grain_sigma);
-                }
+            if (grain_tiled) {
+                // Wrap-pad by the kernel radius so the tile stays periodic; filter2D does
+                // NOT support BORDER_WRAP (it asserts), but the padded margin already holds
+                // the wrapped neighbours and is cropped away, so filter2D's own border type
+                // never affects the valid region — REFLECT101 is safe here.
+                cv::Mat padded;
+                cv::copyMakeBorder(m, padded, grain_kr, grain_kr, grain_kr, grain_kr, cv::BORDER_WRAP);
+                cv::filter2D(padded, padded, -1, disc_kernel, cv::Point(-1, -1), 0.0, cv::BORDER_REFLECT101);
+                m = padded(cv::Rect(grain_kr, grain_kr, tw, th)).clone();
+            } else {
+                cv::filter2D(m, m, -1, disc_kernel, cv::Point(-1, -1), 0.0, cv::BORDER_REFLECT101);
             }
             normalize_zero_mean_unit_variance(m);
             if (roughness > 0.0F) {
