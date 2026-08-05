@@ -605,6 +605,34 @@ RenderPlan RenderPlanSolver::solve(
         shadow_lift_knee = 0.25F + shadow_lift_norm * 0.08F;   // tighten: 0.25 -> 0.17
     }
 
+    // Crossover strength: dial the stock's inherent dye-layer crossover. The per-channel
+    // toe/shoulder/midtone multipliers ARE the curve crossover (R/G/B tone curves that
+    // don't run parallel), and the shadow/highlight Lab biases are its color expression
+    // (cool shadows / warm highlights). Scaling both together by one control moves the
+    // whole crossover: 100 = the stock's authored amount, 0 = channels unified / no
+    // crossover, 200 = double. Midtone palette bias is left alone (it's the stock's base
+    // warmth, not part of the shadow<->highlight split). The separate Split Toning control
+    // (crossbalance) adds a manual cast on top of this.
+    const float crossover_scale = std::clamp(controls.crossover / 100.0F, 0.0F, 2.0F);
+    const auto scale_mult = [crossover_scale](std::array<float, 3> m) {
+        for (float& v : m) { v = 1.0F + (v - 1.0F) * crossover_scale; }
+        return m;
+    };
+    const auto scale_bias = [crossover_scale](std::array<float, 3> b) {
+        for (float& v : b) { v *= crossover_scale; }
+        return b;
+    };
+    const std::array<float, 3> xover_channel_toe = scale_mult(
+        get_array3(stock_profile.numeric_arrays, "tone_response.channel_toe_mult", {1.0F, 1.0F, 1.0F}));
+    const std::array<float, 3> xover_channel_shoulder = scale_mult(
+        get_array3(stock_profile.numeric_arrays, "tone_response.channel_shoulder_mult", {1.0F, 1.0F, 1.0F}));
+    const std::array<float, 3> xover_channel_midtone = scale_mult(
+        get_array3(stock_profile.numeric_arrays, "tone_response.channel_midtone_mult", {1.0F, 1.0F, 1.0F}));
+    const std::array<float, 3> xover_shadow_bias = scale_bias(
+        get_array3(stock_profile.numeric_arrays, "color_response.shadow_bias_lab", {0.0F, 0.0F, 0.0F}));
+    const std::array<float, 3> xover_highlight_bias = scale_bias(
+        get_array3(stock_profile.numeric_arrays, "color_response.highlight_bias_lab", {0.0F, 0.0F, 0.0F}));
+
     plan.film_response = {
         .toe_strength = toe_strength,
         .toe_length = get_numeric(stock_profile.numeric_values, "tone_response.toe_length", 0.0F),
@@ -619,12 +647,12 @@ RenderPlan RenderPlanSolver::solve(
         .yellow_green_muting = get_numeric(stock_profile.numeric_values, "hue_saturation_response.yellow_green_muting", 0.0F),
         .neon_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.neon_compression", 0.0F),
         .chroma_boost = get_numeric(stock_profile.numeric_values, "hue_saturation_response.saturation_boost", 1.0F),
-        .channel_toe_mult = get_array3(stock_profile.numeric_arrays, "tone_response.channel_toe_mult", {1.0F, 1.0F, 1.0F}),
-        .channel_shoulder_mult = get_array3(stock_profile.numeric_arrays, "tone_response.channel_shoulder_mult", {1.0F, 1.0F, 1.0F}),
-        .channel_midtone_mult = get_array3(stock_profile.numeric_arrays, "tone_response.channel_midtone_mult", {1.0F, 1.0F, 1.0F}),
-        .shadow_bias_lab = get_array3(stock_profile.numeric_arrays, "color_response.shadow_bias_lab", {0.0F, 0.0F, 0.0F}),
+        .channel_toe_mult = xover_channel_toe,
+        .channel_shoulder_mult = xover_channel_shoulder,
+        .channel_midtone_mult = xover_channel_midtone,
+        .shadow_bias_lab = xover_shadow_bias,
         .midtone_bias_lab = get_array3(stock_profile.numeric_arrays, "color_response.midtone_bias_lab", {0.0F, 0.0F, 0.0F}),
-        .highlight_bias_lab = get_array3(stock_profile.numeric_arrays, "color_response.highlight_bias_lab", {0.0F, 0.0F, 0.0F}),
+        .highlight_bias_lab = xover_highlight_bias,
         .pan_weight_r = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_r", 0.25F),
         .pan_weight_g = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_g", 0.55F),
         .pan_weight_b = get_numeric(stock_profile.numeric_values, "color_response.pan_weight_b", 0.20F),

@@ -43,6 +43,7 @@ struct SolverControls {
     float film_color_compression = 100.0F;
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
+    float crossover = 100.0F;           // 0..200, 100 = stock's authored dye-layer crossover
     float profile_strength = 100.0F;
     bool adaptive = true;              // scene-referred steering on/off
     bool subtractive_pipeline = false; // set true for filmic_v3 (gates v3 tone steering)

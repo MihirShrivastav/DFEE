@@ -45,6 +45,7 @@ QVariantMap EngineController::defaultFilmControls()
         {"rendered_input", 80.0},
         {"highlight_rolloff", 100.0},
         {"film_contrast", 100.0},
+        {"crossover", 100.0},
         {"profile_strength", 100.0},
         {"shadow_lift", 0.0},
         {"film_color_density", 100.0},
@@ -248,6 +249,7 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
         {"film_exposure_ev", {-3.0, 3.0}},
         {"highlight_rolloff", {0.0, 200.0}},
         {"film_contrast", {0.0, 200.0}},
+        {"crossover", {0.0, 200.0}},
         {"profile_strength", {0.0, 200.0}},
         {"shadow_lift", {-100.0, 100.0}},
         {"film_color_density", {0.0, 200.0}},
@@ -501,6 +503,7 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
     request.adaptive = filmControls_.value("adaptive").toBool();
     request.highlight_rolloff = static_cast<float>(filmControls_.value("highlight_rolloff").toDouble());
     request.film_contrast = static_cast<float>(filmControls_.value("film_contrast").toDouble());
+    request.crossover = static_cast<float>(filmControls_.value("crossover").toDouble());
     request.profile_strength = static_cast<float>(filmControls_.value("profile_strength").toDouble());
     request.shadow_lift = static_cast<float>(filmControls_.value("shadow_lift").toDouble());
     request.film_color_density = static_cast<float>(filmControls_.value("film_color_density").toDouble());

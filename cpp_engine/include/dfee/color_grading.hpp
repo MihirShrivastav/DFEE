@@ -34,6 +34,10 @@ struct ColorGradeParams {
     float cross_highlight_b = 0.0F;
     float cross_exposure_sensitivity = 0.0F;
     float scene_exposure_key = 0.0F;
+    // Crossover control (0..2, 1 = stock's authored amount). Drives the film's own
+    // crossover cast (per-stock directions above) default-on, via the strong kCrossover
+    // path. Crossbalance is the manual split-tone added on top.
+    float crossover_strength = 1.0F;
 };
 
 // Applies the grade in place on linear-ish rendered RGB. Colour shifts are done in OKLab

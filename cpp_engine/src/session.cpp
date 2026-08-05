@@ -952,6 +952,7 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.film_color_compression = request.film_color_compression;
     controls.highlight_rolloff = request.highlight_rolloff;
     controls.film_contrast = request.film_contrast;
+    controls.crossover = request.crossover;
     controls.profile_strength = request.profile_strength;
     controls.adaptive = request.adaptive;
     controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
@@ -1381,6 +1382,7 @@ ColorGradeParams make_color_grade_params(const NativePreviewRenderRequest& r, co
         .cross_highlight_a = fr.crossover_highlight_cast[0], .cross_highlight_b = fr.crossover_highlight_cast[1],
         .cross_exposure_sensitivity = fr.crossover_exposure_sensitivity,
         .scene_exposure_key = fr.scene_exposure_key,
+        .crossover_strength = std::clamp(r.crossover / 100.0F, 0.0F, 2.0F),
     };
 }
 
@@ -1957,30 +1959,35 @@ void apply_scene_referred_tone(
 // Perceptual 3-way + global colour grading. See dfee/color_grading.hpp and
 // documentation/planning/color-grading-spec.md.
 void apply_color_grading(Image& rendered, const ColorGradeParams& params) {
+    const float xover = std::clamp(params.crossover_strength, 0.0F, 2.0F);
+    const float cross = std::clamp(params.crossbalance / 100.0F, -1.0F, 1.0F);
+    // Per-stock authored crossover cast (drives the always-on Crossover control).
+    const float cs_a = params.cross_shadow_a, cs_b = params.cross_shadow_b;
+    const float ch_a = params.cross_highlight_a, ch_b = params.cross_highlight_b;
+    const bool cast_present = cs_a != 0.0F || cs_b != 0.0F || ch_a != 0.0F || ch_b != 0.0F;
+    // Generic teal-shadow/warm-highlight direction for the manual Split Toning control
+    // when the stock has no authored cast of its own.
+    float gs_a = cs_a, gs_b = cs_b, gh_a = ch_a, gh_b = ch_b;
+    if (!cast_present) { gs_a = -0.40F; gs_b = -0.60F; gh_a = 0.45F; gh_b = 0.60F; }
+
     const bool any_color =
         params.shadow_sat != 0.0F || params.midtone_sat != 0.0F ||
-        params.highlight_sat != 0.0F || params.global_sat != 0.0F ||
-        params.crossbalance != 0.0F;
+        params.highlight_sat != 0.0F || params.global_sat != 0.0F;
     const bool any_lum =
         params.shadow_lum != 0.0F || params.midtone_lum != 0.0F ||
         params.highlight_lum != 0.0F || params.global_lum != 0.0F;
-    if (!any_color && !any_lum) {
+    // The Crossover control applies the stock's authored cast by default (xover ~ 1);
+    // Split Toning (crossbalance) adds a manual cast on top.
+    const bool has_cross = (xover > 0.0F && cast_present) || cross != 0.0F;
+    if (!any_color && !any_lum && !has_cross) {
         return;
     }
 
     constexpr float kSat = 0.10F;      // max OKLab a/b offset at sat = 100
     constexpr float kLum = 0.15F;      // max OKLab L offset at lum = 100
-    constexpr float kCrossover = 0.10F; // crossbalance cast scale
+    constexpr float kCrossover = 0.115F; // crossover / split-tone cast scale
     const float deg2rad = std::numbers::pi_v<float> / 180.0F;
 
-    // Per-stock crossover cast directions (fall back to the classic warm-film crossover:
-    // teal shadows / warm highlights) + exposure modulation.
-    float cs_a = params.cross_shadow_a, cs_b = params.cross_shadow_b;
-    float ch_a = params.cross_highlight_a, ch_b = params.cross_highlight_b;
-    if (cs_a == 0.0F && cs_b == 0.0F && ch_a == 0.0F && ch_b == 0.0F) {
-        cs_a = -0.40F; cs_b = -0.60F; ch_a = 0.45F; ch_b = 0.60F;
-    }
-    const float cross = std::clamp(params.crossbalance / 100.0F, -1.0F, 1.0F);
     const float key = std::clamp(params.scene_exposure_key, -1.0F, 1.0F);
     const float sh_exp_gain = 1.0F + params.cross_exposure_sensitivity * std::max(0.0F, -key);
     const float hi_exp_gain = 1.0F + params.cross_exposure_sensitivity * std::max(0.0F, key);
@@ -2019,9 +2026,12 @@ void apply_color_grading(Image& rendered, const ColorGradeParams& params) {
         const float wh = gauss(l, 0.75F);
         float a = oklab.pixels[i * 3 + 1] + ws * a_sh + wm * a_mid + wh * a_hi + a_g;
         float b = oklab.pixels[i * 3 + 2] + ws * b_sh + wm * b_mid + wh * b_hi + b_g;
-        // Crossbalance: stock-characteristic shadow/highlight casts, scaled by scene exposure.
-        a += cross * kCrossover * (ws * cs_a * sh_exp_gain + wh * ch_a * hi_exp_gain);
-        b += cross * kCrossover * (ws * cs_b * sh_exp_gain + wh * ch_b * hi_exp_gain);
+        // Crossover (film's own cast, default-on via xover) + Split Toning (manual cross),
+        // both as shadow/highlight OKLab casts modulated by scene exposure.
+        a += kCrossover * (xover * (ws * cs_a * sh_exp_gain + wh * ch_a * hi_exp_gain)
+                         + cross * (ws * gs_a * sh_exp_gain + wh * gh_a * hi_exp_gain));
+        b += kCrossover * (xover * (ws * cs_b * sh_exp_gain + wh * ch_b * hi_exp_gain)
+                         + cross * (ws * gs_b * sh_exp_gain + wh * gh_b * hi_exp_gain));
         oklab.pixels[i * 3 + 0] = std::clamp(l + ws * lum_sh + wm * lum_mid + wh * lum_hi + lum_g, 0.0F, 1.0F);
         oklab.pixels[i * 3 + 1] = a;
         oklab.pixels[i * 3 + 2] = b;
@@ -2635,6 +2645,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.film_color_compression = request.film_color_compression;
             controls.highlight_rolloff = request.highlight_rolloff;
             controls.film_contrast = request.film_contrast;
+            controls.crossover = request.crossover;
             controls.profile_strength = request.profile_strength;
             controls.adaptive = request.adaptive;
             controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);

@@ -258,6 +258,7 @@ struct NativePreviewRenderRequest {
     float film_color_compression = 100.0F;
     float highlight_rolloff = 100.0F;
     float film_contrast = 100.0F;
+    float crossover = 100.0F;  // 0..200, 100 = stock's authored dye-layer crossover strength
     // Master stock-tone control. 100 = the profile's authored baseline.
     float profile_strength = 100.0F;
     // Rendered-input (TIFF) handling: how much to trust the TIFF's baked exposure/tone
