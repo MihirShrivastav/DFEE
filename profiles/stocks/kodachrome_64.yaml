@@ -118,8 +118,14 @@ hue_chroma_gain:
   blue: 0.08
   green: -0.05
 crossover:
-  shadow_cast_a: -0.05
-  shadow_cast_b: -0.55
-  highlight_cast_a: 0.40
-  highlight_cast_b: 0.45
-  exposure_sensitivity: 0.45
+  # Kodak Kodachrome 64 (K-14): the one positive with a real crossover signature — WARM
+  # skin/reds/oranges and luminous colour over deep, rich, dense blacks, contrasty. So it
+  # keeps the strongest crossover of the reversal set, but MODERATE: warm (red/orange)
+  # highlights over cool-dense shadows. The previous -0.55 blue shadow / 0.40/0.45 warm
+  # highlight were cartoonishly strong; this preserves the warm-over-rich-blacks look at a
+  # believable level (its deep blacks are carried mainly by density/contrast above).
+  shadow_cast_a: -0.03
+  shadow_cast_b: -0.12
+  highlight_cast_a: 0.10
+  highlight_cast_b: 0.18
+  exposure_sensitivity: 0.40

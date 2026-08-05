@@ -17,11 +17,11 @@ tone_response:
   channel_toe_mult:
   - 1.0
   - 1.0
-  - 1.15
+  - 1.06
   channel_shoulder_mult:
   - 1.0
   - 1.0
-  - 1.2
+  - 1.10
   channel_midtone_mult:
   - 1.0
   - 1.0
@@ -109,8 +109,12 @@ hue_chroma_gain:
   blue: 0.04
   green: 0.03
 crossover:
-  shadow_cast_a: -0.06
-  shadow_cast_b: -0.30
-  highlight_cast_a: 0.15
-  highlight_cast_b: 0.15
-  exposure_sensitivity: 0.35
+  # Fujichrome Provia 100F: the ACCURATE/neutral pro slide — reined-in saturation, neutral
+  # grays, most realistic skin tones. Its natural state is a faint cool (slight blue); it is
+  # NOT a cast film. So the most restrained crossover of the set: near-neutral shadows with
+  # just a hint of cool, near-neutral highlights. (Was -0.30/0.15, far too strong for Provia.)
+  shadow_cast_a: 0.0
+  shadow_cast_b: -0.10
+  highlight_cast_a: 0.03
+  highlight_cast_b: 0.05
+  exposure_sensitivity: 0.30

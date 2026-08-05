@@ -108,8 +108,13 @@ compression:
 hue_chroma_gain:
   green: 0.03
 crossover:
-  shadow_cast_a: -0.05
-  shadow_cast_b: -0.20
-  highlight_cast_a: 0.20
-  highlight_cast_b: 0.25
+  # Fujichrome Astia 100F: the softest Fuji slide — low contrast, low saturation, engineered
+  # for flattering skin, with a slight warm/yellow cast and CREAMY (warm) highlights. So it
+  # legitimately keeps a gentle warm-highlight lean (unlike the cooler Provia/Velvia), but
+  # everything stays soft and subtle: near-neutral gentle shadows, gentle creamy-warm
+  # highlights. (Was 0.20/0.25 in the highlights — too strong for such a soft stock.)
+  shadow_cast_a: -0.02
+  shadow_cast_b: -0.08
+  highlight_cast_a: 0.06
+  highlight_cast_b: 0.14
   exposure_sensitivity: 0.30

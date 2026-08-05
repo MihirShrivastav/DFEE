@@ -123,8 +123,13 @@ hue_chroma_gain:
   red: 0.06
   orange: 0.05
 crossover:
-  shadow_cast_a: -0.10
-  shadow_cast_b: -0.70
-  highlight_cast_a: 0.30
-  highlight_cast_b: 0.30
-  exposure_sensitivity: 0.40
+  # Fujichrome Velvia 50: a slide film — minimal dye crossover by design. Its look is
+  # explosive SATURATION + high CONTRAST + deep blacks (authored above), and it is noted as
+  # "true to colour", NOT a cast film. Only trait worth a nudge: shadows veer slightly GREEN
+  # and stay dense; highlights carry a faint warm-RED lean (its strong red sensitivity).
+  # The previous -0.70 blue shadow / 0.30 warm highlight were far too strong for a slide.
+  shadow_cast_a: -0.04
+  shadow_cast_b: -0.12
+  highlight_cast_a: 0.06
+  highlight_cast_b: 0.06
+  exposure_sensitivity: 0.36

@@ -17,11 +17,11 @@ tone_response:
   channel_toe_mult:
   - 1.0
   - 1.0
-  - 1.1
+  - 0.98
   channel_shoulder_mult:
   - 1.0
   - 1.0
-  - 1.15
+  - 1.0
   channel_midtone_mult:
   - 1.0
   - 1.0
@@ -110,8 +110,13 @@ hue_chroma_gain:
   magenta: 0.10
   orange: 0.06
 crossover:
-  shadow_cast_a: 0.05
-  shadow_cast_b: -0.45
-  highlight_cast_a: 0.35
-  highlight_cast_b: 0.25
-  exposure_sensitivity: 0.40
+  # Kodak Ektachrome E100: cool and NEUTRAL, extremely fine grain, accurate colour, clean
+  # whites/blues "without the overwhelming magentas". So a restrained, cool-leaning crossover
+  # with NO magenta and NO warm highlights: faint cool-neutral shadows, clean near-neutral
+  # highlights (whites stay white). The previous +0.05 magenta shadow / -0.45 blue / 0.35
+  # warm highlight all contradicted its clean cool-neutral character.
+  shadow_cast_a: -0.02
+  shadow_cast_b: -0.14
+  highlight_cast_a: 0.03
+  highlight_cast_b: 0.04
+  exposure_sensitivity: 0.32

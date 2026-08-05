@@ -119,3 +119,13 @@ hue_chroma_gain:
   green: 0.12
   yellow: 0.08
   blue: 0.06
+crossover:
+  # Fujichrome Velvia 100: like V50, a slide — minimal crossover; the look is bold
+  # saturation + snappy contrast. It holds shadow colour but "veers slightly green" there,
+  # so a touch more green in the shadows than V50; faint warm-red highlight lean. (This
+  # block was previously absent, so V100 had no crossover cast at all.)
+  shadow_cast_a: -0.05
+  shadow_cast_b: -0.12
+  highlight_cast_a: 0.05
+  highlight_cast_b: 0.05
+  exposure_sensitivity: 0.35
