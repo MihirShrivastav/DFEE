@@ -1261,6 +1261,17 @@ Window {
                 elide: Text.ElideMiddle
             }
 
+            // Save & Return — the plugin's primary action. Pinned in the fixed top area
+            // (where the tab switcher sits in standalone) so it's always reachable, not
+            // buried at the bottom of the develop scroll.
+            PrimaryButton {
+                width: parent.width
+                visible: engine.lightroomRoundTrip
+                text: engine.exporting ? "Saving back…" : "Save & Return to Lightroom"
+                enabled: engine.hasImage && !engine.exporting
+                onClicked: engine.exportImage()
+            }
+
             // Tab switcher — hidden in Lightroom edit-in mode (Develop only there).
             Rectangle {
                 width: parent.width
@@ -2348,14 +2359,6 @@ Window {
                         enabled: engine.hasImage && !engine.exporting
                         onClicked: engine.exportImage()
                     }
-                }
-
-                // Save & Return — Lightroom edit-in mode only
-                PrimaryButton {
-                    visible: engine.lightroomRoundTrip
-                    text: engine.exporting ? "Saving back…" : "Save & Return to Lightroom"
-                    enabled: engine.hasImage && !engine.exporting
-                    onClicked: engine.exportImage()
                 }
 
                 Text {
