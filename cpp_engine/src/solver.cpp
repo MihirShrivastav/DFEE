@@ -713,16 +713,25 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response.compression_crosstalk = get_numeric(
         stock_profile.numeric_values, "compression.crosstalk", comp.crosstalk);
 
-    // Per-stock crossover (drives the Crossbalance control). Defaults to the classic warm-film
-    // crossover (teal shadows / warm highlights) so stocks without a block behave sensibly.
-    plan.film_response.crossover_shadow_cast = {
-        get_numeric(stock_profile.numeric_values, "crossover.shadow_cast_a", -0.35F),
-        get_numeric(stock_profile.numeric_values, "crossover.shadow_cast_b", -0.55F)};
-    plan.film_response.crossover_highlight_cast = {
-        get_numeric(stock_profile.numeric_values, "crossover.highlight_cast_a", 0.45F),
-        get_numeric(stock_profile.numeric_values, "crossover.highlight_cast_b", 0.60F)};
-    plan.film_response.crossover_exposure_sensitivity =
-        get_numeric(stock_profile.numeric_values, "crossover.exposure_sensitivity", 0.40F);
+    // Per-stock crossover (drives the Crossover control). Monochrome stocks have NO colour
+    // crossover — force it to zero so the always-on Crossover control can never tint a B&W
+    // image (they have no `crossover:` block, so they would otherwise inherit the colour
+    // default below). Colour stocks read their authored block; the teal-shadow / warm-
+    // highlight default is only a fallback for a colour stock that omits the block.
+    if (stock_profile.stock_type == StockType::Monochrome) {
+        plan.film_response.crossover_shadow_cast = {0.0F, 0.0F};
+        plan.film_response.crossover_highlight_cast = {0.0F, 0.0F};
+        plan.film_response.crossover_exposure_sensitivity = 0.0F;
+    } else {
+        plan.film_response.crossover_shadow_cast = {
+            get_numeric(stock_profile.numeric_values, "crossover.shadow_cast_a", -0.35F),
+            get_numeric(stock_profile.numeric_values, "crossover.shadow_cast_b", -0.55F)};
+        plan.film_response.crossover_highlight_cast = {
+            get_numeric(stock_profile.numeric_values, "crossover.highlight_cast_a", 0.45F),
+            get_numeric(stock_profile.numeric_values, "crossover.highlight_cast_b", 0.60F)};
+        plan.film_response.crossover_exposure_sensitivity =
+            get_numeric(stock_profile.numeric_values, "crossover.exposure_sensitivity", 0.40F);
+    }
     // Scene-exposure key from the (raw) midtone anchor: dark scene = underexposed (-1),
     // bright scene = overexposed (+1).
     plan.film_response.scene_exposure_key = std::clamp(
