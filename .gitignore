@@ -64,3 +64,19 @@ desktop/out/
 
 # aqtinstall log
 aqtinstall.log
+
+# Large photographic assets / scratch — never commit these (they bloat .git history)
+raw_files/
+comparision/
+film stock boxarts/
+*.tif
+*.tiff
+*.arw
+*.raf
+*.3fr
+*.dng
+*.orf
+*.cr2
+*.cr3
+*.nef
+*.docx
