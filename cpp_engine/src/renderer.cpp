@@ -1348,7 +1348,7 @@ Image FilmRenderer::apply_film_tone_response(
         const float g   = std::clamp(cc.gamma, 0.2F, 3.0F);             // luma contrast
         const float dmn = std::clamp(cc.d_min, 0.0F, 0.35F);           // film black floor
         const float dmx = std::clamp(cc.d_max, 0.70F, 1.0F);          // soft white ceiling
-        const float sh_knee = std::max(dmn + 0.25F, dmx - 0.42F);      // where the highlight shoulder starts
+        const float sh_knee = std::max(dmn + 0.20F, dmx - 0.28F);      // where the highlight shoulder starts (later = brighter, less-flattened highlights)
         const float sh_range = std::max(dmx - sh_knee, 1.0e-3F);
         const float sKb = Km + (Kb - Km) * g;                          // straight-line value at scene black
         constexpr int kL = 1024;
