@@ -101,3 +101,15 @@ color_character:
   emulsion_density_sensitivity: 0.0
   palette:
     range_sensitivity: 0.0
+characteristic_curve:
+  # Kodak Tri-X 400 (B&W negative): moderate rendered contrast (~1.15), long straight line,
+  # classic gentle toe and gradual shoulder.
+  gamma: 1.15
+  latitude_stops: 8.0
+  toe_onset: 2.4
+  toe_hardness: 1.0
+  shoulder_onset: 2.6
+  shoulder_hardness: 1.0
+  d_min: 0.02
+  d_max: 1.0
+  channel_gamma_mult: [1.0, 1.0, 1.0]

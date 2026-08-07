@@ -133,3 +133,15 @@ crossover:
   highlight_cast_a: 0.06
   highlight_cast_b: 0.06
   exposure_sensitivity: 0.36
+characteristic_curve:
+  # Fujichrome Velvia 50 (reversal): high contrast index, short latitude, abrupt toe/shoulder.
+  # gamma = rendered (positive) contrast; Velvia's straight-line is steep (~1.9), latitude ~5 stops.
+  gamma: 1.9
+  latitude_stops: 5.0
+  toe_onset: 1.6
+  toe_hardness: 1.4
+  shoulder_onset: 1.8
+  shoulder_hardness: 1.4
+  d_min: 0.02
+  d_max: 1.0
+  channel_gamma_mult: [1.0, 1.0, 1.0]

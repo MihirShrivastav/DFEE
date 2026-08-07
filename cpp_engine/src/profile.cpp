@@ -263,11 +263,16 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
         "crossover.shadow_cast_a", "crossover.shadow_cast_b",
         "crossover.highlight_cast_a", "crossover.highlight_cast_b",
         "crossover.exposure_sensitivity",
+        "characteristic_curve.gamma", "characteristic_curve.latitude_stops",
+        "characteristic_curve.toe_onset", "characteristic_curve.toe_hardness",
+        "characteristic_curve.shoulder_onset", "characteristic_curve.shoulder_hardness",
+        "characteristic_curve.d_min", "characteristic_curve.d_max",
     };
     static const std::unordered_set<std::string> kArrayFields{
         "tone_response.channel_toe_mult", "tone_response.channel_shoulder_mult", "tone_response.channel_midtone_mult",
         "color_response.shadow_bias_lab", "color_response.midtone_bias_lab", "color_response.highlight_bias_lab",
         "halation.warm_core", "halation.red_fringe",
+        "characteristic_curve.channel_gamma_mult",
     };
     static const std::unordered_set<std::string> kStringFields{
         "stock_id", "stock_name", "stock_type", "grain.family", "grain.peak_zone", "halation.trigger",
