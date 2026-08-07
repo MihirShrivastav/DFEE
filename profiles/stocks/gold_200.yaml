@@ -116,3 +116,17 @@ crossover:
   highlight_cast_a: 0.22
   highlight_cast_b: 0.30
   exposure_sensitivity: 0.38
+characteristic_curve:
+  # Kodak Gold 200 is a daylight consumer negative with published tolerance of
+  # roughly two stops under and three stops over. Its v4 response is therefore
+  # forgiving at both ends, but firmer and more colourful through the mids than
+  # Portra. Warmth remains a colour-response property, not a crushed-black curve.
+  gamma: 1.22
+  latitude_stops: 9.5
+  toe_onset: 3.6
+  toe_hardness: 0.62
+  shoulder_onset: 4.3
+  shoulder_hardness: 0.60
+  d_min: 0.040
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

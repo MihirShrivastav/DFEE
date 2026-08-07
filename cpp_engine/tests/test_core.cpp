@@ -791,6 +791,24 @@ void test_color_negative_profiles_are_distinct() {
     assert(value(gold_200, "hue_saturation_response.saturation_boost") <
            value(ultramax_400, "hue_saturation_response.saturation_boost"));
 
+    // V4 characteristic curves keep Gold's forgiving consumer-negative role
+    // while Ektar is the cleaner, higher-definition vivid negative. These are
+    // tonal relationships only; their separate colour profiles remain active.
+    assert(value(gold_200, "characteristic_curve.gamma") >
+           value(portra_400, "characteristic_curve.gamma"));
+    assert(value(gold_200, "characteristic_curve.latitude_stops") <
+           value(portra_400, "characteristic_curve.latitude_stops"));
+    assert(value(gold_200, "characteristic_curve.toe_onset") >
+           value(ultramax_400, "characteristic_curve.toe_onset"));
+    assert(value(ektar_100, "characteristic_curve.gamma") >
+           value(gold_200, "characteristic_curve.gamma"));
+    assert(value(ektar_100, "characteristic_curve.latitude_stops") <
+           value(gold_200, "characteristic_curve.latitude_stops"));
+    assert(value(ektar_100, "characteristic_curve.toe_onset") <
+           value(gold_200, "characteristic_curve.toe_onset"));
+    assert(value(ektar_100, "characteristic_curve.d_min") <
+           value(gold_200, "characteristic_curve.d_min"));
+
     // ColorPlus is the softer, lower-fidelity consumer 200-speed option. It
     // keeps visibly more texture than Gold while avoiding Gold's stronger
     // colour energy and broad-latitude role.

@@ -28,6 +28,22 @@ That blend occurs in perceptual curve space: `source_tone + strength *
 (stock_tone - source_tone)`. This makes zero strength exact identity and avoids the
 shadow-weighting error of interpolating the two results in linear light.
 
+## Stock Rollout: Gold 200 And Ektar 100 (2026-08-07)
+
+Gold 200 and Ektar 100 are migrated to v4 from their existing researched colour and
+material profiles. Kodak's Gold technical data describes a daylight consumer negative
+with colour saturation, fine grain, high sharpness, and approximately two stops
+under/three stops over tolerance. Its v4 curve is consequently broad and gentle at
+both ends, while retaining slightly firmer midtone contrast than Portra 400.
+
+Kodak's Ektar technical data identifies an ISO-100, ultra-fine-grain negative with
+ultra-vivid colour, exceptional sharpness, and edge definition. Its v4 curve has
+stronger midtone separation and a shorter, cleaner toe than Gold, but remains a
+negative-film shoulder rather than a reversal-style hard clip. The existing Ektar
+red/orange limiter and landscape/product hue response remain responsible for colour.
+
+Sources: [Gold 200 technical data](https://imaging.kodakalaris.com/sites/default/files/files/resources/E7022_Gold_200.pdf), [Ektar 100 technical data](https://www.kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/e4046_ektar_100.pdf).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

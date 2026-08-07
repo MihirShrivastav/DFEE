@@ -121,3 +121,17 @@ crossover:
   highlight_cast_a: 0.06
   highlight_cast_b: 0.06
   exposure_sensitivity: 0.30
+characteristic_curve:
+  # Kodak Ektar 100 is the ultra-fine, ultra-vivid high-definition negative.
+  # Its v4 curve has a cleaner, shorter toe and stronger midtone separation than
+  # Gold/Portra, with a controlled shoulder so saturated outdoor/product detail
+  # stays present instead of becoming a slide-film hard clip.
+  gamma: 1.30
+  latitude_stops: 8.8
+  toe_onset: 2.9
+  toe_hardness: 0.82
+  shoulder_onset: 4.1
+  shoulder_hardness: 0.70
+  d_min: 0.020
+  d_max: 0.990
+  channel_gamma_mult: [1.0, 1.0, 1.0]
