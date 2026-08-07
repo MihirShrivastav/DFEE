@@ -119,12 +119,12 @@ crossover:
 characteristic_curve:
   # Kodak Portra 400 (C-41 negative): low rendered contrast (neg-gamma x print ~1.0), very wide
   # latitude (~10 stops), gentle/long toe and shoulder — the forgiving, soft, creamy look.
-  gamma: 1.0
+  gamma: 1.08
   latitude_stops: 10.0
-  toe_onset: 3.0
-  toe_hardness: 0.8
-  shoulder_onset: 3.2
-  shoulder_hardness: 0.7
-  d_min: 0.03
-  d_max: 0.98
+  toe_onset: 3.8
+  toe_hardness: 0.6
+  shoulder_onset: 4.5
+  shoulder_hardness: 0.55
+  d_min: 0.05
+  d_max: 1.0
   channel_gamma_mult: [1.0, 1.0, 1.0]
