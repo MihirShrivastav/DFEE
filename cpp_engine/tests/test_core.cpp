@@ -603,6 +603,29 @@ void test_cinestill_profile_exposure_ramps_are_distinct() {
     assert(stock_800t.grain.size > stock_400d.grain.size);
     assert(stock_800t.grain.strength > stock_400d.grain.strength);
     assert(stock_800t.halation.strength > stock_400d.halation.strength);
+    require_close(plan_50d.material_effects.halation_threshold, 0.78F, 1.0e-5F);
+    require_close(plan_400d.material_effects.halation_threshold, 0.80F, 1.0e-5F);
+    require_close(plan_800t.material_effects.halation_threshold, 0.76F, 1.0e-5F);
+
+    // CineStill profiles run through v4 with distinct, stock-authored curves.
+    // 50D has the clearest low-speed separation; 400D remains the softer
+    // daylight option; 800T has higher C-41 contrast than 400D without
+    // becoming a hard-clipped teal-orange grade.
+    controls.characteristic_pipeline = true;
+    const auto v4_50d = solver.solve(input, stock_50d, controls);
+    const auto v4_400d = solver.solve(input, stock_400d, controls);
+    const auto v4_800t = solver.solve(input, stock_800t, controls);
+    assert(v4_50d.film_response.use_characteristic_curve);
+    assert(v4_400d.film_response.use_characteristic_curve);
+    assert(v4_800t.film_response.use_characteristic_curve);
+    assert(v4_50d.film_response.characteristic_curve.gamma >
+           v4_400d.film_response.characteristic_curve.gamma);
+    assert(v4_50d.film_response.characteristic_curve.latitude_stops >
+           v4_400d.film_response.characteristic_curve.latitude_stops);
+    assert(v4_800t.film_response.characteristic_curve.gamma >
+           v4_400d.film_response.characteristic_curve.gamma);
+    assert(v4_800t.film_response.characteristic_curve.latitude_stops <
+           v4_50d.film_response.characteristic_curve.latitude_stops);
 }
 
 void test_monochrome_profile_exposure_ramps_are_distinct() {

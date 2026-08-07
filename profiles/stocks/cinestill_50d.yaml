@@ -66,16 +66,17 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.22
-  radius_inner: 8
-  radius_outer: 26
+  strength: 0.12
+  threshold: 0.78
+  radius_inner: 5
+  radius_outer: 18
   warm_core:
   - 1.0
-  - 0.5
-  - 0.2
+  - 0.30
+  - 0.05
   red_fringe:
   - 1.0
-  - 0.1
+  - 0.04
   - 0.02
 chroma_coupling:
   hi_rolloff_start: 0.82
@@ -110,12 +111,23 @@ hue_chroma_gain:
   yellow: 0.04
   cyan: 0.04
 crossover:
-  # CineStill 50D (Vision3 250D minus rem-jet): DAYLIGHT-balanced, fine-grained, clean and
-  # neutral — NOT the tungsten teal-orange of 800T. Only a subtle crossover (gentle warm
-  # highlights, faintly cool shadows), like Vision3 250D. Its CineStill character is the
-  # halation glow (authored separately), not a strong colour cast.
+  # CineStill 50D is a low-speed daylight motion-picture emulsion prepared for
+  # C-41. It stays clean and neutral; its red halation is a tight, separately
+  # authored response rather than a tungsten teal-orange cast.
   shadow_cast_a: -0.03
   shadow_cast_b: -0.10
   highlight_cast_a: 0.10
   highlight_cast_b: 0.14
   exposure_sensitivity: 0.32
+characteristic_curve:
+  # Fine-grain 50D has the family's clearest separation and broadest highlight
+  # headroom. It must feel crisp without a reversal-film hard clip.
+  gamma: 1.12
+  latitude_stops: 11.8
+  toe_onset: 4.0
+  toe_hardness: 0.46
+  shoulder_onset: 5.8
+  shoulder_hardness: 0.38
+  d_min: 0.018
+  d_max: 0.990
+  channel_gamma_mult: [1.0, 1.0, 1.0]

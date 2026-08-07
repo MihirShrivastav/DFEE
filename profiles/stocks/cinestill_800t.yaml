@@ -3,8 +3,8 @@ stock_name: CineStill 800T
 stock_type: color_negative
 adaptation:
   base_iso: 800
-  default_strength: 0.88
-  camera_cast_compensation_sensitivity: 0.55
+  default_strength: 0.94
+  camera_cast_compensation_sensitivity: 0.68
   highlight_stress_sensitivity: 0.86
   shadow_noise_sensitivity: 0.72
 tone_response:
@@ -29,25 +29,25 @@ tone_response:
 color_response:
   shadow_bias_lab:
   - 0.0
-  - -0.6
-  - -1.0
+  - -0.25
+  - -0.50
   midtone_bias_lab:
   - 0.0
-  - -0.3
-  - -0.6
+  - -0.10
+  - -0.25
   highlight_bias_lab:
-  - 0.10
-  - 0.50
-  - 1.00
-  blue_cast_suppression: 0.08
-  green_magenta_stabilization: 0.30
+  - 0.05
+  - 0.32
+  - 0.65
+  blue_cast_suppression: 0.20
+  green_magenta_stabilization: 0.34
 hue_saturation_response:
-  saturation_boost: 1.14
-  red_orange_midtone_compression: 0.30
-  yellow_green_muting: 0.22
-  cyan_blue_highlight_compression: 0.18
-  neon_compression: 0.62
-  highlight_desaturation: 0.45
+  saturation_boost: 1.09
+  red_orange_midtone_compression: 0.34
+  yellow_green_muting: 0.18
+  cyan_blue_highlight_compression: 0.24
+  neon_compression: 0.66
+  highlight_desaturation: 0.50
 grain:
   size: 0.52
   strength: 0.40
@@ -66,16 +66,17 @@ grain:
   overexposure_smoothing: 0.24
 halation:
   trigger: specular_only
-  strength: 0.48
-  radius_inner: 8
-  radius_outer: 38
+  strength: 0.30
+  threshold: 0.76
+  radius_inner: 5
+  radius_outer: 24
   warm_core:
   - 1.0
-  - 0.35
-  - 0.05
+  - 0.22
+  - 0.035
   red_fringe:
   - 1.0
-  - 0.08
+  - 0.03
   - 0.0
 chroma_coupling:
   hi_rolloff_start: 0.68
@@ -106,18 +107,28 @@ compression:
   threshold: 0.45
   crosstalk: 0.32
 hue_chroma_gain:
-  cyan: 0.08
-  orange: 0.05
-  blue: 0.05
+  cyan: 0.04
+  orange: 0.03
+  blue: 0.03
 crossover:
-  # CineStill 800T (Vision3 500T minus rem-jet): THE tungsten night look. In daylight it
-  # reads cool with shadows going strongly BLUE-GREEN (teal) — even more than 500T — while
-  # highlights carry the warm/orange tungsten glow. Blue toe freed above so the curve
-  # supports the teal shadows rather than warming them. Highlights kept warm-ORANGE (a
-  # moderate, b high) rather than red-magenta. The signature red halation is authored
-  # separately in the halation block (strength 0.48, red core) — its rem-jet-removed glow.
-  shadow_cast_a: -0.13
-  shadow_cast_b: -0.38
-  highlight_cast_a: 0.28
-  highlight_cast_b: 0.34
-  exposure_sensitivity: 0.46
+  # 800T is a cool/tungsten-balanced high-speed C-41 negative. Daylight can read
+  # cool, but its stock response stays restrained instead of becoming a generic
+  # teal-orange grade. The tight red halation is authored separately.
+  shadow_cast_a: -0.07
+  shadow_cast_b: -0.20
+  highlight_cast_a: 0.15
+  highlight_cast_b: 0.22
+  exposure_sensitivity: 0.35
+characteristic_curve:
+  # 800T is C-41 processed at EI 800. Its output has modestly firmer contrast
+  # than Vision3 500T, but keeps the high-speed stock's long toe and extended
+  # highlight shoulder for night scenes and practical lights.
+  gamma: 1.10
+  latitude_stops: 10.8
+  toe_onset: 4.1
+  toe_hardness: 0.54
+  shoulder_onset: 5.3
+  shoulder_hardness: 0.44
+  d_min: 0.030
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

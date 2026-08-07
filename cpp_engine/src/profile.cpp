@@ -245,7 +245,7 @@ void validate_native_film_stock_contract(const FilmStockProfile& profile) {
         "grain.target_pgi_35mm_4x6", "grain.clumpiness", "grain.micro_grit", "grain.layer_correlation",
         "grain.shadow_response", "grain.midtone_response", "grain.highlight_response",
         "grain.underexposure_coarsening", "grain.overexposure_smoothing",
-        "halation.strength", "halation.radius_inner", "halation.radius_outer",
+        "halation.strength", "halation.threshold", "halation.radius_inner", "halation.radius_outer",
         "chroma_coupling.hi_rolloff_start", "chroma_coupling.hi_rolloff_rate", "chroma_coupling.hi_compression",
         "chroma_coupling.sh_rolloff_start", "chroma_coupling.sh_compression", "chroma_coupling.hi_hue_conv_rad",
         "chroma_coupling.hi_hue_conv_str",

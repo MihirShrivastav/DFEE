@@ -66,16 +66,17 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.16
-  radius_inner: 6
-  radius_outer: 22
+  strength: 0.14
+  threshold: 0.80
+  radius_inner: 5
+  radius_outer: 18
   warm_core:
   - 1.0
-  - 0.45
-  - 0.12
+  - 0.32
+  - 0.06
   red_fringe:
   - 1.0
-  - 0.1
+  - 0.04
   - 0.02
 chroma_coupling:
   hi_rolloff_start: 0.82
@@ -110,12 +111,24 @@ hue_chroma_gain:
   yellow: 0.04
   cyan: 0.02
 crossover:
-  # CineStill 400D (daylight cinema neg minus rem-jet): DAYLIGHT-balanced, versatile,
-  # natural colour with a gentle warm lean — between neutral 50D and tungsten 800T, but
-  # firmly on the daylight side (NOT teal-orange). Moderate warm highlights, faintly cool
-  # shadows. Halation slightly more present than 50D (below), less than 800T.
+  # CineStill 400D is a daylight still-photography negative with a soft palette,
+  # natural saturation and warm skin; it remains firmly distinct from 800T's
+  # tungsten balance. Halation is separately authored and intentionally subtle.
   shadow_cast_a: -0.04
   shadow_cast_b: -0.14
   highlight_cast_a: 0.16
   highlight_cast_b: 0.22
   exposure_sensitivity: 0.36
+characteristic_curve:
+  # 400D is a still-photography daylight negative: soft palette, natural
+  # saturation and a wide usable range. Keep its contrast below 50D while
+  # preserving a forgiving toe and shoulder.
+  gamma: 1.05
+  latitude_stops: 11.0
+  toe_onset: 4.0
+  toe_hardness: 0.52
+  shoulder_onset: 5.2
+  shoulder_hardness: 0.46
+  d_min: 0.030
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

@@ -78,6 +78,28 @@ copying Gold's stronger colour energy or inventing hard shadows/highlights.
 
 Sources: [Kodak ColorPlus product information](https://kodak.photosys.com/products/colorplus-200-color-negative-film-35mm-36-exp), [B&H ColorPlus specification](https://www.bhphotovideo.com/c/product/1476366-REG/kodak_603147_color_print_film_200_36.html/specs).
 
+## Stock Rollout: CineStill 50D, 400D, And 800T (2026-08-08)
+
+The CineStill family now uses v4 characteristic curves and stock-authored halation
+thresholds. The threshold is a profile neutral point: a 50-percent UI Halation
+Threshold value preserves that stock's normal behavior, while the user can lower
+or raise it without forcing every profile to bloom at the same luminance.
+
+50D is calibrated as the low-speed daylight, fine-grain/highlight-latitude option;
+400D as the soft-palette daylight still film; and 800T as a cool/tungsten-balanced
+high-speed C-41 negative with a modestly firmer response. 800T's colour response
+has been restrained from the prior generic teal-orange grade. Its red halation is
+now tighter, redder, and triggered only by clear overexposed point sources instead
+of broad bright surfaces.
+
+This distinction follows CineStill's own guidance: 800T's red glow occurs around
+points of light surrounded by darker tones, 400D can halate at focused overexposed
+highlights, 400D has a soft palette/natural saturation, and 50D is a daylight
+fine-grain motion-picture emulsion. The 800T tonal curve also accounts for its
+standard C-41 development, which CineStill says moderately increases gamma.
+
+Sources: [800T usage guide](https://cinestillfilm.com/blogs/news/cinestill-800t-in-your-toolbox), [400D product details](https://cinestillfilm.com/collections/the-400d-film-family/products/400dynamic-35mm), [50D technical guidance](https://help.cinestillfilm.com/hc/en-us/articles/360028918672-What-is-different-about-CineStill-50Daylight-film).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.
