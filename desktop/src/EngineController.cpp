@@ -497,7 +497,7 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
     dfee::NativePreviewRenderRequest request;
     request.filename = currentFile_.toStdString();
     request.stock = stockId_.toStdString();
-    request.effect_pipeline_version = "filmic_v3";
+    request.effect_pipeline_version = "filmic_v4"; // A/B eval: display-referred film tone (Portra 400 / Tri-X 400 / Kodachrome 64 have curve blocks)
     request.exposure_placement = filmControls_.value("exposure_placement").toString().toStdString();
     request.film_exposure_ev = static_cast<float>(filmControls_.value("film_exposure_ev").toDouble());
     request.adaptive = filmControls_.value("adaptive").toBool();
