@@ -63,6 +63,21 @@ digital input contains the film negative's entire exposure range.
 
 Sources: [Vision3 250D brochure](https://www.kodak.com/content/pdfs/KODAK-VISION3-250D-5207-7207-brochure.pdf), [Vision3 500T technical information](https://www.kodak.com/content/products-brochures/motion-picture/KODAK-VISION3-5219-7219-technical-information.pdf).
 
+## Stock Rollout: ColorPlus 200 (2026-08-08)
+
+ColorPlus 200 now has its v4 curve without changing its existing quieter colour,
+consumer-grain, or restrained crossover calibration. Kodak does not publish a
+current ColorPlus sensitometric data sheet, so this is intentionally a conservative
+role calibration rather than a fabricated density claim: softer than Gold through
+the mids, gently open at black, and with practical daylight-negative latitude.
+
+The available product information consistently describes ISO-200, daylight-balanced
+C-41 ColorPlus as fine-grained, sharp, naturally to richly saturated, and broadly
+forgiving. Those facts justify a general-use negative response, but do not justify
+copying Gold's stronger colour energy or inventing hard shadows/highlights.
+
+Sources: [Kodak ColorPlus product information](https://kodak.photosys.com/products/colorplus-200-color-negative-film-35mm-36-exp), [B&H ColorPlus specification](https://www.bhphotovideo.com/c/product/1476366-REG/kodak_603147_color_print_film_200_36.html/specs).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

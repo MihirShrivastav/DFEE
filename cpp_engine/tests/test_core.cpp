@@ -834,6 +834,14 @@ void test_color_negative_profiles_are_distinct() {
            value(gold_200, "tone_response.midtone_contrast"));
     assert(value(colorplus_200, "hue_saturation_response.saturation_boost") <
            value(gold_200, "hue_saturation_response.saturation_boost"));
+    assert(value(colorplus_200, "characteristic_curve.gamma") <
+           value(gold_200, "characteristic_curve.gamma"));
+    assert(value(colorplus_200, "characteristic_curve.latitude_stops") <
+           value(gold_200, "characteristic_curve.latitude_stops"));
+    assert(value(colorplus_200, "characteristic_curve.toe_onset") <
+           value(gold_200, "characteristic_curve.toe_onset"));
+    assert(value(colorplus_200, "characteristic_curve.d_min") >
+           value(gold_200, "characteristic_curve.d_min"));
 
     // Fuji's consumer pair is not a generic green grade. C200 is the finer,
     // natural-skin ISO-200 latitude option; Superia is the more vivid, broader

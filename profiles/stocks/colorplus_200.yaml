@@ -119,3 +119,17 @@ crossover:
   highlight_cast_a: 0.10
   highlight_cast_b: 0.14
   exposure_sensitivity: 0.32
+characteristic_curve:
+  # ColorPlus 200 is the quieter everyday daylight negative: fine but visible
+  # consumer-film texture, moderate colour energy, and broad practical
+  # latitude. Its v4 curve stays softer and less vivid than Gold, with a
+  # gently lifted low end rather than a faux crushed-black vintage grade.
+  gamma: 1.10
+  latitude_stops: 9.2
+  toe_onset: 3.5
+  toe_hardness: 0.65
+  shoulder_onset: 4.2
+  shoulder_hardness: 0.60
+  d_min: 0.045
+  d_max: 0.980
+  channel_gamma_mult: [1.0, 1.0, 1.0]
