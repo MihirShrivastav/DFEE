@@ -118,8 +118,20 @@ crossover:
   # PRONOUNCED cool-cyan shadow cast (stronger than Gold; the "shadows go off in grey
   # light" trait). Highlight cast kept warm but not over-yellow so blues/greens stay
   # natural; skin's red lean comes from the warm midtone + red hue gain + high saturation.
-  shadow_cast_a: -0.06
-  shadow_cast_b: -0.26
-  highlight_cast_a: 0.20
-  highlight_cast_b: 0.30
+  shadow_cast_a: -0.04
+  shadow_cast_b: -0.15
+  highlight_cast_a: 0.15
+  highlight_cast_b: 0.22
   exposure_sensitivity: 0.46
+characteristic_curve:
+  # Kodak UltraMax 400: vivid consumer stock — punchier/more contrast than Portra, saturated,
+  # with reasonably deep blacks and held warm highlights.
+  gamma: 1.28
+  latitude_stops: 8.0
+  toe_onset: 3.2
+  toe_hardness: 0.8
+  shoulder_onset: 4.0
+  shoulder_hardness: 0.7
+  d_min: 0.035
+  d_max: 0.96
+  channel_gamma_mult: [1.0, 1.0, 1.0]
