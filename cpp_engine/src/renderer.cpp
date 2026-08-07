@@ -1,4 +1,5 @@
 #include "dfee/renderer.hpp"
+#include "dfee/characteristic_curve.hpp"
 #include "dfee/color_spaces.hpp"
 #include "dfee/mask_sample.hpp"
 #include "dfee/parallel.hpp"
@@ -1308,77 +1309,97 @@ Image FilmRenderer::apply_film_tone_response(
     std::array<float, 3> mid{};
     std::array<float, 3> shoulder_k{};
     std::array<std::vector<float>, 3> tone_luts{};
-    for (int channel = 0; channel < 3; ++channel) {
-        const std::size_t index = static_cast<std::size_t>(channel);
-        alpha[index] =
-            1.0F + response.toe_strength * response.channel_toe_mult[static_cast<std::size_t>(channel)];
-        beta[index] =
-            1.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
-        mid[index] =
-            response.midtone_density * response.channel_midtone_mult[static_cast<std::size_t>(channel)];
-        shoulder_k[index] =
-            2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
+    if (response.use_characteristic_curve) {
+        for (int channel = 0; channel < 3; ++channel) {
+            const std::size_t index = static_cast<std::size_t>(channel);
+            // shoulder_k is still used by the apply_tone_curve lambda for ch > 1 extrapolation.
+            shoulder_k[index] =
+                2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
 
-        auto& lut = tone_luts[index];
-        lut.resize(kToneLutSize);
-        for (std::size_t sample_index = 0; sample_index < kToneLutSize; ++sample_index) {
-            const float ch_clamp = static_cast<float>(sample_index) / static_cast<float>(kToneLutSize - 1U);
-            const float ch_safe = clampf(ch_clamp, 1.0e-12F, 1.0F - 1.0e-12F);
-            const float ch_pow_alpha = std::pow(ch_safe, alpha[index]);
-            float s_curve = ch_pow_alpha /
-                (ch_pow_alpha + std::pow(1.0F - ch_safe, beta[index]));
-
-            const float mid_value = mid[index];
-            if (mid_value != 1.0F) {
-                const float delta = s_curve - 0.5F;
-                const float mid_weight = std::exp(-(delta * delta) / (2.0F * 0.12F * 0.12F));
-                const float s_curve_gamma = std::pow(s_curve, 1.0F / mid_value);
-                s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
+            auto& lut = tone_luts[index];
+            lut.resize(kToneLutSize);
+            CharacteristicCurve cc = response.characteristic_curve;
+            cc.gamma *= response.curve_gamma_mult[index];  // per-dye-layer gamma => crossover
+            for (std::size_t s = 0; s < kToneLutSize; ++s) {
+                const float ch = static_cast<float>(s) / static_cast<float>(kToneLutSize - 1U);
+                const float logE = scene_logE(ch, response.scene_midtone_anchor, response.scene_exposure_shift);
+                const float y = curve_eval(cc, logE);          // perceptual [0,1]
+                lut[s] = std::pow(y, 2.2F);                    // back to linear for the pipeline
             }
+        }
+    } else {
+        for (int channel = 0; channel < 3; ++channel) {
+            const std::size_t index = static_cast<std::size_t>(channel);
+            alpha[index] =
+                1.0F + response.toe_strength * response.channel_toe_mult[static_cast<std::size_t>(channel)];
+            beta[index] =
+                1.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
+            mid[index] =
+                response.midtone_density * response.channel_midtone_mult[static_cast<std::size_t>(channel)];
+            shoulder_k[index] =
+                2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
 
-            // Characteristic-curve toe latitude. toe_strength sets the depth of the
-            // shadow compression; toe_length sets how far that compression extends
-            // into the lower mids. Keeping the transition bounded and smooth avoids
-            // turning a longer toe into a global gamma change.
-            const float toe_end = std::clamp(0.10F + response.toe_length * 0.55F, 0.10F, 0.55F);
-            const float toe_t = clampf(s_curve / toe_end, 0.0F, 1.0F);
-            const float toe_weight = (1.0F - toe_t) * (1.0F - toe_t);
-            const float toe_curve = toe_end * std::pow(toe_t, 1.0F + response.toe_strength * 0.35F);
-            s_curve = s_curve * (1.0F - toe_weight) + toe_curve * toe_weight;
+            auto& lut = tone_luts[index];
+            lut.resize(kToneLutSize);
+            for (std::size_t sample_index = 0; sample_index < kToneLutSize; ++sample_index) {
+                const float ch_clamp = static_cast<float>(sample_index) / static_cast<float>(kToneLutSize - 1U);
+                const float ch_safe = clampf(ch_clamp, 1.0e-12F, 1.0F - 1.0e-12F);
+                const float ch_pow_alpha = std::pow(ch_safe, alpha[index]);
+                float s_curve = ch_pow_alpha /
+                    (ch_pow_alpha + std::pow(1.0F - ch_safe, beta[index]));
 
-            // Highlight rolloff (filmic_v3): above the knee, compress highlights DOWN with a
-            // Reinhard shoulder so bright regions retain gradation and ease into a soft,
-            // creamy near-white instead of clipping to paper-white. Stronger amount pulls the
-            // white point lower (more protective). Off (amount 0 / knee >= 1) for
-            // filmic_v2/parity, so those stay byte-identical.
-            if (response.highlight_rolloff_amount > 0.0F && response.highlight_rolloff_knee < 1.0F &&
-                s_curve > response.highlight_rolloff_knee) {
-                const float knee = response.highlight_rolloff_knee;
-                const float range = 1.0F - knee;
-                const float t = (s_curve - knee) / range;
-                const float k = response.highlight_rolloff_amount;
-                s_curve = knee + range * (t / (1.0F + k * t));
+                const float mid_value = mid[index];
+                if (mid_value != 1.0F) {
+                    const float delta = s_curve - 0.5F;
+                    const float mid_weight = std::exp(-(delta * delta) / (2.0F * 0.12F * 0.12F));
+                    const float s_curve_gamma = std::pow(s_curve, 1.0F / mid_value);
+                    s_curve = s_curve * (1.0F - mid_weight) + s_curve_gamma * mid_weight;
+                }
+
+                // Characteristic-curve toe latitude. toe_strength sets the depth of the
+                // shadow compression; toe_length sets how far that compression extends
+                // into the lower mids. Keeping the transition bounded and smooth avoids
+                // turning a longer toe into a global gamma change.
+                const float toe_end = std::clamp(0.10F + response.toe_length * 0.55F, 0.10F, 0.55F);
+                const float toe_t = clampf(s_curve / toe_end, 0.0F, 1.0F);
+                const float toe_weight = (1.0F - toe_t) * (1.0F - toe_t);
+                const float toe_curve = toe_end * std::pow(toe_t, 1.0F + response.toe_strength * 0.35F);
+                s_curve = s_curve * (1.0F - toe_weight) + toe_curve * toe_weight;
+
+                // Highlight rolloff (filmic_v3): above the knee, compress highlights DOWN with a
+                // Reinhard shoulder so bright regions retain gradation and ease into a soft,
+                // creamy near-white instead of clipping to paper-white. Stronger amount pulls the
+                // white point lower (more protective). Off (amount 0 / knee >= 1) for
+                // filmic_v2/parity, so those stay byte-identical.
+                if (response.highlight_rolloff_amount > 0.0F && response.highlight_rolloff_knee < 1.0F &&
+                    s_curve > response.highlight_rolloff_knee) {
+                    const float knee = response.highlight_rolloff_knee;
+                    const float range = 1.0F - knee;
+                    const float t = (s_curve - knee) / range;
+                    const float k = response.highlight_rolloff_amount;
+                    s_curve = knee + range * (t / (1.0F + k * t));
+                }
+
+                // Film-like shadow lift (filmic_v3): a COMPRESSIVE toe that mirrors the highlight
+                // Reinhard shoulder above. Below the knee, bend the darkest tones UP with gradation
+                // (lifted but soft, like a real film toe) instead of relying on a flat additive fog
+                // floor (which reads milky). Continuous at the knee. Off (amount 0) for
+                // filmic_v2/parity and whenever Shadow Lift <= 0.
+                if (response.shadow_lift_amount > 0.0F && response.shadow_lift_knee > 0.0F &&
+                    s_curve < response.shadow_lift_knee) {
+                    const float knee = response.shadow_lift_knee;
+                    const float t = (knee - s_curve) / knee;        // 0 at the knee, 1 at true black
+                    const float k = response.shadow_lift_amount;
+                    s_curve = knee - knee * (t / (1.0F + k * t));   // lift toward the knee, compressing shadow contrast
+                }
+
+                // Base-fog floor: the stock's natural fog (a whisper under the toe in filmic_v3; the
+                // full Shadow Lift amount in filmic_v2/parity). Quadratic falloff to the knee.
+                const float toe_knee = std::max(0.05F, response.shadow_lift_knee);
+                const float toe_fade = clampf(s_curve / toe_knee, 0.0F, 1.0F);
+                const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
+                lut[sample_index] = clamp01(s_curve + response.black_density_floor * shadow_weight);
             }
-
-            // Film-like shadow lift (filmic_v3): a COMPRESSIVE toe that mirrors the highlight
-            // Reinhard shoulder above. Below the knee, bend the darkest tones UP with gradation
-            // (lifted but soft, like a real film toe) instead of relying on a flat additive fog
-            // floor (which reads milky). Continuous at the knee. Off (amount 0) for
-            // filmic_v2/parity and whenever Shadow Lift <= 0.
-            if (response.shadow_lift_amount > 0.0F && response.shadow_lift_knee > 0.0F &&
-                s_curve < response.shadow_lift_knee) {
-                const float knee = response.shadow_lift_knee;
-                const float t = (knee - s_curve) / knee;        // 0 at the knee, 1 at true black
-                const float k = response.shadow_lift_amount;
-                s_curve = knee - knee * (t / (1.0F + k * t));   // lift toward the knee, compressing shadow contrast
-            }
-
-            // Base-fog floor: the stock's natural fog (a whisper under the toe in filmic_v3; the
-            // full Shadow Lift amount in filmic_v2/parity). Quadratic falloff to the knee.
-            const float toe_knee = std::max(0.05F, response.shadow_lift_knee);
-            const float toe_fade = clampf(s_curve / toe_knee, 0.0F, 1.0F);
-            const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);
-            lut[sample_index] = clamp01(s_curve + response.black_density_floor * shadow_weight);
         }
     }
 

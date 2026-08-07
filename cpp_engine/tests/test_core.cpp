@@ -3584,6 +3584,27 @@ static void test_pipeline_gate() {
     std::printf("test_pipeline_gate passed\n");
 }
 
+static void test_curve_render() {
+    const int N = 64;
+    dfee::Image ramp(N, 1, 3);
+    for (int i = 0; i < N; ++i) { float v = static_cast<float>(i) / (N - 1); for (int c = 0; c < 3; ++c) ramp.pixels[i*3+c] = v; }
+    dfee::FilmRenderer renderer;
+    dfee::FilmResponsePlan plan;                       // defaults
+    plan.use_characteristic_curve = true;
+    plan.scene_midtone_anchor = 0.18f; plan.scene_exposure_shift = 0.0f;
+    plan.characteristic_curve.gamma = 1.0f;
+    dfee::Image out1 = renderer.apply_film_tone_response(ramp, plan);
+    // monotonic
+    for (int i = 1; i < N; ++i) assert(out1.pixels[i*3] >= out1.pixels[(i-1)*3] - 1e-5f);
+    // higher gamma => larger output spread between the 25th and 75th input samples
+    dfee::FilmResponsePlan plan2 = plan; plan2.characteristic_curve.gamma = 2.2f;
+    dfee::Image out2 = renderer.apply_film_tone_response(ramp, plan2);
+    float spread1 = out1.pixels[48*3] - out1.pixels[16*3];
+    float spread2 = out2.pixels[48*3] - out2.pixels[16*3];
+    assert(spread2 > spread1);
+    std::printf("test_curve_render passed\n");
+}
+
 static void test_curve_mapping() {
     dfee::CharacteristicCurve base; base.gamma = 1.0f; base.shoulder_onset = 2.0f; base.toe_onset = 2.0f; base.d_min = 0.0f;
     // Film Contrast +100 raises gamma; -100 lowers it.
@@ -3681,6 +3702,7 @@ int main() {
         test_color_character_synthetic_zone_hue_fixture();
         test_characteristic_curve();
         test_pipeline_gate();
+        test_curve_render();
         test_curve_mapping();
         std::cout << "dfee_tests passed\n";
         return 0;
