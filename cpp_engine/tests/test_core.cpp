@@ -3636,6 +3636,13 @@ static void test_curve_render() {
     const float input = shadow_inputs[3];
     assert(std::abs(softened.pixels[kTestPixel] - input) <
            std::abs(shadow_out.pixels[kTestPixel] - input));
+
+    // Zero rendered-input strength is an exact identity, not merely a numerically
+    // close linear-light blend. This makes the stock tone a controllable perceptual
+    // delta over an already-developed TIFF.
+    rendered_input.tone_response_strength = 0.0f;
+    const dfee::Image identity = renderer.apply_film_tone_response(shadows, rendered_input);
+    assert(identity.pixels == shadows.pixels);
     std::printf("test_curve_render passed\n");
 }
 

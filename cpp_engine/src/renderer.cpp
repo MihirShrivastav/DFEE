@@ -1340,6 +1340,10 @@ Image FilmRenderer::apply_film_tone_response(
             const float f = fx - static_cast<float>(i0);
             return luma_lut[static_cast<std::size_t>(i0)] * (1.0F - f) + luma_lut[static_cast<std::size_t>(i1)] * f;
         };
+        const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
+        if (tone_k <= 0.0F) {
+            return rgb_linear;
+        }
         parallel_for_index(static_cast<std::ptrdiff_t>(n), [&](std::ptrdiff_t pidx) {
             const std::size_t b = static_cast<std::size_t>(pidx) * 3U;
             const float r = rgb_linear.pixels[b + 0];
@@ -1348,27 +1352,27 @@ Image FilmRenderer::apply_film_tone_response(
             const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * gc + 0.0722F * bc);
             const float log_e = scene_logE(
                 luma, response.scene_midtone_anchor, response.scene_exposure_shift);
-            const float out_lin = std::pow(lcurve(log_e), 2.2F);
-            std::array<float, 3> curve_rgb{};
+            const float input_tone = std::pow(luma, 1.0F / 2.2F);
+            const float stock_tone = lcurve(log_e);
+
+            // The characteristic curve is authored in perceptual tone. A developed
+            // TIFF already has its own display curve, so its stock contribution must
+            // be blended as a tone delta here, not as a linear-light image mix. At
+            // zero strength this is exactly identity; at one it is the full stock
+            // curve used for RAW. The same scale preserves RGB chroma.
+            const float output_tone = std::max(
+                0.0F, input_tone + tone_k * (stock_tone - input_tone));
+            const float out_lin = std::pow(output_tone, 2.2F);
             if (luma > 1.0e-4F) {
                 const float sgain = std::min(out_lin / luma, 16.0F);   // chroma-preserving luminance scale
-                curve_rgb = {
-                    std::max(0.0F, r * sgain),
-                    std::max(0.0F, gc * sgain),
-                    std::max(0.0F, bc * sgain),
-                };
+                toned.pixels[b + 0] = std::max(0.0F, r * sgain);
+                toned.pixels[b + 1] = std::max(0.0F, gc * sgain);
+                toned.pixels[b + 2] = std::max(0.0F, bc * sgain);
             } else {
-                curve_rgb = {out_lin, out_lin, out_lin};
+                toned.pixels[b + 0] = out_lin;
+                toned.pixels[b + 1] = out_lin;
+                toned.pixels[b + 2] = out_lin;
             }
-
-            // A Lightroom TIFF already has a display/develop curve. The session
-            // reduces tone_response_strength according to Preserve Rendered Tone;
-            // honor that contract in v4 as well. RAW uses strength 1.0 and receives
-            // the full stock curve, while developed input avoids a second full curve.
-            const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
-            toned.pixels[b + 0] = r + tone_k * (curve_rgb[0] - r);
-            toned.pixels[b + 1] = gc + tone_k * (curve_rgb[1] - gc);
-            toned.pixels[b + 2] = bc + tone_k * (curve_rgb[2] - bc);
         });
         return toned;
     }

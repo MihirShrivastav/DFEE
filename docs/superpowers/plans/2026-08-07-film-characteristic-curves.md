@@ -24,6 +24,9 @@ luminance-based, preserving chroma by RGB scaling; legacy pipelines are unchange
 For developed TIFF/JPEG input, v4 must also honor the existing `rendered_input`
 contract. The desktop's default `80` resolves to a restrained tone blend rather than
 a second full display curve. RAW input retains a full-strength characteristic curve.
+That blend occurs in perceptual curve space: `source_tone + strength *
+(stock_tone - source_tone)`. This makes zero strength exact identity and avoids the
+shadow-weighting error of interpolating the two results in linear light.
 
 ## Global Constraints
 
