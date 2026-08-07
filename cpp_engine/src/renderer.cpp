@@ -1310,56 +1310,91 @@ Image FilmRenderer::apply_film_tone_response(
     std::array<float, 3> shoulder_k{};
     std::array<std::vector<float>, 3> tone_luts{};
     if (response.use_characteristic_curve) {
-        // Exposure-preserving contrast pivot: the mean perceptual luma of the scene. Pivoting
-        // the film contrast around the image's OWN brightness keeps dark scenes dark (they gain
-        // contrast, they are not pushed darker/flatter) and bright scenes bright — we impart the
-        // stock's contrast character without re-exposing.
-        double pivot_acc = 0.0;
-        const std::size_t pivot_n = rgb_linear.pixel_count();
-        for (std::size_t i = 0; i < pivot_n; ++i) {
+        // ---- Scene-aware, luminance-based film tone (display-referred) ----
+        // Measure the scene in perceptual luma: mean = exposure-preserving pivot (Km); black
+        // (Kb) and white (Kw) points from percentiles, so the film maps the ACTUAL scene range
+        // onto its response (no hand-waved fixed endpoints). Applied to LUMINANCE only, chroma
+        // preserved by scaling RGB by the luma ratio, so contrast adds tonal punch WITHOUT
+        // inflating saturation. gamma = contrast (Film Contrast); d_min = black floor (Shadow
+        // Lift); d_max = soft white ceiling with a Reinhard shoulder (Highlight Rolloff) so
+        // highlights roll off with gradation and cannot pile at pure white. Full strength —
+        // a display-referred reshape does not double-develop. Film Exposure stays pre-film.
+        const std::size_t n = rgb_linear.pixel_count();
+        std::array<std::uint32_t, 256> hist{};
+        double luma_acc = 0.0;
+        for (std::size_t i = 0; i < n; ++i) {
             const float l = 0.2126F * rgb_linear.pixels[i * 3 + 0]
                           + 0.7152F * rgb_linear.pixels[i * 3 + 1]
                           + 0.0722F * rgb_linear.pixels[i * 3 + 2];
-            pivot_acc += std::pow(std::clamp(l, 0.0F, 1.0F), 1.0F / 2.2F);
+            const float lp = std::pow(std::clamp(l, 0.0F, 1.0F), 1.0F / 2.2F);
+            luma_acc += lp;
+            hist[static_cast<std::size_t>(std::clamp(static_cast<int>(lp * 255.0F + 0.5F), 0, 255))]++;
         }
-        const float scene_pivot = std::clamp(
-            static_cast<float>(pivot_acc / static_cast<double>(std::max<std::size_t>(pivot_n, 1U))),
-            0.20F, 0.70F);
-        for (int channel = 0; channel < 3; ++channel) {
-            const std::size_t index = static_cast<std::size_t>(channel);
-            // shoulder_k is still used by the apply_tone_curve lambda for ch > 1 extrapolation.
-            shoulder_k[index] =
-                2.0F + response.shoulder_strength * response.channel_shoulder_mult[static_cast<std::size_t>(channel)];
-
-            auto& lut = tone_luts[index];
-            lut.resize(kToneLutSize);
-            CharacteristicCurve cc = response.characteristic_curve;
-            cc.gamma *= response.curve_gamma_mult[index];  // per-dye-layer gamma => crossover
-            // Display-referred film tone: reshape the developed (TIFF/sRGB) tones in PERCEPTUAL
-            // space around mid-grey (0.4586 = 0.18^(1/2.2)). gamma = contrast around the pivot;
-            // soft exponential knees roll highlights toward d_max and lift shadows toward d_min
-            // so the curve CANNOT hard-clip (blow) or crush. Film Exposure is applied in linear
-            // first. This preserves overall exposure (mid maps to mid) and imparts the stock's
-            // contrast character at full strength — no scene-referred re-exposure.
-            const float dmn = std::clamp(cc.d_min, 0.0F, 0.4F);
-            const float dmx = std::clamp(cc.d_max, dmn + 0.2F, 1.0F);
-            // Small knees: only the extreme highlights/shadows soft-clip, so the bulk of the
-            // range keeps full gamma contrast (a wide knee flattens darker scenes).
-            const float knee = std::clamp(0.10F / std::max(cc.shoulder_hardness, 0.5F), 0.05F, 0.14F);
-            // NOTE: Film Exposure is applied by the pre-film stage; do NOT re-apply it here
-            // (that double-counts exposure and interacts badly with the pivot).
-            for (std::size_t s = 0; s < kToneLutSize; ++s) {
-                const float ch = static_cast<float>(s) / static_cast<float>(kToneLutSize - 1U);
-                const float d = std::clamp(std::pow(ch, 1.0F / 2.2F), 0.0F, 1.0F);
-                const float c = scene_pivot + (d - scene_pivot) * cc.gamma;   // contrast around the scene's own brightness
-                float y;
-                if (c > dmx - knee)      { y = dmx - knee * std::exp(-(c - (dmx - knee)) / knee); }   // soft shoulder
-                else if (c < dmn + knee) { y = dmn + knee * std::exp(-((dmn + knee) - c) / knee); }   // soft toe
-                else                     { y = c; }
-                lut[s] = std::pow(std::clamp(y, 0.0F, 1.0F), 2.2F);
+        const float mean_lp = static_cast<float>(luma_acc / static_cast<double>(std::max<std::size_t>(n, 1U)));
+        const auto pctile = [&](float frac) {
+            const auto target = static_cast<std::uint64_t>(frac * static_cast<double>(n));
+            std::uint64_t cum = 0;
+            for (int bni = 0; bni < 256; ++bni) {
+                cum += hist[static_cast<std::size_t>(bni)];
+                if (cum >= target) { return static_cast<float>(bni) / 255.0F; }
             }
+            return 1.0F;
+        };
+        const float Km = std::clamp(mean_lp, 0.15F, 0.80F);              // exposure-preserving pivot
+        const float Kb = std::clamp(pctile(0.02F), 0.0F, Km - 0.04F);   // scene black point
+        const float Kw = std::clamp(pctile(0.98F), Km + 0.04F, 1.0F);   // scene white point
+
+        const CharacteristicCurve& cc = response.characteristic_curve;
+        const float g   = std::clamp(cc.gamma, 0.2F, 3.0F);             // luma contrast
+        const float dmn = std::clamp(cc.d_min, 0.0F, 0.35F);           // film black floor
+        const float dmx = std::clamp(cc.d_max, 0.70F, 1.0F);          // soft white ceiling
+        const float sh_knee = std::max(dmn + 0.25F, dmx - 0.42F);      // where the highlight shoulder starts
+        const float sh_range = std::max(dmx - sh_knee, 1.0e-3F);
+        const float sKb = Km + (Kb - Km) * g;                          // straight-line value at scene black
+        constexpr int kL = 1024;
+        std::array<float, kL> luma_lut{};
+        for (int i = 0; i < kL; ++i) {
+            const float lp = static_cast<float>(i) / static_cast<float>(kL - 1);
+            float out = Km + (lp - Km) * g;                            // straight-line gamma contrast around pivot
+            if (lp < Kb) {                                             // toe: scene-black region -> film black floor
+                const float t = Kb > 1.0e-4F ? lp / Kb : 1.0F;
+                const float ss = t * t * (3.0F - 2.0F * t);            // smoothstep
+                out = dmn + (sKb - dmn) * ss;
+            }
+            if (out > sh_knee) {                                       // shoulder: roll highlights toward d_max (soft, gradation kept)
+                out = dmx - sh_range * std::exp(-(out - sh_knee) / sh_range);
+            }
+            luma_lut[static_cast<std::size_t>(i)] = std::clamp(out, 0.0F, 1.0F);
         }
-    } else {
+        const auto lcurve = [&](float lp) {
+            const float fx = std::clamp(lp, 0.0F, 1.0F) * static_cast<float>(kL - 1);
+            const int i0 = static_cast<int>(fx);
+            const int i1 = std::min(i0 + 1, kL - 1);
+            const float f = fx - static_cast<float>(i0);
+            return luma_lut[static_cast<std::size_t>(i0)] * (1.0F - f) + luma_lut[static_cast<std::size_t>(i1)] * f;
+        };
+        parallel_for_index(static_cast<std::ptrdiff_t>(n), [&](std::ptrdiff_t pidx) {
+            const std::size_t b = static_cast<std::size_t>(pidx) * 3U;
+            const float r = rgb_linear.pixels[b + 0];
+            const float gc = rgb_linear.pixels[b + 1];
+            const float bc = rgb_linear.pixels[b + 2];
+            const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * gc + 0.0722F * bc);
+            const float lp = std::pow(std::clamp(luma, 0.0F, 1.0F), 1.0F / 2.2F);
+            const float out_lin = std::pow(lcurve(lp), 2.2F);
+            if (luma > 1.0e-4F) {
+                const float sgain = std::min(out_lin / luma, 16.0F);   // chroma-preserving luminance scale
+                toned.pixels[b + 0] = std::max(0.0F, r * sgain);
+                toned.pixels[b + 1] = std::max(0.0F, gc * sgain);
+                toned.pixels[b + 2] = std::max(0.0F, bc * sgain);
+            } else {
+                toned.pixels[b + 0] = out_lin;
+                toned.pixels[b + 1] = out_lin;
+                toned.pixels[b + 2] = out_lin;
+            }
+        });
+        return toned;
+    }
+    {
         for (int channel = 0; channel < 3; ++channel) {
             const std::size_t index = static_cast<std::size_t>(channel);
             alpha[index] =

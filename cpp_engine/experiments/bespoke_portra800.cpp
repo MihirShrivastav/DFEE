@@ -252,6 +252,7 @@ int main(int argc, char** argv) {
     req.halation = "Auto";
     req.film_contrast = film_contrast;
     req.shadow_lift = shadow_lift;
+    req.highlight_rolloff = env_f("DFEE_HL_ROLLOFF", 100.0F);  // 0..200, 100 = stock default
     req.temp = temp;
     req.film_color_density = film_color_density;
     req.film_exposure_ev = film_exposure_ev;

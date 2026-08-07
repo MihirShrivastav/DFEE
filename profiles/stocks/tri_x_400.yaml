@@ -111,5 +111,5 @@ characteristic_curve:
   shoulder_onset: 3.4
   shoulder_hardness: 0.85
   d_min: 0.03
-  d_max: 1.0
+  d_max: 0.96
   channel_gamma_mult: [1.0, 1.0, 1.0]

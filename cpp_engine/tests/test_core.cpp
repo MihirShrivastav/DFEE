@@ -3610,8 +3610,8 @@ static void test_curve_mapping() {
     // Film Contrast +100 raises gamma; -100 lowers it.
     assert(dfee::map_characteristic_curve(base, 200.f, 100.f, 0.f).gamma > 1.0f);
     assert(dfee::map_characteristic_curve(base, 0.f,   100.f, 0.f).gamma < 1.0f);
-    // Highlight Rolloff up pulls the shoulder onset EARLIER (smaller).
-    assert(dfee::map_characteristic_curve(base, 100.f, 200.f, 0.f).shoulder_onset < base.shoulder_onset);
+    // Highlight Rolloff up lowers the white ceiling d_max (recovers/rolls highlights).
+    assert(dfee::map_characteristic_curve(base, 100.f, 200.f, 0.f).d_max < base.d_max);
     // Shadow Lift up raises d_min (lifted toe).
     assert(dfee::map_characteristic_curve(base, 100.f, 100.f, 100.f).d_min > base.d_min);
     // Exposure shift: negatives get a gentle expose-to-right bias at EV 0; reversal neutral.
