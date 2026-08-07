@@ -3625,6 +3625,17 @@ static void test_curve_render() {
     for (std::size_t i = 1; i < shadow_inputs.size(); ++i) {
         assert(shadow_out.pixels[i * 3] > shadow_out.pixels[(i - 1) * 3]);
     }
+
+    // Rendered-input attenuation must also apply to v4. Lightroom TIFFs already
+    // contain a development curve, so Preserve Rendered Tone blends the stock curve
+    // back toward the incoming pixels rather than double-developing shadow detail.
+    dfee::FilmResponsePlan rendered_input = portra;
+    rendered_input.tone_response_strength = 0.40f;
+    const dfee::Image softened = renderer.apply_film_tone_response(shadows, rendered_input);
+    constexpr std::size_t kTestPixel = 3U * 3U;
+    const float input = shadow_inputs[3];
+    assert(std::abs(softened.pixels[kTestPixel] - input) <
+           std::abs(shadow_out.pixels[kTestPixel] - input));
     std::printf("test_curve_render passed\n");
 }
 

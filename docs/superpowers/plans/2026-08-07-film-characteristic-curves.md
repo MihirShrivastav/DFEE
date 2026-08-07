@@ -21,6 +21,10 @@ through a `[-16,+12]` stop LUT. The pure curve derives its straight-line slope f
 black floor to retain C1 continuity and shadow gradation. The v4 path remains
 luminance-based, preserving chroma by RGB scaling; legacy pipelines are unchanged.
 
+For developed TIFF/JPEG input, v4 must also honor the existing `rendered_input`
+contract. The desktop's default `80` resolves to a restrained tone blend rather than
+a second full display curve. RAW input retains a full-strength characteristic curve.
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

@@ -1349,16 +1349,26 @@ Image FilmRenderer::apply_film_tone_response(
             const float log_e = scene_logE(
                 luma, response.scene_midtone_anchor, response.scene_exposure_shift);
             const float out_lin = std::pow(lcurve(log_e), 2.2F);
+            std::array<float, 3> curve_rgb{};
             if (luma > 1.0e-4F) {
                 const float sgain = std::min(out_lin / luma, 16.0F);   // chroma-preserving luminance scale
-                toned.pixels[b + 0] = std::max(0.0F, r * sgain);
-                toned.pixels[b + 1] = std::max(0.0F, gc * sgain);
-                toned.pixels[b + 2] = std::max(0.0F, bc * sgain);
+                curve_rgb = {
+                    std::max(0.0F, r * sgain),
+                    std::max(0.0F, gc * sgain),
+                    std::max(0.0F, bc * sgain),
+                };
             } else {
-                toned.pixels[b + 0] = out_lin;
-                toned.pixels[b + 1] = out_lin;
-                toned.pixels[b + 2] = out_lin;
+                curve_rgb = {out_lin, out_lin, out_lin};
             }
+
+            // A Lightroom TIFF already has a display/develop curve. The session
+            // reduces tone_response_strength according to Preserve Rendered Tone;
+            // honor that contract in v4 as well. RAW uses strength 1.0 and receives
+            // the full stock curve, while developed input avoids a second full curve.
+            const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
+            toned.pixels[b + 0] = r + tone_k * (curve_rgb[0] - r);
+            toned.pixels[b + 1] = gc + tone_k * (curve_rgb[1] - gc);
+            toned.pixels[b + 2] = bc + tone_k * (curve_rgb[2] - bc);
         });
         return toned;
     }
@@ -1457,13 +1467,7 @@ Image FilmRenderer::apply_film_tone_response(
     // already carry a baked-in tone curve — the stock's tonal character (toe/shoulder/
     // midtone) still shows through, but we don't double-map and blow the highlights.
     // 1.0 (default, RAW/parity) = full tone response, byte-identical to before.
-    //
-    // EXCEPTION: the characteristic curve is a DISPLAY-referred film reshaping designed to run
-    // on developed input, so it does not double-map — apply it at FULL strength even on TIFF.
-    // Its soft shoulder/toe (asymptotes to d_max/d_min) are what guarantee no blow/crush.
-    const float tone_k = response.use_characteristic_curve
-        ? 1.0F
-        : clampf(response.tone_response_strength, 0.0F, 1.0F);
+    const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
     parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t pixel_index) {
         const std::size_t base = static_cast<std::size_t>(pixel_index) * 3U;
         if (tone_k >= 0.999F) {
