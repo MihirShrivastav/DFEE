@@ -245,7 +245,7 @@ int main(int argc, char** argv) {
     dfee::NativePreviewRenderRequest req;      // defaults mirror the app's neutral controls
     req.filename = in_path;
     req.stock = stock;
-    req.effect_pipeline_version = "filmic_v3"; // subtractive film pipeline
+    req.effect_pipeline_version = [](){ const char* p = std::getenv("DFEE_PIPELINE"); return p ? std::string(p) : std::string("filmic_v3"); }();  // subtractive film pipeline (or filmic_v4 if DFEE_PIPELINE set)
     req.exposure_placement = placement;
     req.adaptive = true;
     req.grain = "Auto";
