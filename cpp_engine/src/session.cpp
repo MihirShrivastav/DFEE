@@ -52,6 +52,7 @@ namespace {
 constexpr const char* kDefaultEffectPipelineVersion = "parity_v1";
 constexpr const char* kFilmicEffectPipelineVersion = "filmic_v2";
 constexpr const char* kSubtractiveEffectPipelineVersion = "filmic_v3";
+constexpr const char* kCharacteristicEffectPipelineVersion = "filmic_v4";
 
 NativeEngineMetadata build_engine_metadata() {
     NativeEngineMetadata metadata;
@@ -75,20 +76,25 @@ NativeEngineMetadata build_engine_metadata() {
     return normalized == kFilmicEffectPipelineVersion || normalized == kSubtractiveEffectPipelineVersion;
 }
 
-[[nodiscard]] bool is_subtractive_effect_pipeline(const std::string& value) {
-    return normalized_effect_pipeline_version(value) == kSubtractiveEffectPipelineVersion;
+[[nodiscard]] bool is_subtractive_effect_pipeline_impl(const std::string& value) {
+    const std::string n = normalized_effect_pipeline_version(value);
+    return n == kSubtractiveEffectPipelineVersion || n == kCharacteristicEffectPipelineVersion;
 }
 
-[[nodiscard]] std::optional<NativeError> validate_effect_pipeline_version(const std::string& value) {
+[[nodiscard]] bool is_characteristic_curve_pipeline_impl(const std::string& value) {
+    return normalized_effect_pipeline_version(value) == kCharacteristicEffectPipelineVersion;
+}
+
+[[nodiscard]] std::optional<NativeError> validate_effect_pipeline_version_impl(const std::string& value) {
     const std::string normalized = normalized_effect_pipeline_version(value);
     if (normalized == kDefaultEffectPipelineVersion || normalized == kFilmicEffectPipelineVersion ||
-        normalized == kSubtractiveEffectPipelineVersion) {
+        normalized == kSubtractiveEffectPipelineVersion || normalized == kCharacteristicEffectPipelineVersion) {
         return std::nullopt;
     }
     return NativeError{
         .code = "UNSUPPORTED_EFFECT_PIPELINE_VERSION",
         .user_message = "The requested effect pipeline version is not supported by this native engine build.",
-        .detail = "Supported effect_pipeline_version values: parity_v1, filmic_v2, filmic_v3. Requested: " + normalized,
+        .detail = "Supported effect_pipeline_version values: parity_v1, filmic_v2, filmic_v3, filmic_v4. Requested: " + normalized,
     };
 }
 
@@ -955,7 +961,7 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.crossover = request.crossover;
     controls.profile_strength = request.profile_strength;
     controls.adaptive = request.adaptive;
-    controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
+    controls.subtractive_pipeline = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
     controls.halation_strength = request.halation_strength;
     controls.halation_threshold = request.halation_threshold;
     controls.shadow_lift = request.shadow_lift;
@@ -1887,6 +1893,24 @@ NativeRenderWorkResult render_native_image(
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// Public pipeline classification helpers (declared in session.hpp).
+// Thin wrappers over the anonymous-namespace _impl functions so that tests
+// and other translation units can call them without accessing internal detail.
+// ---------------------------------------------------------------------------
+
+bool is_subtractive_effect_pipeline(const std::string& value) {
+    return is_subtractive_effect_pipeline_impl(value);
+}
+
+bool is_characteristic_curve_pipeline(const std::string& value) {
+    return is_characteristic_curve_pipeline_impl(value);
+}
+
+std::optional<NativeError> validate_effect_pipeline_version(const std::string& value) {
+    return validate_effect_pipeline_version_impl(value);
+}
+
 // Scene-referred EV-masked tone stage (filmic_v3). See tone_controls.hpp and
 // documentation/planning/tone-controls-rebuild-spec.md.
 // Lightroom-style parametric tone. The six Basic controls (Contrast/Highlights/Shadows/
@@ -2414,7 +2438,7 @@ NativeGrainResolutionResponse EngineSession::resolve_auto_grain(const NativePrev
         finalize_engine_metadata(response.engine);
         return response;
     }
-    if (const auto version_error = validate_effect_pipeline_version(request.effect_pipeline_version)) {
+    if (const auto version_error = validate_effect_pipeline_version_impl(request.effect_pipeline_version)) {
         response.status = "error";
         response.error = *version_error;
         finalize_engine_metadata(response.engine);
@@ -2509,7 +2533,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 finalize_engine_metadata(response.engine);
                 return response;
             }
-            if (const auto version_error = validate_effect_pipeline_version(request.effect_pipeline_version)) {
+            if (const auto version_error = validate_effect_pipeline_version_impl(request.effect_pipeline_version)) {
                 response.status = "error";
                 response.error = *version_error;
                 finalize_engine_metadata(response.engine);
@@ -2576,7 +2600,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 // RAW baseline develop: give flat scene-linear RAW a camera-standard
                 // tone so a no-stock preview looks like a developed photo, not linear.
                 if (!is_tiff_filename(response.filename) &&
-                    is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                    is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
                 }
             }
@@ -2687,7 +2711,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.crossover = request.crossover;
             controls.profile_strength = request.profile_strength;
             controls.adaptive = request.adaptive;
-            controls.subtractive_pipeline = is_subtractive_effect_pipeline(request.effect_pipeline_version);
+            controls.subtractive_pipeline = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
             controls.halation_strength = request.halation_strength;
             controls.halation_threshold = request.halation_threshold;
             controls.shadow_lift = request.shadow_lift;
@@ -2732,7 +2756,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 // no baked display curve to protect. The stock must therefore retain
                 // its full tone response. `rendered_input` is TIFF-only.
                 if (!is_tiff_filename(response.filename) &&
-                    is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                    is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
                 }
                 dump_stage(rendered, "10_baseline");
@@ -2761,18 +2785,18 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             }
             dump_stage(rendered, "30_color");
             if (render_plan.stock_type != "monochrome" &&
-                is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_density");
                 rendered = renderer.apply_subtractive_density(rendered, render_plan.film_response);
             }
             if (render_plan.stock_type != "monochrome" &&
-                is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                 // Before compression, so its chroma shoulder self-limits any hue over-boost.
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_hue_saturation");
                 rendered = renderer.apply_hue_saturation(rendered, render_plan.film_response);
             }
             if (render_plan.stock_type != "monochrome" &&
-                is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                 ScopedStageTimer substage(response.engine, "render_preview_film_stage_compression");
                 rendered = renderer.apply_color_compression(rendered, render_plan.film_response);
             }
@@ -2888,7 +2912,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 finalize_engine_metadata(response.engine);
                 return response;
             }
-            if (const auto version_error = validate_effect_pipeline_version(request.effect_pipeline_version)) {
+            if (const auto version_error = validate_effect_pipeline_version_impl(request.effect_pipeline_version)) {
                 response.status = "error";
                 response.error = *version_error;
                 finalize_engine_metadata(response.engine);
@@ -3166,7 +3190,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     // curve stays active; only already-rendered TIFF inputs attenuate
                     // it through the rendered-input control.
                     if (!is_tiff_filename(response.filename) &&
-                        is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                        is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                         rendered = apply_raw_baseline_develop(rendered);
                     }
                     if (request.stock != "none" && render_plan->stock_type == "monochrome") {
@@ -3190,18 +3214,18 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     }
                     trace_mem(project_root_, "after_color_response");
                     if (request.stock != "none" && render_plan->stock_type != "monochrome" &&
-                        is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                        is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_density");
                         rendered = renderer.apply_subtractive_density(rendered, render_plan->film_response);
                     }
                     if (request.stock != "none" && render_plan->stock_type != "monochrome" &&
-                        is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                        is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                         // Before compression, so its chroma shoulder self-limits any hue over-boost.
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_hue_saturation");
                         rendered = renderer.apply_hue_saturation(rendered, render_plan->film_response);
                     }
                     if (request.stock != "none" && render_plan->stock_type != "monochrome" &&
-                        is_subtractive_effect_pipeline(request.effect_pipeline_version)) {
+                        is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_compression");
                         rendered = renderer.apply_color_compression(rendered, render_plan->film_response);
                     }
@@ -3520,7 +3544,7 @@ CudaStatus EngineSession::cuda_status() const noexcept {
 }
 
 bool EngineSession::is_effect_pipeline_supported(const std::string& version) {
-    return !validate_effect_pipeline_version(version).has_value();
+    return !validate_effect_pipeline_version_impl(version).has_value();
 }
 
 std::string EngineSession::resolve_filename(const std::string& filename) const {

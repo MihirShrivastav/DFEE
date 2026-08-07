@@ -3574,6 +3574,15 @@ static void test_characteristic_curve() {
     std::printf("test_characteristic_curve passed\n");
 }
 
+static void test_pipeline_gate() {
+    assert(dfee::is_characteristic_curve_pipeline("filmic_v4"));
+    assert(!dfee::is_characteristic_curve_pipeline("filmic_v3"));
+    assert(dfee::is_subtractive_effect_pipeline("filmic_v4"));   // v4 still runs subtractive stages
+    assert(dfee::is_subtractive_effect_pipeline("filmic_v3"));
+    assert(!dfee::validate_effect_pipeline_version("filmic_v4").has_value()); // accepted
+    std::printf("test_pipeline_gate passed\n");
+}
+
 }  // namespace
 
 int main() {
@@ -3654,6 +3663,7 @@ int main() {
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
         test_color_character_synthetic_zone_hue_fixture();
         test_characteristic_curve();
+        test_pipeline_gate();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

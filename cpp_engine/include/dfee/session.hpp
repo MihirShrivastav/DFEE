@@ -15,6 +15,20 @@
 
 namespace dfee {
 
+// Pipeline classification helpers. These are free functions so that tests and
+// other translation units can call them independently of EngineSession.
+
+// Returns true when the given effect_pipeline_version runs the subtractive
+// colour-density stages (filmic_v3 and filmic_v4).
+[[nodiscard]] bool is_subtractive_effect_pipeline(const std::string& value);
+
+// Returns true only when the pipeline uses the characteristic-curve path
+// (filmic_v4 and later).
+[[nodiscard]] bool is_characteristic_curve_pipeline(const std::string& value);
+
+// Returns nullopt when the version is accepted, or a NativeError otherwise.
+[[nodiscard]] std::optional<NativeError> validate_effect_pipeline_version(const std::string& value);
+
 class EngineSession {
 public:
     explicit EngineSession(std::filesystem::path project_root);
@@ -32,8 +46,8 @@ public:
     [[nodiscard]] CudaStatus cuda_status() const noexcept;
 
     // Returns true when the given effect_pipeline_version is accepted by this
-    // native engine build (parity_v1, filmic_v2, filmic_v3). Empty resolves to
-    // the default (parity_v1).
+    // native engine build (parity_v1, filmic_v2, filmic_v3, filmic_v4). Empty
+    // resolves to the default (parity_v1).
     [[nodiscard]] static bool is_effect_pipeline_supported(const std::string& version);
 
 private:
