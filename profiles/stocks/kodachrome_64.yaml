@@ -129,3 +129,15 @@ crossover:
   highlight_cast_a: 0.10
   highlight_cast_b: 0.18
   exposure_sensitivity: 0.40
+characteristic_curve:
+  # Kodak Kodachrome 64: contrasty with deep, rich blacks and held highlights — its punchy,
+  # dense tonal signature (display-referred: gamma = contrast around mid, low d_min = deep blacks).
+  gamma: 1.45
+  latitude_stops: 6.0
+  toe_onset: 2.2
+  toe_hardness: 1.1
+  shoulder_onset: 3.0
+  shoulder_hardness: 0.9
+  d_min: 0.02
+  d_max: 1.0
+  channel_gamma_mult: [1.0, 1.0, 1.0]

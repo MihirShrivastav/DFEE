@@ -1310,6 +1310,21 @@ Image FilmRenderer::apply_film_tone_response(
     std::array<float, 3> shoulder_k{};
     std::array<std::vector<float>, 3> tone_luts{};
     if (response.use_characteristic_curve) {
+        // Exposure-preserving contrast pivot: the mean perceptual luma of the scene. Pivoting
+        // the film contrast around the image's OWN brightness keeps dark scenes dark (they gain
+        // contrast, they are not pushed darker/flatter) and bright scenes bright — we impart the
+        // stock's contrast character without re-exposing.
+        double pivot_acc = 0.0;
+        const std::size_t pivot_n = rgb_linear.pixel_count();
+        for (std::size_t i = 0; i < pivot_n; ++i) {
+            const float l = 0.2126F * rgb_linear.pixels[i * 3 + 0]
+                          + 0.7152F * rgb_linear.pixels[i * 3 + 1]
+                          + 0.0722F * rgb_linear.pixels[i * 3 + 2];
+            pivot_acc += std::pow(std::clamp(l, 0.0F, 1.0F), 1.0F / 2.2F);
+        }
+        const float scene_pivot = std::clamp(
+            static_cast<float>(pivot_acc / static_cast<double>(std::max<std::size_t>(pivot_n, 1U))),
+            0.20F, 0.70F);
         for (int channel = 0; channel < 3; ++channel) {
             const std::size_t index = static_cast<std::size_t>(channel);
             // shoulder_k is still used by the apply_tone_curve lambda for ch > 1 extrapolation.
@@ -1320,11 +1335,28 @@ Image FilmRenderer::apply_film_tone_response(
             lut.resize(kToneLutSize);
             CharacteristicCurve cc = response.characteristic_curve;
             cc.gamma *= response.curve_gamma_mult[index];  // per-dye-layer gamma => crossover
+            // Display-referred film tone: reshape the developed (TIFF/sRGB) tones in PERCEPTUAL
+            // space around mid-grey (0.4586 = 0.18^(1/2.2)). gamma = contrast around the pivot;
+            // soft exponential knees roll highlights toward d_max and lift shadows toward d_min
+            // so the curve CANNOT hard-clip (blow) or crush. Film Exposure is applied in linear
+            // first. This preserves overall exposure (mid maps to mid) and imparts the stock's
+            // contrast character at full strength — no scene-referred re-exposure.
+            const float dmn = std::clamp(cc.d_min, 0.0F, 0.4F);
+            const float dmx = std::clamp(cc.d_max, dmn + 0.2F, 1.0F);
+            // Small knees: only the extreme highlights/shadows soft-clip, so the bulk of the
+            // range keeps full gamma contrast (a wide knee flattens darker scenes).
+            const float knee = std::clamp(0.10F / std::max(cc.shoulder_hardness, 0.5F), 0.05F, 0.14F);
+            // NOTE: Film Exposure is applied by the pre-film stage; do NOT re-apply it here
+            // (that double-counts exposure and interacts badly with the pivot).
             for (std::size_t s = 0; s < kToneLutSize; ++s) {
                 const float ch = static_cast<float>(s) / static_cast<float>(kToneLutSize - 1U);
-                const float logE = scene_logE(ch, response.scene_midtone_anchor, response.scene_exposure_shift);
-                const float y = curve_eval(cc, logE);          // perceptual [0,1]
-                lut[s] = std::pow(y, 2.2F);                    // back to linear for the pipeline
+                const float d = std::clamp(std::pow(ch, 1.0F / 2.2F), 0.0F, 1.0F);
+                const float c = scene_pivot + (d - scene_pivot) * cc.gamma;   // contrast around the scene's own brightness
+                float y;
+                if (c > dmx - knee)      { y = dmx - knee * std::exp(-(c - (dmx - knee)) / knee); }   // soft shoulder
+                else if (c < dmn + knee) { y = dmn + knee * std::exp(-((dmn + knee) - c) / knee); }   // soft toe
+                else                     { y = c; }
+                lut[s] = std::pow(std::clamp(y, 0.0F, 1.0F), 2.2F);
             }
         }
     } else {
@@ -1422,7 +1454,13 @@ Image FilmRenderer::apply_film_tone_response(
     // already carry a baked-in tone curve — the stock's tonal character (toe/shoulder/
     // midtone) still shows through, but we don't double-map and blow the highlights.
     // 1.0 (default, RAW/parity) = full tone response, byte-identical to before.
-    const float tone_k = clampf(response.tone_response_strength, 0.0F, 1.0F);
+    //
+    // EXCEPTION: the characteristic curve is a DISPLAY-referred film reshaping designed to run
+    // on developed input, so it does not double-map — apply it at FULL strength even on TIFF.
+    // Its soft shoulder/toe (asymptotes to d_max/d_min) are what guarantee no blow/crush.
+    const float tone_k = response.use_characteristic_curve
+        ? 1.0F
+        : clampf(response.tone_response_strength, 0.0F, 1.0F);
     parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t pixel_index) {
         const std::size_t base = static_cast<std::size_t>(pixel_index) * 3U;
         if (tone_k >= 0.999F) {
