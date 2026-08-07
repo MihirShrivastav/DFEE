@@ -116,3 +116,15 @@ crossover:
   highlight_cast_a: 0.09
   highlight_cast_b: 0.14
   exposure_sensitivity: 0.30
+characteristic_curve:
+  # Portra 160: the cleanest, smoothest Portra — soft, very wide latitude, airy lifted
+  # shadows and gently held highlights (a touch softer than 400).
+  gamma: 1.13
+  latitude_stops: 10.0
+  toe_onset: 3.8
+  toe_hardness: 0.6
+  shoulder_onset: 4.6
+  shoulder_hardness: 0.55
+  d_min: 0.05
+  d_max: 0.97
+  channel_gamma_mult: [1.0, 1.0, 1.0]

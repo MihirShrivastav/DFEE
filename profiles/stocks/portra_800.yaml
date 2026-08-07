@@ -113,8 +113,20 @@ hue_chroma_gain:
 crossover:
   # Portra 800: the strongest Portra crossover — warm highlights, and its signature
   # murky COOL-MAGENTA shadows (a toward magenta, b toward blue), skin leaning magenta.
-  shadow_cast_a: 0.04
-  shadow_cast_b: -0.18
+  shadow_cast_a: 0.015
+  shadow_cast_b: -0.12
   highlight_cast_a: 0.17
   highlight_cast_b: 0.26
   exposure_sensitivity: 0.45
+characteristic_curve:
+  # Portra 800: the punchiest, densest Portra — a bit more contrast than 400/160, still soft
+  # and wide-latitude with lifted shadows and held highlights.
+  gamma: 1.20
+  latitude_stops: 9.0
+  toe_onset: 3.4
+  toe_hardness: 0.7
+  shoulder_onset: 4.0
+  shoulder_hardness: 0.6
+  d_min: 0.045
+  d_max: 0.96
+  channel_gamma_mult: [1.0, 1.0, 1.0]
