@@ -744,6 +744,22 @@ void test_color_negative_profiles_are_distinct() {
     assert(value(vision_250d, "halation.strength") <= 0.06F);
     assert(value(vision_500t, "halation.strength") <= 0.06F);
 
+    // V4 curves retain VISION3's long motion-picture exposure scale. 250D is
+    // the firmer medium-speed daylight stock, while the faster 500T leaves a
+    // little more room at both ends for shadow recovery and practical lights.
+    assert(value(vision_250d, "characteristic_curve.latitude_stops") >
+           value(portra_400, "characteristic_curve.latitude_stops"));
+    assert(value(vision_500t, "characteristic_curve.latitude_stops") >
+           value(vision_250d, "characteristic_curve.latitude_stops"));
+    assert(value(vision_250d, "characteristic_curve.gamma") >
+           value(vision_500t, "characteristic_curve.gamma"));
+    assert(value(vision_500t, "characteristic_curve.toe_onset") >
+           value(vision_250d, "characteristic_curve.toe_onset"));
+    assert(value(vision_500t, "characteristic_curve.shoulder_onset") >
+           value(vision_250d, "characteristic_curve.shoulder_onset"));
+    assert(value(vision_500t, "characteristic_curve.d_min") >
+           value(vision_250d, "characteristic_curve.d_min"));
+
     // 500T's tungsten/low-light role carries a warmer midtone balance and a
     // longer shadow transition than the daylight-balanced 250D.
     assert(value(vision_500t, "tone_response.toe_length") >

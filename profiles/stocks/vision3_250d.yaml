@@ -1,6 +1,20 @@
 stock_id: vision3_250d
 stock_name: Kodak Vision3 250D
 stock_type: color_negative
+characteristic_curve:
+  # Vision3 250D is a daylight-balanced cinema negative built for a long,
+  # printable exposure scale. Its v4 curve keeps the clean, gently firm
+  # daylight separation of a medium-speed stock, but protects far more
+  # shadow and specular-highlight information than a consumer still negative.
+  gamma: 1.08
+  latitude_stops: 11.4
+  toe_onset: 4.0
+  toe_hardness: 0.50
+  shoulder_onset: 5.4
+  shoulder_hardness: 0.44
+  d_min: 0.030
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]
 adaptation:
   base_iso: 250
   default_strength: 1.0

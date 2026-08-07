@@ -44,6 +44,25 @@ red/orange limiter and landscape/product hue response remain responsible for col
 
 Sources: [Gold 200 technical data](https://imaging.kodakalaris.com/sites/default/files/files/resources/E7022_Gold_200.pdf), [Ektar 100 technical data](https://www.kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/e4046_ektar_100.pdf).
 
+## Stock Rollout: Vision3 250D And 500T (2026-08-07)
+
+Vision3 250D and 500T now use the v4 tonal model while retaining their existing
+researched colour-response, grain, halation, and crossover calibration. Both are
+motion-picture negatives with a longer usable exposure range than the still-photo
+negative profiles. The 250D curve has slightly firmer daylight separation; 500T
+has the longer toe and shoulder required for the stock's shadow recovery and
+practical-light retention. Neither is calibrated by crushing shadows or hard
+clipping highlights.
+
+Kodak documents 250D as retaining at least 2.5 stops of shadow latitude below a
+3-percent black card and at least 3.5 stops of specular highlight latitude above
+a white card. Kodak documents 500T's advanced dye layering as reducing shadow
+grain and its sub-micron technology as providing two stops of extended highlight
+latitude. The authored values are a rendering calibration, not a claim that the
+digital input contains the film negative's entire exposure range.
+
+Sources: [Vision3 250D brochure](https://www.kodak.com/content/pdfs/KODAK-VISION3-250D-5207-7207-brochure.pdf), [Vision3 500T technical information](https://www.kodak.com/content/products-brochures/motion-picture/KODAK-VISION3-5219-7219-technical-information.pdf).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.
