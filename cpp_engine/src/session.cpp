@@ -73,7 +73,8 @@ NativeEngineMetadata build_engine_metadata() {
 
 [[nodiscard]] bool is_filmic_effect_pipeline(const std::string& value) {
     const std::string normalized = normalized_effect_pipeline_version(value);
-    return normalized == kFilmicEffectPipelineVersion || normalized == kSubtractiveEffectPipelineVersion;
+    return normalized == kFilmicEffectPipelineVersion || normalized == kSubtractiveEffectPipelineVersion ||
+           normalized == kCharacteristicEffectPipelineVersion;
 }
 
 [[nodiscard]] bool is_subtractive_effect_pipeline_impl(const std::string& value) {
@@ -962,6 +963,8 @@ SolverControls build_solver_controls(const NativePreviewRenderRequest& request) 
     controls.profile_strength = request.profile_strength;
     controls.adaptive = request.adaptive;
     controls.subtractive_pipeline = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
+    controls.characteristic_pipeline = is_characteristic_curve_pipeline_impl(request.effect_pipeline_version);
+    controls.film_exposure_ev = request.film_exposure_ev;
     controls.halation_strength = request.halation_strength;
     controls.halation_threshold = request.halation_threshold;
     controls.shadow_lift = request.shadow_lift;
@@ -1233,7 +1236,9 @@ Image apply_pre_film_preview_sliders(
     RenderPlan& plan) {
     Image adjusted = rgb_input;
 
-    const bool is_filmic_v3 = request.effect_pipeline_version == "filmic_v3";
+    // True for filmic_v3 and filmic_v4: both route the Light panel post-film.
+    // filmic_v2 / parity_v1 keep the legacy pre-film additive tone (byte-identical).
+    const bool is_filmic_v3 = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
 
     // filmic_v3: the whole Light panel (Exposure + Contrast/Highlights/Shadows/Whites/
     // Blacks/Midtones) is a POST-film finishing stage (see apply_post_film_light_panel),
@@ -1292,7 +1297,9 @@ Image apply_pre_film_preview_sliders(
 [[nodiscard]] Image apply_post_film_light_panel(
     const Image& rendered,
     const NativePreviewRenderRequest& request) {
-    if (request.effect_pipeline_version != "filmic_v3") {
+    // filmic_v3 and filmic_v4 both use the post-film Light panel.
+    // Legacy parity_v1 / filmic_v2 apply the Light panel pre-film instead.
+    if (!is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
         return rendered;
     }
     Image adjusted = rendered;
@@ -2712,6 +2719,8 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             controls.profile_strength = request.profile_strength;
             controls.adaptive = request.adaptive;
             controls.subtractive_pipeline = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
+            controls.characteristic_pipeline = is_characteristic_curve_pipeline_impl(request.effect_pipeline_version);
+            controls.film_exposure_ev = request.film_exposure_ev;
             controls.halation_strength = request.halation_strength;
             controls.halation_threshold = request.halation_threshold;
             controls.shadow_lift = request.shadow_lift;

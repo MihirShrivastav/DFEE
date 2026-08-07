@@ -9,6 +9,7 @@
 
 #include "dfee/analyzer.hpp"
 #include "dfee/bias.hpp"
+#include "dfee/characteristic_curve.hpp"
 #include "dfee/profile.hpp"
 
 namespace dfee {
@@ -46,7 +47,9 @@ struct SolverControls {
     float crossover = 100.0F;           // 0..200, 100 = stock's authored dye-layer crossover
     float profile_strength = 100.0F;
     bool adaptive = true;              // scene-referred steering on/off
-    bool subtractive_pipeline = false; // set true for filmic_v3 (gates v3 tone steering)
+    float film_exposure_ev = 0.0F;        // Film Exposure slider value (stops); used for curve placement
+    bool subtractive_pipeline = false;    // set true for filmic_v3/v4 (gates subtractive tone steering)
+    bool characteristic_pipeline = false; // set true for filmic_v4 (gates characteristic curve path)
     float halation_strength = 100.0F;  // 0..200, 100 = stock default (0 = off)
     float halation_threshold = 50.0F;  // 0..100, lower = more highlights bloom
     float shadow_lift = 0.0F;          // -100..100 bipolar; 0 = stock's natural base-fog floor
@@ -145,6 +148,14 @@ struct FilmResponsePlan {
     // rendered (TIFF) inputs so the stock's tone curve is applied subtly on top of the
     // TIFF's baked-in tone rather than double-mapped (which blows highlights).
     float tone_response_strength = 1.0F;
+    // Characteristic curve fields (filmic_v4 only). use_characteristic_curve is false
+    // unless the stock YAML has a characteristic_curve.gamma key AND the pipeline is
+    // filmic_v4; when false the renderer uses the legacy logistic path unchanged.
+    bool use_characteristic_curve = false;
+    CharacteristicCurve characteristic_curve;
+    float scene_midtone_anchor = 0.18F;
+    float scene_exposure_shift = 0.0F;
+    std::array<float, 3> curve_gamma_mult{1.0F, 1.0F, 1.0F}; // per-dye-layer gamma; absorbs crossover
 };
 
 struct MaterialEffectsPlan {

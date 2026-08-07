@@ -2,6 +2,7 @@
 #include "dfee/bias.hpp"
 #include "dfee/characteristic_curve.hpp"
 #include "dfee/color_spaces.hpp"
+#include "dfee/curve_mapping.hpp"
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
 #include "dfee/raw_decode.hpp"
@@ -3583,6 +3584,22 @@ static void test_pipeline_gate() {
     std::printf("test_pipeline_gate passed\n");
 }
 
+static void test_curve_mapping() {
+    dfee::CharacteristicCurve base; base.gamma = 1.0f; base.shoulder_onset = 2.0f; base.toe_onset = 2.0f; base.d_min = 0.0f;
+    // Film Contrast +100 raises gamma; -100 lowers it.
+    assert(dfee::map_characteristic_curve(base, 200.f, 100.f, 0.f).gamma > 1.0f);
+    assert(dfee::map_characteristic_curve(base, 0.f,   100.f, 0.f).gamma < 1.0f);
+    // Highlight Rolloff up pulls the shoulder onset EARLIER (smaller).
+    assert(dfee::map_characteristic_curve(base, 100.f, 200.f, 0.f).shoulder_onset < base.shoulder_onset);
+    // Shadow Lift up raises d_min (lifted toe).
+    assert(dfee::map_characteristic_curve(base, 100.f, 100.f, 100.f).d_min > base.d_min);
+    // Exposure shift: negatives get +2/3 expose-to-right bias at EV 0; reversal neutral.
+    assert(std::abs(dfee::map_exposure_shift(0.f, false) - 0.66f) < 0.05f);
+    assert(std::abs(dfee::map_exposure_shift(0.f, true)  - 0.0f)  < 1e-4f);
+    assert(std::abs(dfee::map_exposure_shift(1.f, true)  - 1.0f)  < 1e-4f);
+    std::printf("test_curve_mapping passed\n");
+}
+
 }  // namespace
 
 int main() {
@@ -3664,6 +3681,7 @@ int main() {
         test_color_character_synthetic_zone_hue_fixture();
         test_characteristic_curve();
         test_pipeline_gate();
+        test_curve_mapping();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

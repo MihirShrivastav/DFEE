@@ -1,4 +1,5 @@
 #include "dfee/solver.hpp"
+#include "dfee/curve_mapping.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -690,6 +691,30 @@ RenderPlan RenderPlanSolver::solve(
     plan.film_response.tone_response_strength = std::clamp(
         plan.film_response.tone_response_strength, 0.0F, 1.0F);
     plan.film_response.profile_strength = controls.profile_strength;
+
+    // Characteristic curve wiring (filmic_v4 only). Gated on both the pipeline flag and
+    // the presence of characteristic_curve.gamma in the stock YAML (absent or zero => legacy
+    // logistic path is used unchanged, so existing stocks are byte-identical on filmic_v4).
+    if (controls.characteristic_pipeline &&
+        get_numeric(stock_profile.numeric_values, "characteristic_curve.gamma", 0.0F) > 0.0F) {
+        CharacteristicCurve authored;
+        authored.gamma            = get_numeric(stock_profile.numeric_values, "characteristic_curve.gamma", 1.0F);
+        authored.latitude_stops   = get_numeric(stock_profile.numeric_values, "characteristic_curve.latitude_stops", 8.0F);
+        authored.toe_onset        = get_numeric(stock_profile.numeric_values, "characteristic_curve.toe_onset", 2.0F);
+        authored.toe_hardness     = get_numeric(stock_profile.numeric_values, "characteristic_curve.toe_hardness", 1.0F);
+        authored.shoulder_onset   = get_numeric(stock_profile.numeric_values, "characteristic_curve.shoulder_onset", 2.0F);
+        authored.shoulder_hardness= get_numeric(stock_profile.numeric_values, "characteristic_curve.shoulder_hardness", 1.0F);
+        authored.d_min            = get_numeric(stock_profile.numeric_values, "characteristic_curve.d_min", 0.0F);
+        authored.d_max            = get_numeric(stock_profile.numeric_values, "characteristic_curve.d_max", 1.0F);
+        plan.film_response.characteristic_curve = map_characteristic_curve(
+            authored, controls.film_contrast, controls.highlight_rolloff, controls.shadow_lift);
+        plan.film_response.use_characteristic_curve = true;
+        plan.film_response.scene_midtone_anchor = tonal.midtone_anchor;
+        plan.film_response.scene_exposure_shift = map_exposure_shift(
+            controls.film_exposure_ev, stock_profile.stock_type == StockType::ColorReversal);
+        plan.film_response.curve_gamma_mult = get_array3(
+            stock_profile.numeric_arrays, "characteristic_curve.channel_gamma_mult", {1.0F, 1.0F, 1.0F});
+    }
 
     const ColorCharacterDefaults cc_defaults = color_character_defaults(stock_profile.stock_type);
     plan.film_response.highlight_hold_sensitivity = get_numeric(

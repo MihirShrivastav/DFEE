@@ -24,6 +24,7 @@ add_library(dfee_core STATIC
     src/bridge_utils.cpp
     src/characteristic_curve.cpp
     src/color_spaces.cpp
+    src/curve_mapping.cpp
     src/cuda_runtime.cpp
     src/image.cpp
     src/profile.cpp
