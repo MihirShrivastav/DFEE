@@ -1,5 +1,6 @@
 #include "dfee/analyzer.hpp"
 #include "dfee/bias.hpp"
+#include "dfee/characteristic_curve.hpp"
 #include "dfee/color_spaces.hpp"
 #include "dfee/image.hpp"
 #include "dfee/profile.hpp"
@@ -3544,6 +3545,35 @@ void test_filmic_v3_version_is_supported_and_subtractive() {
     }
 }
 
+static void test_characteristic_curve() {
+    using dfee::CharacteristicCurve;
+    CharacteristicCurve c; // gamma 1.0, latitude 8, onsets 2, d_min 0, d_max 1
+    constexpr float kMidOut = 0.4586f;         // pow(0.18, 1/2.2)
+    // (a) mid-grey (logE 0) maps to the mid output reference.
+    assert(std::abs(dfee::curve_eval(c, 0.0f) - kMidOut) < 0.02f);
+    // (b) monotonic increasing across the whole log-E range.
+    float prev = -1.0f;
+    for (int i = -60; i <= 60; ++i) { float y = dfee::curve_eval(c, i * 0.1f); assert(y >= prev - 1e-6f); prev = y; }
+    // (c) straight-line slope near mid ~= gamma/kStopsRef (kStopsRef = 8 => 0.125 per stop at gamma 1).
+    float slope = (dfee::curve_eval(c, 0.5f) - dfee::curve_eval(c, -0.5f)) / 1.0f;
+    assert(std::abs(slope - 0.125f) < 0.02f);
+    // (d) higher gamma => steeper mid slope.
+    CharacteristicCurve hi = c; hi.gamma = 2.0f;
+    float slope_hi = (dfee::curve_eval(hi, 0.5f) - dfee::curve_eval(hi, -0.5f)) / 1.0f;
+    assert(slope_hi > slope * 1.5f);
+    // (e) toe/shoulder compress: slope beyond the onsets is < straight-line slope.
+    float toe_slope = dfee::curve_eval(c, -3.5f) - dfee::curve_eval(c, -4.5f);
+    assert(toe_slope < slope);
+    // (f) endpoints approach d_min/d_max and stay in range.
+    assert(dfee::curve_eval(c, -40.0f) >= 0.0f && dfee::curve_eval(c, -40.0f) < 0.05f);
+    assert(dfee::curve_eval(c, 40.0f) <= 1.0f && dfee::curve_eval(c, 40.0f) > 0.95f);
+    // scene_logE: value == anchor => 0; one stop brighter => +1; exposure shift adds.
+    assert(std::abs(dfee::scene_logE(0.18f, 0.18f, 0.0f) - 0.0f) < 1e-4f);
+    assert(std::abs(dfee::scene_logE(0.36f, 0.18f, 0.0f) - 1.0f) < 1e-4f);
+    assert(std::abs(dfee::scene_logE(0.18f, 0.18f, 1.5f) - 1.5f) < 1e-4f);
+    std::printf("test_characteristic_curve passed\n");
+}
+
 }  // namespace
 
 int main() {
@@ -3623,6 +3653,7 @@ int main() {
         test_color_compression_leans_neighbours_preserves_neutral();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
         test_color_character_synthetic_zone_hue_fixture();
+        test_characteristic_curve();
         std::cout << "dfee_tests passed\n";
         return 0;
     } catch (const std::exception& ex) {

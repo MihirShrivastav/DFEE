@@ -22,6 +22,7 @@ add_library(dfee_core STATIC
     src/analyzer.cpp
     src/bias.cpp
     src/bridge_utils.cpp
+    src/characteristic_curve.cpp
     src/color_spaces.cpp
     src/cuda_runtime.cpp
     src/image.cpp
