@@ -256,6 +256,14 @@ int main(int argc, char** argv) {
     req.film_color_density = film_color_density;
     req.film_exposure_ev = film_exposure_ev;
     req.crossover = env_f("DFEE_CROSSOVER", 100.0F);  // scale the stock's dye-layer crossover
+    // Light panel (post-film, filmic_v3) — for A/B testing the parametric tone curve.
+    req.exposure   = env_f("DFEE_EXPOSURE", 0.0F);
+    req.contrast   = env_f("DFEE_CONTRAST", 0.0F);
+    req.highlights = env_f("DFEE_HIGHLIGHTS", 0.0F);
+    req.shadows    = env_f("DFEE_SHADOWS", 0.0F);
+    req.whites     = env_f("DFEE_WHITES", 0.0F);
+    req.blacks     = env_f("DFEE_BLACKS", 0.0F);
+    req.midtones   = env_f("DFEE_MIDTONES", 0.0F);
 
     // Diagnostic: DFEE_EXPORT_OUT=<path.tif> reproduces the Lightroom round-trip
     // export (full-res render + write to output_path) and prints the failure reason.

@@ -1889,71 +1889,110 @@ NativeRenderWorkResult render_native_image(
 
 // Scene-referred EV-masked tone stage (filmic_v3). See tone_controls.hpp and
 // documentation/planning/tone-controls-rebuild-spec.md.
+// Lightroom-style parametric tone. The six Basic controls (Contrast/Highlights/Shadows/
+// Whites/Blacks/Midtones) are composed into a SINGLE MONOTONIC luminance tone curve in a
+// perceptual (gamma) domain, then applied to luminance with colour preserved by ratio.
+//
+// This replaces the old per-pixel stack of overlapping-Gaussian EV gains + an additive
+// black offset, which leaked ~20% of a Shadows push into the midtones (flattening/greying
+// the whole image) and floated the black point off zero. Here each control is a smooth,
+// endpoint-behaved deformation of one curve:
+//   - Shadows  : a bump pinned at black, peaking in the dark region, ZERO by mid-grey
+//                (brightens shadows without touching mids/highlights or lifting true black).
+//   - Highlights: mirror bump pinned at white, zero below mid.
+//   - Midtones : bump centred on mid-grey, zero at both ends.
+//   - Blacks   : moves the black ENDPOINT (the one control that lifts/deepens true black).
+//   - Whites   : moves the white endpoint.
+//   - Contrast : an endpoint-pinned S about mid-grey.
+// The composed curve is forced monotonic (cumulative max) so no combination can invert or
+// flatten. Reference: Lightroom Basic sliders build tonal-range masks that peak at their
+// end and taper toward the opposite end (digital-photography-school.com tone-curve guide).
 void apply_scene_referred_tone(
     Image& adjusted,
     float contrast_value, float highlights_value, float shadows_value,
     float whites_value, float blacks_value, float midtones_value) {
     constexpr float kInvGamma = 1.0F / 2.2F;
-    constexpr float kRegionMaxEV = 1.15F; // Shadows/Midtones/Highlights EV at +/-100
-    constexpr float kWhiteMaxEV = 0.70F;  // Whites endpoint gain (EV, top-weighted)
-    constexpr float kBlackLift = 0.06F;   // Blacks endpoint lift (linear, bottom-weighted)
-    constexpr float kContrast = 0.50F;    // Contrast pivot-power strength
-    constexpr float kMidGrey = 0.18F;
+    constexpr float kGamma    = 2.2F;
+    // Per-control amplitudes at +/-100, in perceptual (gamma) units.
+    constexpr float kShadowAmp    = 0.18F; // shadow-region lift at the bump peak
+    constexpr float kMidtoneAmp   = 0.14F; // midtone lift at mid-grey
+    constexpr float kHighlightAmp = 0.18F; // highlight-region move at the bump peak
+    constexpr float kBlackAmp     = 0.10F; // black-endpoint move
+    constexpr float kWhiteAmp     = 0.17F; // white-endpoint move
+    constexpr float kContrastAmp  = 0.12F; // S-curve amplitude (< 1/2pi keeps it monotonic)
 
-    const float sh_ev = std::clamp(shadows_value / 100.0F, -1.0F, 1.0F) * kRegionMaxEV;
-    const float mid_ev = std::clamp(midtones_value / 100.0F, -1.0F, 1.0F) * kRegionMaxEV;
-    const float hi_ev = std::clamp(highlights_value / 100.0F, -1.0F, 1.0F) * kRegionMaxEV;
-    const float white_ev = std::clamp(whites_value / 100.0F, -1.0F, 1.0F) * kWhiteMaxEV;
-    const float black_off = std::clamp(blacks_value / 100.0F, -1.0F, 1.0F) * kBlackLift;
-    const float contrast_gamma = 1.0F + std::clamp(contrast_value / 100.0F, -1.0F, 1.0F) * kContrast;
+    const float sh  = std::clamp(shadows_value    / 100.0F, -1.0F, 1.0F) * kShadowAmp;
+    const float mid = std::clamp(midtones_value   / 100.0F, -1.0F, 1.0F) * kMidtoneAmp;
+    const float hi  = std::clamp(highlights_value / 100.0F, -1.0F, 1.0F) * kHighlightAmp;
+    const float blk = std::clamp(blacks_value     / 100.0F, -1.0F, 1.0F) * kBlackAmp;
+    const float wht = std::clamp(whites_value     / 100.0F, -1.0F, 1.0F) * kWhiteAmp;
+    const float con = std::clamp(contrast_value   / 100.0F, -1.0F, 1.0F) * kContrastAmp;
 
-    const bool any_region = sh_ev != 0.0F || mid_ev != 0.0F || hi_ev != 0.0F;
-    const bool any_endpoint = white_ev != 0.0F || black_off != 0.0F;
-    const bool any_contrast = std::fabs(contrast_gamma - 1.0F) > 1.0e-4F;
-    if (!any_region && !any_endpoint && !any_contrast) {
+    if (sh == 0.0F && mid == 0.0F && hi == 0.0F && blk == 0.0F && wht == 0.0F && con == 0.0F) {
         return;
     }
 
-    const auto zone = [](float lp, float center, float sigma) {
-        const float d = (lp - center) / sigma;
-        return std::exp(-0.5F * d * d);
+    constexpr float kPi = std::numbers::pi_v<float>;
+    // Raised-sine bump: 0 at lo and hi (pinned), 1 at the midpoint. Region-localized.
+    const auto bump = [](float x, float lo, float hi_) -> float {
+        if (x <= lo || x >= hi_) { return 0.0F; }
+        return std::sin(kPi * (x - lo) / (hi_ - lo));
+    };
+    // Smoothstep 0->1 across [e0,e1].
+    const auto smoothstep = [](float e0, float e1, float x) -> float {
+        const float t = std::clamp((x - e0) / (e1 - e0), 0.0F, 1.0F);
+        return t * t * (3.0F - 2.0F * t);
     };
 
-    for (std::size_t i = 0; i < adjusted.pixel_count(); ++i) {
+    // Build the monotonic tone-curve LUT in perceptual space.
+    constexpr int kLut = 1024;
+    std::array<float, kLut> lut{};
+    for (int i = 0; i < kLut; ++i) {
+        const float x = static_cast<float>(i) / static_cast<float>(kLut - 1);
+        float y = x;
+        // Region deformations (well-separated so a Shadows push cannot reach the midtones).
+        y += sh  * bump(x, 0.00F, 0.45F);          // shadows: pinned at black, zero by 0.45
+        y += mid * bump(x, 0.20F, 0.80F);          // midtones: centred on mid-grey
+        y += hi  * bump(x, 0.55F, 1.00F);          // highlights: pinned at white, zero below 0.55
+        // Endpoint moves.
+        y += blk * (1.0F - smoothstep(0.0F, 0.25F, x)); // blacks: moves the black endpoint
+        y += wht * smoothstep(0.62F, 1.0F, x);          // whites: expands the upper highlights toward the white endpoint
+        // Contrast: endpoint-pinned S about mid-grey (steepens mids, darks down / lights up).
+        y += con * (-std::sin(2.0F * kPi * std::clamp(y, 0.0F, 1.0F)));
+        lut[static_cast<std::size_t>(i)] = y;
+    }
+    // Force monotonic non-decreasing, then clamp — no slider combination can invert/flatten.
+    for (int i = 1; i < kLut; ++i) {
+        lut[static_cast<std::size_t>(i)] = std::max(lut[static_cast<std::size_t>(i)],
+                                                    lut[static_cast<std::size_t>(i - 1)]);
+    }
+    for (float& v : lut) { v = std::clamp(v, 0.0F, 1.0F); }
+
+    const auto curve = [&lut](float x) -> float {
+        const float fx = std::clamp(x, 0.0F, 1.0F) * static_cast<float>(kLut - 1);
+        const int i0 = static_cast<int>(fx);
+        const int i1 = std::min(i0 + 1, kLut - 1);
+        const float f = fx - static_cast<float>(i0);
+        return lut[static_cast<std::size_t>(i0)] * (1.0F - f) + lut[static_cast<std::size_t>(i1)] * f;
+    };
+
+    parallel_for_index(static_cast<std::ptrdiff_t>(adjusted.pixel_count()), [&](std::ptrdiff_t i) {
         float r = adjusted.pixels[i * 3 + 0];
         float g = adjusted.pixels[i * 3 + 1];
         float b = adjusted.pixels[i * 3 + 2];
         const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * g + 0.0722F * b);
-        const float lp = std::pow(std::min(luma, 1.0F), kInvGamma); // perceptual luminance for masks
-
-        if (any_region) {
-            const float total_ev =
-                sh_ev * zone(lp, 0.22F, 0.16F) +
-                mid_ev * zone(lp, 0.50F, 0.16F) +
-                hi_ev * zone(lp, 0.78F, 0.16F);
-            const float gain = std::exp2(total_ev);
-            r *= gain; g *= gain; b *= gain;
-        }
-        if (white_ev != 0.0F) {
-            const float top_weight = lp * lp * lp;
-            const float wmult = std::exp2(white_ev * top_weight);
-            r *= wmult; g *= wmult; b *= wmult;
-        }
-        if (black_off != 0.0F) {
-            const float bottom = 1.0F - lp;
-            const float off = black_off * bottom * bottom * bottom;
-            r += off; g += off; b += off;
-        }
-        r = std::max(0.0F, r); g = std::max(0.0F, g); b = std::max(0.0F, b);
-        if (any_contrast) {
-            r = kMidGrey * std::pow(std::max(r, 1.0e-8F) / kMidGrey, contrast_gamma);
-            g = kMidGrey * std::pow(std::max(g, 1.0e-8F) / kMidGrey, contrast_gamma);
-            b = kMidGrey * std::pow(std::max(b, 1.0e-8F) / kMidGrey, contrast_gamma);
-        }
-        adjusted.pixels[i * 3 + 0] = r;
-        adjusted.pixels[i * 3 + 1] = g;
-        adjusted.pixels[i * 3 + 2] = b;
-    }
+        const float lx = std::clamp(luma, 0.0F, 1.0F);
+        const float x = std::pow(lx, kInvGamma);             // perceptual luminance
+        const float y = curve(x);                            // reshaped perceptual luminance
+        const float luma_out = std::pow(y, kGamma);          // back to linear
+        // Preserve colour: scale RGB by the luminance ratio (chroma-preserving), capped so a
+        // deep-shadow lift can't explode a near-black pixel. luma>1 (from Exposure) is handled
+        // via lx clamped to 1, so blown highlights follow the top of the curve.
+        const float scale = std::min(luma_out / std::max(lx, 1.0e-3F), 16.0F);
+        adjusted.pixels[i * 3 + 0] = std::max(0.0F, r * scale);
+        adjusted.pixels[i * 3 + 1] = std::max(0.0F, g * scale);
+        adjusted.pixels[i * 3 + 2] = std::max(0.0F, b * scale);
+    });
 }
 
 // Perceptual 3-way + global colour grading. See dfee/color_grading.hpp and
