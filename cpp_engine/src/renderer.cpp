@@ -1360,6 +1360,21 @@ Image FilmRenderer::apply_film_tone_response(
                 s_curve = knee + range * (t / (1.0F + k * t));
             }
 
+            // Film-like shadow lift (filmic_v3): a COMPRESSIVE toe that mirrors the highlight
+            // Reinhard shoulder above. Below the knee, bend the darkest tones UP with gradation
+            // (lifted but soft, like a real film toe) instead of relying on a flat additive fog
+            // floor (which reads milky). Continuous at the knee. Off (amount 0) for
+            // filmic_v2/parity and whenever Shadow Lift <= 0.
+            if (response.shadow_lift_amount > 0.0F && response.shadow_lift_knee > 0.0F &&
+                s_curve < response.shadow_lift_knee) {
+                const float knee = response.shadow_lift_knee;
+                const float t = (knee - s_curve) / knee;        // 0 at the knee, 1 at true black
+                const float k = response.shadow_lift_amount;
+                s_curve = knee - knee * (t / (1.0F + k * t));   // lift toward the knee, compressing shadow contrast
+            }
+
+            // Base-fog floor: the stock's natural fog (a whisper under the toe in filmic_v3; the
+            // full Shadow Lift amount in filmic_v2/parity). Quadratic falloff to the knee.
             const float toe_knee = std::max(0.05F, response.shadow_lift_knee);
             const float toe_fade = clampf(s_curve / toe_knee, 0.0F, 1.0F);
             const float shadow_weight = (1.0F - toe_fade) * (1.0F - toe_fade);

@@ -589,15 +589,29 @@ RenderPlan RenderPlanSolver::solve(
     }
 
     // Shadow Lift: bipolar control around the stock's natural base-fog floor (black_density).
-    // 0 = the stock's authored floor (unchanged). Positive lifts the deep-shadow floor toward a
-    // matte ceiling and widens its footprint into the low shadows (a genuine faded look, not just
-    // a moved black point). Negative pulls the floor toward true black and tightens the footprint.
-    // The renderer applies floor via: s + floor * (1 - clamp(s/knee,0,1))^2.
-    constexpr float kShadowLiftFloorMax = 0.07F;  // shared ceiling so the slider ends mean the same on every stock
+    // 0 = the stock's authored floor (unchanged). Negative pulls the floor toward true black and
+    // tightens the footprint (deeper, crushed blacks).
+    //
+    // Positive (filmic_v3): instead of flooding a flat fog offset across the blacks (which reads
+    // milky/faded), lift the shadows with a COMPRESSIVE TOE that mirrors the highlight Reinhard
+    // shoulder — the renderer bends the darkest tones up with gradation, so lifted shadows stay
+    // soft like a real film toe. Only a whisper of extra base-fog rides on top so blacks aren't
+    // pure-crushed. filmic_v2/parity keep the legacy additive-floor lift (byte-identical).
+    // Renderer applies: compressive toe (amount) + floor * (1 - clamp(s/knee,0,1))^2.
+    constexpr float kShadowLiftFloorMax  = 0.07F;  // legacy additive-floor ceiling (parity path)
+    constexpr float kShadowLiftAmountMax = 0.6F;   // compressive-toe strength at Shadow Lift +100
+    constexpr float kShadowFogWhisper    = 0.008F; // tiny base-fog kept under the toe so blacks aren't pure-crushed
     const float shadow_lift_norm = std::clamp(controls.shadow_lift / 100.0F, -1.0F, 1.0F);
     float shadow_lift_floor = black_density;
     float shadow_lift_knee = 0.25F;
-    if (shadow_lift_norm > 0.0F) {
+    float shadow_lift_amount = 0.0F;
+    if (shadow_lift_norm > 0.0F && controls.subtractive_pipeline) {
+        // Film-like compressive toe (mirror of the highlight shoulder).
+        shadow_lift_amount = shadow_lift_norm * kShadowLiftAmountMax;
+        shadow_lift_knee = 0.12F + shadow_lift_norm * 0.08F;   // confine to true shadows (max ~0.20) as it strengthens
+        shadow_lift_floor = black_density + shadow_lift_norm * kShadowFogWhisper;
+    } else if (shadow_lift_norm > 0.0F) {
+        // Legacy additive-floor lift (filmic_v2 / parity) — unchanged.
         shadow_lift_floor = black_density + shadow_lift_norm * std::max(0.0F, kShadowLiftFloorMax - black_density);
         shadow_lift_knee = 0.25F + shadow_lift_norm * 0.20F;   // widen: 0.25 -> 0.45
     } else if (shadow_lift_norm < 0.0F) {
@@ -641,6 +655,7 @@ RenderPlan RenderPlanSolver::solve(
         .highlight_rolloff_start = highlight_rolloff_start,
         .black_density_floor = shadow_lift_floor,
         .shadow_lift_knee = shadow_lift_knee,
+        .shadow_lift_amount = shadow_lift_amount,
         .highlight_desaturation = highlight_desaturation,
         .blue_cyan_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.cyan_blue_highlight_compression", 0.0F),
         .red_orange_compression = get_numeric(stock_profile.numeric_values, "hue_saturation_response.red_orange_midtone_compression", 0.0F),

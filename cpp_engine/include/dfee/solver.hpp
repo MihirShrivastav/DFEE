@@ -89,6 +89,7 @@ struct FilmResponsePlan {
     float highlight_rolloff_start = 0.0F;
     float black_density_floor = 0.0F;
     float shadow_lift_knee = 0.25F;  // deep-shadow footprint of the base-fog floor (Shadow Lift widens/tightens it)
+    float shadow_lift_amount = 0.0F; // compressive-toe lift strength (mirror of highlight_rolloff_amount; 0 = off, filmic_v3)
     float highlight_desaturation = 0.0F;
     float blue_cyan_compression = 0.0F;
     float red_orange_compression = 0.0F;
