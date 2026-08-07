@@ -3614,8 +3614,8 @@ static void test_curve_mapping() {
     assert(dfee::map_characteristic_curve(base, 100.f, 200.f, 0.f).shoulder_onset < base.shoulder_onset);
     // Shadow Lift up raises d_min (lifted toe).
     assert(dfee::map_characteristic_curve(base, 100.f, 100.f, 100.f).d_min > base.d_min);
-    // Exposure shift: negatives get +2/3 expose-to-right bias at EV 0; reversal neutral.
-    assert(std::abs(dfee::map_exposure_shift(0.f, false) - 0.66f) < 0.05f);
+    // Exposure shift: negatives get a gentle expose-to-right bias at EV 0; reversal neutral.
+    assert(std::abs(dfee::map_exposure_shift(0.f, false) - 0.20f) < 0.05f);
     assert(std::abs(dfee::map_exposure_shift(0.f, true)  - 0.0f)  < 1e-4f);
     assert(std::abs(dfee::map_exposure_shift(1.f, true)  - 1.0f)  < 1e-4f);
     std::printf("test_curve_mapping passed\n");

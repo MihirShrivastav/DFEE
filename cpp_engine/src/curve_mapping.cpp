@@ -14,7 +14,7 @@ CharacteristicCurve map_characteristic_curve(const CharacteristicCurve& a,
     return c;
 }
 float map_exposure_shift(float film_exposure_ev, bool is_reversal) {
-    const float bias = is_reversal ? 0.0f : 0.66f; // negatives designed to over-expose ~2/3 stop
+    const float bias = is_reversal ? 0.0f : 0.20f; // gentle expose-to-right for negatives; larger blows highlights
     return film_exposure_ev + bias;
 }
 }
