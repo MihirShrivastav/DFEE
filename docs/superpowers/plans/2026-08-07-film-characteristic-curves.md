@@ -8,6 +8,19 @@
 
 **Tech Stack:** C++20, OpenCV (image buffers), yaml-cpp (profiles), assert-based test binary `dfee_tests` (`cpp_engine/tests/test_core.cpp`), MSVC Release build via CMake preset `out/build/windows-msvc-vcpkg`. Harness: `experiments/bespoke_portra800.cpp`.
 
+## Follow-up: Toe Correctness (2026-08-07)
+
+The first renderer implementation did not execute `curve_eval(...)`: it rebuilt a
+scene-percentile luma curve with a generic smoothstep toe. This left
+`latitude_stops`, `toe_onset`, and `toe_hardness` inert and could make high-contrast
+v4 profiles crush shadows when the straight-line join fell below `d_min`.
+
+The corrected renderer evaluates the authored characteristic curve in log exposure
+through a `[-16,+12]` stop LUT. The pure curve derives its straight-line slope from
+`gamma / latitude_stops`, and caps only an impossible toe join immediately above the
+black floor to retain C1 continuity and shadow gradation. The v4 path remains
+luminance-based, preserving chroma by RGB scaling; legacy pipelines are unchanged.
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

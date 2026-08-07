@@ -1310,64 +1310,31 @@ Image FilmRenderer::apply_film_tone_response(
     std::array<float, 3> shoulder_k{};
     std::array<std::vector<float>, 3> tone_luts{};
     if (response.use_characteristic_curve) {
-        // ---- Scene-aware, luminance-based film tone (display-referred) ----
-        // Measure the scene in perceptual luma: mean = exposure-preserving pivot (Km); black
-        // (Kb) and white (Kw) points from percentiles, so the film maps the ACTUAL scene range
-        // onto its response (no hand-waved fixed endpoints). Applied to LUMINANCE only, chroma
-        // preserved by scaling RGB by the luma ratio, so contrast adds tonal punch WITHOUT
-        // inflating saturation. gamma = contrast (Film Contrast); d_min = black floor (Shadow
-        // Lift); d_max = soft white ceiling with a Reinhard shoulder (Highlight Rolloff) so
-        // highlights roll off with gradation and cannot pile at pure white. Full strength —
-        // a display-referred reshape does not double-develop. Film Exposure stays pre-film.
+        // ---- Stock-authored, luminance-based characteristic curve ----
+        // Film sensitivity has already been placed by the pre-film exposure stage. Evaluate the
+        // stock curve in log exposure, not at scene percentiles: percentile gates made every
+        // stock share one generic smoothstep toe, ignored toe_onset/toe_hardness, and could
+        // force contrasty profiles into a hard black clamp. Applying the curve to luminance keeps
+        // its contrast character while preserving scene chroma through the RGB scale below.
         const std::size_t n = rgb_linear.pixel_count();
-        std::array<std::uint32_t, 256> hist{};
-        double luma_acc = 0.0;
-        for (std::size_t i = 0; i < n; ++i) {
-            const float l = 0.2126F * rgb_linear.pixels[i * 3 + 0]
-                          + 0.7152F * rgb_linear.pixels[i * 3 + 1]
-                          + 0.0722F * rgb_linear.pixels[i * 3 + 2];
-            const float lp = std::pow(std::clamp(l, 0.0F, 1.0F), 1.0F / 2.2F);
-            luma_acc += lp;
-            hist[static_cast<std::size_t>(std::clamp(static_cast<int>(lp * 255.0F + 0.5F), 0, 255))]++;
-        }
-        const float mean_lp = static_cast<float>(luma_acc / static_cast<double>(std::max<std::size_t>(n, 1U)));
-        const auto pctile = [&](float frac) {
-            const auto target = static_cast<std::uint64_t>(frac * static_cast<double>(n));
-            std::uint64_t cum = 0;
-            for (int bni = 0; bni < 256; ++bni) {
-                cum += hist[static_cast<std::size_t>(bni)];
-                if (cum >= target) { return static_cast<float>(bni) / 255.0F; }
-            }
-            return 1.0F;
-        };
-        const float Km = std::clamp(mean_lp, 0.15F, 0.80F);              // exposure-preserving pivot
-        const float Kb = std::clamp(pctile(0.02F), 0.0F, Km - 0.04F);   // scene black point
-        const float Kw = std::clamp(pctile(0.98F), Km + 0.04F, 1.0F);   // scene white point
-
         const CharacteristicCurve& cc = response.characteristic_curve;
-        const float g   = std::clamp(cc.gamma, 0.2F, 3.0F);             // luma contrast
-        const float dmn = std::clamp(cc.d_min, 0.0F, 0.35F);           // film black floor
-        const float dmx = std::clamp(cc.d_max, 0.70F, 1.0F);          // soft white ceiling
-        const float sh_knee = std::max(dmn + 0.20F, dmx - 0.28F);      // where the highlight shoulder starts (later = brighter, less-flattened highlights)
-        const float sh_range = std::max(dmx - sh_knee, 1.0e-3F);
-        const float sKb = Km + (Kb - Km) * g;                          // straight-line value at scene black
-        constexpr int kL = 1024;
+        // The curve lives in stops. Sampling it in linear light would collapse
+        // precision in the toe and would also make values above one share a clipped
+        // LUT entry. This range covers practical RAW headroom while keeping the hot
+        // render loop to interpolation and a final display transfer.
+        constexpr int kL = 2048;
+        constexpr float kLogELow = -16.0F;
+        constexpr float kLogEHigh = 12.0F;
         std::array<float, kL> luma_lut{};
         for (int i = 0; i < kL; ++i) {
-            const float lp = static_cast<float>(i) / static_cast<float>(kL - 1);
-            float out = Km + (lp - Km) * g;                            // straight-line gamma contrast around pivot
-            if (lp < Kb) {                                             // toe: scene-black region -> film black floor
-                const float t = Kb > 1.0e-4F ? lp / Kb : 1.0F;
-                const float ss = t * t * (3.0F - 2.0F * t);            // smoothstep
-                out = dmn + (sKb - dmn) * ss;
-            }
-            if (out > sh_knee) {                                       // shoulder: roll highlights toward d_max (soft, gradation kept)
-                out = dmx - sh_range * std::exp(-(out - sh_knee) / sh_range);
-            }
-            luma_lut[static_cast<std::size_t>(i)] = std::clamp(out, 0.0F, 1.0F);
+            const float t = static_cast<float>(i) / static_cast<float>(kL - 1);
+            const float log_e = kLogELow + (kLogEHigh - kLogELow) * t;
+            luma_lut[static_cast<std::size_t>(i)] = curve_eval(cc, log_e);
         }
-        const auto lcurve = [&](float lp) {
-            const float fx = std::clamp(lp, 0.0F, 1.0F) * static_cast<float>(kL - 1);
+        const auto lcurve = [&](float log_e) {
+            const float t = std::clamp(
+                (log_e - kLogELow) / (kLogEHigh - kLogELow), 0.0F, 1.0F);
+            const float fx = t * static_cast<float>(kL - 1);
             const int i0 = static_cast<int>(fx);
             const int i1 = std::min(i0 + 1, kL - 1);
             const float f = fx - static_cast<float>(i0);
@@ -1379,8 +1346,9 @@ Image FilmRenderer::apply_film_tone_response(
             const float gc = rgb_linear.pixels[b + 1];
             const float bc = rgb_linear.pixels[b + 2];
             const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * gc + 0.0722F * bc);
-            const float lp = std::pow(std::clamp(luma, 0.0F, 1.0F), 1.0F / 2.2F);
-            const float out_lin = std::pow(lcurve(lp), 2.2F);
+            const float log_e = scene_logE(
+                luma, response.scene_midtone_anchor, response.scene_exposure_shift);
+            const float out_lin = std::pow(lcurve(log_e), 2.2F);
             if (luma > 1.0e-4F) {
                 const float sgain = std::min(out_lin / luma, 16.0F);   // chroma-preserving luminance scale
                 toned.pixels[b + 0] = std::max(0.0F, r * sgain);

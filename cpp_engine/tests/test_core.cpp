@@ -3555,9 +3555,13 @@ static void test_characteristic_curve() {
     // (b) monotonic increasing across the whole log-E range.
     float prev = -1.0f;
     for (int i = -60; i <= 60; ++i) { float y = dfee::curve_eval(c, i * 0.1f); assert(y >= prev - 1e-6f); prev = y; }
-    // (c) straight-line slope near mid ~= gamma/kStopsRef (kStopsRef = 8 => 0.125 per stop at gamma 1).
+    // (c) default latitude is eight stops, so the mid slope is gamma / 8 per stop.
     float slope = (dfee::curve_eval(c, 0.5f) - dfee::curve_eval(c, -0.5f)) / 1.0f;
     assert(std::abs(slope - 0.125f) < 0.02f);
+    // Authored latitude is live: a wider negative-film latitude has a gentler mid slope.
+    CharacteristicCurve wide = c; wide.latitude_stops = 12.0f;
+    const float wide_slope = (dfee::curve_eval(wide, 0.5f) - dfee::curve_eval(wide, -0.5f)) / 1.0f;
+    assert(wide_slope < slope * 0.8f);
     // (d) higher gamma => steeper mid slope.
     CharacteristicCurve hi = c; hi.gamma = 2.0f;
     float slope_hi = (dfee::curve_eval(hi, 0.5f) - dfee::curve_eval(hi, -0.5f)) / 1.0f;
@@ -3602,6 +3606,25 @@ static void test_curve_render() {
     float spread1 = out1.pixels[48*3] - out1.pixels[16*3];
     float spread2 = out2.pixels[48*3] - out2.pixels[16*3];
     assert(spread2 > spread1);
+
+    // A long, gentle negative-film toe must retain gradation below the authored onset.
+    // This catches the former percentile/smoothstep renderer path, which ignored these
+    // parameters and could clamp a sizeable dark band to the black floor.
+    dfee::FilmResponsePlan portra = plan;
+    portra.characteristic_curve.gamma = 1.15f;
+    portra.characteristic_curve.latitude_stops = 10.0f;
+    portra.characteristic_curve.toe_onset = 3.8f;
+    portra.characteristic_curve.toe_hardness = 0.6f;
+    portra.characteristic_curve.d_min = 0.05f;
+    dfee::Image shadows(5, 1, 3);
+    const std::array<float, 5> shadow_inputs{0.0002f, 0.0005f, 0.0015f, 0.004f, 0.012f};
+    for (std::size_t i = 0; i < shadow_inputs.size(); ++i) {
+        shadows.pixels[i * 3] = shadows.pixels[i * 3 + 1] = shadows.pixels[i * 3 + 2] = shadow_inputs[i];
+    }
+    const dfee::Image shadow_out = renderer.apply_film_tone_response(shadows, portra);
+    for (std::size_t i = 1; i < shadow_inputs.size(); ++i) {
+        assert(shadow_out.pixels[i * 3] > shadow_out.pixels[(i - 1) * 3]);
+    }
     std::printf("test_curve_render passed\n");
 }
 

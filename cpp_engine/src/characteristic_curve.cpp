@@ -5,21 +5,30 @@
 namespace dfee {
 namespace {
 constexpr float kMidOut = 0.4586f;   // pow(0.18, 1/2.2): mid-grey perceptual output
-constexpr float kStopsRef = 8.0f;    // gamma 1.0 => 1/8 output per stop of log-E
 }
 
 float curve_eval(const CharacteristicCurve& c, float logE) {
-    const float s = c.gamma / kStopsRef;                 // straight-line slope (output per stop)
+    // Gamma is the contrast index while latitude defines the useful straight-line
+    // span. Treating every stock as an eight-stop curve made the authored latitude
+    // field inert and could place a long negative-film toe below d_min, where the
+    // renderer had no option but to flatten it.
+    const float latitude = std::max(c.latitude_stops, 1.0f);
+    const float s = c.gamma / latitude;                  // straight-line slope (output per stop)
     const float d_min = std::clamp(c.d_min, 0.0f, 0.9f);
     const float d_max = std::clamp(c.d_max, d_min + 0.05f, 1.0f);
     const float lin = kMidOut + s * logE;                // straight-line output
+    // A C1 exponential toe can only join the straight line above the black floor.
+    // Cap an incompatible authored onset just before that intersection rather than
+    // collapsing the toe to a near-zero-width segment and crushing shadow detail.
+    const float toe_limit = std::max(0.05f, (kMidOut - d_min) / std::max(s, 1.0e-4f) - 1.0e-3f);
+    const float toe_onset = std::clamp(c.toe_onset, 0.05f, toe_limit);
     float y;
-    if (logE < -c.toe_onset) {
+    if (logE < -toe_onset) {
         // C1 exponential toe: matches value & slope s at the join, asymptotes to d_min.
-        const float y0 = kMidOut - s * c.toe_onset;      // straight-line value at the join
+        const float y0 = kMidOut - s * toe_onset;        // straight-line value at the join
         const float foot = std::max(y0 - d_min, 1e-4f);
         const float k = (s / foot) * std::max(c.toe_hardness, 0.05f);
-        y = d_min + foot * std::exp(k * (logE + c.toe_onset));
+        y = d_min + foot * std::exp(k * (logE + toe_onset));
     } else if (logE > c.shoulder_onset) {
         // C1 exponential shoulder: asymptotes to d_max.
         const float y1 = kMidOut + s * c.shoulder_onset;
