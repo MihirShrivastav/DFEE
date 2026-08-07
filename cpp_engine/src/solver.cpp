@@ -709,7 +709,12 @@ RenderPlan RenderPlanSolver::solve(
         plan.film_response.characteristic_curve = map_characteristic_curve(
             authored, controls.film_contrast, controls.highlight_rolloff, controls.shadow_lift);
         plan.film_response.use_characteristic_curve = true;
-        plan.film_response.scene_midtone_anchor = tonal.midtone_anchor;
+        // Fixed 18% mid-grey reference for curve placement. Do NOT use the scene's measured
+        // midtone_anchor here: the pre-film exposure stage already normalizes the scene toward
+        // 0.18, so re-centering on the scene key double-applies exposure (lifts mids ~1 stop,
+        // blows highlights, flattens). Film sensitivity is fixed; the scene falls where its
+        // actual exposure (+ Film Exposure) puts it — that is what makes contrast exposure-dependent.
+        plan.film_response.scene_midtone_anchor = 0.18F;
         plan.film_response.scene_exposure_shift = map_exposure_shift(
             controls.film_exposure_ev, stock_profile.stock_type == StockType::ColorReversal);
         plan.film_response.curve_gamma_mult = get_array3(
