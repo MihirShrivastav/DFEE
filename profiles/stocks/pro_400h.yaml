@@ -66,9 +66,10 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.06
-  radius_inner: 5
-  radius_outer: 20
+  strength: 0.03
+  threshold: 0.82
+  radius_inner: 3
+  radius_outer: 12
   warm_core:
   - 1.0
   - 0.65
@@ -111,13 +112,23 @@ hue_chroma_gain:
   blue: 0.02
   magenta: -0.02
 crossover:
-  # Fujicolor Pro 400H: remarkably NEUTRAL, low-contrast, pastel/airy — the opposite of a
-  # Kodak warm crossover. Its signature is "green shadows + pink highlights" on a cool base
-  # with added depth in blue/green. So: gently green-cyan shadows (a slightly -, b -), and
-  # COOL-pastel highlights with only a faint PINK lean (a small +, b kept LOW — NOT the
-  # golden/yellow b of Kodak stocks). Subtle overall; the look is softness, not a strong cast.
-  shadow_cast_a: -0.04
-  shadow_cast_b: -0.14
-  highlight_cast_a: 0.07
-  highlight_cast_b: 0.06
+  # Pro 400H's fourth layer is represented as neutral-gray, skin, and mixed-light
+  # stability. Its slight palette tendency must never become a cyan-green cast.
+  shadow_cast_a: -0.02
+  shadow_cast_b: -0.06
+  highlight_cast_a: 0.04
+  highlight_cast_b: 0.03
   exposure_sensitivity: 0.34
+characteristic_curve:
+  # Pro 400H's fourth layer supports neutral grays and skin across mixed light.
+  # Its v4 curve therefore prioritizes continuous gradation and a long shoulder,
+  # not a pastel wash or a cyan-green global shift.
+  gamma: 1.10
+  latitude_stops: 11.0
+  toe_onset: 4.2
+  toe_hardness: 0.45
+  shoulder_onset: 5.3
+  shoulder_hardness: 0.42
+  d_min: 0.040
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

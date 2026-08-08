@@ -66,7 +66,8 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.08
+  strength: 0.03
+  threshold: 0.83
   radius_inner: 3
   radius_outer: 12
   warm_core:
@@ -110,14 +111,24 @@ hue_chroma_gain:
   cyan: 0.02
   blue: 0.01
 crossover:
-  # Fujifilm Eterna 250D (cinema neg): ultra-fine, soft-contrast, SUBDUED/muted "washed-off"
-  # palette with a PASTEL BLUE tone all around and muted greens — the cool Fuji answer to
-  # Vision3, NOT its warm teal-orange. So a gentle, LOW crossover: faintly green-cool shadows
-  # and cool/neutral highlights (b kept near-zero — removed the previous golden 0.16 that
-  # fought the pastel-blue look). The cool channel mults above (lifted blue toe, preserved
-  # blue shoulder) already carry the overall pastel-blue; this cast just stays out of its way.
+  # Standard Eterna 250D is the restrained daylight camera negative: soft,
+  # finely grained and latitude-first. It is not the separate Vivid stock and
+  # does not need a broad blue/cyan grade to read as cinema film.
   shadow_cast_a: -0.02
   shadow_cast_b: -0.14
   highlight_cast_a: 0.03
   highlight_cast_b: 0.04
   exposure_sensitivity: 0.28
+characteristic_curve:
+  # Standard Eterna 250D is the daylight camera-negative, not Eterna Vivid.
+  # The curve is deliberately low-contrast and long-range, preserving the
+  # documented latitude and gradation balance without a reversal-like clip.
+  gamma: 1.02
+  latitude_stops: 11.8
+  toe_onset: 4.4
+  toe_hardness: 0.46
+  shoulder_onset: 5.8
+  shoulder_hardness: 0.38
+  d_min: 0.030
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

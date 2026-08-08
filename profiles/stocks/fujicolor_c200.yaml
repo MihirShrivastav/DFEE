@@ -66,9 +66,10 @@ grain:
   overexposure_smoothing: 0.34
 halation:
   trigger: specular_only
-  strength: 0.06
-  radius_inner: 5
-  radius_outer: 20
+  strength: 0.04
+  threshold: 0.81
+  radius_inner: 3
+  radius_outer: 12
   warm_core:
   - 1.0
   - 0.5
@@ -110,13 +111,23 @@ hue_chroma_gain:
   cyan: 0.04
   blue: 0.03
 crossover:
-  # Fujicolor C200: the budget everyday Fuji. Cooler/subdued vs Kodak but WARMER and softer
-  # than Superia — it renders slightly warm greens and its shadows go greenish + milky
-  # "warm-gray" (muddy, lifted) rather than Superia's cool moody green. So: greenish shadows
-  # (a -), but only faintly cool (b near-neutral, warmer than Superia), and a gentle WARM
-  # highlight lean (C200 leans warm) — restrained vs Kodak. Reds stay muted (no red gain).
-  shadow_cast_a: -0.05
-  shadow_cast_b: -0.08
-  highlight_cast_a: 0.08
-  highlight_cast_b: 0.18
+  # C200 is the clean, daylight consumer Fuji baseline. Its restrained palette
+  # tendency is not a green cast: skin and ordinary neutral grays remain stable.
+  shadow_cast_a: -0.03
+  shadow_cast_b: -0.05
+  highlight_cast_a: 0.05
+  highlight_cast_b: 0.12
   exposure_sensitivity: 0.36
+characteristic_curve:
+  # C200 is a clean, fine-grain daylight consumer negative. Preserve its
+  # practical latitude and natural skin rendering without inheriting Gold's
+  # warm colour energy or Superia's more emphatic midtone contrast.
+  gamma: 1.12
+  latitude_stops: 10.2
+  toe_onset: 3.8
+  toe_hardness: 0.55
+  shoulder_onset: 4.8
+  shoulder_hardness: 0.52
+  d_min: 0.030
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

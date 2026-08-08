@@ -885,6 +885,27 @@ void test_color_negative_profiles_are_distinct() {
     assert(value(eterna_250d, "grain.size") < value(pro_400h, "grain.size"));
     assert(value(eterna_250d, "hue_saturation_response.saturation_boost") <
            value(pro_400h, "hue_saturation_response.saturation_boost"));
+
+    // V4 preserves the Fuji negative roles without treating fourth-layer
+    // stability as a global green cast. Superia is firmer/vivid; C200 is the
+    // clean ISO-200 consumer stock; Pro 400H and Eterna are the long-range
+    // professional and cinema responses respectively.
+    assert(value(superia_400, "characteristic_curve.gamma") >
+           value(fujicolor_c200, "characteristic_curve.gamma"));
+    assert(value(fujicolor_c200, "characteristic_curve.gamma") >
+           value(pro_400h, "characteristic_curve.gamma"));
+    assert(value(pro_400h, "characteristic_curve.latitude_stops") >
+           value(fujicolor_c200, "characteristic_curve.latitude_stops"));
+    assert(value(eterna_250d, "characteristic_curve.latitude_stops") >
+           value(pro_400h, "characteristic_curve.latitude_stops"));
+    assert(value(eterna_250d, "characteristic_curve.gamma") <
+           value(pro_400h, "characteristic_curve.gamma"));
+    assert(value(pro_400h, "characteristic_curve.d_min") >
+           value(fujicolor_c200, "characteristic_curve.d_min"));
+    assert(value(fujicolor_c200, "halation.threshold") >= 0.80F);
+    assert(value(superia_400, "halation.threshold") >= 0.78F);
+    assert(value(pro_400h, "halation.threshold") >= 0.80F);
+    assert(value(eterna_250d, "halation.threshold") >= 0.80F);
 }
 
 void test_shadow_lift_floor_and_footprint() {

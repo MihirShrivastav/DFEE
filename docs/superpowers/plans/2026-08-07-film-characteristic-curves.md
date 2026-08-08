@@ -100,6 +100,24 @@ standard C-41 development, which CineStill says moderately increases gamma.
 
 Sources: [800T usage guide](https://cinestillfilm.com/blogs/news/cinestill-800t-in-your-toolbox), [400D product details](https://cinestillfilm.com/collections/the-400d-film-family/products/400dynamic-35mm), [50D technical guidance](https://help.cinestillfilm.com/hc/en-us/articles/360028918672-What-is-different-about-CineStill-50Daylight-film).
 
+## Stock Rollout: Fujifilm Negative Family (2026-08-09)
+
+Fujicolor C200, Superia X-TRA 400, Pro 400H, and Eterna 250D now use v4
+characteristic curves and high stock-specific halation thresholds. Their existing
+per-hue colour, grain, density, and compression differences remain in place. The
+only colour adjustment in this slice reduces their crossover casts to a bounded
+palette tendency: Fujifilm's fourth-layer technology is documented as neutral-gray
+and skin stability over varied exposure/light, not a license for a universal
+green-cyan grade.
+
+C200 is the fine-grain ISO-200 consumer baseline; Superia is the firmer, more
+vivid/textured ISO-400 consumer option; Pro 400H prioritizes continuous gradation,
+neutral grays, and controlled shadow colour; and standard Eterna 250D remains the
+low-contrast, long-latitude daylight cinema negative. Eterna Vivid is a separate,
+high-contrast/high-saturation product and is not represented by this profile.
+
+Sources: [C200 product information](https://asset.fujifilm.com/www/us/files/2019-09/cce1e1943550fc3e76c22411066f0100/films_c200_datasheet_01.pdf), [Superia X-TRA 400 product information](https://asset.fujifilm.com/www/in/files/2020-07/32cf7e5def364084eb8cf03ff011df0f/films_superia-xtra400_datasheet_01.pdf), [Pro 400H product information](https://www.fujifilm.com.hk/products/professional_films/pdf/pro_400h_datasheet.pdf), [Eterna 250D manual](https://manualzz.com/doc/27787292/fujifilm-motion-picture-film-manual).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

@@ -66,9 +66,10 @@ grain:
   overexposure_smoothing: 0.28
 halation:
   trigger: specular_only
-  strength: 0.08
-  radius_inner: 5
-  radius_outer: 20
+  strength: 0.05
+  threshold: 0.79
+  radius_inner: 4
+  radius_outer: 15
   warm_core:
   - 1.0
   - 0.5
@@ -113,13 +114,24 @@ hue_chroma_gain:
   blue: 0.06
   magenta: 0.02
 crossover:
-  # Fujicolor Superia X-TRA 400: the "typical Fuji" cool magenta/green look. Its signature
-  # is MOODY GREENISH SHADOWS on a punchy, saturated, medium-contrast base (4th cyan layer
-  # → cyan/green depth). So: pronounced green + cool shadows (a clearly -, b -), and only a
-  # MODEST warm lean in the highlights (from its poppy reds/oranges) — NOT the golden b of
-  # the Kodak stocks. Green toe held above so the curve supports the green shadow lean.
-  shadow_cast_a: -0.08
-  shadow_cast_b: -0.18
-  highlight_cast_a: 0.09
-  highlight_cast_b: 0.13
+  # Superia X-TRA 400 is the vivid, higher-speed consumer option. Its hue
+  # separation remains bounded so the documented neutral-gray and skin balance
+  # survive across the exposure range.
+  shadow_cast_a: -0.04
+  shadow_cast_b: -0.09
+  highlight_cast_a: 0.06
+  highlight_cast_b: 0.10
   exposure_sensitivity: 0.42
+characteristic_curve:
+  # Superia X-TRA 400 is the more vivid, higher-speed consumer Fuji option.
+  # It has stronger midtone separation and more texture than C200, while its
+  # broad shoulder preserves the documented gray and skin stability.
+  gamma: 1.22
+  latitude_stops: 9.3
+  toe_onset: 3.4
+  toe_hardness: 0.70
+  shoulder_onset: 4.4
+  shoulder_hardness: 0.60
+  d_min: 0.025
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]
