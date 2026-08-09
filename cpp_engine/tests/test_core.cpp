@@ -718,6 +718,21 @@ void test_reversal_profile_roles_are_distinct() {
     assert(value(astia, "characteristic_curve.shoulder_hardness") < 1.0F);
     assert(value(astia, "halation.threshold") >= 0.80F);
 
+    // Provia is Fujifilm's medium-contrast, medium-saturation, faithful
+    // general-purpose transparency. Its v4 curve should separate it from the
+    // soft Astia portrait response without making it a substitute Velvia or
+    // Kodachrome, and its restrained halation must begin only at speculars.
+    assert(value(provia, "characteristic_curve.gamma") >
+           value(astia, "characteristic_curve.gamma"));
+    assert(value(provia, "characteristic_curve.gamma") <
+           value(kodachrome, "characteristic_curve.gamma"));
+    assert(value(provia, "characteristic_curve.latitude_stops") <
+           value(astia, "characteristic_curve.latitude_stops"));
+    assert(value(provia, "characteristic_curve.latitude_stops") >= 6.0F);
+    assert(value(provia, "characteristic_curve.d_max") >
+           value(kodachrome, "characteristic_curve.d_max"));
+    assert(value(provia, "halation.threshold") >= 0.80F);
+
     // Velvia remains the vivid branch, with the ISO 50 profile deliberately the
     // more saturated and contrast-forward starting point.
     assert(value(velvia_50, "hue_saturation_response.saturation_boost") >

@@ -29,25 +29,25 @@ tone_response:
 color_response:
   shadow_bias_lab:
   - 0.0
-  - -0.5
-  - -1.5
+  - -0.2
+  - -0.6
   midtone_bias_lab:
   - 0.0
   - 0.0
-  - 0.5
+  - 0.2
   highlight_bias_lab:
-  - 0.3
-  - 0.5
-  - 1.5
+  - 0.15
+  - 0.15
+  - 0.4
   blue_cast_suppression: 0.15
   green_magenta_stabilization: 0.25
 hue_saturation_response:
-  saturation_boost: 1.16
-  red_orange_midtone_compression: 0.22
-  yellow_green_muting: 0.18
-  cyan_blue_highlight_compression: 0.22
+  saturation_boost: 1.12
+  red_orange_midtone_compression: 0.20
+  yellow_green_muting: 0.10
+  cyan_blue_highlight_compression: 0.16
   neon_compression: 0.55
-  highlight_desaturation: 0.25
+  highlight_desaturation: 0.20
 grain:
   size: 0.18
   strength: 0.12
@@ -67,6 +67,7 @@ grain:
 halation:
   trigger: specular_only
   strength: 0.06
+  threshold: 0.84
   radius_inner: 3
   radius_outer: 12
   warm_core:
@@ -109,12 +110,25 @@ hue_chroma_gain:
   blue: 0.04
   green: 0.03
 crossover:
-  # Fujichrome Provia 100F: the ACCURATE/neutral pro slide — reined-in saturation, neutral
-  # grays, most realistic skin tones. Its natural state is a faint cool (slight blue); it is
-  # NOT a cast film. So the most restrained crossover of the set: near-neutral shadows with
-  # just a hint of cool, near-neutral highlights. (Was -0.30/0.15, far too strong for Provia.)
+  # Provia is Fujifilm's neutral, faithful general-purpose transparency. Its
+  # characteristic color is clean primaries plus delicate pastels, not an
+  # imposed cool-shadow/warm-highlight grade.
   shadow_cast_a: 0.0
-  shadow_cast_b: -0.10
-  highlight_cast_a: 0.03
-  highlight_cast_b: 0.05
+  shadow_cast_b: -0.04
+  highlight_cast_a: 0.01
+  highlight_cast_b: 0.02
   exposure_sensitivity: 0.30
+characteristic_curve:
+  # Fujichrome Provia 100F (RDP III, E-6): medium contrast and saturation with
+  # rich, unusually linear highlight-to-shadow gradation. This rendered curve
+  # is firmer than Astia's soft portrait response, but stays below Kodachrome
+  # and Velvia rather than treating a faithful transparency as a vivid stock.
+  gamma: 1.30
+  latitude_stops: 6.1
+  toe_onset: 2.40
+  toe_hardness: 0.92
+  shoulder_onset: 2.85
+  shoulder_hardness: 0.86
+  d_min: 0.018
+  d_max: 0.992
+  channel_gamma_mult: [1.0, 1.0, 1.0]

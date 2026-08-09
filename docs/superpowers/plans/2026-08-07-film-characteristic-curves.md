@@ -138,6 +138,26 @@ that the engine reproduces a physical E-6 density curve or scanner response.
 
 Source: [Fujichrome Astia 100F professional data sheet](https://www.fujifilm.com.hk/products/professional_films/pdf/astia_100f_datasheet.pdf).
 
+## Stock Rollout: Fujichrome Provia 100F (2026-08-09)
+
+Provia 100F (RDP III) is now on the v4 characteristic-curve path as the
+general-purpose Fujichrome transparency baseline. Fujifilm specifies ISO 100,
+RMS 8 grain, medium saturation and contrast, vivid and faithful color, brilliant
+bias-free highlights, and excellent highlight-to-shadow gradation linearity. It
+also documents minimal color-balance and gradation change over -0.5 to +2 stop
+push/pull processing.
+
+The calibration gives Provia a 1.30 rendered contrast index and a 6.1-stop
+transparency range. It is firmer and slightly shorter than Astia's soft portrait
+curve, but remains below the contrast-forward Kodachrome and Velvia roles. The
+palette is tightened toward neutral: protected primaries and delicate pastels
+are retained without an artificial blue-shadow or warm-highlight crossover. A
+high halation threshold limits the small material effect to genuine specular
+sources. These values calibrate the engine's rendered response to the published
+relative behavior; they are not a literal E-6 density or scanner model.
+
+Source: [Fujichrome Provia 100F professional data sheet](https://asset.fujifilm.com/www/us/files/2020-03/6325e0d91ad8f74448c5968b5a954199/Provia100f.pdf).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.
