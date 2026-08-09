@@ -2746,6 +2746,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
 
         Image rendered = preview.rgb_linear;
         FilmRenderer renderer;
+        FilmicHalationSource halation_source;
         {
             ScopedStageTimer stage(response.engine, "render_preview_apply_pre_film_sliders");
             if (is_tiff_filename(response.filename)) {
@@ -2767,6 +2768,13 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 if (!is_tiff_filename(response.filename) &&
                     is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
+                }
+                if (is_filmic_effect_pipeline(request.effect_pipeline_version)) {
+                    ScopedStageTimer source_stage(response.engine, "render_preview_film_stage_halation_source");
+                    halation_source = renderer.build_filmic_halation_source(
+                        rendered,
+                        render_plan.film_response.scene_exposure_shift,
+                        render_plan.material_effects);
                 }
                 dump_stage(rendered, "10_baseline");
             }
@@ -2818,6 +2826,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                     ? renderer.apply_filmic_halation_bloom(
                         rendered,
+                        halation_source,
                         zone_masks,
                         spatial_masks,
                         render_plan.material_effects)
@@ -3185,6 +3194,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
 
                 append_export_trace(project_root_, "export_image:fullres_renderer:start");
                 FilmRenderer renderer;
+                FilmicHalationSource halation_source;
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_film_fullres");
                     {
@@ -3201,6 +3211,13 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     if (!is_tiff_filename(response.filename) &&
                         is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                         rendered = apply_raw_baseline_develop(rendered);
+                    }
+                    if (request.stock != "none" && is_filmic_effect_pipeline(request.effect_pipeline_version)) {
+                        ScopedStageTimer film_stage(response.engine, "export_image_render_stage_halation_source");
+                        halation_source = renderer.build_filmic_halation_source(
+                            rendered,
+                            render_plan->film_response.scene_exposure_shift,
+                            render_plan->material_effects);
                     }
                     if (request.stock != "none" && render_plan->stock_type == "monochrome") {
                         ScopedStageTimer film_stage(response.engine, "export_image_render_stage_panchromatic");
@@ -3247,6 +3264,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
                             ? renderer.apply_filmic_halation_bloom(
                                 rendered,
+                                halation_source,
                                 working_zone_masks,
                                 working_spatial_masks,
                                 render_plan->material_effects)

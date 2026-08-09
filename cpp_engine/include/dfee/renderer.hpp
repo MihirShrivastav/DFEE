@@ -6,6 +6,8 @@
 #include "dfee/profile.hpp"
 #include "dfee/solver.hpp"
 
+#include <vector>
+
 namespace dfee {
 
 // Phase 1 geometry (Geometry tab): a final spatial transform on the rendered image.
@@ -26,6 +28,25 @@ struct GeometryParams {
     [[nodiscard]] bool is_identity() const {
         return crop_x == 0.0F && crop_y == 0.0F && crop_w == 1.0F && crop_h == 1.0F &&
                straighten_deg == 0.0F && rotate_quadrant == 0 && !flip_h && !flip_v;
+    }
+};
+
+// Compact scene-exposure emitter proxy for the filmic halation/bloom stage. It is
+// built before the stock characteristic curve, then composited over the finished
+// film image. Keeping only the proxy avoids retaining another full-resolution
+// frame during export.
+struct FilmicHalationSource {
+    int image_width = 0;
+    int image_height = 0;
+    int width = 0;
+    int height = 0;
+    std::vector<float> glow;
+    std::vector<float> bloom_rgb;
+
+    [[nodiscard]] bool is_valid() const {
+        const std::size_t pixels = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+        return image_width > 0 && image_height > 0 && width > 0 && height > 0 &&
+            glow.size() == pixels && bloom_rgb.size() == pixels * 3U;
     }
 };
 
@@ -119,6 +140,20 @@ public:
         const SpatialMasks& spatial_masks,
         const MaterialEffectsPlan& effects) const;
 
+    [[nodiscard]] FilmicHalationSource build_filmic_halation_source(
+        const Image& rgb_exposure,
+        float film_exposure_stops,
+        const MaterialEffectsPlan& effects) const;
+
+    [[nodiscard]] Image apply_filmic_halation_bloom(
+        const Image& rgb_linear,
+        const FilmicHalationSource& source,
+        const ZoneMasks& zone_masks,
+        const SpatialMasks& spatial_masks,
+        const MaterialEffectsPlan& effects) const;
+
+    // Compatibility/test helper. Production preview/export builds the source before
+    // the stock curve through build_filmic_halation_source(...).
     [[nodiscard]] Image apply_filmic_halation_bloom(
         const Image& rgb_linear,
         const ZoneMasks& zone_masks,

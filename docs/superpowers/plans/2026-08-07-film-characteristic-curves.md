@@ -108,6 +108,14 @@ performs peak-preserving pooling into the existing proxy, retaining the brightes
 source and its colour per cell before the same low-memory blur/composite stage.
 It does not allocate a full-resolution glow field or broaden diffuse highlights.
 
+The source must also be evaluated before the film curve. A film shoulder is the
+*rendered density response* to high exposure; it must not erase the exposure that
+created halation in the first place. Preview and export now build the compact
+emitter proxy after scene placement and RAW development, apply Film Exposure to
+that measurement, and only then run the stock tone/color stages. The red halo is
+composited after those stages, so highlight roll-off and halation reinforce rather
+than cancel one another.
+
 CineStill 800T's stock-normal threshold is now `0.68` with `0.40` strength. It
 therefore responds to genuinely hot practicals before they reach display white,
 while its `specular_only` intent and the user threshold control still prevent a

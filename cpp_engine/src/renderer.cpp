@@ -1896,32 +1896,19 @@ Image FilmRenderer::apply_halation_bloom(
     return mat_to_rgb_image(rgb);
 }
 
-Image FilmRenderer::apply_filmic_halation_bloom(
-    const Image& rgb_linear,
-    const ZoneMasks& zone_masks,
-    const SpatialMasks& spatial_masks,
+FilmicHalationSource FilmRenderer::build_filmic_halation_source(
+    const Image& rgb_exposure,
+    const float film_exposure_stops,
     const MaterialEffectsPlan& effects) const {
-    if (rgb_linear.channels != 3) {
-        throw std::invalid_argument("apply_filmic_halation_bloom expects a 3-channel RGB image");
+    if (rgb_exposure.channels != 3) {
+        throw std::invalid_argument("build_filmic_halation_source expects a 3-channel RGB image");
     }
-    // filmic halation is threshold-driven (physical: bright regions cause the halo), so the
-    // analyzer's specular source/receiver masks and the highlight zone mask are not used here.
-    (void)zone_masks;
-    (void)spatial_masks;
     if (effects.halation_strength <= 0.0F && effects.bloom_strength <= 0.0F) {
-        return rgb_linear;
+        return {};
     }
 
-    cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);   // full-res working buffer, composited in place
-    const int full_w = rgb.cols;
-    const int full_h = rgb.rows;
-
-    // --- Build the glow on a small proxy. Physically, halation is light that penetrated the
-    // emulsion, reflected off the film base/pressure plate and re-exposed the surrounding area
-    // as a warm/red halo (pronounced on rem-jet-removed stocks like CineStill 800T, minimal on
-    // stocks with intact anti-halation backing). The glow is inherently low-frequency, so we
-    // compute it on a downscaled proxy and sample it back bilinearly at full res -- visually
-    // identical to a full-res blur, but the glow fields stay tens of MB instead of ~1 GB. ---
+    const int full_w = rgb_exposure.width;
+    const int full_h = rgb_exposure.height;
     constexpr int kGlowProxyEdge = 1024;
     const int proxy_long = std::max(full_w, full_h);
     const float pscale = proxy_long > kGlowProxyEdge
@@ -1930,37 +1917,85 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     const int pw = std::max(1, static_cast<int>(std::lround(full_w * pscale)));
     const int ph = std::max(1, static_cast<int>(std::lround(full_h * pscale)));
     const float hal_thresh = std::clamp(effects.halation_threshold, 0.30F, 0.80F);
-    cv::Mat glow_src(ph, pw, CV_32F);      // scalar halation emitter (highlights above threshold)
-    cv::Mat bloom_src(ph, pw, CV_32FC3);   // colour bloom emitter (highlight-weighted colour)
-    glow_src.setTo(0.0F);
-    bloom_src.setTo(cv::Scalar(0.0F, 0.0F, 0.0F));
+    const float exposure_scale = std::exp2(std::clamp(film_exposure_stops, -4.0F, 4.0F));
+    FilmicHalationSource result;
+    result.image_width = full_w;
+    result.image_height = full_h;
+    result.width = pw;
+    result.height = ph;
+    result.glow.assign(static_cast<std::size_t>(pw) * static_cast<std::size_t>(ph), 0.0F);
+    result.bloom_rgb.assign(result.glow.size() * 3U, 0.0F);
 
-    // Downsampling RGB before thresholding averages a two-pixel practical light into
-    // darkness on a large RAW preview. Build the emitter proxy from the brightest source
-    // in each proxy cell instead: the glow stays low-resolution, while real point sources
-    // retain enough energy to expose the surrounding emulsion.
+    // The source is scene/exposure-referred. A stock shoulder belongs in the output
+    // image, not in the emitter measurement: halation is created by excess exposure
+    // before the final film density curve rolls highlights into a printable range.
+    // Peak pooling preserves small practical lights without holding a full-size glow map.
     for (int y = 0; y < full_h; ++y) {
-        const cv::Vec3f* source_row = rgb.ptr<cv::Vec3f>(y);
         const int proxy_y = std::min(ph - 1, static_cast<int>(
             (static_cast<float>(y) + 0.5F) * static_cast<float>(ph) / static_cast<float>(full_h)));
-        float* glow_row = glow_src.ptr<float>(proxy_y);
-        cv::Vec3f* bloom_row = bloom_src.ptr<cv::Vec3f>(proxy_y);
         for (int x = 0; x < full_w; ++x) {
-            const cv::Vec3f& p = source_row[x];
-            const float lum = 0.2126F * p[0] + 0.7152F * p[1] + 0.0722F * p[2];
+            const float r = std::max(0.0F, rgb_exposure.at(x, y, 0) * exposure_scale);
+            const float g = std::max(0.0F, rgb_exposure.at(x, y, 1) * exposure_scale);
+            const float b = std::max(0.0F, rgb_exposure.at(x, y, 2) * exposure_scale);
+            const float lum = 0.2126F * r + 0.7152F * g + 0.0722F * b;
             const float highlight = smoothstep01((lum - hal_thresh) / 0.20F);
             const float excess = std::max(0.0F, lum - (hal_thresh - 0.08F));
             const float source = clamp01(highlight * (0.35F + excess));
             const int proxy_x = std::min(pw - 1, static_cast<int>(
                 (static_cast<float>(x) + 0.5F) * static_cast<float>(pw) / static_cast<float>(full_w)));
-            if (source > glow_row[proxy_x]) {
-                glow_row[proxy_x] = source;
+            const std::size_t pixel = static_cast<std::size_t>(proxy_y) * static_cast<std::size_t>(pw) +
+                static_cast<std::size_t>(proxy_x);
+            if (source > result.glow[pixel]) {
+                result.glow[pixel] = source;
                 const float bloom_weight = source * (0.55F + 0.45F * highlight);
-                bloom_row[proxy_x] = cv::Vec3f(
-                    p[0] * bloom_weight,
-                    p[1] * bloom_weight,
-                    p[2] * bloom_weight);
+                const std::size_t base = pixel * 3U;
+                result.bloom_rgb[base + 0U] = clamp01(r) * bloom_weight;
+                result.bloom_rgb[base + 1U] = clamp01(g) * bloom_weight;
+                result.bloom_rgb[base + 2U] = clamp01(b) * bloom_weight;
             }
+        }
+    }
+
+    return result;
+}
+
+Image FilmRenderer::apply_filmic_halation_bloom(
+    const Image& rgb_linear,
+    const FilmicHalationSource& source,
+    const ZoneMasks& zone_masks,
+    const SpatialMasks& spatial_masks,
+    const MaterialEffectsPlan& effects) const {
+    if (rgb_linear.channels != 3) {
+        throw std::invalid_argument("apply_filmic_halation_bloom expects a 3-channel RGB image");
+    }
+    // Filmic halation is source-thresholded from exposure-referred light. The
+    // analyzer masks are therefore not used by this physical material stage.
+    (void)zone_masks;
+    (void)spatial_masks;
+    if (effects.halation_strength <= 0.0F && effects.bloom_strength <= 0.0F) {
+        return rgb_linear;
+    }
+    if (!source.is_valid() || source.image_width != rgb_linear.width || source.image_height != rgb_linear.height) {
+        throw std::invalid_argument("apply_filmic_halation_bloom received an invalid or mismatched emitter proxy");
+    }
+
+    cv::Mat rgb = rgb_image_to_mat(rgb_linear, false);   // full-res working buffer, composited in place
+    const int full_w = rgb.cols;
+    const int full_h = rgb.rows;
+    const int pw = source.width;
+    const int ph = source.height;
+    cv::Mat glow_src(ph, pw, CV_32F);
+    cv::Mat bloom_src(ph, pw, CV_32FC3);
+    for (int y = 0; y < ph; ++y) {
+        float* glow_row = glow_src.ptr<float>(y);
+        cv::Vec3f* bloom_row = bloom_src.ptr<cv::Vec3f>(y);
+        for (int x = 0; x < pw; ++x) {
+            const std::size_t pixel = static_cast<std::size_t>(y) * static_cast<std::size_t>(pw) +
+                static_cast<std::size_t>(x);
+            glow_row[x] = source.glow[pixel];
+            const std::size_t base = pixel * 3U;
+            bloom_row[x] = cv::Vec3f(
+                source.bloom_rgb[base + 0U], source.bloom_rgb[base + 1U], source.bloom_rgb[base + 2U]);
         }
     }
 
@@ -2048,6 +2083,15 @@ Image FilmRenderer::apply_filmic_halation_bloom(
     });
 
     return mat_to_rgb_image(rgb);
+}
+
+Image FilmRenderer::apply_filmic_halation_bloom(
+    const Image& rgb_linear,
+    const ZoneMasks& zone_masks,
+    const SpatialMasks& spatial_masks,
+    const MaterialEffectsPlan& effects) const {
+    const FilmicHalationSource source = build_filmic_halation_source(rgb_linear, 0.0F, effects);
+    return apply_filmic_halation_bloom(rgb_linear, source, zone_masks, spatial_masks, effects);
 }
 
 Image FilmRenderer::apply_film_grain(

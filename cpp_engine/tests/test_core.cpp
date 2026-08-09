@@ -3838,6 +3838,49 @@ void test_halation_preserves_small_emitters_after_proxy_reduction() {
     }
 }
 
+void test_halation_uses_precurve_exposure_source() {
+    constexpr int w = 160;
+    constexpr int h = 160;
+    constexpr int cx = 80;
+    constexpr int cy = 80;
+    constexpr int radius = 12;
+    dfee::Image scene_exposure(w, h, 3);
+    dfee::Image post_curve(w, h, 3);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const int dx = x - cx;
+            const int dy = y - cy;
+            const bool practical = dx * dx + dy * dy <= radius * radius;
+            const float scene_value = practical ? 1.0F : 0.08F;
+            const float display_value = practical ? 0.58F : 0.08F;
+            for (int channel = 0; channel < 3; ++channel) {
+                scene_exposure.at(x, y, channel) = scene_value;
+                post_curve.at(x, y, channel) = display_value;
+            }
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.halation_strength = 0.40F;
+    effects.halation_threshold = 0.68F;
+    effects.halation_radius_inner = 5.0F;
+    effects.halation_radius_outer = 24.0F;
+    effects.halation_warm_core = {1.0F, 0.22F, 0.035F};
+    effects.halation_red_fringe = {1.0F, 0.03F, 0.0F};
+
+    const dfee::FilmRenderer renderer;
+    const auto source = renderer.build_filmic_halation_source(scene_exposure, 0.0F, effects);
+    const auto output = renderer.apply_filmic_halation_bloom(
+        post_curve, source, make_flat_zone_masks(post_curve), dfee::SpatialMasks{}, effects);
+    const float red_delta = output.at(cx + radius + 3, cy, 0) - post_curve.at(cx + radius + 3, cy, 0);
+    const float blue_delta = output.at(cx + radius + 3, cy, 2) - post_curve.at(cx + radius + 3, cy, 2);
+    if (!(red_delta > 0.002F && red_delta > blue_delta * 2.0F)) {
+        throw std::runtime_error(
+            "halation must use the pre-curve exposure source, not shouldered output: red=" +
+            std::to_string(red_delta) + " blue=" + std::to_string(blue_delta));
+    }
+}
+
 static void test_curve_mapping() {
     dfee::CharacteristicCurve base; base.gamma = 1.0f; base.shoulder_onset = 2.0f; base.toe_onset = 2.0f; base.d_min = 0.0f;
     // Film Contrast +100 raises gamma; -100 lowers it.
@@ -3930,6 +3973,7 @@ int main() {
         test_filmic_grain_uniform_softlight();
         test_halation_threshold_and_strength();
         test_halation_preserves_small_emitters_after_proxy_reduction();
+        test_halation_uses_precurve_exposure_source();
         test_color_compression_compresses_high_chroma_preserves_neutral();
         test_color_compression_leans_neighbours_preserves_neutral();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();
