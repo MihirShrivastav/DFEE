@@ -29,28 +29,28 @@ tone_response:
 color_response:
   shadow_bias_lab:
   - 0.0
-  - -2.0
-  - -4.5
+  - -0.16
+  - -0.28
   midtone_bias_lab:
   - 0.0
-  - -2.2
-  - 1.2
+  - -0.20
+  - 0.10
   highlight_bias_lab:
-  - 0.3
-  - 0.5
-  - 2.5
+  - 0.08
+  - 0.08
+  - 0.16
   blue_cast_suppression: 0.05
   green_magenta_stabilization: 0.2
 hue_saturation_response:
-  saturation_boost: 1.42
-  red_orange_midtone_compression: 0.12
-  yellow_green_muting: 0.05
+  saturation_boost: 1.55
+  red_orange_midtone_compression: 0.14
+  yellow_green_muting: 0.04
   cyan_blue_highlight_compression: 0.14
   neon_compression: 0.45
-  highlight_desaturation: 0.24
+  highlight_desaturation: 0.18
 grain:
-  size: 0.12
-  strength: 0.07
+  size: 0.14
+  strength: 0.08
   chroma_strength: 0.005
   peak_zone: lower_mid_to_mid
   texture_masking: 0.85
@@ -66,7 +66,8 @@ grain:
   overexposure_smoothing: 0.42
 halation:
   trigger: specular_only
-  strength: 0.07
+  strength: 0.05
+  threshold: 0.84
   radius_inner: 3
   radius_outer: 12
   warm_core:
@@ -118,14 +119,27 @@ compression:
 hue_chroma_gain:
   green: 0.12
   yellow: 0.08
-  blue: 0.06
+  red: 0.10
+  blue: 0.04
 crossover:
-  # Fujichrome Velvia 100: like V50, a slide — minimal crossover; the look is bold
-  # saturation + snappy contrast. It holds shadow colour but "veers slightly green" there,
-  # so a touch more green in the shadows than V50; faint warm-red highlight lean. (This
-  # block was previously absent, so V100 had no crossover cast at all.)
-  shadow_cast_a: -0.05
-  shadow_cast_b: -0.12
-  highlight_cast_a: 0.05
-  highlight_cast_b: 0.05
+  # Velvia 100 is also red/green-emphasized and ultra-high saturation, with
+  # cleaner fluorescent behavior than RVP50. Keep gray crossover neutral and
+  # use the explicit hue response for its sunrise, sunset, and greenery role.
+  shadow_cast_a: -0.01
+  shadow_cast_b: -0.02
+  highlight_cast_a: 0.01
+  highlight_cast_b: 0.02
   exposure_sensitivity: 0.35
+characteristic_curve:
+  # Fujichrome Velvia 100 (RVP100, E-6): an ISO-100 ultra-high-saturation
+  # transparency. It retains unmistakably strong contrast, but its finer RMS-8
+  # emulsion and higher speed give it a slightly more open tonal path than RVP50.
+  gamma: 1.48
+  latitude_stops: 5.7
+  toe_onset: 2.20
+  toe_hardness: 0.98
+  shoulder_onset: 2.65
+  shoulder_hardness: 1.00
+  d_min: 0.018
+  d_max: 0.990
+  channel_gamma_mult: [1.0, 1.0, 1.0]

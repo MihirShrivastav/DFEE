@@ -733,14 +733,22 @@ void test_reversal_profile_roles_are_distinct() {
            value(kodachrome, "characteristic_curve.d_max"));
     assert(value(provia, "halation.threshold") >= 0.80F);
 
-    // Velvia remains the vivid branch, with the ISO 50 profile deliberately the
-    // more saturated and contrast-forward starting point.
-    assert(value(velvia_50, "hue_saturation_response.saturation_boost") >
-           value(velvia_100, "hue_saturation_response.saturation_boost"));
+    // Fujifilm specifies ultra-high saturation for both Velvia speeds. The
+    // separation is material: RVP50 is denser/coarser with the firmer curve;
+    // RVP100 retains the shared palette at ISO 100 with a slightly more open
+    // response and lower RMS grain, rather than a fabricated saturation gap.
+    assert(std::abs(value(velvia_50, "hue_saturation_response.saturation_boost") -
+                    value(velvia_100, "hue_saturation_response.saturation_boost")) < 0.01F);
     assert(value(velvia_100, "hue_saturation_response.saturation_boost") >
            value(provia, "hue_saturation_response.saturation_boost"));
-    assert(value(velvia_50, "tone_response.midtone_contrast") >
-             value(velvia_100, "tone_response.midtone_contrast"));
+    assert(value(velvia_50, "characteristic_curve.gamma") >
+           value(velvia_100, "characteristic_curve.gamma"));
+    assert(value(velvia_50, "characteristic_curve.latitude_stops") <
+           value(velvia_100, "characteristic_curve.latitude_stops"));
+    assert(value(velvia_50, "grain.size") > value(velvia_100, "grain.size"));
+    assert(value(velvia_50, "grain.strength") > value(velvia_100, "grain.strength"));
+    assert(value(velvia_50, "halation.threshold") >= 0.80F);
+    assert(value(velvia_100, "halation.threshold") >= 0.80F);
 
     dfee::SolverInput input;
     dfee::SolverControls controls;

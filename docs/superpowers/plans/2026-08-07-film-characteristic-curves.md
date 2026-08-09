@@ -158,6 +158,28 @@ relative behavior; they are not a literal E-6 density or scanner model.
 
 Source: [Fujichrome Provia 100F professional data sheet](https://asset.fujifilm.com/www/us/files/2020-03/6325e0d91ad8f74448c5968b5a954199/Provia100f.pdf).
 
+## Stock Rollout: Fujichrome Velvia 50 And Velvia 100 (2026-08-09)
+
+Both Velvia profiles are now calibrated as an ultra-high-saturation E-6 pair.
+Fujifilm specifies world-class saturation and vibrancy, neutral grays, and deep
+shadows for RVP50. It specifies the same ultra-high saturation for RVP100,
+enabled by new cyan, magenta, and yellow couplers, plus an ISO-100/RMS-8
+emulsion. Fujifilm's current family comparison also identifies red/green
+emphasis for both materials, while noting that RVP100 is less prone to a green
+cast under fluorescent lighting; this is a stability property, not a reason to
+give either stock a permanent green or blue crossover.
+
+The prior profiles contradicted that evidence with large blue/green shadow and
+warm-highlight biases, a lower saturation setting for RVP100, and finer grain
+for RVP50 despite the published RMS-9 versus RMS-8 ordering. Both have been
+corrected. The pair now shares the documented ultra-high-chroma baseline and
+uses explicit red/green hue response, neutral grays, and high-threshold
+specular-only halation. RVP50 remains the denser, firmer, shorter curve;
+RVP100 has a slightly more open tonal response and finer grain. This is an
+engine output calibration, not a literal E-6 density or scanner model.
+
+Sources: [Velvia 50 professional data sheet](https://asset.fujifilm.com/www/in/files/2020-07/fcc8016d9ffc8503faacbc39c9b827c4/films_velvia-50_datasheet_01.pdf), [Velvia 100 professional data sheet](https://asset.fujifilm.com/www/in/files/2020-07/053a4dd52b58d6f75cd3ad35dd03998c/films_velvia-100_datasheet_01.pdf), [Fujifilm Velvia family comparison](https://www.fujifilm.com/jp/ja/consumer/films/negative-and-reversal/velvia).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

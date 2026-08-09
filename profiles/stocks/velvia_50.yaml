@@ -29,28 +29,28 @@ tone_response:
 color_response:
   shadow_bias_lab:
   - 0.0
-  - -1.5
-  - -5.0
+  - -0.20
+  - -0.35
   midtone_bias_lab:
   - 0.0
-  - -1.8
-  - 0.5
+  - -0.22
+  - 0.08
   highlight_bias_lab:
-  - 0.5
-  - 0.5
-  - 3.0
+  - 0.08
+  - 0.08
+  - 0.18
   blue_cast_suppression: 0.05
   green_magenta_stabilization: 0.2
 hue_saturation_response:
-  saturation_boost: 1.62
-  red_orange_midtone_compression: 0.1
-  yellow_green_muting: 0.05
-  cyan_blue_highlight_compression: 0.12
+  saturation_boost: 1.55
+  red_orange_midtone_compression: 0.14
+  yellow_green_muting: 0.04
+  cyan_blue_highlight_compression: 0.14
   neon_compression: 0.45
-  highlight_desaturation: 0.14
+  highlight_desaturation: 0.16
 grain:
-  size: 0.1
-  strength: 0.06
+  size: 0.16
+  strength: 0.10
   chroma_strength: 0.005
   peak_zone: lower_mid_to_mid
   texture_masking: 0.85
@@ -66,7 +66,8 @@ grain:
   overexposure_smoothing: 0.42
 halation:
   trigger: specular_only
-  strength: 0.07
+  strength: 0.05
+  threshold: 0.84
   radius_inner: 3
   radius_outer: 12
   warm_core:
@@ -116,32 +117,31 @@ compression:
   threshold: 0.42
   crosstalk: 0.40
 hue_chroma_gain:
-  green: 0.10
-  blue: 0.08
-  magenta: 0.08
-  yellow: 0.06
-  red: 0.06
-  orange: 0.05
+  green: 0.11
+  blue: 0.05
+  magenta: 0.05
+  yellow: 0.07
+  red: 0.09
+  orange: 0.06
 crossover:
-  # Fujichrome Velvia 50: a slide film — minimal dye crossover by design. Its look is
-  # explosive SATURATION + high CONTRAST + deep blacks (authored above), and it is noted as
-  # "true to colour", NOT a cast film. Only trait worth a nudge: shadows veer slightly GREEN
-  # and stay dense; highlights carry a faint warm-RED lean (its strong red sensitivity).
-  # The previous -0.70 blue shadow / 0.30 warm highlight were far too strong for a slide.
-  shadow_cast_a: -0.04
-  shadow_cast_b: -0.12
-  highlight_cast_a: 0.06
-  highlight_cast_b: 0.06
+  # Velvia 50 achieves its look through ultra-high chroma and density while
+  # retaining neutral grays from highlights through deep shadows. Red/green
+  # emphasis lives in the hue response above, not a global crossover cast.
+  shadow_cast_a: -0.01
+  shadow_cast_b: -0.02
+  highlight_cast_a: 0.01
+  highlight_cast_b: 0.02
   exposure_sensitivity: 0.36
 characteristic_curve:
-  # Fujichrome Velvia 50 (reversal): high contrast index, short latitude, abrupt toe/shoulder.
-  # gamma = rendered (positive) contrast; Velvia's straight-line is steep (~1.9), latitude ~5 stops.
-  gamma: 1.9
-  latitude_stops: 5.0
-  toe_onset: 1.9
-  toe_hardness: 1.2
-  shoulder_onset: 2.3
-  shoulder_hardness: 1.2
-  d_min: 0.02
-  d_max: 1.0
+  # Fujichrome Velvia 50 (RVP50, E-6): the lower-speed, denser Velvia branch.
+  # It has the strongest midtone separation and shortest tonal transitions in
+  # this pair, but not an artificial hard clip or a colored black floor.
+  gamma: 1.62
+  latitude_stops: 5.4
+  toe_onset: 2.05
+  toe_hardness: 1.08
+  shoulder_onset: 2.45
+  shoulder_hardness: 1.10
+  d_min: 0.014
+  d_max: 0.987
   channel_gamma_mult: [1.0, 1.0, 1.0]
