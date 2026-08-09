@@ -69,9 +69,12 @@ grain:
   overexposure_smoothing: 0.26
 halation:
   trigger: specular_only
-  strength: 0.05
-  radius_inner: 3
-  radius_outer: 12
+  # Delta 100 has a conventional antihalation backing. Retain only a neutral,
+  # tightly localized residual around exceptional specular sources.
+  strength: 0.025
+  threshold: 0.84
+  radius_inner: 2
+  radius_outer: 8
   warm_core:
   - 1.0
   - 1.0
@@ -95,3 +98,16 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+characteristic_curve:
+  # ILFORD Delta 100 Professional: Core-Shell tabular-grain ISO 100 negative.
+  # ID-11 stock normal processing is intended for average print contrast, with
+  # exceptionally fine grain and high detail rather than Tri-X-style punch.
+  gamma: 1.18
+  latitude_stops: 8.8
+  toe_onset: 3.2
+  toe_hardness: 0.68
+  shoulder_onset: 4.4
+  shoulder_hardness: 0.62
+  d_min: 0.012
+  d_max: 0.988
+  channel_gamma_mult: [1.0, 1.0, 1.0]

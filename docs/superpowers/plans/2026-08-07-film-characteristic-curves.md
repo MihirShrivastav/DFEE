@@ -747,6 +747,30 @@ git commit -m "profiles: datasheet-derived characteristic curves for Velvia 50 /
 
 ---
 
+## Stock Rollout: ILFORD Delta 100 Professional (2026-08-09)
+
+The monochrome calibration program starts with Delta 100 rather than treating it
+as a lower-speed Tri-X preset. ILFORD describes it as a medium-speed,
+exceptionally fine-grain Core-Shell material for detail-rich pictorial and fine
+art work. Its own normal ID-11 stock processing is intended to yield an
+average-contrast printable negative, and the published practical EI range is
+50–200. These facts support a clean, normal-contrast, comparatively open
+ISO-100 role rather than a hard toe or a generic high-contrast B&W grade.
+
+The v4 mapping therefore uses gamma `1.18`, 8.8 stops of rendered latitude,
+soft toe/shoulder transitions, a low black floor, and a high white ceiling. It
+is deliberately less forceful and more open than the existing cubic-grain
+Tri-X 400 v4 calibration. Existing tabular-grain and fine-grain parameters are
+retained. Delta 100's conventional anti-halation backing also means a very
+small neutral, high-threshold specular residual rather than a broad bloom.
+
+This is a rendered-response calibration based on ILFORD's technical material,
+not a claim to reproduce a specific developer, enlarger, filter, or paper:
+[ILFORD Delta 100 product page](https://www.ilfordphoto.com/delta-100-professional-sheet-film?___from_store=ilford_uk&___store=ilford_brochure),
+[Delta 100 technical information](https://www.bhphotovideo.com/lit_files/575178.pdf).
+
+---
+
 ## Self-Review
 
 **Spec coverage:** model (Task 1), scene placement (Tasks 1,3,4), per-dye-layer color/crossover (Task 3 `curve_gamma_mult`, Task 4), filmic_v4 gate (Task 2), control re-layering (Task 3 `map_characteristic_curve`/`map_exposure_shift`), Light panel untouched (not referenced), prototype 3 stocks + datasheet derivation + harness validation (Task 6), rollout (Task 7), parity guard (Tasks 2/6/7). All spec sections covered.
