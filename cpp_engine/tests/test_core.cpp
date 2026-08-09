@@ -635,8 +635,8 @@ void test_monochrome_profile_exposure_ramps_are_distinct() {
     const auto tmax_100 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "tmax_100.yaml");
     const auto tmax_400 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "tmax_400.yaml");
     const auto delta_100 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "delta_100.yaml");
+    const auto delta_400 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "delta_400.yaml");
     const auto delta_3200 = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "delta_3200.yaml");
-    const auto tri_x = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "tri_x_400.yaml");
     const dfee::RenderPlanSolver solver;
 
     dfee::SolverInput input;
@@ -682,18 +682,22 @@ void test_monochrome_profile_exposure_ramps_are_distinct() {
     assert(delta_3200.grain.size > delta_100.grain.size);
     assert(delta_3200.grain.strength > delta_100.grain.strength);
 
-    // Delta 100 is the clean, fine-grain tabular ISO-100 role: smoother and
-    // more open than classic cubic-grain Tri-X, with no generic broad halation.
+    // Delta 400 is the Delta family's fast, fine-grain middle-speed role. Its
+    // own normal-development response and anti-halation backing determine this
+    // calibration; other B&W stocks are not treated as its reference target.
     controls.characteristic_pipeline = true;
     const auto delta_100_v4 = solver.solve(input, delta_100, controls);
-    const auto tri_x_v4 = solver.solve(input, tri_x, controls);
+    const auto delta_400_v4 = solver.solve(input, delta_400, controls);
     assert(delta_100_v4.film_response.use_characteristic_curve);
-    assert(delta_100_v4.film_response.characteristic_curve.gamma <
-           tri_x_v4.film_response.characteristic_curve.gamma);
-    assert(delta_100_v4.film_response.characteristic_curve.latitude_stops >
-           tri_x_v4.film_response.characteristic_curve.latitude_stops);
+    assert(delta_400_v4.film_response.use_characteristic_curve);
+    assert(delta_100.grain.size < delta_400.grain.size);
+    assert(delta_400.grain.size < delta_3200.grain.size);
+    assert(delta_100.grain.strength < delta_400.grain.strength);
+    assert(delta_400.grain.strength < delta_3200.grain.strength);
     assert(delta_100_v4.material_effects.halation_strength < 0.05F);
     assert(delta_100_v4.material_effects.halation_threshold >= 0.80F);
+    assert(delta_400_v4.material_effects.halation_strength < 0.05F);
+    assert(delta_400_v4.material_effects.halation_threshold >= 0.80F);
 }
 
 void test_reversal_profile_roles_are_distinct() {

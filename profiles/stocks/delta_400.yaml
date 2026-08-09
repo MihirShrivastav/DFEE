@@ -69,9 +69,12 @@ grain:
   overexposure_smoothing: 0.2
 halation:
   trigger: specular_only
-  strength: 0.12
-  radius_inner: 4
-  radius_outer: 18
+  # Delta 400 uses an anti-halation backing. Keep only a neutral, tightly
+  # bounded residual for exceptional specular sources.
+  strength: 0.035
+  threshold: 0.84
+  radius_inner: 2
+  radius_outer: 10
   warm_core:
   - 1.0
   - 1.0
@@ -95,6 +98,20 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+characteristic_curve:
+  # ILFORD Delta 400 Professional: fast Core-Shell tabular-grain negative.
+  # Normal ID-11 development is intended for a printable normal contrast;
+  # preserve its useful EI 200-3200 working range with a gradual toe and
+  # shoulder, rather than turning its ISO speed into an aggressive grade.
+  gamma: 1.16
+  latitude_stops: 8.6
+  toe_onset: 3.0
+  toe_hardness: 0.72
+  shoulder_onset: 4.0
+  shoulder_hardness: 0.66
+  d_min: 0.015
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]
 color_character:
   highlight_hold_sensitivity: 0.0
   shadow_retention_sensitivity: 0.0

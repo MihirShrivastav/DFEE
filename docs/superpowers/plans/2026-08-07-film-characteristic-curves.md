@@ -758,16 +758,40 @@ average-contrast printable negative, and the published practical EI range is
 ISO-100 role rather than a hard toe or a generic high-contrast B&W grade.
 
 The v4 mapping therefore uses gamma `1.18`, 8.8 stops of rendered latitude,
-soft toe/shoulder transitions, a low black floor, and a high white ceiling. It
-is deliberately less forceful and more open than the existing cubic-grain
-Tri-X 400 v4 calibration. Existing tabular-grain and fine-grain parameters are
-retained. Delta 100's conventional anti-halation backing also means a very
-small neutral, high-threshold specular residual rather than a broad bloom.
+soft toe/shoulder transitions, a low black floor, and a high white ceiling.
+This preserves Delta 100's clean, detail-forward normal-contrast role while
+retaining its existing tabular-grain and fine-grain parameters. Delta 100's
+conventional anti-halation backing also means a very small neutral,
+high-threshold specular residual rather than a broad bloom.
 
 This is a rendered-response calibration based on ILFORD's technical material,
 not a claim to reproduce a specific developer, enlarger, filter, or paper:
 [ILFORD Delta 100 product page](https://www.ilfordphoto.com/delta-100-professional-sheet-film?___from_store=ilford_uk&___store=ilford_brochure),
 [Delta 100 technical information](https://www.bhphotovideo.com/lit_files/575178.pdf).
+
+---
+
+## Stock Rollout: ILFORD Delta 400 Professional (2026-08-10)
+
+Delta 400 is calibrated as its own fast Core-Shell tabular-grain material, not
+as a contrast or grain offset from a different black-and-white stock. ILFORD
+specifies ISO 400 with normal-contrast ID-11 processing, describes fine-grain
+performance for action, available-light, pictorial, and fine-art work, and
+documents a practical EI range of 200 to 3200. The roll-film material also has
+an anti-halation backing that clears during processing.
+
+The v4 curve therefore uses a normal rendered gamma of `1.16`, 8.6 stops of
+latitude, and a graduated `3.0`-stop toe plus `4.0`-stop shoulder. This
+preserves a controlled printable response over a useful exposure range without
+mistaking higher ISO for a hard, contrasty digital grade. It retains the
+existing fine tabular-grain middle-speed role between Delta 100 and Delta 3200.
+Halation is reduced to a neutral, high-threshold, localized residual consistent
+with the stock's anti-halation backing.
+
+This is a rendered-response calibration based on ILFORD's technical material,
+not a claim to reproduce a specific developer, enlarger, filter, or paper:
+[ILFORD Delta 400 technical information](https://www.ilfordphoto.com/amfile/file/download/file/1915/product/684/),
+[ILFORD Delta 400 product information](https://www.ilfordphoto.ca/product/delta-400-professional-120-roll-film/).
 
 ---
 
