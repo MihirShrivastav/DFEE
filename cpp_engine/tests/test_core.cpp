@@ -733,6 +733,20 @@ void test_reversal_profile_roles_are_distinct() {
            value(kodachrome, "characteristic_curve.d_max"));
     assert(value(provia, "halation.threshold") >= 0.80F);
 
+    // Kodak specifies E100 as neutral, low contrast, low D-min, and extended
+    // in highlight-to-shadow detail. Its v4 response remains a transparency,
+    // but it is the open Kodak counterpart to the Fujichrome slide profiles.
+    assert(value(ektachrome, "characteristic_curve.gamma") <
+           value(provia, "characteristic_curve.gamma"));
+    assert(value(ektachrome, "characteristic_curve.latitude_stops") >
+           value(provia, "characteristic_curve.latitude_stops"));
+    assert(value(ektachrome, "characteristic_curve.latitude_stops") < 8.0F);
+    assert(value(ektachrome, "characteristic_curve.d_min") <
+           value(astia, "characteristic_curve.d_min"));
+    assert(value(ektachrome, "characteristic_curve.d_max") >
+           value(provia, "characteristic_curve.d_max"));
+    assert(value(ektachrome, "halation.threshold") >= 0.80F);
+
     // Fujifilm specifies ultra-high saturation for both Velvia speeds. The
     // separation is material: RVP50 is denser/coarser with the firmer curve;
     // RVP100 retains the shared palette at ISO 100 with a slightly more open

@@ -180,6 +180,24 @@ engine output calibration, not a literal E-6 density or scanner model.
 
 Sources: [Velvia 50 professional data sheet](https://asset.fujifilm.com/www/in/files/2020-07/fcc8016d9ffc8503faacbc39c9b827c4/films_velvia-50_datasheet_01.pdf), [Velvia 100 professional data sheet](https://asset.fujifilm.com/www/in/files/2020-07/053a4dd52b58d6f75cd3ad35dd03998c/films_velvia-100_datasheet_01.pdf), [Fujifilm Velvia family comparison](https://www.fujifilm.com/jp/ja/consumer/films/negative-and-reversal/velvia).
 
+## Stock Rollout: Kodak Ektachrome E100 (2026-08-09)
+
+Kodak Ektachrome E100 is now on the v4 characteristic-curve path. Kodak
+specifies an ISO-100 E-6 transparency with RMS 8 grain, low D-min for whiter
+brighter whites, neutral balance, moderately enhanced saturation, a low-contrast
+tonal scale, consistent gray scale, natural skin, and extended highlight-to-
+shadow tonal detail.
+
+The v4 response makes E100 the open neutral reversal option: a 1.16 rendered
+contrast index, a 6.5-stop curve, the lowest black floor in the reversal group,
+and the highest white ceiling. It remains a bounded transparency response, not
+negative-film latitude. Its old cool bias was removed, the palette remains only
+moderately enhanced, and halation is limited to rare specular sources. These
+values calibrate output behavior from Kodak's relative sensitometric guidance;
+they do not reproduce a physical E-6 density curve or scanner transform.
+
+Source: [Kodak Ektachrome E100 technical data](https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/e4000_ektachrome_100.pdf).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.
