@@ -66,8 +66,10 @@ grain:
   overexposure_smoothing: 0.24
 halation:
   trigger: specular_only
-  strength: 0.30
-  threshold: 0.76
+  # Rem-jet removal makes clipped practicals bloom readily. Keep the onset below
+  # display white, but retain a specular-only response rather than glowing skies.
+  strength: 0.40
+  threshold: 0.68
   radius_inner: 5
   radius_outer: 24
   warm_core:

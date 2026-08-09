@@ -98,6 +98,23 @@ highlights, 400D has a soft palette/natural saturation, and 50D is a daylight
 fine-grain motion-picture emulsion. The 800T tonal curve also accounts for its
 standard C-41 development, which CineStill says moderately increases gamma.
 
+### Practical-Light Emitter Correction (2026-08-09)
+
+The initial filmic implementation identified halation emitters *after* area
+downsampling to the glow proxy. This was efficient, but wrong for the exact case
+that defines the CineStill look: a tiny clipped lamp or reflection in a large
+frame averaged below the stock threshold and emitted no halo. The renderer now
+performs peak-preserving pooling into the existing proxy, retaining the brightest
+source and its colour per cell before the same low-memory blur/composite stage.
+It does not allocate a full-resolution glow field or broaden diffuse highlights.
+
+CineStill 800T's stock-normal threshold is now `0.68` with `0.40` strength. It
+therefore responds to genuinely hot practicals before they reach display white,
+while its `specular_only` intent and the user threshold control still prevent a
+daylight sky or broad white surface from becoming fake red bloom. Native coverage
+uses a four-pixel practical in a `2400x1600` image to ensure proxy reduction cannot
+erase this behavior again.
+
 Sources: [800T usage guide](https://cinestillfilm.com/blogs/news/cinestill-800t-in-your-toolbox), [400D product details](https://cinestillfilm.com/collections/the-400d-film-family/products/400dynamic-35mm), [50D technical guidance](https://help.cinestillfilm.com/hc/en-us/articles/360028918672-What-is-different-about-CineStill-50Daylight-film).
 
 ## Stock Rollout: Fujifilm Negative Family (2026-08-09)

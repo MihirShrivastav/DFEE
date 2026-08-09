@@ -605,7 +605,7 @@ void test_cinestill_profile_exposure_ramps_are_distinct() {
     assert(stock_800t.halation.strength > stock_400d.halation.strength);
     require_close(plan_50d.material_effects.halation_threshold, 0.78F, 1.0e-5F);
     require_close(plan_400d.material_effects.halation_threshold, 0.80F, 1.0e-5F);
-    require_close(plan_800t.material_effects.halation_threshold, 0.76F, 1.0e-5F);
+    require_close(plan_800t.material_effects.halation_threshold, 0.68F, 1.0e-5F);
 
     // CineStill profiles run through v4 with distinct, stock-authored curves.
     // 50D has the clearest low-speed separation; 400D remains the softer
@@ -3799,6 +3799,45 @@ static void test_curve_render() {
     std::printf("test_curve_render passed\n");
 }
 
+void test_halation_preserves_small_emitters_after_proxy_reduction() {
+    // A 4 px practical light in a 2400 px-wide image would average far below the
+    // source threshold with INTER_AREA before emitter extraction. Halation needs to
+    // remain visible around these point-like sources on production-sized RAWs.
+    constexpr int w = 2400;
+    constexpr int h = 1600;
+    constexpr int cx = w / 2;
+    constexpr int cy = h / 2;
+    dfee::Image image(w, h, 3);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const bool practical = std::abs(x - cx) <= 1 && std::abs(y - cy) <= 1;
+            const float value = practical ? 1.0F : 0.05F;
+            image.at(x, y, 0) = value;
+            image.at(x, y, 1) = value;
+            image.at(x, y, 2) = value;
+        }
+    }
+
+    dfee::MaterialEffectsPlan effects;
+    effects.halation_strength = 0.30F;
+    effects.halation_threshold = 0.76F;
+    effects.halation_radius_inner = 5.0F;
+    effects.halation_radius_outer = 24.0F;
+    effects.halation_warm_core = {1.0F, 0.22F, 0.035F};
+    effects.halation_red_fringe = {1.0F, 0.03F, 0.0F};
+
+    const dfee::FilmRenderer renderer;
+    const auto output = renderer.apply_filmic_halation_bloom(
+        image, make_flat_zone_masks(image), dfee::SpatialMasks{}, effects);
+    const float red_delta = output.at(cx + 18, cy, 0) - image.at(cx + 18, cy, 0);
+    const float blue_delta = output.at(cx + 18, cy, 2) - image.at(cx + 18, cy, 2);
+    if (!(red_delta > 0.0004F && red_delta > blue_delta * 2.0F)) {
+        throw std::runtime_error(
+            "proxy-reduced practical light must retain a visible red halation ring: red=" +
+            std::to_string(red_delta) + " blue=" + std::to_string(blue_delta));
+    }
+}
+
 static void test_curve_mapping() {
     dfee::CharacteristicCurve base; base.gamma = 1.0f; base.shoulder_onset = 2.0f; base.toe_onset = 2.0f; base.d_min = 0.0f;
     // Film Contrast +100 raises gamma; -100 lowers it.
@@ -3890,6 +3929,7 @@ int main() {
         test_highlight_rolloff_compresses_highlights();
         test_filmic_grain_uniform_softlight();
         test_halation_threshold_and_strength();
+        test_halation_preserves_small_emitters_after_proxy_reduction();
         test_color_compression_compresses_high_chroma_preserves_neutral();
         test_color_compression_leans_neighbours_preserves_neutral();
         test_subtractive_density_darkens_saturated_preserves_hue_and_neutrals();

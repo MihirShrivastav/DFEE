@@ -1929,29 +1929,38 @@ Image FilmRenderer::apply_filmic_halation_bloom(
         : 1.0F;
     const int pw = std::max(1, static_cast<int>(std::lround(full_w * pscale)));
     const int ph = std::max(1, static_cast<int>(std::lround(full_h * pscale)));
-    cv::Mat proxy_rgb;
-    if (pscale < 1.0F) {
-        cv::resize(rgb, proxy_rgb, cv::Size(pw, ph), 0.0, 0.0, cv::INTER_AREA);
-    } else {
-        proxy_rgb = rgb;   // small image: read the shared buffer (only read before compositing)
-    }
-
     const float hal_thresh = std::clamp(effects.halation_threshold, 0.30F, 0.80F);
     cv::Mat glow_src(ph, pw, CV_32F);      // scalar halation emitter (highlights above threshold)
     cv::Mat bloom_src(ph, pw, CV_32FC3);   // colour bloom emitter (highlight-weighted colour)
-    for (int y = 0; y < ph; ++y) {
-        const cv::Vec3f* prow = proxy_rgb.ptr<cv::Vec3f>(y);
-        float* grow = glow_src.ptr<float>(y);
-        cv::Vec3f* brow = bloom_src.ptr<cv::Vec3f>(y);
-        for (int x = 0; x < pw; ++x) {
-            const cv::Vec3f& p = prow[x];
+    glow_src.setTo(0.0F);
+    bloom_src.setTo(cv::Scalar(0.0F, 0.0F, 0.0F));
+
+    // Downsampling RGB before thresholding averages a two-pixel practical light into
+    // darkness on a large RAW preview. Build the emitter proxy from the brightest source
+    // in each proxy cell instead: the glow stays low-resolution, while real point sources
+    // retain enough energy to expose the surrounding emulsion.
+    for (int y = 0; y < full_h; ++y) {
+        const cv::Vec3f* source_row = rgb.ptr<cv::Vec3f>(y);
+        const int proxy_y = std::min(ph - 1, static_cast<int>(
+            (static_cast<float>(y) + 0.5F) * static_cast<float>(ph) / static_cast<float>(full_h)));
+        float* glow_row = glow_src.ptr<float>(proxy_y);
+        cv::Vec3f* bloom_row = bloom_src.ptr<cv::Vec3f>(proxy_y);
+        for (int x = 0; x < full_w; ++x) {
+            const cv::Vec3f& p = source_row[x];
             const float lum = 0.2126F * p[0] + 0.7152F * p[1] + 0.0722F * p[2];
             const float highlight = smoothstep01((lum - hal_thresh) / 0.20F);
             const float excess = std::max(0.0F, lum - (hal_thresh - 0.08F));
             const float source = clamp01(highlight * (0.35F + excess));
-            grow[x] = source;
-            const float bloom_weight = source * (0.55F + 0.45F * highlight);
-            brow[x] = cv::Vec3f(p[0] * bloom_weight, p[1] * bloom_weight, p[2] * bloom_weight);
+            const int proxy_x = std::min(pw - 1, static_cast<int>(
+                (static_cast<float>(x) + 0.5F) * static_cast<float>(pw) / static_cast<float>(full_w)));
+            if (source > glow_row[proxy_x]) {
+                glow_row[proxy_x] = source;
+                const float bloom_weight = source * (0.55F + 0.45F * highlight);
+                bloom_row[proxy_x] = cv::Vec3f(
+                    p[0] * bloom_weight,
+                    p[1] * bloom_weight,
+                    p[2] * bloom_weight);
+            }
         }
     }
 
