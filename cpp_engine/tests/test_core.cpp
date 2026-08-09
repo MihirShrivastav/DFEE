@@ -703,6 +703,21 @@ void test_reversal_profile_roles_are_distinct() {
     assert(value(astia, "hue_saturation_response.saturation_boost") <
            value(provia, "hue_saturation_response.saturation_boost"));
 
+    // Astia's published RAP100F data identifies it as Fujichrome's softest,
+    // subdued-color portrait transparency with smooth skin-tone gradation.
+    // Its v4 curve must remain gentler and longer than the later general and
+    // vivid reversal baselines, without borrowing color-negative latitude.
+    assert(value(astia, "characteristic_curve.gamma") <
+           value(kodachrome, "characteristic_curve.gamma"));
+    assert(value(astia, "characteristic_curve.gamma") <
+           value(velvia_50, "characteristic_curve.gamma"));
+    assert(value(astia, "characteristic_curve.latitude_stops") >
+           value(kodachrome, "characteristic_curve.latitude_stops"));
+    assert(value(astia, "characteristic_curve.latitude_stops") < 8.0F);
+    assert(value(astia, "characteristic_curve.toe_hardness") < 1.0F);
+    assert(value(astia, "characteristic_curve.shoulder_hardness") < 1.0F);
+    assert(value(astia, "halation.threshold") >= 0.80F);
+
     // Velvia remains the vivid branch, with the ISO 50 profile deliberately the
     // more saturated and contrast-forward starting point.
     assert(value(velvia_50, "hue_saturation_response.saturation_boost") >

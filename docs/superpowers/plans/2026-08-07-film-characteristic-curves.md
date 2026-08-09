@@ -118,6 +118,26 @@ high-contrast/high-saturation product and is not represented by this profile.
 
 Sources: [C200 product information](https://asset.fujifilm.com/www/us/files/2019-09/cce1e1943550fc3e76c22411066f0100/films_c200_datasheet_01.pdf), [Superia X-TRA 400 product information](https://asset.fujifilm.com/www/in/files/2020-07/32cf7e5def364084eb8cf03ff011df0f/films_superia-xtra400_datasheet_01.pdf), [Pro 400H product information](https://www.fujifilm.com.hk/products/professional_films/pdf/pro_400h_datasheet.pdf), [Eterna 250D manual](https://manualzz.com/doc/27787292/fujifilm-motion-picture-film-manual).
 
+## Stock Rollout: Fujichrome Astia 100F (2026-08-09)
+
+Astia 100F (RAP100F) is now on the v4 characteristic-curve path. Fujifilm's
+published E-6 data describes it as its softest-toned, subdued-color Fujichrome:
+an ISO-100 professional transparency with continuous highlight-to-shadow skin
+gradation, high color fidelity from its multi-color-correction layers, RMS 7
+grain, and usable -0.5 to +2 stop push/pull processing.
+
+The v4 calibration therefore uses a gentle 1.18 rendered contrast index, a
+6.4-stop transparency range, and soft toe/shoulder joins. It deliberately stays
+shorter than a color-negative response. The profile removes the prior invented
+warm crossover in favor of near-neutral dye behavior, lowers global saturation,
+and protects red-orange and neon colors so skin and subtly colored wardrobe do
+not become overly dense. Its small halation is retained only for exceptional
+specular sources through a high stock threshold. These are output-rendering
+parameters derived from the stock's relative sensitometric role, not a claim
+that the engine reproduces a physical E-6 density curve or scanner response.
+
+Source: [Fujichrome Astia 100F professional data sheet](https://www.fujifilm.com.hk/products/professional_films/pdf/astia_100f_datasheet.pdf).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.

@@ -42,12 +42,12 @@ color_response:
   blue_cast_suppression: 0.18
   green_magenta_stabilization: 0.25
 hue_saturation_response:
-  saturation_boost: 1.00
-  red_orange_midtone_compression: 0.32
-  yellow_green_muting: 0.2
-  cyan_blue_highlight_compression: 0.2
+  saturation_boost: 0.94
+  red_orange_midtone_compression: 0.38
+  yellow_green_muting: 0.12
+  cyan_blue_highlight_compression: 0.18
   neon_compression: 0.65
-  highlight_desaturation: 0.42
+  highlight_desaturation: 0.38
 grain:
   size: 0.14
   strength: 0.08
@@ -67,6 +67,7 @@ grain:
 halation:
   trigger: specular_only
   strength: 0.05
+  threshold: 0.84
   radius_inner: 3
   radius_outer: 11
   warm_core:
@@ -108,13 +109,26 @@ compression:
 hue_chroma_gain:
   green: 0.03
 crossover:
-  # Fujichrome Astia 100F: the softest Fuji slide — low contrast, low saturation, engineered
-  # for flattering skin, with a slight warm/yellow cast and CREAMY (warm) highlights. So it
-  # legitimately keeps a gentle warm-highlight lean (unlike the cooler Provia/Velvia), but
-  # everything stays soft and subtle: near-neutral gentle shadows, gentle creamy-warm
-  # highlights. (Was 0.20/0.25 in the highlights — too strong for such a soft stock.)
-  shadow_cast_a: -0.02
-  shadow_cast_b: -0.08
-  highlight_cast_a: 0.06
-  highlight_cast_b: 0.14
+  # Astia's MCCL layers target high color fidelity and continuous skin tone, not
+  # a global warm grade. Keep crossover essentially neutral and let the muted,
+  # protected palette above provide its portrait-oriented character.
+  shadow_cast_a: -0.01
+  shadow_cast_b: -0.04
+  highlight_cast_a: 0.02
+  highlight_cast_b: 0.06
   exposure_sensitivity: 0.30
+characteristic_curve:
+  # Fujichrome Astia 100F (RAP100F, E-6): Fujifilm documents its softest tones
+  # and subdued colors, smooth highlight-to-shadow skin gradation, and -0.5 to
+  # +2 stop push/pull suitability. This is a rendered transparency calibration:
+  # gentler and longer than the other slide profiles, while still much shorter
+  # than a color-negative curve.
+  gamma: 1.18
+  latitude_stops: 6.4
+  toe_onset: 2.65
+  toe_hardness: 0.75
+  shoulder_onset: 3.10
+  shoulder_hardness: 0.72
+  d_min: 0.025
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]
