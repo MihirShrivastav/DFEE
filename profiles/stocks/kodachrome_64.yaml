@@ -35,26 +35,26 @@ tone_response:
   - 0.95
 color_response:
   shadow_bias_lab:
-  - -0.5
-  - -0.5
-  - -3.5
+  - -0.08
+  - -0.16
+  - -0.28
   midtone_bias_lab:
   - 0.0
-  - 1.4
-  - 2.6
+  - 0.22
+  - 0.38
   highlight_bias_lab:
-  - 0.5
-  - 0.7
-  - 1.8
+  - 0.10
+  - 0.16
+  - 0.22
   blue_cast_suppression: 0.2
   green_magenta_stabilization: 0.35
 hue_saturation_response:
-  saturation_boost: 1.28
-  red_orange_midtone_compression: 0.18
-  yellow_green_muting: 0.1
-  cyan_blue_highlight_compression: 0.25
+  saturation_boost: 1.20
+  red_orange_midtone_compression: 0.22
+  yellow_green_muting: 0.08
+  cyan_blue_highlight_compression: 0.20
   neon_compression: 0.6
-  highlight_desaturation: 0.45
+  highlight_desaturation: 0.32
 grain:
   size: 0.25
   strength: 0.2
@@ -73,9 +73,12 @@ grain:
   overexposure_smoothing: 0.32
 halation:
   trigger: specular_only
-  strength: 0.1
-  radius_inner: 4
-  radius_outer: 15
+  # K-14's rem-jet backing was designed to suppress reflective halos and
+  # preserve sharpness. Leave only a negligible scanner/lens residual.
+  strength: 0.015
+  threshold: 0.88
+  radius_inner: 2
+  radius_outer: 7
   warm_core:
   - 1.0
   - 0.55
@@ -118,26 +121,25 @@ hue_chroma_gain:
   blue: 0.08
   green: -0.05
 crossover:
-  # Kodak Kodachrome 64 (K-14): the one positive with a real crossover signature — WARM
-  # skin/reds/oranges and luminous colour over deep, rich, dense blacks, contrasty. So it
-  # keeps the strongest crossover of the reversal set, but MODERATE: warm (red/orange)
-  # highlights over cool-dense shadows. The previous -0.55 blue shadow / 0.40/0.45 warm
-  # highlight were cartoonishly strong; this preserves the warm-over-rich-blacks look at a
-  # believable level (its deep blacks are carried mainly by density/contrast above).
-  shadow_cast_a: -0.03
-  shadow_cast_b: -0.12
-  highlight_cast_a: 0.10
-  highlight_cast_b: 0.18
+  # K-14's separately formed dyes give Kodachrome a distinct palette, but
+  # Kodak documented naturally reproduced subtle colors and scanner-friendly
+  # common dye behavior. Keep the warm density bias restrained, not a grade.
+  shadow_cast_a: -0.01
+  shadow_cast_b: -0.04
+  highlight_cast_a: 0.05
+  highlight_cast_b: 0.08
   exposure_sensitivity: 0.40
 characteristic_curve:
-  # Kodak Kodachrome 64: contrasty with deep, rich blacks and held highlights — its punchy,
-  # dense tonal signature (display-referred: gamma = contrast around mid, low d_min = deep blacks).
-  gamma: 1.35
-  latitude_stops: 6.0
-  toe_onset: 2.2
-  toe_hardness: 1.1
-  shoulder_onset: 3.0
-  shoulder_hardness: 0.9
-  d_min: 0.02
-  d_max: 0.96
+  # Kodak Kodachrome 64 (KR/PKR, K-14): a distinctly dense, contrast-forward
+  # transparency with deep but graded blacks. Its published sensitometric
+  # curves have substantial toe and shoulder; keep it firmer/shorter than
+  # Provia without borrowing Velvia's extreme saturation or hard clipping.
+  gamma: 1.38
+  latitude_stops: 5.8
+  toe_onset: 2.15
+  toe_hardness: 1.05
+  shoulder_onset: 2.85
+  shoulder_hardness: 0.92
+  d_min: 0.015
+  d_max: 0.985
   channel_gamma_mult: [1.0, 1.0, 1.0]

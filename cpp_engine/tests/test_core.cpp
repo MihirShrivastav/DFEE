@@ -747,6 +747,21 @@ void test_reversal_profile_roles_are_distinct() {
            value(provia, "characteristic_curve.d_max"));
     assert(value(ektachrome, "halation.threshold") >= 0.80F);
 
+    // Kodachrome 64 is a separate K-14 material, not a generic E-6 profile:
+    // it is denser/firmer than Provia but avoids Velvia's extreme response.
+    // Its rem-jet backing is an explicit anti-halation layer, so any residual
+    // material glow must be much smaller than the conventional slide profiles.
+    assert(value(kodachrome, "characteristic_curve.gamma") >
+           value(provia, "characteristic_curve.gamma"));
+    assert(value(kodachrome, "characteristic_curve.gamma") <
+           value(velvia_100, "characteristic_curve.gamma"));
+    assert(value(kodachrome, "characteristic_curve.latitude_stops") <
+           value(provia, "characteristic_curve.latitude_stops"));
+    assert(value(kodachrome, "characteristic_curve.latitude_stops") >
+           value(velvia_50, "characteristic_curve.latitude_stops"));
+    assert(value(kodachrome, "halation.strength") < 0.03F);
+    assert(value(kodachrome, "halation.threshold") >= 0.85F);
+
     // Fujifilm specifies ultra-high saturation for both Velvia speeds. The
     // separation is material: RVP50 is denser/coarser with the firmer curve;
     // RVP100 retains the shared palette at ISO 100 with a slightly more open

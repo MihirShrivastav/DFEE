@@ -37,7 +37,7 @@ The interface is designed to emulate the physical workflow of analog photography
 - **Fuji Pro 400H:** Known for a cool pastel aesthetic and extreme highlight latitude.
 - **Fuji Superia 400:** Consumer stock with cool, teal/magenta characteristics.
 - **CineStill 800T:** Tungsten-balanced cinema stock (Vision3 500T) known for its distinctive red halation due to the removed remjet layer.
-- **Kodachrome 64:** Legendary, complex reversal film with vivid reds and crushing, sudden blacks.
+- **Kodachrome 64:** Legendary K-14 reversal film with vivid reds, dense color, and deep but graded blacks.
 - **Ilford HP5 Plus / Delta 3200 / Kodak Tri-X 400:** Classic monochrome stocks with varying degrees of punchy contrast and distinct grain structures.
 
 #### Print Stocks (Positive Finish)

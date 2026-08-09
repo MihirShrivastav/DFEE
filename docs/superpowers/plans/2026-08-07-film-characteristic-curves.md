@@ -198,6 +198,27 @@ they do not reproduce a physical E-6 density curve or scanner transform.
 
 Source: [Kodak Ektachrome E100 technical data](https://kodakprofessional.com/sites/default/files/wysiwyg/pro/resources/e4000_ektachrome_100.pdf).
 
+## Stock Rollout: Kodak Kodachrome 64 (2026-08-09)
+
+Kodachrome 64 (KR/PKR) already had a v4 curve, but this audit recalibrates its
+physical assumptions from Kodak's K-14 documentation. The original Kodak E-88
+guide records diffuse RMS 12 at density 1.0, its three-layer sensitometric
+curves, and scanner-friendly common dye behavior across the Kodachrome family.
+Kodak's professional material describes its palette as naturally reproducing
+subtle colors with fine grain and sharpness. Critically, K-14 uses a rem-jet
+antihalation backing to minimize reflection halos and loss of sharpness.
+
+The updated response is a dense, contrast-forward but graded transparency: it
+sits above Provia in midtone separation and below Velvia's extreme curve. The
+toe and shoulder preserve the substantial published transitions rather than
+crushing black or clipping white. Large blue/green shadow and yellow-highlight
+biases were removed; a restrained warm density tendency and red/orange palette
+remain. Film halation is now only a near-negligible, high-threshold residual,
+consistent with rem-jet. This preserves Kodachrome's separate K-14 identity
+without claiming to recreate its proprietary processing or a particular scan.
+
+Sources: [Kodak Kodachrome 25, 64, and 200 technical guide E-88](https://125px.com/docs/film/kodak/e88-1998_01.pdf), [Kodak K-14M processor theory guide](https://www.kodak.com/cluster/global/plugins/acrobat/en/service/kLab/tg2044_1_02mar99.pdf).
+
 ## Global Constraints
 
 - Never regress legacy pipelines: `parity_v1` and `filmic_v2` MUST stay byte-identical (`dfee_tests` guards this). All new behavior is gated behind `effect_pipeline_version == "filmic_v4"`.
