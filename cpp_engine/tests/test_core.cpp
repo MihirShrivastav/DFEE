@@ -708,6 +708,38 @@ void test_monochrome_profile_exposure_ramps_are_distinct() {
     assert(delta_3200_v4.material_effects.halation_threshold >= 0.80F);
 }
 
+void test_double_x_v4_motion_picture_role() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto double_x = dfee::load_film_stock_profile(
+        repo_root / "profiles" / "stocks" / "eastman_double_x.yaml");
+    const dfee::RenderPlanSolver solver;
+
+    dfee::SolverInput input;
+    input.tonal_distribution.tonal_skew = "normal";
+    input.tonal_distribution.dynamic_range_stops = 8.0F;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.luma_p95 = 0.70F;
+    input.tonal_distribution.luma_p98 = 0.82F;
+    input.camera_input_bias = dfee::CameraBiasAnalysis{.neutral_confidence = 0.9F};
+    input.raw_iso = 250;
+
+    dfee::SolverControls controls;
+    controls.exposure_intent = "Preserve";
+    controls.adaptive = false;
+    controls.subtractive_pipeline = true;
+    controls.characteristic_pipeline = true;
+
+    const auto plan = solver.solve(input, double_x, controls);
+    assert(plan.film_response.use_characteristic_curve);
+    assert(double_x.adaptation.base_iso == 250);
+    assert(double_x.grain.family == "bw_cubic");
+    assert(double_x.grain.size >= 0.60F);
+    assert(plan.film_response.characteristic_curve.gamma <= 1.12F);
+    assert(plan.film_response.characteristic_curve.latitude_stops >= 8.8F);
+    assert(plan.film_response.material_effects.halation_strength < 0.05F);
+    assert(plan.film_response.material_effects.halation_threshold >= 0.80F);
+}
+
 void test_reversal_profile_roles_are_distinct() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const auto astia = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "astia_100.yaml");
@@ -3952,6 +3984,7 @@ int main() {
         test_toe_length_controls_shadow_latitude();
         test_cinestill_profile_exposure_ramps_are_distinct();
         test_monochrome_profile_exposure_ramps_are_distinct();
+        test_double_x_v4_motion_picture_role();
         test_reversal_profile_roles_are_distinct();
         test_color_negative_profiles_are_distinct();
         test_shadow_lift_floor_and_footprint();

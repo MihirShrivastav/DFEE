@@ -69,9 +69,12 @@ grain:
   overexposure_smoothing: 0.18
 halation:
   trigger: specular_only
-  strength: 0.15
-  radius_inner: 5
-  radius_outer: 18
+  # Kodak specifies a grey acetate base and anti-static/lubricant layer, not a
+  # visible halo look. Keep a neutral residual only for exceptional sources.
+  strength: 0.04
+  threshold: 0.83
+  radius_inner: 3
+  radius_outer: 12
   warm_core:
   - 1.0
   - 1.0
@@ -95,3 +98,17 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+characteristic_curve:
+  # EASTMAN DOUBLE-X 5222/7222: panchromatic motion-picture B&W negative.
+  # Kodak specifies daylight EI 250 / tungsten EI 200 for development to
+  # gamma 0.65. Preserve that controlled, print-chain-friendly response with
+  # a broad toe and shoulder, not a high-contrast still-film interpretation.
+  gamma: 1.10
+  latitude_stops: 9.0
+  toe_onset: 3.5
+  toe_hardness: 0.64
+  shoulder_onset: 4.2
+  shoulder_hardness: 0.62
+  d_min: 0.022
+  d_max: 0.982
+  channel_gamma_mult: [1.0, 1.0, 1.0]

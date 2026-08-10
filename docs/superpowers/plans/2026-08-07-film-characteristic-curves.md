@@ -820,6 +820,30 @@ paper: [ILFORD Delta 3200 technical information](https://www.ilfordphoto.com/amf
 
 ---
 
+## Stock Rollout: EASTMAN DOUBLE-X 5222/7222 (2026-08-10)
+
+Double-X is calibrated as a panchromatic motion-picture negative, not as a
+still-film preset. Kodak specifies daylight EI 250 and tungsten EI 200 when
+developed to gamma 0.65, and positions it for general production, available
+light, good image structure, and sharpness. This points to a controlled
+print-chain-friendly negative response with usable shadow and highlight
+transitions, rather than a contrast-heavy “cinema” grade.
+
+The v4 mapping uses gamma `1.10`, 9.0 stops of rendered latitude, and broad
+but bounded toe/shoulder transitions. The existing cubic-grain role remains
+materially more pronounced than fine tabular-grain stocks, independently of
+tone contrast. Kodak documents a gray acetate safety base with an anti-static
+and lubricant layer; it does not establish a broad visual halation signature,
+so the old generic glow is replaced by a small neutral, localized,
+high-threshold residual only.
+
+This is a rendered-response calibration based on Kodak's technical material,
+not a claim to reproduce a particular lab, printer, or scan:
+[Kodak EASTMAN DOUBLE-X technical information](https://www.kodak.com/content/products-brochures/motion-picture/EASTMAN-DOUBLE-X-technical-information.pdf),
+[Kodak EASTMAN DOUBLE-X resource page](https://www.kodak.com/en/motion/product/camera-films/eastman-double-x-black-white-5222-7222/resources/).
+
+---
+
 ## Self-Review
 
 **Spec coverage:** model (Task 1), scene placement (Tasks 1,3,4), per-dye-layer color/crossover (Task 3 `curve_gamma_mult`, Task 4), filmic_v4 gate (Task 2), control re-layering (Task 3 `map_characteristic_curve`/`map_exposure_shift`), Light panel untouched (not referenced), prototype 3 stocks + datasheet derivation + harness validation (Task 6), rollout (Task 7), parity guard (Tasks 2/6/7). All spec sections covered.
