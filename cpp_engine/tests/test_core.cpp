@@ -688,16 +688,24 @@ void test_monochrome_profile_exposure_ramps_are_distinct() {
     controls.characteristic_pipeline = true;
     const auto delta_100_v4 = solver.solve(input, delta_100, controls);
     const auto delta_400_v4 = solver.solve(input, delta_400, controls);
+    const auto delta_3200_v4 = solver.solve(input, delta_3200, controls);
     assert(delta_100_v4.film_response.use_characteristic_curve);
     assert(delta_400_v4.film_response.use_characteristic_curve);
+    assert(delta_3200_v4.film_response.use_characteristic_curve);
     assert(delta_100.grain.size < delta_400.grain.size);
     assert(delta_400.grain.size < delta_3200.grain.size);
     assert(delta_100.grain.strength < delta_400.grain.strength);
     assert(delta_400.grain.strength < delta_3200.grain.strength);
+    assert(delta_3200_v4.film_response.characteristic_curve.gamma <
+           delta_400_v4.film_response.characteristic_curve.gamma);
+    assert(delta_3200_v4.film_response.characteristic_curve.latitude_stops >=
+           delta_400_v4.film_response.characteristic_curve.latitude_stops);
     assert(delta_100_v4.material_effects.halation_strength < 0.05F);
     assert(delta_100_v4.material_effects.halation_threshold >= 0.80F);
     assert(delta_400_v4.material_effects.halation_strength < 0.05F);
     assert(delta_400_v4.material_effects.halation_threshold >= 0.80F);
+    assert(delta_3200_v4.material_effects.halation_strength <= 0.05F);
+    assert(delta_3200_v4.material_effects.halation_threshold >= 0.80F);
 }
 
 void test_reversal_profile_roles_are_distinct() {

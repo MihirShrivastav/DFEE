@@ -69,9 +69,12 @@ grain:
   overexposure_smoothing: 0.12
 halation:
   trigger: specular_only
-  strength: 0.12
-  radius_inner: 4
-  radius_outer: 16
+  # Do not invent broad glow for a conventional B&W negative. Retain only a
+  # neutral, localized residual around exceptional practical sources.
+  strength: 0.05
+  threshold: 0.82
+  radius_inner: 3
+  radius_outer: 12
   warm_core:
   - 1.0
   - 1.0
@@ -95,3 +98,17 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+characteristic_curve:
+  # ILFORD Delta 3200 Professional: Core-Shell high-speed negative designed
+  # for EI 3200 with extended development. Its measured ISO speed is 1000;
+  # the default curve therefore preserves shadow and highlight transitions
+  # instead of turning the marketed EI into a harsh, contrast-heavy grade.
+  gamma: 1.06
+  latitude_stops: 9.2
+  toe_onset: 3.4
+  toe_hardness: 0.58
+  shoulder_onset: 4.3
+  shoulder_hardness: 0.58
+  d_min: 0.028
+  d_max: 0.978
+  channel_gamma_mult: [1.0, 1.0, 1.0]

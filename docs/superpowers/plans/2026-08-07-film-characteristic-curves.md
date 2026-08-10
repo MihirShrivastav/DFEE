@@ -795,6 +795,31 @@ not a claim to reproduce a specific developer, enlarger, filter, or paper:
 
 ---
 
+## Stock Rollout: ILFORD Delta 3200 Professional (2026-08-10)
+
+Delta 3200 needs a separate calibration from the slower Delta stocks. ILFORD
+states that it is designed for EI 3200 with extended development, while its
+measured ISO speed is 1000. It recommends EI 1600-6400 in normal use and
+documents working exposure/development combinations from EI 400 through 6400,
+with higher settings requiring test exposure. That is evidence for a
+high-speed, process-sensitive response with gradual tonal transitions, not for
+a generic high-contrast or broad-halation treatment.
+
+The v4 default maps this to gamma `1.06`, 9.2 stops of rendered latitude, a
+long soft toe, and a similarly graduated shoulder. The established high-speed
+grain role remains visibly stronger than the Delta 100 and Delta 400 profiles,
+but it is not used to manufacture contrast. No specific anti-halation claim is
+made for this profile: in the absence of material evidence supporting a visible
+halo, halation is constrained to a neutral, localized, high-threshold practical
+source residual.
+
+This is a rendered-response calibration based on ILFORD's technical material,
+not a claim to reproduce one developer, exposure index, enlarger, filter, or
+paper: [ILFORD Delta 3200 technical information](https://www.ilfordphoto.com/amfile/file/download/file/1913/product/683/),
+[ILFORD Delta 3200 product information](https://www.ilfordphoto.com/delta-3200-professional-bulk-length-film?___from_store=ilford_uk&___store=ilford_brochure).
+
+---
+
 ## Self-Review
 
 **Spec coverage:** model (Task 1), scene placement (Tasks 1,3,4), per-dye-layer color/crossover (Task 3 `curve_gamma_mult`, Task 4), filmic_v4 gate (Task 2), control re-layering (Task 3 `map_characteristic_curve`/`map_exposure_shift`), Light panel untouched (not referenced), prototype 3 stocks + datasheet derivation + harness validation (Task 6), rollout (Task 7), parity guard (Tasks 2/6/7). All spec sections covered.
