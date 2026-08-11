@@ -11,7 +11,7 @@ Window {
     minimumWidth: 960
     minimumHeight: 620
     visible: true
-    title: "DFEE"
+    title: "Film Lab"
     color: bg
 
     // Graphite palette — charcoal, monochrome. Color lives only in the photo + boxart.
@@ -1128,14 +1128,14 @@ Window {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "DFEE"
+                text: "Film Lab"
                 color: root.textPrimary
                 font.pixelSize: 22
                 font.weight: Font.Medium
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: engine.lightroomRoundTrip ? "Lightroom round-trip TIFF" : "Open a RAW or TIFF image to begin"
+                text: engine.lightroomRoundTrip ? "Preparing your photo…" : "Open a RAW or TIFF image to begin"
                 color: root.textMuted
                 font.pixelSize: 13
             }
@@ -1255,7 +1255,7 @@ Window {
 
             Text {
                 width: parent.width
-                text: engine.lightroomRoundTrip ? "Lightroom round-trip" : (engine.hasImage ? "Native preview" : "No image loaded")
+                text: engine.lightroomRoundTrip ? "Editing from Lightroom" : (engine.hasImage ? "Live preview" : "No image loaded")
                 color: root.textMuted
                 font.pixelSize: 11
                 elide: Text.ElideMiddle
@@ -1267,7 +1267,7 @@ Window {
             PrimaryButton {
                 width: parent.width
                 visible: engine.lightroomRoundTrip
-                text: engine.exporting ? "Saving back…" : "Save & Return to Lightroom"
+                text: engine.exporting ? "Saving…" : "Save & Return to Lightroom"
                 enabled: engine.hasImage && !engine.exporting
                 onClicked: engine.exportImage()
             }
@@ -2365,7 +2365,7 @@ Window {
                 Text {
                     width: parent.width
                     topPadding: 4
-                    text: "DFEE Native Engine"
+                    text: "Film Lab"
                     color: root.textMuted
                     font.pixelSize: 11
                 }
@@ -2391,14 +2391,14 @@ Window {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: engine.lightroomRoundTrip ? "Saving back to Lightroom" : "Exporting full resolution"
+                text: engine.lightroomRoundTrip ? "Saving to Lightroom…" : "Exporting your image…"
                 color: root.textPrimary
                 font.pixelSize: 16
                 font.weight: Font.Medium
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: engine.lightroomRoundTrip ? "Rendering and atomically replacing the working TIFF" : "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
+                text: engine.lightroomRoundTrip ? "Applying your film recipe…" : "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
                 color: root.textSecondary
                 font.pixelSize: 12
             }

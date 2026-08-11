@@ -22,8 +22,9 @@ int main(int argc, char* argv[]) {
     QQuickStyle::setStyle("Basic");
 
     QGuiApplication app(argc, argv);
-    app.setApplicationName("DFEE");
-    app.setOrganizationName("DFEE");
+    app.setApplicationName("Film Lab");
+    app.setApplicationDisplayName("Film Lab");
+    app.setOrganizationName("Film Lab");
 
     // Bundled Geist (Swiss grotesque) — the Graphite typeface. Embedded via qrc so it
     // renders identically everywhere, including headless/offscreen captures.
@@ -38,7 +39,7 @@ int main(int argc, char* argv[]) {
     }
 
     QCommandLineParser commandLine;
-    commandLine.setApplicationDescription("DFEE native film editor");
+    commandLine.setApplicationDescription("Film Lab — film emulation editor");
     commandLine.addHelpOption();
     const QCommandLineOption lightroomEditOption(
         "lightroom-edit", "Open a Lightroom-provided TIFF and save back to that exact working file.", "tiff");
