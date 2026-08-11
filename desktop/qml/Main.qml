@@ -1389,6 +1389,54 @@ Window {
                                 currentIndex: stockBox.indexOfValue(engine.stock)
                                 onActivated: engine.stock = stockBox.currentValue
 
+                                // Searchable stock picker. Empty query shows the full sectioned
+                                // list; typing runs a smart match (prefix/word/substring/fuzzy on
+                                // both the display name and the stock id) ranked best-first.
+                                property string query: ""
+                                property var filteredStocks: query.trim().length === 0
+                                    ? engine.stockModel : stockBox.rankStocks(query)
+                                function pick(id) { engine.stock = id; stockBox.popup.close(); }
+                                function chooseTop() {
+                                    if (!filteredStocks || filteredStocks.length === 0) return;
+                                    var i = Math.max(0, Math.min(stockList.currentIndex, filteredStocks.length - 1));
+                                    pick(filteredStocks[i].id);
+                                }
+                                function rankStocks(qraw) {
+                                    var q = qraw.toLowerCase().trim();
+                                    var qn = q.replace(/[^a-z0-9]/g, "");
+                                    var src = engine.stockModel;
+                                    var scored = [];
+                                    for (var k = 0; k < src.length; ++k) {
+                                        var it = src[k];
+                                        var s = stockBox.scoreStock((it.name || "").toLowerCase(),
+                                                                    (it.id || "").toLowerCase(), q, qn);
+                                        if (s >= 0) scored.push({ item: it, score: s, ord: k });
+                                    }
+                                    scored.sort(function(a, b) { return b.score !== a.score ? b.score - a.score : a.ord - b.ord; });
+                                    var res = [];
+                                    for (var j = 0; j < scored.length; ++j) res.push(scored[j].item);
+                                    return res;
+                                }
+                                function scoreStock(n, idl, q, qn) {
+                                    if (q.length === 0) return 1;
+                                    if (n === q) return 1000;                              // exact
+                                    if (n.indexOf(q) === 0) return 900;                    // name prefix
+                                    var words = n.split(/[^a-z0-9]+/);
+                                    for (var w = 0; w < words.length; ++w)
+                                        if (words[w].length && words[w].indexOf(q) === 0) return 820 - w; // word prefix
+                                    var pos = n.indexOf(q);
+                                    if (pos >= 0) return 700 - pos;                        // substring
+                                    var idflat = idl.replace(/[^a-z0-9]/g, "");
+                                    if (qn.length && idflat.indexOf(qn) >= 0) return 550;  // id substring (e.g. 800t, tri x)
+                                    var qi = 0;                                            // fuzzy subsequence on name
+                                    for (var i = 0; i < n.length && qi < q.length; ++i) if (n[i] === q[qi]) qi++;
+                                    if (qi === q.length) return 350;
+                                    qi = 0;                                                // fuzzy subsequence on id (trix -> tri_x, p400 -> portra_400)
+                                    for (var b = 0; b < idflat.length && qi < qn.length; ++b) if (idflat[b] === qn[qi]) qi++;
+                                    if (qn.length && qi === qn.length) return 300;
+                                    return -1;                                             // no match
+                                }
+
                                 contentItem: Item {
                                     Row {
                                         anchors.left: parent.left
@@ -1438,31 +1486,101 @@ Window {
                                     open: false
                                 }
                                 popup: Popup {
+                                    id: stockPopup
                                     y: stockBox.height + 4
                                     width: stockBox.width
-                                    implicitHeight: Math.min(contentItem.implicitHeight + 8, 320)
+                                    implicitHeight: Math.min(searchCol.implicitHeight + 8, 400)
                                     padding: 4
-                                    contentItem: ListView {
-                                        clip: true
-                                        implicitHeight: contentHeight
-                                        model: stockBox.popup.visible ? stockBox.delegateModel : null
-                                        currentIndex: stockBox.highlightedIndex
-                                        ScrollIndicator.vertical: ScrollIndicator { }
-                                        section.property: "typeLabel"
-                                        section.criteria: ViewSection.FullString
-                                        section.delegate: Item {
-                                            width: ListView.view.width
-                                            height: section === "" ? 0 : 24
-                                            visible: section !== ""
+                                    onOpened: { stockBox.query = ""; stockSearch.text = ""; stockSearch.forceActiveFocus(); stockList.currentIndex = 0; }
+                                    contentItem: Column {
+                                        id: searchCol
+                                        spacing: 4
+                                        Rectangle {
+                                            width: parent.width
+                                            height: 34
+                                            radius: 8
+                                            color: root.inset
+                                            border.width: 1
+                                            border.color: stockSearch.activeFocus ? root.border : root.hair
+                                            TextField {
+                                                id: stockSearch
+                                                anchors.fill: parent
+                                                leftPadding: 10; rightPadding: 10
+                                                verticalAlignment: TextInput.AlignVCenter
+                                                placeholderText: "Search film stocks…"
+                                                color: root.textPrimary
+                                                placeholderTextColor: root.textMuted
+                                                font.pixelSize: 13
+                                                selectByMouse: true
+                                                background: null
+                                                onTextChanged: { stockBox.query = text; stockList.currentIndex = 0; }
+                                                Keys.onReturnPressed: stockBox.chooseTop()
+                                                Keys.onEnterPressed: stockBox.chooseTop()
+                                                Keys.onEscapePressed: stockPopup.close()
+                                                Keys.onDownPressed: stockList.incrementCurrentIndex()
+                                                Keys.onUpPressed: stockList.decrementCurrentIndex()
+                                            }
+                                        }
+                                        ListView {
+                                            id: stockList
+                                            width: parent.width
+                                            height: Math.min(contentHeight, 340)
+                                            clip: true
+                                            model: stockBox.filteredStocks
+                                            currentIndex: 0
+                                            ScrollIndicator.vertical: ScrollIndicator { }
+                                            section.property: stockBox.query.trim().length ? "" : "typeLabel"
+                                            section.criteria: ViewSection.FullString
+                                            section.delegate: Item {
+                                                width: ListView.view.width
+                                                height: section === "" ? 0 : 24
+                                                visible: section !== ""
+                                                Text {
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 10
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.bottomMargin: 4
+                                                    text: section
+                                                    color: root.textMuted
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.Medium
+                                                }
+                                            }
+                                            delegate: ItemDelegate {
+                                                id: stockRow
+                                                width: stockList.width - 8
+                                                height: 50
+                                                hoverEnabled: true
+                                                highlighted: stockList.currentIndex === index
+                                                onHoveredChanged: if (hovered) stockList.currentIndex = index
+                                                onClicked: stockBox.pick(modelData.id)
+                                                contentItem: Row {
+                                                    leftPadding: 6
+                                                    spacing: 12
+                                                    BoxartSwatch {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        cell: 32
+                                                        stockId: modelData.id
+                                                    }
+                                                    Text {
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        text: modelData.name
+                                                        color: root.textPrimary
+                                                        elide: Text.ElideRight
+                                                        font.pixelSize: 13
+                                                    }
+                                                }
+                                                background: Rectangle {
+                                                    radius: 8
+                                                    color: stockRow.highlighted ? "#16ffffff" : "transparent"
+                                                }
+                                            }
                                             Text {
-                                                anchors.left: parent.left
-                                                anchors.leftMargin: 10
-                                                anchors.bottom: parent.bottom
-                                                anchors.bottomMargin: 4
-                                                text: section
+                                                anchors.centerIn: parent
+                                                visible: stockList.count === 0
+                                                text: "No stocks match “" + stockBox.query + "”"
                                                 color: root.textMuted
-                                                font.pixelSize: 10
-                                                font.weight: Font.Medium
+                                                font.pixelSize: 12
                                             }
                                         }
                                     }
