@@ -15,6 +15,10 @@
 #include "ThumbnailImageProvider.h"
 #include "LibraryController.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 int main(int argc, char* argv[]) {
     // Native Windows controls cannot be safely restyled from QML.  Basic keeps
     // rendering entirely within the application and makes the Graphite tokens
@@ -47,6 +51,32 @@ int main(int argc, char* argv[]) {
     commandLine.addPositionalArgument(
         "tiff", "A Lightroom-provided TIFF working file. This is the standard Additional External Editor launch form.");
     commandLine.process(app);
+
+    // Film Lab opens photos from Lightroom (Edit In -> Film Lab), which hands it a developed
+    // TIFF. It is deliberately not a standalone RAW editor — our RAW front-end is not exposed
+    // to users. Launched without a Lightroom file, show a short note and exit before any window
+    // appears. Escape hatches for us: FILMLAB_ALLOW_STANDALONE=1 (full standalone UI) or
+    // DFEE_SELFTEST (headless self-test).
+    {
+        const bool hasLightroomFile =
+            commandLine.isSet(lightroomEditOption) || !commandLine.positionalArguments().isEmpty();
+        const bool devOverride = qEnvironmentVariableIsSet("FILMLAB_ALLOW_STANDALONE")
+                                 || qEnvironmentVariableIsSet("DFEE_SELFTEST");
+        if (!hasLightroomFile && !devOverride) {
+#ifdef _WIN32
+            MessageBoxW(nullptr,
+                        L"Film Lab opens your photos from Lightroom.\n\n"
+                        L"In Lightroom Classic, select a photo and choose\n"
+                        L"Photo → Edit In → Film Lab.\n\n"
+                        L"Film Lab edits the developed image Lightroom sends it; "
+                        L"it is not a standalone editor.",
+                        L"Film Lab", MB_OK | MB_ICONINFORMATION);
+#endif
+            qInfo() << "Film Lab launched without a Lightroom file; exiting. Use Lightroom's "
+                       "Edit In > Film Lab (or set FILMLAB_ALLOW_STANDALONE=1 for development).";
+            return 0;
+        }
+    }
 
     // Construct the provider BEFORE EngineController so it can be passed to
     // the worker at construction time.  This ensures provider_ is set before
