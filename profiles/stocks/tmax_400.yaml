@@ -101,3 +101,15 @@ color_character:
   emulsion_density_sensitivity: 0.0
   palette:
     range_sensitivity: 0.0
+characteristic_curve:
+  # Kodak T-MAX 400: fast T-GRAIN — fine grain for its speed, modern moderate contrast,
+  # wide latitude, gradual toe and shoulder.
+  gamma: 1.16
+  latitude_stops: 8.7
+  toe_onset: 3.1
+  toe_hardness: 0.68
+  shoulder_onset: 4.1
+  shoulder_hardness: 0.64
+  d_min: 0.016
+  d_max: 0.985
+  channel_gamma_mult: [1.0, 1.0, 1.0]

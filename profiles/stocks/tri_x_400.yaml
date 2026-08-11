@@ -102,14 +102,14 @@ color_character:
   palette:
     range_sensitivity: 0.0
 characteristic_curve:
-  # Kodak Tri-X 400 (B&W negative): moderate rendered contrast (~1.15), long straight line,
-  # classic gentle toe and gradual shoulder.
-  gamma: 1.30
-  latitude_stops: 8.0
-  toe_onset: 3.0
-  toe_hardness: 0.8
-  shoulder_onset: 3.4
-  shoulder_hardness: 0.85
-  d_min: 0.03
-  d_max: 0.96
+  # Kodak Tri-X 400: the classic punchy, contrasty fast B&W — deeper contrast than HP5/T-MAX,
+  # rich blacks, distinctive gritty tonality; a steeper straight line and a firm toe.
+  gamma: 1.24
+  latitude_stops: 8.2
+  toe_onset: 2.8
+  toe_hardness: 0.72
+  shoulder_onset: 3.9
+  shoulder_hardness: 0.66
+  d_min: 0.016
+  d_max: 0.984
   channel_gamma_mult: [1.0, 1.0, 1.0]

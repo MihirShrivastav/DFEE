@@ -101,3 +101,15 @@ color_character:
   emulsion_density_sensitivity: 0.0
   palette:
     range_sensitivity: 0.0
+characteristic_curve:
+  # ILFORD FP4 Plus 125: classic medium-speed cubic-grain negative — moderate, well-behaved
+  # contrast, fine grain, wide printable latitude with a long gentle toe and shoulder.
+  gamma: 1.16
+  latitude_stops: 8.8
+  toe_onset: 3.2
+  toe_hardness: 0.7
+  shoulder_onset: 4.2
+  shoulder_hardness: 0.64
+  d_min: 0.014
+  d_max: 0.986
+  channel_gamma_mult: [1.0, 1.0, 1.0]

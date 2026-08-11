@@ -95,3 +95,15 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+characteristic_curve:
+  # ILFORD HP5 Plus 400: classic fast cubic-grain workhorse — forgiving, lower-contrast, very
+  # wide latitude with an especially long gentle toe for open shadow detail.
+  gamma: 1.12
+  latitude_stops: 9.0
+  toe_onset: 3.3
+  toe_hardness: 0.62
+  shoulder_onset: 4.3
+  shoulder_hardness: 0.6
+  d_min: 0.018
+  d_max: 0.983
+  channel_gamma_mult: [1.0, 1.0, 1.0]

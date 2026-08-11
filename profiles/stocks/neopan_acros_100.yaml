@@ -95,3 +95,15 @@ dye_contamination:
   b_to_r: 0.0
   r_to_b: 0.0
   g_to_b: 0.0
+characteristic_curve:
+  # Fujifilm Neopan 100 Acros: Sigma-crystal ultra-fine grain — exceptionally smooth, long
+  # tonal scale, high sharpness, moderate contrast with clean deep blacks.
+  gamma: 1.14
+  latitude_stops: 9.0
+  toe_onset: 3.3
+  toe_hardness: 0.66
+  shoulder_onset: 4.3
+  shoulder_hardness: 0.62
+  d_min: 0.012
+  d_max: 0.988
+  channel_gamma_mult: [1.0, 1.0, 1.0]

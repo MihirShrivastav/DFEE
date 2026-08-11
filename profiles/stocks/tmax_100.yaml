@@ -101,3 +101,15 @@ color_character:
   emulsion_density_sensitivity: 0.0
   palette:
     range_sensitivity: 0.0
+characteristic_curve:
+  # Kodak T-MAX 100: T-GRAIN ultra-fine, high sharpness — clean and crisp, moderately high
+  # contrast with a long straight line and deep clean blacks.
+  gamma: 1.22
+  latitude_stops: 8.4
+  toe_onset: 2.9
+  toe_hardness: 0.72
+  shoulder_onset: 4.0
+  shoulder_hardness: 0.66
+  d_min: 0.012
+  d_max: 0.988
+  channel_gamma_mult: [1.0, 1.0, 1.0]
