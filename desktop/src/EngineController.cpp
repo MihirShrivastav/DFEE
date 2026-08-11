@@ -12,16 +12,32 @@
 #include <QCoreApplication>
 
 #include <algorithm>
+#include <filesystem>
+#include <system_error>
 
 #ifndef DFEE_REPO_ROOT
 #  define DFEE_REPO_ROOT "."
 #endif
 
+namespace {
+// Locate the data root that holds profiles/stocks. In an installed/deployed build the
+// profiles are bundled next to the executable; fall back to the source-tree repo root
+// (DFEE_REPO_ROOT) for developer builds run from the build tree.
+std::filesystem::path resolveProjectRoot() {
+    std::error_code ec;
+    const std::filesystem::path exeDir(
+        QCoreApplication::applicationDirPath().toStdWString());
+    if (std::filesystem::exists(exeDir / "profiles" / "stocks", ec)) {
+        return exeDir;
+    }
+    return std::filesystem::path(DFEE_REPO_ROOT);
+}
+}  // namespace
+
 EngineController::EngineController(PreviewImageProvider* provider,
                                    QObject* parent)
     : QObject(parent)
-    , session_(std::make_unique<dfee::EngineSession>(
-          std::filesystem::path(DFEE_REPO_ROOT)))
+    , session_(std::make_unique<dfee::EngineSession>(resolveProjectRoot()))
     , provider_(provider)
 {
     filmControls_ = defaultFilmControls();
