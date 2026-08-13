@@ -1834,6 +1834,55 @@ void test_filmic_grain_roughness_does_not_become_pixel_noise() {
     assert(rough_neighbor_energy < smooth_neighbor_energy * 1.45);
 }
 
+void test_filmic_high_speed_grain_remains_bounded() {
+    constexpr int kWidth = 256;
+    constexpr int kHeight = 192;
+    dfee::Image rgb(kWidth, kHeight, 3);
+    for (int y = 0; y < kHeight; ++y) {
+        for (int x = 0; x < kWidth; ++x) {
+            rgb.at(x, y, 0) = rgb.at(x, y, 1) = rgb.at(x, y, 2) = 0.42F;
+        }
+    }
+
+    dfee::SpatialMasks masks;
+    masks.grain_receptivity_mask = dfee::LuminanceImage(kWidth, kHeight);
+    dfee::MaterialEffectsPlan delta_3200;
+    delta_3200.grain_strength = 0.54F;
+    delta_3200.grain_size = 0.64F;
+    delta_3200.grain_roughness = 0.38F;
+    delta_3200.grain_chroma_strength = 0.0F;
+    delta_3200.grain_target_pgi = 56.0F;
+    delta_3200.grain_peak_zone = "midtones_heavy";
+    delta_3200.grain_shadow_response = 0.84F;
+    delta_3200.grain_midtone_response = 1.05F;
+    delta_3200.grain_highlight_response = 0.28F;
+    delta_3200.grain_underexposure_coarsening = 0.32F;
+    delta_3200.grain_overexposure_smoothing = 0.20F;
+    delta_3200.grain_seed = 3200U;
+
+    dfee::MaterialEffectsPlan overloaded = delta_3200;
+    overloaded.grain_strength = 2.0F;
+    overloaded.grain_target_pgi = 100.0F;
+
+    const dfee::FilmRenderer renderer;
+    const auto baseline = renderer.apply_filmic_grain(rgb, masks, delta_3200);
+    const auto stress = renderer.apply_filmic_grain(rgb, masks, overloaded);
+    const auto standard_deviation = [](const dfee::Image& image) {
+        double sum = 0.0;
+        double sum_sq = 0.0;
+        for (const float value : image.pixels) {
+            sum += value;
+            sum_sq += static_cast<double>(value) * value;
+        }
+        const double count = static_cast<double>(image.value_count());
+        return std::sqrt(std::max(0.0, sum_sq / count - (sum / count) * (sum / count)));
+    };
+    const double baseline_std = standard_deviation(baseline);
+    const double stress_std = standard_deviation(stress);
+    assert(baseline_std > 1.0e-3);
+    assert(stress_std < baseline_std * 1.20);
+}
+
 void test_print_per_channel_curve() {
     dfee::Image img(3, 1, 3);
     const auto set_gray = [&](int x, float v) { img.at(x, 0, 0) = v; img.at(x, 0, 1) = v; img.at(x, 0, 2) = v; };
@@ -4003,6 +4052,7 @@ int main() {
         test_filmic_grain_density_domain_preserves_flat_mean_and_endpoints();
         test_filmic_grain_avoids_low_frequency_blotches();
         test_filmic_grain_roughness_does_not_become_pixel_noise();
+        test_filmic_high_speed_grain_remains_bounded();
         test_filmic_grain_profile_placement_and_texture_masking();
         test_print_finish();
         test_print_per_channel_curve();

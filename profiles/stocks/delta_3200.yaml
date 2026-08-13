@@ -52,21 +52,24 @@ hue_saturation_response:
   neon_compression: 1.0
   highlight_desaturation: 1.0
 grain:
-  size: 0.85
-  strength: 0.78
+  # Delta 3200 must be visibly coarser than the slower Delta materials, but
+  # real high-speed silver grain remains particle texture, not large mottling.
+  size: 0.64
+  strength: 0.54
+  roughness: 0.38
   chroma_strength: 0.0
   peak_zone: midtones_heavy
   texture_masking: 0.35
   family: bw_tabular
-  target_pgi_35mm_4x6: 68
-  clumpiness: 0.66
-  micro_grit: 0.34
+  target_pgi_35mm_4x6: 56
+  clumpiness: 0.45
+  micro_grit: 0.20
   layer_correlation: 1.00
-  shadow_response: 1.05
-  midtone_response: 1.24
-  highlight_response: 0.42
-  underexposure_coarsening: 0.56
-  overexposure_smoothing: 0.12
+  shadow_response: 0.84
+  midtone_response: 1.05
+  highlight_response: 0.28
+  underexposure_coarsening: 0.32
+  overexposure_smoothing: 0.20
 halation:
   trigger: specular_only
   # Do not invent broad glow for a conventional B&W negative. Retain only a

@@ -808,7 +808,10 @@ a generic high-contrast or broad-halation treatment.
 The v4 default maps this to gamma `1.06`, 9.2 stops of rendered latitude, a
 long soft toe, and a similarly graduated shoulder. The established high-speed
 grain role remains visibly stronger than the Delta 100 and Delta 400 profiles,
-but it is not used to manufacture contrast. No specific anti-halation claim is
+but it is deliberately bounded: strength, particle scale, PGI, and tonal
+weighting must not stack into low-frequency or opaque-looking mottling. The
+renderer additionally caps the final density-domain sigma for every high-grain
+configuration, including user overrides. No specific anti-halation claim is
 made for this profile: in the absence of material evidence supporting a visible
 halo, halation is constrained to a neutral, localized, high-threshold practical
 source residual.

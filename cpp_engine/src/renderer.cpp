@@ -380,6 +380,10 @@ constexpr float kLeanBlueSign     = -1.0F;  // sign chosen so blue leans toward 
 // Film grain belongs in optical density, not as a display-space overlay. The
 // stock response and artist-facing Amount control apply the remaining shaping.
 constexpr float kGrainDensitySigma = 0.190F;
+// A high-speed profile can combine a large print-grain index, strong stock
+// strength, and a midtone-heavy response. Bound the final density deviation so
+// those independent controls cannot turn silver texture into opaque mottling.
+constexpr float kGrainMaxSigma = 0.115F;
 constexpr float kGrainDensityFloor = 1.0e-5F;
 constexpr float kGrainMaxDensity = 12.0F;
 
@@ -2478,8 +2482,10 @@ Image FilmRenderer::apply_filmic_grain(
             // is signal-dependent but never tied to neighbouring image detail.
             const float clear_highlight_taper = smoothstep01(0.16F, 0.60F, luma_density);
             const float blocked_shadow_taper = 1.0F - smoothstep01(3.00F, 5.00F, luma_density);
-            const float sigma_luma = sigma_base * std::max(0.0F, density_mod) *
-                clear_highlight_taper * blocked_shadow_taper;
+            const float sigma_luma = std::min(
+                kGrainMaxSigma,
+                sigma_base * std::max(0.0F, density_mod) *
+                    clear_highlight_taper * blocked_shadow_taper);
 
             const auto apply_density_grain = [&](const float input, const float noise, const float channel_multiplier) {
                 if (input <= kGrainDensityFloor || input >= 1.0F - kGrainDensityFloor) {
