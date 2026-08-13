@@ -52,8 +52,10 @@ class EngineController : public QObject {
     Q_PROPERTY(int historyIndex READ historyIndex NOTIFY historyChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
-    // Saved presets on disk (Documents/Film Lab/Presets) as {id, name}.
+    // Saved presets on disk (Documents/Film Lab/Presets) as {id, name, group}.
     Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
+    // User group names (first-level subdirectories), sorted.
+    Q_PROPERTY(QStringList presetGroups READ presetGroups NOTIFY presetsChanged)
 
 public:
     // provider must be non-null; it must outlive EngineController (the
@@ -129,6 +131,7 @@ public:
     bool canUndo() const { return historyIndex_ > 0; }
     bool canRedo() const { return historyIndex_ >= 0 && historyIndex_ < int(history_.size()) - 1; }
     QVariantList presets() const { return presets_; }
+    QStringList presetGroups() const { return presetGroups_; }
 
     // Edit history navigation. jumpToHistory takes a display row (0 = newest).
     Q_INVOKABLE void undo();
@@ -136,11 +139,15 @@ public:
     Q_INVOKABLE void jumpToHistory(int displayRow);
 
     // Presets. A recipe is stock + look controls (geometry excluded). savePreset
-    // writes the current recipe; applyPreset / deletePreset act on a preset id
-    // (its file name without extension). Returns false on I/O failure.
-    Q_INVOKABLE bool savePreset(const QString& name);
+    // writes the current recipe into an optional group (subdirectory); a preset id
+    // is its path relative to the presets root without extension ("group/name" or
+    // just "name"). applyPreset / deletePreset act on that id. Returns false on
+    // I/O failure. createGroup makes an (empty) group; presetExists tests a target.
+    Q_INVOKABLE bool savePreset(const QString& name, const QString& group = QString());
     Q_INVOKABLE void applyPreset(const QString& id);
     Q_INVOKABLE bool deletePreset(const QString& id);
+    Q_INVOKABLE bool createGroup(const QString& name);
+    Q_INVOKABLE bool presetExists(const QString& name, const QString& group) const;
     Q_INVOKABLE void refreshPresets();
 
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
@@ -210,6 +217,7 @@ private:
     int historyIndex_ = -1;      // current step within history_ (internal, 0 = oldest)
     bool pendingSeed_ = false;   // seed a baseline step on the next preview-ready
     QVariantList presets_;
+    QStringList presetGroups_;
 
     std::unique_ptr<dfee::EngineSession> session_;
     QStringList stockNames_;

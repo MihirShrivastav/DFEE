@@ -45,6 +45,14 @@ QString fmtControlValue(double v) {
     if (std::abs(v - r) < 1e-6) return QString::number(static_cast<long long>(r));
     return QString::number(v, 'f', 2);
 }
+
+// A single filesystem-safe path component (preset or group name). The display
+// name is preserved inside the JSON; only the file/dir name is sanitized.
+QString sanitizeComponent(const QString& s) {
+    QString safe = s.trimmed();
+    safe.replace(QRegularExpression(QStringLiteral("[\\\\/:*?\"<>|]")), QStringLiteral("_"));
+    return safe;
+}
 }  // namespace
 
 EngineController::EngineController(PreviewImageProvider* provider,
@@ -956,38 +964,58 @@ void EngineController::applyRecipe(const QVariantMap& recipe, const QString& lab
 void EngineController::refreshPresets()
 {
     presets_.clear();
-    QDir dir(presetsDir());
-    const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
-    for (const QString& f : files) {
-        QFile file(dir.filePath(f));
-        if (!file.open(QIODevice::ReadOnly)) continue;
-        const QJsonObject obj = QJsonDocument::fromJson(file.readAll()).object();
-        const QString id = QFileInfo(f).completeBaseName();
-        QVariantMap m;
-        m["id"] = id;
-        m["name"] = obj.value("name").toString(id);
-        presets_.append(m);
+    presetGroups_.clear();
+    const QDir root(presetsDir());
+
+    // Read every *.json in a directory into presets_, tagged with its group.
+    const auto readDir = [this](const QDir& dir, const QString& group) {
+        const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+        for (const QString& f : files) {
+            QFile file(dir.filePath(f));
+            if (!file.open(QIODevice::ReadOnly)) continue;
+            const QJsonObject obj = QJsonDocument::fromJson(file.readAll()).object();
+            const QString base = QFileInfo(f).completeBaseName();
+            QVariantMap m;
+            m["id"] = group.isEmpty() ? base : (group + QStringLiteral("/") + base);
+            m["name"] = obj.value("name").toString(base);
+            m["group"] = group;
+            presets_.append(m);
+        }
+    };
+
+    readDir(root, QString());                                   // ungrouped (root)
+    const QStringList subdirs =
+        root.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    for (const QString& d : subdirs) {                          // one level of groups
+        presetGroups_.append(d);
+        readDir(QDir(root.filePath(d)), d);
     }
     emit presetsChanged();
 }
 
-bool EngineController::savePreset(const QString& name)
+bool EngineController::savePreset(const QString& name, const QString& group)
 {
-    const QString trimmed = name.trimmed();
-    if (trimmed.isEmpty() || currentFile_.isEmpty()) return false;
-    // Sanitize for a filesystem-safe file name; the display name is stored inside.
-    QString safe = trimmed;
-    safe.replace(QRegularExpression(QStringLiteral("[\\\\/:*?\"<>|]")), QStringLiteral("_"));
+    const QString displayName = name.trimmed();
+    const QString safeName = sanitizeComponent(displayName);
+    if (safeName.isEmpty() || currentFile_.isEmpty()) return false;
+
+    QDir dir(presetsDir());
+    const QString safeGroup = sanitizeComponent(group);
+    if (!safeGroup.isEmpty()) {
+        dir = QDir(dir.filePath(safeGroup));
+        if (!QDir().mkpath(dir.absolutePath())) return false;
+    }
 
     const QVariantMap recipe = captureRecipe();
     QJsonObject obj;
     obj["schemaVersion"] = 1;
-    obj["name"] = trimmed;
+    obj["name"] = displayName;
+    obj["group"] = safeGroup;
     obj["stock"] = recipe.value("stock").toString();
     obj["controls"] = QJsonObject::fromVariantMap(recipe.value("controls").toMap());
     obj["createdAt"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 
-    QFile file(QDir(presetsDir()).filePath(safe + QStringLiteral(".json")));
+    QFile file(dir.filePath(safeName + QStringLiteral(".json")));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
     file.close();
@@ -1003,12 +1031,42 @@ void EngineController::applyPreset(const QString& id)
     QVariantMap recipe;
     recipe["stock"] = obj.value("stock").toString();
     recipe["controls"] = obj.value("controls").toObject().toVariantMap();
-    applyRecipe(recipe, QStringLiteral("Preset: ") + obj.value("name").toString(id));
+    const QString shown = obj.value("name").toString(QFileInfo(id).completeBaseName());
+    applyRecipe(recipe, QStringLiteral("Preset: ") + shown);
 }
 
 bool EngineController::deletePreset(const QString& id)
 {
-    const bool ok = QFile::remove(QDir(presetsDir()).filePath(id + QStringLiteral(".json")));
+    const QDir root(presetsDir());
+    const bool ok = QFile::remove(root.filePath(id + QStringLiteral(".json")));
+    if (ok) {
+        // Tidy up a group directory that has become empty after the delete.
+        const int slash = id.indexOf(QLatin1Char('/'));
+        if (slash > 0) {
+            const QString group = id.left(slash);
+            const QDir gdir(root.filePath(group));
+            if (gdir.entryList({QStringLiteral("*.json")}, QDir::Files).isEmpty()) {
+                root.rmdir(group);      // no-op if not truly empty
+            }
+        }
+        refreshPresets();
+    }
+    return ok;
+}
+
+bool EngineController::createGroup(const QString& name)
+{
+    const QString safe = sanitizeComponent(name);
+    if (safe.isEmpty()) return false;
+    const bool ok = QDir().mkpath(QDir(presetsDir()).filePath(safe));
     if (ok) refreshPresets();
     return ok;
+}
+
+bool EngineController::presetExists(const QString& name, const QString& group) const
+{
+    QDir dir(presetsDir());
+    const QString safeGroup = sanitizeComponent(group);
+    if (!safeGroup.isEmpty()) dir = QDir(dir.filePath(safeGroup));
+    return QFile::exists(dir.filePath(sanitizeComponent(name) + QStringLiteral(".json")));
 }

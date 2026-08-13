@@ -74,25 +74,43 @@ Window {
         onActivated: engine.redo()
     }
 
-    // New-preset name prompt (from the Presets panel ＋). Film Lab styled.
+    // New-preset wizard (from the Presets panel ＋): name + group picker. Film Lab styled.
     Popup {
         id: presetNameDialog
         modal: true
         dim: true
         anchors.centerIn: Overlay.overlay
-        width: 340
+        width: 380
         padding: 20
         background: Rectangle { radius: 12; color: root.panelRaised; border.width: 1; border.color: root.border }
         Overlay.modal: Rectangle { color: "#99000000" }
-        onOpened: { presetNameField.text = ""; presetNameField.forceActiveFocus(); }
-        function commit() {
-            if (presetNameField.text.trim().length === 0) return;
-            if (engine.savePreset(presetNameField.text.trim())) presetNameDialog.close();
+
+        // "" = ungrouped; when creatingGroup, the target group is the typed name.
+        property string selectedGroup: ""
+        property bool creatingGroup: false
+        readonly property string targetGroup: creatingGroup ? newGroupField.text.trim() : selectedGroup
+        readonly property bool nameValid: presetNameField.text.trim().length > 0
+        readonly property bool groupValid: !creatingGroup || newGroupField.text.trim().length > 0
+        readonly property bool overwrites: nameValid && groupValid
+                                           && engine.presetExists(presetNameField.text.trim(), targetGroup)
+
+        onOpened: {
+            presetNameField.text = "";
+            newGroupField.text = "";
+            selectedGroup = "";
+            creatingGroup = false;
+            presetNameField.forceActiveFocus();
         }
+        function commit() {
+            if (!nameValid || !groupValid) return;
+            if (engine.savePreset(presetNameField.text.trim(), targetGroup)) presetNameDialog.close();
+        }
+
         contentItem: Column {
             spacing: 14
             Text { width: parent.width; text: "Save preset"; color: root.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
             Text { width: parent.width; text: "Saves the current film stock and all develop settings as a reusable look."; color: root.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap }
+
             Rectangle {
                 width: parent.width; height: 36; radius: 8; color: root.inset
                 border.width: 1; border.color: presetNameField.activeFocus ? root.border : root.hair
@@ -109,11 +127,66 @@ Window {
                     Keys.onEscapePressed: presetNameDialog.close()
                 }
             }
+
+            Text { width: parent.width; text: "GROUP"; color: root.textMuted; font.pixelSize: 10; font.weight: Font.SemiBold }
+            Flow {
+                width: parent.width
+                spacing: 6
+                PresetChip {
+                    label: "Ungrouped"
+                    selected: !presetNameDialog.creatingGroup && presetNameDialog.selectedGroup === ""
+                    onClicked: { presetNameDialog.creatingGroup = false; presetNameDialog.selectedGroup = ""; }
+                }
+                Repeater {
+                    model: engine.presetGroups
+                    PresetChip {
+                        label: modelData
+                        selected: !presetNameDialog.creatingGroup && presetNameDialog.selectedGroup === modelData
+                        onClicked: { presetNameDialog.creatingGroup = false; presetNameDialog.selectedGroup = modelData; }
+                    }
+                }
+                PresetChip {
+                    label: "＋ New group"
+                    selected: presetNameDialog.creatingGroup
+                    onClicked: { presetNameDialog.creatingGroup = true; newGroupField.forceActiveFocus(); }
+                }
+            }
+            Rectangle {
+                width: parent.width; height: presetNameDialog.creatingGroup ? 36 : 0
+                visible: presetNameDialog.creatingGroup
+                radius: 8; color: root.inset
+                border.width: 1; border.color: newGroupField.activeFocus ? root.border : root.hair
+                TextField {
+                    id: newGroupField
+                    anchors.fill: parent
+                    leftPadding: 10; rightPadding: 10
+                    verticalAlignment: TextInput.AlignVCenter
+                    placeholderText: "New group name"
+                    color: root.textPrimary; placeholderTextColor: root.textMuted
+                    font.pixelSize: 13; selectByMouse: true; background: null
+                    Keys.onReturnPressed: presetNameDialog.commit()
+                    Keys.onEnterPressed: presetNameDialog.commit()
+                    Keys.onEscapePressed: presetNameDialog.close()
+                }
+            }
+
+            Text {
+                width: parent.width
+                visible: presetNameDialog.overwrites
+                text: "A preset with this name already exists here — saving replaces it."
+                color: root.danger; font.pixelSize: 11; wrapMode: Text.WordWrap
+            }
+
             Row {
                 anchors.right: parent.right
                 spacing: 8
                 SecondaryButton { width: 96; text: "Cancel"; onClicked: presetNameDialog.close() }
-                PrimaryButton { width: 96; text: "Save"; enabled: presetNameField.text.trim().length > 0; onClicked: presetNameDialog.commit() }
+                PrimaryButton {
+                    width: 110
+                    text: presetNameDialog.overwrites ? "Replace" : "Save"
+                    enabled: presetNameDialog.nameValid && presetNameDialog.groupValid
+                    onClicked: presetNameDialog.commit()
+                }
             }
         }
     }
@@ -678,6 +751,28 @@ Window {
         }
     }
 
+    // Small pill/chip toggle — used by the preset save dialog's group picker.
+    component PresetChip: Rectangle {
+        property string label: ""
+        property bool selected: false
+        signal clicked()
+        implicitWidth: chipText.implicitWidth + 22
+        height: 26
+        radius: 13
+        color: selected ? "#33333a" : root.inset
+        border.width: 1
+        border.color: selected ? root.border : root.hair
+        Text {
+            id: chipText
+            anchors.centerIn: parent
+            text: parent.label
+            color: parent.selected ? root.textPrimary : root.textSecondary
+            font.pixelSize: 11
+            font.weight: parent.selected ? Font.Medium : Font.Normal
+        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.clicked() }
+    }
+
     // Beveled group card — subtle raised gradient, hairline border, top highlight, and a
     // collapsible header. Content is provided inline (avoids the QML default-property trap).
     component FilmSlider: Column {
@@ -779,6 +874,35 @@ Window {
         readonly property real bodyH: Math.max(0, height - 2 * headerH - 44)
         function sectionH(mine, other) { return !mine ? 0 : (other ? bodyH * 0.5 : bodyH) }
 
+        // Group collapse state (map group name -> collapsed bool).
+        property var collapsedGroups: ({})
+        function isCollapsed(g) { return leftPanel.collapsedGroups[g] === true }
+        function toggleGroup(g) {
+            var c = Object.assign({}, leftPanel.collapsedGroups);
+            c[g] = !leftPanel.isCollapsed(g);
+            leftPanel.collapsedGroups = c;
+        }
+        // Flatten presets into display rows: ungrouped first, then each group as a
+        // header row followed by its (uncollapsed) presets. Re-evaluates when the
+        // preset list, group list, or collapse state changes.
+        function presetRows() {
+            var rows = [];
+            var pres = engine.presets;
+            for (var i = 0; i < pres.length; ++i)
+                if (!pres[i].group) rows.push({ kind: "preset", id: pres[i].id, name: pres[i].name, grouped: false });
+            var groups = engine.presetGroups;
+            for (var j = 0; j < groups.length; ++j) {
+                var g = groups[j];
+                var items = [];
+                for (var k = 0; k < pres.length; ++k) if (pres[k].group === g) items.push(pres[k]);
+                rows.push({ kind: "group", name: g, count: items.length });
+                if (!leftPanel.isCollapsed(g))
+                    for (var m = 0; m < items.length; ++m)
+                        rows.push({ kind: "preset", id: items[m].id, name: items[m].name, grouped: true });
+            }
+            return rows;
+        }
+
         // Reusable accordion section header.
         component SectionHeader: Rectangle {
             property string title: ""
@@ -828,52 +952,93 @@ Window {
                     onClicked: presetNameDialog.open()
                 }
             }
-            ListView {
-                id: presetList
+            // Presets body — grouped list, with the empty-state message centered.
+            Item {
                 width: parent.width
-                height: Math.max(0, leftPanel.sectionH(leftPanel.presetsOpen, leftPanel.historyOpen) - 40)
+                height: leftPanel.presetsOpen
+                        ? Math.max(0, leftPanel.sectionH(leftPanel.presetsOpen, leftPanel.historyOpen) - 40)
+                        : 0
                 visible: leftPanel.presetsOpen
                 clip: true
-                model: engine.presets
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
-                delegate: Item {
-                    width: presetList.width
-                    height: 34
-                    Rectangle {
-                        anchors.fill: parent; anchors.margins: 2; radius: 6
-                        color: presetHover.hovered ? "#1e1e22" : "transparent"
-                    }
-                    HoverHandler { id: presetHover }
-                    Row {
-                        anchors.left: parent.left; anchors.leftMargin: 12
-                        anchors.right: parent.right; anchors.rightMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 8
-                        Text {
-                            width: parent.width - delPreset.width - 8
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.name; color: root.textPrimary; elide: Text.ElideRight; font.pixelSize: 13
+
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width - 40
+                    visible: engine.presets.length === 0
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "No presets yet.\nBuild a look, then save it with ＋."
+                    color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3
+                }
+
+                ListView {
+                    id: presetList
+                    anchors.fill: parent
+                    visible: engine.presets.length > 0
+                    clip: true
+                    model: leftPanel.presetRows()
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    delegate: Item {
+                        width: presetList.width
+                        height: modelData.kind === "group" ? 30 : 32
+
+                        // Group header row: chevron + name + count, click to collapse.
+                        Item {
+                            anchors.fill: parent
+                            visible: modelData.kind === "group"
+                            ChevronToggle {
+                                anchors.left: parent.left; anchors.leftMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                open: !leftPanel.isCollapsed(modelData.name)
+                            }
+                            Text {
+                                anchors.left: parent.left; anchors.leftMargin: 32
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.name
+                                color: root.textSecondary; font.pixelSize: 12; font.weight: Font.Medium
+                            }
+                            Text {
+                                anchors.right: parent.right; anchors.rightMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.count
+                                color: root.textMuted; font.pixelSize: 11
+                            }
+                            MouseArea {
+                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                onClicked: leftPanel.toggleGroup(modelData.name)
+                            }
                         }
-                        Text {
-                            id: delPreset
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "×"; color: presetHover.hovered ? root.textSecondary : "transparent"; font.pixelSize: 16
-                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: engine.deletePreset(modelData.id) }
+
+                        // Preset row: indented under its group; apply on click, × to delete.
+                        Item {
+                            anchors.fill: parent
+                            visible: modelData.kind === "preset"
+                            Rectangle {
+                                anchors.fill: parent; anchors.margins: 2; radius: 6
+                                color: presetHover.hovered ? "#1e1e22" : "transparent"
+                            }
+                            HoverHandler { id: presetHover }
+                            Text {
+                                anchors.left: parent.left
+                                anchors.leftMargin: modelData.grouped ? 32 : 14
+                                anchors.right: delPreset.left; anchors.rightMargin: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.name; color: root.textPrimary; elide: Text.ElideRight; font.pixelSize: 13
+                            }
+                            Text {
+                                id: delPreset
+                                anchors.right: parent.right; anchors.rightMargin: 8
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "×"; color: presetHover.hovered ? root.textSecondary : "transparent"; font.pixelSize: 16
+                                MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: engine.deletePreset(modelData.id) }
+                            }
+                            MouseArea {
+                                anchors.fill: parent; anchors.rightMargin: 22
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: engine.applyPreset(modelData.id)
+                            }
                         }
-                    }
-                    MouseArea {
-                        anchors.fill: parent; anchors.rightMargin: 22
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: engine.applyPreset(modelData.id)
                     }
                 }
-            }
-            Text {
-                width: parent.width
-                leftPadding: 14; rightPadding: 14; topPadding: 8
-                visible: leftPanel.presetsOpen && engine.presets.length === 0
-                text: "No presets yet. Build a look, then save it with ＋."
-                color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap
             }
 
             // ── HISTORY ────────────────────────────────────────────────
