@@ -191,6 +191,200 @@ Window {
         }
     }
 
+    // Edit preset — rename and/or move to another group. Same picker as saving,
+    // prefilled with the preset's current name and group.
+    Popup {
+        id: editPresetDialog
+        modal: true
+        dim: true
+        anchors.centerIn: Overlay.overlay
+        width: 380
+        padding: 20
+        background: Rectangle { radius: 12; color: root.panelRaised; border.width: 1; border.color: root.border }
+        Overlay.modal: Rectangle { color: "#99000000" }
+
+        property string targetId: ""
+        property string selectedGroup: ""
+        property bool creatingGroup: false
+        readonly property string targetGroup: creatingGroup ? editNewGroupField.text.trim() : selectedGroup
+        readonly property bool nameValid: editNameField.text.trim().length > 0
+        readonly property bool groupValid: !creatingGroup || editNewGroupField.text.trim().length > 0
+        readonly property string resultId: (targetGroup.length ? targetGroup + "/" : "") + editNameField.text.trim()
+        readonly property bool overwrites: nameValid && groupValid && resultId !== targetId
+                                           && engine.presetExists(editNameField.text.trim(), targetGroup)
+
+        function openFor(id, name, group) {
+            targetId = id;
+            editNameField.text = name;
+            selectedGroup = group;
+            creatingGroup = false;
+            editNewGroupField.text = "";
+            open();
+        }
+        onOpened: editNameField.forceActiveFocus()
+        function commit() {
+            if (!nameValid || !groupValid) return;
+            if (engine.editPreset(targetId, editNameField.text.trim(), targetGroup)) editPresetDialog.close();
+        }
+
+        contentItem: Column {
+            spacing: 14
+            Text { width: parent.width; text: "Edit preset"; color: root.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
+            Rectangle {
+                width: parent.width; height: 36; radius: 8; color: root.inset
+                border.width: 1; border.color: editNameField.activeFocus ? root.border : root.hair
+                TextField {
+                    id: editNameField
+                    anchors.fill: parent
+                    leftPadding: 10; rightPadding: 10
+                    verticalAlignment: TextInput.AlignVCenter
+                    placeholderText: "Preset name"
+                    color: root.textPrimary; placeholderTextColor: root.textMuted
+                    font.pixelSize: 13; selectByMouse: true; background: null
+                    Keys.onReturnPressed: editPresetDialog.commit()
+                    Keys.onEnterPressed: editPresetDialog.commit()
+                    Keys.onEscapePressed: editPresetDialog.close()
+                }
+            }
+            Text { width: parent.width; text: "GROUP"; color: root.textMuted; font.pixelSize: 10; font.weight: Font.SemiBold }
+            Flow {
+                width: parent.width
+                spacing: 6
+                PresetChip {
+                    label: "Ungrouped"
+                    selected: !editPresetDialog.creatingGroup && editPresetDialog.selectedGroup === ""
+                    onClicked: { editPresetDialog.creatingGroup = false; editPresetDialog.selectedGroup = ""; }
+                }
+                Repeater {
+                    model: engine.presetGroups
+                    PresetChip {
+                        label: modelData
+                        selected: !editPresetDialog.creatingGroup && editPresetDialog.selectedGroup === modelData
+                        onClicked: { editPresetDialog.creatingGroup = false; editPresetDialog.selectedGroup = modelData; }
+                    }
+                }
+                PresetChip {
+                    label: "＋ New group"
+                    selected: editPresetDialog.creatingGroup
+                    onClicked: { editPresetDialog.creatingGroup = true; editNewGroupField.forceActiveFocus(); }
+                }
+            }
+            Rectangle {
+                width: parent.width; height: editPresetDialog.creatingGroup ? 36 : 0
+                visible: editPresetDialog.creatingGroup
+                radius: 8; color: root.inset
+                border.width: 1; border.color: editNewGroupField.activeFocus ? root.border : root.hair
+                TextField {
+                    id: editNewGroupField
+                    anchors.fill: parent
+                    leftPadding: 10; rightPadding: 10
+                    verticalAlignment: TextInput.AlignVCenter
+                    placeholderText: "New group name"
+                    color: root.textPrimary; placeholderTextColor: root.textMuted
+                    font.pixelSize: 13; selectByMouse: true; background: null
+                    Keys.onReturnPressed: editPresetDialog.commit()
+                    Keys.onEnterPressed: editPresetDialog.commit()
+                    Keys.onEscapePressed: editPresetDialog.close()
+                }
+            }
+            Text {
+                width: parent.width
+                visible: editPresetDialog.overwrites
+                text: "Another preset with this name already exists here — saving replaces it."
+                color: root.danger; font.pixelSize: 11; wrapMode: Text.WordWrap
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: 8
+                SecondaryButton { width: 96; text: "Cancel"; onClicked: editPresetDialog.close() }
+                PrimaryButton {
+                    width: 110
+                    text: editPresetDialog.overwrites ? "Replace" : "Save"
+                    enabled: editPresetDialog.nameValid && editPresetDialog.groupValid
+                    onClicked: editPresetDialog.commit()
+                }
+            }
+        }
+    }
+
+    // Rename a group.
+    Popup {
+        id: groupRenameDialog
+        modal: true
+        dim: true
+        anchors.centerIn: Overlay.overlay
+        width: 340
+        padding: 20
+        background: Rectangle { radius: 12; color: root.panelRaised; border.width: 1; border.color: root.border }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        property string oldName: ""
+        function openFor(g) { oldName = g; groupRenameField.text = g; open(); }
+        onOpened: { groupRenameField.selectAll(); groupRenameField.forceActiveFocus(); }
+        function commit() {
+            var n = groupRenameField.text.trim();
+            if (n.length === 0) return;
+            if (engine.renameGroup(oldName, n)) groupRenameDialog.close();
+        }
+        contentItem: Column {
+            spacing: 14
+            Text { width: parent.width; text: "Rename group"; color: root.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
+            Rectangle {
+                width: parent.width; height: 36; radius: 8; color: root.inset
+                border.width: 1; border.color: groupRenameField.activeFocus ? root.border : root.hair
+                TextField {
+                    id: groupRenameField
+                    anchors.fill: parent
+                    leftPadding: 10; rightPadding: 10
+                    verticalAlignment: TextInput.AlignVCenter
+                    placeholderText: "Group name"
+                    color: root.textPrimary; placeholderTextColor: root.textMuted
+                    font.pixelSize: 13; selectByMouse: true; background: null
+                    Keys.onReturnPressed: groupRenameDialog.commit()
+                    Keys.onEnterPressed: groupRenameDialog.commit()
+                    Keys.onEscapePressed: groupRenameDialog.close()
+                }
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: 8
+                SecondaryButton { width: 96; text: "Cancel"; onClicked: groupRenameDialog.close() }
+                PrimaryButton { width: 96; text: "Rename"; enabled: groupRenameField.text.trim().length > 0; onClicked: groupRenameDialog.commit() }
+            }
+        }
+    }
+
+    // Confirm deleting a group (and the presets inside it).
+    Popup {
+        id: groupDeleteConfirm
+        modal: true
+        dim: true
+        anchors.centerIn: Overlay.overlay
+        width: 360
+        padding: 20
+        background: Rectangle { radius: 12; color: root.panelRaised; border.width: 1; border.color: root.border }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        property string groupName: ""
+        property int groupCount: 0
+        function openFor(g, c) { groupName = g; groupCount = c; open(); }
+        contentItem: Column {
+            spacing: 16
+            Text { width: parent.width; text: "Delete group?"; color: root.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
+            Text {
+                width: parent.width
+                text: "Deletes \"" + groupDeleteConfirm.groupName + "\" and the "
+                      + groupDeleteConfirm.groupCount + " preset"
+                      + (groupDeleteConfirm.groupCount === 1 ? "" : "s") + " inside it. This can't be undone."
+                color: root.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: 8
+                SecondaryButton { width: 96; text: "Cancel"; onClicked: groupDeleteConfirm.close() }
+                PrimaryButton { width: 96; text: "Delete"; onClicked: { engine.deleteGroup(groupDeleteConfirm.groupName); groupDeleteConfirm.close(); } }
+            }
+        }
+    }
+
     // Themed confirmation for a full reset — shared by the Reset button and
     // the Ctrl+Shift+R shortcut. Destructive until edit history lands.
     Popup {
@@ -889,7 +1083,7 @@ Window {
             var rows = [];
             var pres = engine.presets;
             for (var i = 0; i < pres.length; ++i)
-                if (!pres[i].group) rows.push({ kind: "preset", id: pres[i].id, name: pres[i].name, grouped: false });
+                if (!pres[i].group) rows.push({ kind: "preset", id: pres[i].id, name: pres[i].name, group: "", grouped: false });
             var groups = engine.presetGroups;
             for (var j = 0; j < groups.length; ++j) {
                 var g = groups[j];
@@ -898,7 +1092,7 @@ Window {
                 rows.push({ kind: "group", name: g, count: items.length });
                 if (!leftPanel.isCollapsed(g))
                     for (var m = 0; m < items.length; ++m)
-                        rows.push({ kind: "preset", id: items[m].id, name: items[m].name, grouped: true });
+                        rows.push({ kind: "preset", id: items[m].id, name: items[m].name, group: g, grouped: true });
             }
             return rows;
         }
@@ -981,10 +1175,12 @@ Window {
                         width: presetList.width
                         height: modelData.kind === "group" ? 30 : 32
 
-                        // Group header row: chevron + name + count, click to collapse.
+                        // Group header row: chevron + name; count when idle, rename/
+                        // delete actions on hover. Click the row to collapse/expand.
                         Item {
                             anchors.fill: parent
                             visible: modelData.kind === "group"
+                            HoverHandler { id: groupHover }
                             ChevronToggle {
                                 anchors.left: parent.left; anchors.leftMargin: 12
                                 anchors.verticalCenter: parent.verticalCenter
@@ -992,23 +1188,39 @@ Window {
                             }
                             Text {
                                 anchors.left: parent.left; anchors.leftMargin: 32
+                                anchors.right: parent.right; anchors.rightMargin: 48
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.name
+                                text: modelData.name; elide: Text.ElideRight
                                 color: root.textSecondary; font.pixelSize: 12; font.weight: Font.Medium
-                            }
-                            Text {
-                                anchors.right: parent.right; anchors.rightMargin: 12
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: modelData.count
-                                color: root.textMuted; font.pixelSize: 11
                             }
                             MouseArea {
                                 anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                 onClicked: leftPanel.toggleGroup(modelData.name)
                             }
+                            Text {
+                                visible: !groupHover.hovered
+                                anchors.right: parent.right; anchors.rightMargin: 12
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.count; color: root.textMuted; font.pixelSize: 11
+                            }
+                            Row {
+                                visible: groupHover.hovered
+                                anchors.right: parent.right; anchors.rightMargin: 10
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 10
+                                Text {
+                                    text: "✎"; color: root.textSecondary; font.pixelSize: 13
+                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: groupRenameDialog.openFor(modelData.name) }
+                                }
+                                Text {
+                                    text: "×"; color: root.textSecondary; font.pixelSize: 16
+                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: groupDeleteConfirm.openFor(modelData.name, modelData.count) }
+                                }
+                            }
                         }
 
-                        // Preset row: indented under its group; apply on click, × to delete.
+                        // Preset row: indented under its group; apply on click, edit /
+                        // delete on hover.
                         Item {
                             anchors.fill: parent
                             visible: modelData.kind === "preset"
@@ -1020,21 +1232,28 @@ Window {
                             Text {
                                 anchors.left: parent.left
                                 anchors.leftMargin: modelData.grouped ? 32 : 14
-                                anchors.right: delPreset.left; anchors.rightMargin: 6
+                                anchors.right: parent.right; anchors.rightMargin: 46
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.name; color: root.textPrimary; elide: Text.ElideRight; font.pixelSize: 13
                             }
-                            Text {
-                                id: delPreset
-                                anchors.right: parent.right; anchors.rightMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "×"; color: presetHover.hovered ? root.textSecondary : "transparent"; font.pixelSize: 16
-                                MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: engine.deletePreset(modelData.id) }
-                            }
                             MouseArea {
-                                anchors.fill: parent; anchors.rightMargin: 22
+                                anchors.fill: parent; anchors.rightMargin: 46
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: engine.applyPreset(modelData.id)
+                            }
+                            Row {
+                                visible: presetHover.hovered
+                                anchors.right: parent.right; anchors.rightMargin: 10
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 10
+                                Text {
+                                    text: "✎"; color: root.textSecondary; font.pixelSize: 13
+                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: editPresetDialog.openFor(modelData.id, modelData.name, modelData.group) }
+                                }
+                                Text {
+                                    text: "×"; color: root.textSecondary; font.pixelSize: 16
+                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: engine.deletePreset(modelData.id) }
+                                }
                             }
                         }
                     }

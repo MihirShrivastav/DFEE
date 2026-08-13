@@ -1035,22 +1035,85 @@ void EngineController::applyPreset(const QString& id)
     applyRecipe(recipe, QStringLiteral("Preset: ") + shown);
 }
 
+void EngineController::tidyGroupDir(const QString& group)
+{
+    if (group.isEmpty()) return;
+    const QDir root(presetsDir());
+    const QDir gdir(root.filePath(group));
+    if (gdir.exists() && gdir.entryList({QStringLiteral("*.json")}, QDir::Files).isEmpty()) {
+        root.rmdir(group);      // no-op if the folder still holds other files
+    }
+}
+
 bool EngineController::deletePreset(const QString& id)
 {
     const QDir root(presetsDir());
     const bool ok = QFile::remove(root.filePath(id + QStringLiteral(".json")));
     if (ok) {
-        // Tidy up a group directory that has become empty after the delete.
         const int slash = id.indexOf(QLatin1Char('/'));
-        if (slash > 0) {
-            const QString group = id.left(slash);
-            const QDir gdir(root.filePath(group));
-            if (gdir.entryList({QStringLiteral("*.json")}, QDir::Files).isEmpty()) {
-                root.rmdir(group);      // no-op if not truly empty
-            }
-        }
+        if (slash > 0) tidyGroupDir(id.left(slash));
         refreshPresets();
     }
+    return ok;
+}
+
+bool EngineController::editPreset(const QString& id, const QString& newName, const QString& newGroup)
+{
+    const QDir root(presetsDir());
+    const QString oldPath = root.filePath(id + QStringLiteral(".json"));
+    QFile in(oldPath);
+    if (!in.open(QIODevice::ReadOnly)) return false;
+    QJsonObject obj = QJsonDocument::fromJson(in.readAll()).object();
+    in.close();
+
+    const QString displayName = newName.trimmed();
+    const QString safeName = sanitizeComponent(displayName);
+    if (safeName.isEmpty()) return false;
+    const QString safeGroup = sanitizeComponent(newGroup);
+
+    QDir destDir(root);
+    if (!safeGroup.isEmpty()) {
+        destDir = QDir(root.filePath(safeGroup));
+        if (!QDir().mkpath(destDir.absolutePath())) return false;
+    }
+    const QString newPath = destDir.filePath(safeName + QStringLiteral(".json"));
+    const bool samePath =
+        QFileInfo(newPath).absoluteFilePath() == QFileInfo(oldPath).absoluteFilePath();
+
+    obj["name"] = displayName;
+    obj["group"] = safeGroup;
+    QFile out(newPath);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    out.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    out.close();
+
+    if (!samePath) {
+        QFile::remove(oldPath);
+        const int slash = id.indexOf(QLatin1Char('/'));
+        if (slash > 0) tidyGroupDir(id.left(slash));   // source group may now be empty
+    }
+    refreshPresets();
+    return true;
+}
+
+bool EngineController::renameGroup(const QString& oldName, const QString& newName)
+{
+    const QString safeNew = sanitizeComponent(newName);
+    if (safeNew.isEmpty() || oldName.isEmpty()) return false;
+    if (safeNew == oldName) return true;
+    QDir root(presetsDir());
+    if (QFileInfo::exists(root.filePath(safeNew))) return false;   // don't clobber
+    const bool ok = root.rename(oldName, safeNew);
+    if (ok) refreshPresets();
+    return ok;
+}
+
+bool EngineController::deleteGroup(const QString& name)
+{
+    if (name.isEmpty()) return false;
+    QDir gdir(QDir(presetsDir()).filePath(name));
+    const bool ok = gdir.removeRecursively();   // group folder + its presets
+    if (ok) refreshPresets();
     return ok;
 }
 

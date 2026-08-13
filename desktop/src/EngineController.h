@@ -149,6 +149,13 @@ public:
     Q_INVOKABLE bool createGroup(const QString& name);
     Q_INVOKABLE bool presetExists(const QString& name, const QString& group) const;
     Q_INVOKABLE void refreshPresets();
+    // Management. editPreset renames and/or moves a preset (newGroup "" = ungrouped),
+    // rewriting the file's name/group and tidying an emptied source group.
+    // renameGroup / deleteGroup act on a group directory (deleteGroup removes its
+    // presets too). All return false on failure (e.g. a name collision).
+    Q_INVOKABLE bool editPreset(const QString& id, const QString& newName, const QString& newGroup);
+    Q_INVOKABLE bool renameGroup(const QString& oldName, const QString& newName);
+    Q_INVOKABLE bool deleteGroup(const QString& name);
 
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
     Q_INVOKABLE void onPreviewReady();
@@ -212,6 +219,7 @@ private:
     QString presetsDir() const;                          // ensures the dir exists
     QVariantMap captureRecipe() const;                   // {stock, controls (look-only)}
     void applyRecipe(const QVariantMap& recipe, const QString& label);
+    void tidyGroupDir(const QString& group);             // remove a now-empty group folder
 
     QVector<HistoryEntry> history_;
     int historyIndex_ = -1;      // current step within history_ (internal, 0 = oldest)
