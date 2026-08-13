@@ -763,7 +763,9 @@ Window {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: filmstrip.top
-        width: engine.lightroomRoundTrip ? 264 : 0
+        // Presets and history are navigational, not the primary working
+        // surface. Keep the rail readable while giving the photo more room.
+        width: engine.lightroomRoundTrip ? 232 : 0
         visible: engine.lightroomRoundTrip
         color: root.bg
         border.width: 1
@@ -1460,7 +1462,9 @@ Window {
         anchors.top: parent.top
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: 356
+        // The inspector keeps enough width for labels and full slider travel,
+        // but the image remains the primary surface in Lightroom round-trips.
+        width: 328
         color: root.bg                               // darker rail so the cards read as raised
         border.width: 1
         border.color: root.border
