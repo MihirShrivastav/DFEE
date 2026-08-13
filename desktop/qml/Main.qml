@@ -33,6 +33,72 @@ Window {
     readonly property color danger: "#e0655b"
     property bool libraryOpen: true       // left folders pane
     property bool filmstripOpen: true     // bottom thumbnail strip
+    property bool peekBefore: false       // "\" — momentary before/after (Lightroom-style toggle)
+
+    // ── Keyboard shortcuts (Tier 1) ─────────────────────────────────────
+    // Bare-letter shortcuts are suppressed while the stock search field has
+    // focus so typing a stock name never triggers them.
+    Shortcut {
+        sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]
+        enabled: engine.hasImage && !engine.exporting
+        onActivated: engine.exportImage()
+    }
+    Shortcut {
+        sequence: "\\"                       // toggle before/after
+        enabled: engine.hasBefore && !stockSearch.activeFocus
+        onActivated: { previewCanvas.compareMode = 0; root.peekBefore = !root.peekBefore; }
+    }
+    Shortcut {
+        sequence: "B"                        // cycle Edited → Split → Side by side
+        enabled: engine.hasBefore && !stockSearch.activeFocus
+        onActivated: { root.peekBefore = false; previewCanvas.compareMode = (previewCanvas.compareMode + 1) % 3; }
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+R"             // reset all edits (confirmed)
+        enabled: engine.hasImage
+        onActivated: resetConfirm.open()
+    }
+    Shortcut {
+        sequences: ["Ctrl+F", "F"]           // focus the film-stock search
+        enabled: !stockSearch.activeFocus
+        onActivated: stockBox.popup.open()
+    }
+
+    // Themed confirmation for a full reset — shared by the Reset button and
+    // the Ctrl+Shift+R shortcut. Destructive until edit history lands.
+    Popup {
+        id: resetConfirm
+        modal: true
+        dim: true
+        anchors.centerIn: Overlay.overlay
+        width: 340
+        padding: 20
+        background: Rectangle { radius: 12; color: root.panelRaised; border.width: 1; border.color: root.border }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        contentItem: Column {
+            spacing: 16
+            Text {
+                width: parent.width
+                text: "Reset all edits?"
+                color: root.textPrimary
+                font.pixelSize: 15
+                font.weight: Font.Medium
+            }
+            Text {
+                width: parent.width
+                text: "This clears the film stock, exposure and every develop control back to how the image first opened. This can't be undone yet."
+                color: root.textSecondary
+                font.pixelSize: 12
+                wrapMode: Text.WordWrap
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: 8
+                SecondaryButton { width: 96; text: "Cancel"; onClicked: resetConfirm.close() }
+                PrimaryButton { width: 96; text: "Reset"; onClicked: { engine.resetAllEdits(); resetConfirm.close(); } }
+            }
+        }
+    }
 
     function exportFormatLabel(format) {
         if (format === "png8") return "8-bit PNG"
@@ -901,15 +967,24 @@ Window {
             readonly property string beforeSrc: engine.hasBefore ? ("image://preview/before?rev=" + engine.beforeRevision) : ""
             readonly property bool split: previewCanvas.compareMode === 1 && engine.hasBefore
             readonly property bool sideBySide: previewCanvas.compareMode === 2 && engine.hasBefore
+            readonly property bool peeking: root.peekBefore && engine.hasBefore && previewCanvas.compareMode === 0
 
             // Edited / Split — the film ("after") fills; "before" is clipped on the left.
+            // While peeking ("\") the full frame shows the unedited original instead.
             Image {
                 id: afterImg
                 anchors.fill: parent
                 fillMode: Image.PreserveAspectFit
                 cache: false
-                source: imageArea.afterSrc
+                source: imageArea.peeking ? imageArea.beforeSrc : imageArea.afterSrc
                 visible: !imageArea.sideBySide
+            }
+            Rectangle {
+                visible: imageArea.peeking && !imageArea.sideBySide
+                anchors { left: parent.left; top: parent.top; margins: 6 }
+                width: peekLabel.implicitWidth + 14; height: 20; radius: 6
+                color: "#cc161618"; border.width: 1; border.color: root.hair
+                Text { id: peekLabel; anchors.centerIn: parent; text: "Before"; color: "#e9e9ec"; font.pixelSize: 11; font.weight: Font.Medium }
             }
             Item {
                 anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
@@ -1212,7 +1287,7 @@ Window {
                         enabled: engine.hasImage
                         visible: true
                         text: "Reset"
-                        onClicked: engine.resetAllEdits()
+                        onClicked: resetConfirm.open()
                         contentItem: Text { text: resetAllBtn.text; color: resetAllBtn.enabled ? root.textPrimary : root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
                         background: Rectangle {
                             radius: 7
