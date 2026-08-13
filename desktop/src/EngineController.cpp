@@ -10,6 +10,12 @@
 #include <QDebug>
 #include <QTimer>
 #include <QCoreApplication>
+#include <QDir>
+#include <QStandardPaths>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QDateTime>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <filesystem>
@@ -32,6 +38,13 @@ std::filesystem::path resolveProjectRoot() {
     }
     return std::filesystem::path(DFEE_REPO_ROOT);
 }
+
+// Compact value for history labels: integers without a decimal, else 2 places.
+QString fmtControlValue(double v) {
+    const double r = std::round(v);
+    if (std::abs(v - r) < 1e-6) return QString::number(static_cast<long long>(r));
+    return QString::number(v, 'f', 2);
+}
 }  // namespace
 
 EngineController::EngineController(PreviewImageProvider* provider,
@@ -50,6 +63,8 @@ EngineController::EngineController(PreviewImageProvider* provider,
     worker_ = new RenderWorker(session_.get(), this, provider_);
     worker_->moveToThread(&workerThread_);
     workerThread_.start();
+
+    refreshPresets();
 }
 
 QVariantMap EngineController::defaultFilmControls()
@@ -191,6 +206,10 @@ void EngineController::setStock(const QString& id)
     if (stockId_ == id) return;
     stockId_ = id;
     emit stockChanged();
+    const int i = stockIds_.indexOf(id);
+    const QString name = (i >= 0) ? stockNames_.at(i) : id;
+    recordHistory(id == "none" ? QStringLiteral("Film stock: None")
+                               : QStringLiteral("Film stock: ") + name, "stock");
     scheduleRender();
 }
 
@@ -334,6 +353,14 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
     }
     filmControls_.insert(key, bounded);
     emit filmControlsChanged();
+    // Grouped controls (color grading / HSL / crop) read cleaner without a raw
+    // per-sub-band number; scalar controls carry their value.
+    const bool grouped = key.startsWith(QStringLiteral("cg_"))
+                      || key.startsWith(QStringLiteral("hsl_"))
+                      || key.startsWith(QStringLiteral("crop_"));
+    recordHistory(grouped ? friendlyLabel(key)
+                          : friendlyLabel(key) + QStringLiteral(" ") + fmtControlValue(bounded),
+                  key);
     scheduleRender();
     return true;
 }
@@ -345,6 +372,7 @@ void EngineController::setFilmControl(const QString& key, const QVariant& value)
         if (filmControls_.value(key).toString() == id) return;
         filmControls_.insert(key, id);
         emit filmControlsChanged();
+        recordHistory(friendlyLabel(key), key);
         scheduleRender();
         return;
     }
@@ -353,6 +381,7 @@ void EngineController::setFilmControl(const QString& key, const QVariant& value)
         if (filmControls_.value(key).toBool() == enabled) return;
         filmControls_.insert(key, enabled);
         emit filmControlsChanged();
+        recordHistory(friendlyLabel(key) + (enabled ? QStringLiteral(" on") : QStringLiteral(" off")), key);
         scheduleRender();
         return;
     }
@@ -361,6 +390,7 @@ void EngineController::setFilmControl(const QString& key, const QVariant& value)
         if (filmControls_.value(key).toInt() == q) return;
         filmControls_.insert(key, q);
         emit filmControlsChanged();
+        recordHistory(QStringLiteral("Rotate"), key);
         scheduleRender();
         return;
     }
@@ -369,6 +399,8 @@ void EngineController::setFilmControl(const QString& key, const QVariant& value)
         if (filmControls_.value(key).toString() == placement) return;
         filmControls_.insert(key, placement);
         emit filmControlsChanged();
+        recordHistory(placement == "as_shot" ? QStringLiteral("Exposure: as shot")
+                                             : QStringLiteral("Exposure: auto balanced"), key);
         scheduleRender();
         return;
     }
@@ -393,6 +425,7 @@ void EngineController::resetAllEdits()
     }
     emit filmControlsChanged();
     emit paramsChanged();
+    recordHistory(QStringLiteral("Reset all"));
     scheduleRender();
 }
 
@@ -413,6 +446,7 @@ void EngineController::setCrop(double x, double y, double w, double h)
     filmControls_.insert("crop_w", cw);
     filmControls_.insert("crop_h", ch);
     emit filmControlsChanged();
+    recordHistory(QStringLiteral("Crop"), "crop");
     scheduleRender();
 }
 
@@ -421,6 +455,7 @@ void EngineController::rotateQuadrant(int steps)
     const int q = ((filmControls_.value("rotate_quadrant").toInt() + steps) % 4 + 4) % 4;
     filmControls_.insert("rotate_quadrant", q);
     emit filmControlsChanged();
+    recordHistory(QStringLiteral("Rotate"), "rotate_quadrant");
     scheduleRender();
 }
 
@@ -435,6 +470,7 @@ void EngineController::resetGeometry()
     filmControls_.insert("flip_h", false);
     filmControls_.insert("flip_v", false);
     emit filmControlsChanged();
+    recordHistory(QStringLiteral("Reset crop & rotate"));
     scheduleRender();
 }
 
@@ -448,6 +484,7 @@ void EngineController::setAutoGrain(bool enabled)
         filmControls_.insert("grain_size", -1.0);
         filmControls_.insert("grain_roughness", -1.0);
         emit filmControlsChanged();
+        recordHistory(QStringLiteral("Grain: auto"), "grain_auto");
         scheduleRender();
         return;
     }
@@ -469,6 +506,9 @@ void EngineController::openFile(const QUrl& url)
     const QString file = url.toLocalFile();
     status_ = "Loading " + QFileInfo(file).fileName();
     emit statusChanged();
+    // A new image starts a fresh history; seed the baseline once its first
+    // preview is ready (state is settled by then, including exposure placement).
+    pendingSeed_ = true;
 
     if (workerBusy_) {
         // Latch the latest file for the pending open; mark it as an open (not
@@ -635,6 +675,10 @@ dfee::NativeExportRequest EngineController::buildExportRequest() const
 
 void EngineController::onPreviewReady()
 {
+    if (pendingSeed_) {
+        pendingSeed_ = false;
+        seedHistory(QStringLiteral("Import"));
+    }
     hasImage_ = true;
     emit hasImageChanged();
     previewRevision_++;
@@ -710,6 +754,7 @@ void EngineController::onAutoGrainResolved(bool ok, double strength, double size
     filmControls_.insert("grain_size", size);
     filmControls_.insert("grain_roughness", roughness);
     emit filmControlsChanged();
+    recordHistory(QStringLiteral("Grain: custom"), "grain_auto");
     if (qEnvironmentVariableIsSet("DFEE_SELFTEST_GRAIN")) {
         qDebug() << "SELFTEST Auto grain materialized" << strength << size << roughness;
     }
@@ -759,4 +804,211 @@ void EngineController::onWorkerBusyChanged(bool busy)
             scheduleRender();
         }
     }
+}
+
+// ── Edit history ────────────────────────────────────────────────────────
+
+bool EngineController::isGeometryKey(const QString& key)
+{
+    return key.startsWith(QStringLiteral("crop_"))
+        || key == QStringLiteral("straighten_deg")
+        || key == QStringLiteral("rotate_quadrant")
+        || key == QStringLiteral("flip_h")
+        || key == QStringLiteral("flip_v");
+}
+
+QString EngineController::friendlyLabel(const QString& key)
+{
+    static const QHash<QString, QString> names = {
+        {"exposure_placement", "Exposure placement"}, {"film_exposure_ev", "Film exposure"},
+        {"adaptive", "Adaptive"}, {"rendered_input", "Preserve rendered tone"},
+        {"highlight_rolloff", "Highlight rolloff"}, {"film_contrast", "Film contrast"},
+        {"crossover", "Crossover"}, {"profile_strength", "Film strength"},
+        {"shadow_lift", "Shadow lift"}, {"film_color_density", "Film color density"},
+        {"emulsion_color_density", "Emulsion density"}, {"highlight_color_hold", "Highlight color"},
+        {"shadow_color_retention", "Shadow color"}, {"grain_strength", "Grain strength"},
+        {"grain_size", "Grain size"}, {"grain_roughness", "Grain roughness"},
+        {"halation_strength", "Halation"}, {"halation_threshold", "Halation threshold"},
+        {"bloom", "Bloom"}, {"exposure", "Exposure"}, {"contrast", "Contrast"},
+        {"highlights", "Highlights"}, {"shadows", "Shadows"}, {"whites", "Whites"},
+        {"blacks", "Blacks"}, {"midtones", "Midtones"}, {"temp", "Temperature"},
+        {"tint", "Tint"}, {"saturation", "Saturation"}, {"vibrance", "Vibrance"},
+        {"texture", "Texture"}, {"clarity", "Clarity"}, {"dehaze", "Dehaze"},
+        {"sharpness", "Sharpness"}, {"sharpness_mask", "Sharpen mask"},
+        {"print_stock", "Print finish"}, {"print_strength", "Print strength"},
+        {"print_c", "Print cyan"}, {"print_m", "Print magenta"}, {"print_y", "Print yellow"},
+        {"print_contrast", "Print contrast"}, {"print_black_point", "Print black point"},
+        {"straighten_deg", "Straighten"},
+    };
+    const auto it = names.constFind(key);
+    if (it != names.cend()) return it.value();
+    if (key.startsWith(QStringLiteral("cg_"))) return QStringLiteral("Color grading");
+    if (key.startsWith(QStringLiteral("hsl_"))) return QStringLiteral("HSL");
+    if (key.startsWith(QStringLiteral("crop_"))) return QStringLiteral("Crop");
+    return key;
+}
+
+void EngineController::recordHistory(const QString& label, const QString& coalesceKey)
+{
+    if (currentFile_.isEmpty() || historyIndex_ < 0) return;  // no history before baseline
+    // Drop any redo tail — a new edit replaces the abandoned future.
+    if (historyIndex_ < int(history_.size()) - 1) {
+        history_.erase(history_.begin() + historyIndex_ + 1, history_.end());
+    }
+    HistoryEntry entry{label, coalesceKey, stockId_, filmControls_};
+    if (!coalesceKey.isEmpty() && !history_.isEmpty()
+        && history_.last().coalesceKey == coalesceKey) {
+        history_.last() = entry;      // merge consecutive same-control edits
+    } else {
+        history_.append(entry);
+        historyIndex_ = int(history_.size()) - 1;
+    }
+    emit historyChanged();
+}
+
+void EngineController::seedHistory(const QString& label)
+{
+    history_.clear();
+    history_.append(HistoryEntry{label, QString(), stockId_, filmControls_});
+    historyIndex_ = 0;
+    emit historyChanged();
+}
+
+void EngineController::restoreHistory(int internalIndex)
+{
+    if (internalIndex < 0 || internalIndex >= int(history_.size())) return;
+    historyIndex_ = internalIndex;
+    const HistoryEntry& e = history_.at(internalIndex);
+    filmControls_ = e.controls;
+    filmExposure_ = filmControls_.value("film_exposure_ev").toDouble();
+    shadowLift_ = filmControls_.value("shadow_lift").toDouble();
+    if (stockId_ != e.stock) {
+        stockId_ = e.stock;
+        emit stockChanged();
+    }
+    emit filmControlsChanged();
+    emit paramsChanged();
+    emit historyChanged();
+    scheduleRender();
+}
+
+QVariantList EngineController::history() const
+{
+    QVariantList out;                 // newest-first for the UI
+    for (int i = int(history_.size()) - 1; i >= 0; --i) {
+        QVariantMap m;
+        m["label"] = history_.at(i).label;
+        out.append(m);
+    }
+    return out;
+}
+
+void EngineController::undo()      { if (canUndo()) restoreHistory(historyIndex_ - 1); }
+void EngineController::redo()      { if (canRedo()) restoreHistory(historyIndex_ + 1); }
+void EngineController::jumpToHistory(int displayRow)
+{
+    restoreHistory(int(history_.size()) - 1 - displayRow);
+}
+
+// ── Presets ─────────────────────────────────────────────────────────────
+
+QString EngineController::presetsDir() const
+{
+    const QString base = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    const QString dir = base + QStringLiteral("/Film Lab/Presets");
+    QDir().mkpath(dir);
+    return dir;
+}
+
+QVariantMap EngineController::captureRecipe() const
+{
+    QVariantMap controls;
+    for (auto it = filmControls_.cbegin(); it != filmControls_.cend(); ++it) {
+        if (!isGeometryKey(it.key())) controls.insert(it.key(), it.value());
+    }
+    QVariantMap recipe;
+    recipe["stock"] = stockId_;
+    recipe["controls"] = controls;
+    return recipe;
+}
+
+void EngineController::applyRecipe(const QVariantMap& recipe, const QString& label)
+{
+    const QString newStock = recipe.value("stock").toString();
+    const QVariantMap controls = recipe.value("controls").toMap();
+    for (auto it = controls.cbegin(); it != controls.cend(); ++it) {
+        if (isGeometryKey(it.key())) continue;
+        if (!filmControls_.contains(it.key())) continue;  // ignore unknown keys
+        filmControls_.insert(it.key(), it.value());
+    }
+    filmExposure_ = filmControls_.value("film_exposure_ev").toDouble();
+    shadowLift_ = filmControls_.value("shadow_lift").toDouble();
+    if (!newStock.isEmpty() && stockId_ != newStock) {
+        stockId_ = newStock;
+        emit stockChanged();
+    }
+    emit filmControlsChanged();
+    emit paramsChanged();
+    recordHistory(label);
+    scheduleRender();
+}
+
+void EngineController::refreshPresets()
+{
+    presets_.clear();
+    QDir dir(presetsDir());
+    const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+    for (const QString& f : files) {
+        QFile file(dir.filePath(f));
+        if (!file.open(QIODevice::ReadOnly)) continue;
+        const QJsonObject obj = QJsonDocument::fromJson(file.readAll()).object();
+        const QString id = QFileInfo(f).completeBaseName();
+        QVariantMap m;
+        m["id"] = id;
+        m["name"] = obj.value("name").toString(id);
+        presets_.append(m);
+    }
+    emit presetsChanged();
+}
+
+bool EngineController::savePreset(const QString& name)
+{
+    const QString trimmed = name.trimmed();
+    if (trimmed.isEmpty() || currentFile_.isEmpty()) return false;
+    // Sanitize for a filesystem-safe file name; the display name is stored inside.
+    QString safe = trimmed;
+    safe.replace(QRegularExpression(QStringLiteral("[\\\\/:*?\"<>|]")), QStringLiteral("_"));
+
+    const QVariantMap recipe = captureRecipe();
+    QJsonObject obj;
+    obj["schemaVersion"] = 1;
+    obj["name"] = trimmed;
+    obj["stock"] = recipe.value("stock").toString();
+    obj["controls"] = QJsonObject::fromVariantMap(recipe.value("controls").toMap());
+    obj["createdAt"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+
+    QFile file(QDir(presetsDir()).filePath(safe + QStringLiteral(".json")));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    file.close();
+    refreshPresets();
+    return true;
+}
+
+void EngineController::applyPreset(const QString& id)
+{
+    QFile file(QDir(presetsDir()).filePath(id + QStringLiteral(".json")));
+    if (!file.open(QIODevice::ReadOnly)) return;
+    const QJsonObject obj = QJsonDocument::fromJson(file.readAll()).object();
+    QVariantMap recipe;
+    recipe["stock"] = obj.value("stock").toString();
+    recipe["controls"] = obj.value("controls").toObject().toVariantMap();
+    applyRecipe(recipe, QStringLiteral("Preset: ") + obj.value("name").toString(id));
+}
+
+bool EngineController::deletePreset(const QString& id)
+{
+    const bool ok = QFile::remove(QDir(presetsDir()).filePath(id + QStringLiteral(".json")));
+    if (ok) refreshPresets();
+    return ok;
 }

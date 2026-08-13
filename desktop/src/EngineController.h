@@ -9,6 +9,7 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QVariantList>
+#include <QVector>
 #include <memory>
 
 #include "dfee/bridge_types.hpp"
@@ -45,6 +46,14 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantList histogramR READ histogramR NOTIFY histogramChanged)
     Q_PROPERTY(QVariantList histogramG READ histogramG NOTIFY histogramChanged)
     Q_PROPERTY(QVariantList histogramB READ histogramB NOTIFY histogramChanged)
+    // Edit history (newest-first list of {label}), the current step's row in that
+    // list, and undo/redo availability. In-memory, reseeded per opened image.
+    Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
+    Q_PROPERTY(int historyIndex READ historyIndex NOTIFY historyChanged)
+    Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
+    Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
+    // Saved presets on disk (Documents/Film Lab/Presets) as {id, name}.
+    Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
 
 public:
     // provider must be non-null; it must outlive EngineController (the
@@ -115,6 +124,25 @@ public:
     QVariantList histogramG() const { return histogramG_; }
     QVariantList histogramB() const { return histogramB_; }
 
+    QVariantList history() const;
+    int historyIndex() const { return history_.isEmpty() ? -1 : (int(history_.size()) - 1 - historyIndex_); }
+    bool canUndo() const { return historyIndex_ > 0; }
+    bool canRedo() const { return historyIndex_ >= 0 && historyIndex_ < int(history_.size()) - 1; }
+    QVariantList presets() const { return presets_; }
+
+    // Edit history navigation. jumpToHistory takes a display row (0 = newest).
+    Q_INVOKABLE void undo();
+    Q_INVOKABLE void redo();
+    Q_INVOKABLE void jumpToHistory(int displayRow);
+
+    // Presets. A recipe is stock + look controls (geometry excluded). savePreset
+    // writes the current recipe; applyPreset / deletePreset act on a preset id
+    // (its file name without extension). Returns false on I/O failure.
+    Q_INVOKABLE bool savePreset(const QString& name);
+    Q_INVOKABLE void applyPreset(const QString& id);
+    Q_INVOKABLE bool deletePreset(const QString& id);
+    Q_INVOKABLE void refreshPresets();
+
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
     Q_INVOKABLE void onPreviewReady();
     Q_INVOKABLE void onBeforeReady(bool ok);
@@ -139,6 +167,8 @@ signals:
     void beforeChanged();
     void statusChanged();
     void histogramChanged();
+    void historyChanged();
+    void presetsChanged();
 
 private:
     // Factory for the default film-control values — the single source of truth
@@ -153,6 +183,33 @@ private:
     [[nodiscard]] dfee::NativePreviewRenderRequest buildPreviewRequest() const;
     [[nodiscard]] dfee::NativeExportRequest buildExportRequest() const;
     bool updateNumericFilmControl(const QString& key, double value);
+
+    // ── Edit history ────────────────────────────────────────────────────
+    struct HistoryEntry {
+        QString label;         // human-readable ("Contrast +8")
+        QString coalesceKey;   // consecutive edits with the same non-empty key merge
+        QString stock;         // full snapshot: stock + all controls
+        QVariantMap controls;
+    };
+    // Record the current {stock, controls} as a new step (or merge into the last
+    // step when coalesceKey matches). No-op before an image is open.
+    void recordHistory(const QString& label, const QString& coalesceKey = QString());
+    // Replace history with a single baseline step for a freshly opened image.
+    void seedHistory(const QString& label);
+    // Restore the snapshot at an internal index (0 = baseline) without recording.
+    void restoreHistory(int internalIndex);
+    static QString friendlyLabel(const QString& key);   // control key -> display name
+    static bool isGeometryKey(const QString& key);
+
+    // ── Presets ─────────────────────────────────────────────────────────
+    QString presetsDir() const;                          // ensures the dir exists
+    QVariantMap captureRecipe() const;                   // {stock, controls (look-only)}
+    void applyRecipe(const QVariantMap& recipe, const QString& label);
+
+    QVector<HistoryEntry> history_;
+    int historyIndex_ = -1;      // current step within history_ (internal, 0 = oldest)
+    bool pendingSeed_ = false;   // seed a baseline step on the next preview-ready
+    QVariantList presets_;
 
     std::unique_ptr<dfee::EngineSession> session_;
     QStringList stockNames_;

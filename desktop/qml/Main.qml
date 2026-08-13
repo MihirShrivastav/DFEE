@@ -63,6 +63,60 @@ Window {
         enabled: !stockSearch.activeFocus
         onActivated: stockBox.popup.open()
     }
+    Shortcut {
+        sequence: "Ctrl+Z"                   // undo
+        enabled: engine.canUndo && !stockSearch.activeFocus && !presetNameField.activeFocus
+        onActivated: engine.undo()
+    }
+    Shortcut {
+        sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]   // redo
+        enabled: engine.canRedo && !stockSearch.activeFocus && !presetNameField.activeFocus
+        onActivated: engine.redo()
+    }
+
+    // New-preset name prompt (from the Presets panel ＋). Film Lab styled.
+    Popup {
+        id: presetNameDialog
+        modal: true
+        dim: true
+        anchors.centerIn: Overlay.overlay
+        width: 340
+        padding: 20
+        background: Rectangle { radius: 12; color: root.panelRaised; border.width: 1; border.color: root.border }
+        Overlay.modal: Rectangle { color: "#99000000" }
+        onOpened: { presetNameField.text = ""; presetNameField.forceActiveFocus(); }
+        function commit() {
+            if (presetNameField.text.trim().length === 0) return;
+            if (engine.savePreset(presetNameField.text.trim())) presetNameDialog.close();
+        }
+        contentItem: Column {
+            spacing: 14
+            Text { width: parent.width; text: "Save preset"; color: root.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
+            Text { width: parent.width; text: "Saves the current film stock and all develop settings as a reusable look."; color: root.textSecondary; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Rectangle {
+                width: parent.width; height: 36; radius: 8; color: root.inset
+                border.width: 1; border.color: presetNameField.activeFocus ? root.border : root.hair
+                TextField {
+                    id: presetNameField
+                    anchors.fill: parent
+                    leftPadding: 10; rightPadding: 10
+                    verticalAlignment: TextInput.AlignVCenter
+                    placeholderText: "Preset name"
+                    color: root.textPrimary; placeholderTextColor: root.textMuted
+                    font.pixelSize: 13; selectByMouse: true; background: null
+                    Keys.onReturnPressed: presetNameDialog.commit()
+                    Keys.onEnterPressed: presetNameDialog.commit()
+                    Keys.onEscapePressed: presetNameDialog.close()
+                }
+            }
+            Row {
+                anchors.right: parent.right
+                spacing: 8
+                SecondaryButton { width: 96; text: "Cancel"; onClicked: presetNameDialog.close() }
+                PrimaryButton { width: 96; text: "Save"; enabled: presetNameField.text.trim().length > 0; onClicked: presetNameDialog.commit() }
+            }
+        }
+    }
 
     // Themed confirmation for a full reset — shared by the Reset button and
     // the Ctrl+Shift+R shortcut. Destructive until edit history lands.
@@ -702,6 +756,164 @@ Window {
         }
     }
 
+    // ── Left panel (Lightroom mode) — accordion of Presets + edit History. ──
+    // Both sections are collapsible; open sections share the vertical space.
+    Rectangle {
+        id: leftPanel
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: filmstrip.top
+        width: engine.lightroomRoundTrip ? 264 : 0
+        visible: engine.lightroomRoundTrip
+        color: root.bg
+        border.width: 1
+        border.color: root.border
+        clip: true
+
+        property bool presetsOpen: true
+        property bool historyOpen: true
+        readonly property int headerH: 40
+        // Body height shared by the two lists once the fixed chrome is removed.
+        readonly property real bodyH: Math.max(0, height - 2 * headerH - 44)
+        function sectionH(mine, other) { return !mine ? 0 : (other ? bodyH * 0.5 : bodyH) }
+
+        // Reusable accordion section header.
+        component SectionHeader: Rectangle {
+            property string title: ""
+            property bool expanded: true
+            signal toggled()
+            width: parent ? parent.width : 0
+            height: leftPanel.headerH
+            color: "transparent"
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.hair }
+            Text {
+                anchors.left: parent.left; anchors.leftMargin: 14; anchors.verticalCenter: parent.verticalCenter
+                text: title; color: root.textSecondary; font.pixelSize: 11; font.weight: Font.SemiBold
+                // letter-spaced caps, Lightroom-style section label
+            }
+            ChevronToggle {
+                anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
+                open: expanded
+            }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.toggled() }
+        }
+
+        Column {
+            anchors.fill: parent
+
+            // ── PRESETS ────────────────────────────────────────────────
+            SectionHeader {
+                title: "PRESETS"; expanded: leftPanel.presetsOpen
+                onToggled: leftPanel.presetsOpen = !leftPanel.presetsOpen
+            }
+            // New-from-current action row (only when presets section is open).
+            Item {
+                width: parent.width; height: leftPanel.presetsOpen ? 40 : 0
+                visible: leftPanel.presetsOpen
+                Button {
+                    id: newPresetBtn
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.margins: 10; anchors.verticalCenter: parent.verticalCenter
+                    height: 28
+                    enabled: engine.hasImage
+                    text: "＋  New preset from current"
+                    contentItem: Text { text: newPresetBtn.text; color: newPresetBtn.enabled ? root.textPrimary : root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
+                    background: Rectangle {
+                        radius: 7; color: newPresetBtn.down ? "#26262b" : "#2e2e34"
+                        border.width: 1; border.color: root.hair; opacity: newPresetBtn.enabled ? 1.0 : 0.5
+                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+                    }
+                    onClicked: presetNameDialog.open()
+                }
+            }
+            ListView {
+                id: presetList
+                width: parent.width
+                height: Math.max(0, leftPanel.sectionH(leftPanel.presetsOpen, leftPanel.historyOpen) - 40)
+                visible: leftPanel.presetsOpen
+                clip: true
+                model: engine.presets
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                delegate: Item {
+                    width: presetList.width
+                    height: 34
+                    Rectangle {
+                        anchors.fill: parent; anchors.margins: 2; radius: 6
+                        color: presetHover.hovered ? "#1e1e22" : "transparent"
+                    }
+                    HoverHandler { id: presetHover }
+                    Row {
+                        anchors.left: parent.left; anchors.leftMargin: 12
+                        anchors.right: parent.right; anchors.rightMargin: 8
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 8
+                        Text {
+                            width: parent.width - delPreset.width - 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.name; color: root.textPrimary; elide: Text.ElideRight; font.pixelSize: 13
+                        }
+                        Text {
+                            id: delPreset
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "×"; color: presetHover.hovered ? root.textSecondary : "transparent"; font.pixelSize: 16
+                            MouseArea { anchors.fill: parent; anchors.margins: -4; cursorShape: Qt.PointingHandCursor; onClicked: engine.deletePreset(modelData.id) }
+                        }
+                    }
+                    MouseArea {
+                        anchors.fill: parent; anchors.rightMargin: 22
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: engine.applyPreset(modelData.id)
+                    }
+                }
+            }
+            Text {
+                width: parent.width
+                leftPadding: 14; rightPadding: 14; topPadding: 8
+                visible: leftPanel.presetsOpen && engine.presets.length === 0
+                text: "No presets yet. Build a look, then save it with ＋."
+                color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap
+            }
+
+            // ── HISTORY ────────────────────────────────────────────────
+            SectionHeader {
+                title: "HISTORY"; expanded: leftPanel.historyOpen
+                onToggled: leftPanel.historyOpen = !leftPanel.historyOpen
+            }
+            ListView {
+                id: historyList
+                width: parent.width
+                height: leftPanel.sectionH(leftPanel.historyOpen, leftPanel.presetsOpen)
+                visible: leftPanel.historyOpen
+                clip: true
+                model: engine.history
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                delegate: Item {
+                    width: historyList.width
+                    height: 30
+                    readonly property bool current: index === engine.historyIndex
+                    // Rows newer than the current step (undone future) read dimmed.
+                    readonly property bool future: index < engine.historyIndex
+                    Rectangle {
+                        anchors.fill: parent; anchors.margins: 2; radius: 6
+                        color: current ? "#33333a" : (histHover.hovered ? "#1e1e22" : "transparent")
+                        border.width: current ? 1 : 0; border.color: root.hair
+                    }
+                    HoverHandler { id: histHover }
+                    Text {
+                        anchors.left: parent.left; anchors.leftMargin: 14
+                        anchors.right: parent.right; anchors.rightMargin: 10
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.label
+                        color: current ? root.textPrimary : (future ? root.textMuted : root.textSecondary)
+                        elide: Text.ElideRight; font.pixelSize: 12
+                        font.weight: current ? Font.Medium : Font.Normal
+                    }
+                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: engine.jumpToHistory(index) }
+                }
+            }
+        }
+    }
+
     // ── Library pane (left) — pinned FOLDERS only. Collapsible. Standalone only. ──
     Rectangle {
         id: libraryPane
@@ -871,7 +1083,7 @@ Window {
 
     Rectangle {
         id: previewCanvas
-        anchors.left: libraryPane.right
+        anchors.left: engine.lightroomRoundTrip ? leftPanel.right : libraryPane.right
         anchors.top: parent.top
         anchors.bottom: filmstrip.top
         anchors.right: inspector.left

@@ -29,12 +29,13 @@ Human-readable JSON, **one file per preset**, and **folders are real directories
 map 1:1 to the filesystem and presets are portable/shareable/backup-able.
 
 ```
-%APPDATA%/Film Lab/presets/           (QStandardPaths::AppDataLocation + /presets)
+Documents/Film Lab/Presets/           (QStandardPaths::DocumentsLocation + /Film Lab/Presets)
   Golden Hour.json
   My Portraits/                       ← a user group (subdirectory)
     Soft Skin.json
     Punchy.json
 ```
+(Storage moved to Documents so presets are easy to find/share, like other apps.)
 
 Preset file schema:
 ```json
