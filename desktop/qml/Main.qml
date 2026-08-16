@@ -60,9 +60,23 @@ Window {
     property bool leftPanelOpen: true     // left presets/history panel (Lightroom mode)
     property bool peekBefore: false       // "\" — momentary before/after (Lightroom-style toggle)
 
-    // ── Keyboard shortcuts (Tier 1) ─────────────────────────────────────
-    // Bare-letter shortcuts are suppressed while the stock search field has
-    // focus so typing a stock name never triggers them.
+    // True while any text field has focus — bare-letter/character shortcuts are
+    // suppressed then so typing never triggers them.
+    readonly property bool textEntry: stockSearch.activeFocus || presetNameField.activeFocus
+        || newGroupField.activeFocus || editNameField.activeFocus
+        || editNewGroupField.activeFocus || groupRenameField.activeFocus
+
+    // Step the film stock (dir -1/+1) through the picker's model, wrapping around.
+    function cycleStock(dir) {
+        var m = engine.stockModel;
+        if (!m || m.length === 0) return;
+        var cur = 0;
+        for (var i = 0; i < m.length; ++i) if (m[i].id === engine.stock) { cur = i; break; }
+        engine.stock = m[(cur + dir + m.length) % m.length].id;
+    }
+
+    // ── Keyboard shortcuts ──────────────────────────────────────────────
+    // Bare-letter/character shortcuts are suppressed while typing (root.textEntry).
     Shortcut {
         sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]
         enabled: engine.hasImage && !engine.exporting
@@ -97,6 +111,21 @@ Window {
         sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]   // redo
         enabled: engine.canRedo && !stockSearch.activeFocus && !presetNameField.activeFocus
         onActivated: engine.redo()
+    }
+    Shortcut {
+        sequence: "["                        // previous film stock
+        enabled: engine.hasImage && !root.textEntry
+        onActivated: root.cycleStock(-1)
+    }
+    Shortcut {
+        sequence: "]"                        // next film stock
+        enabled: engine.hasImage && !root.textEntry
+        onActivated: root.cycleStock(1)
+    }
+    Shortcut {
+        sequences: ["?", "F1"]               // keyboard shortcuts help
+        enabled: !root.textEntry
+        onActivated: helpDialog.opened ? helpDialog.close() : helpDialog.open()
     }
 
     // New-preset wizard (from the Presets panel ＋): name + group picker. Film Lab styled.
@@ -446,6 +475,103 @@ Window {
         }
     }
 
+    // Keyboard-shortcuts help sheet (opened with ? or F1, or the header button).
+    // macOS-style: grouped rows with keycaps, dimmed backdrop, Esc/click to close.
+    Popup {
+        id: helpDialog
+        modal: true
+        dim: true
+        anchors.centerIn: Overlay.overlay
+        width: 460
+        padding: 24
+        background: Rectangle { radius: 14; color: root.panelRaised; border.width: 1; border.color: root.border }
+        Overlay.modal: Rectangle { color: "#99000000" }
+
+        readonly property var leftGroups: [
+            { title: "EDITING", items: [
+                { keys: ["Ctrl", "Z"], desc: "Undo" },
+                { keys: ["Ctrl", "Y"], desc: "Redo" },
+                { keys: ["Ctrl", "Shift", "R"], desc: "Reset all edits" },
+                { keys: ["Ctrl", "S"], desc: "Save & return to Lightroom" }
+            ]},
+            { title: "HELP", items: [
+                { keys: ["?"], desc: "Show this help" }
+            ]}
+        ]
+        readonly property var rightGroups: [
+            { title: "VIEW", items: [
+                { keys: ["\\"], desc: "Before / after" },
+                { keys: ["B"], desc: "Cycle compare mode" }
+            ]},
+            { title: "FILM STOCK", items: [
+                { keys: ["F"], desc: "Search film stocks" },
+                { keys: ["["], desc: "Previous stock" },
+                { keys: ["]"], desc: "Next stock" }
+            ]}
+        ]
+
+        // One column of grouped shortcut rows.
+        component ShortcutColumn: Column {
+            property var groups: []
+            spacing: 18
+            Repeater {
+                model: parent.groups
+                Column {
+                    width: parent.width
+                    spacing: 9
+                    Text { text: modelData.title; color: root.textMuted; font.pixelSize: 10; font.weight: Font.SemiBold }
+                    Repeater {
+                        model: modelData.items
+                        Item {
+                            width: parent.width
+                            height: 26
+                            Text {
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.desc; color: root.textSecondary; font.pixelSize: 12
+                            }
+                            Row {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                spacing: 4
+                                Repeater {
+                                    model: modelData.keys
+                                    Keycap { label: modelData }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        contentItem: Column {
+            spacing: 20
+
+            // Header row.
+            Item {
+                width: parent.width
+                height: 24
+                Row {
+                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                    spacing: 8
+                    AppIcon { anchors.verticalCenter: parent.verticalCenter; name: "keyboard"; size: 18; color: root.textPrimary }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: "Keyboard shortcuts"; color: root.textPrimary; font.pixelSize: 15; font.weight: Font.Medium }
+                }
+                Text {
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    text: "Esc to close"; color: root.textMuted; font.pixelSize: 11
+                }
+            }
+
+            // Two balanced columns.
+            Row {
+                width: parent.width
+                spacing: 28
+                ShortcutColumn { width: (parent.width - 28) / 2; groups: helpDialog.leftGroups }
+                ShortcutColumn { width: (parent.width - 28) / 2; groups: helpDialog.rightGroups }
+            }
+        }
+    }
+
     function exportFormatLabel(format) {
         if (format === "png8") return "8-bit PNG"
         if (format === "png16") return "16-bit PNG"
@@ -678,6 +804,26 @@ Window {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: ra.triggered()
+        }
+    }
+
+    // A single keyboard keycap (raised chip with a top bevel) for the help sheet.
+    component Keycap: Rectangle {
+        property string label: ""
+        implicitWidth: Math.max(24, kcText.implicitWidth + 14)
+        height: 24
+        radius: root.radiusSmall
+        color: root.ctrl
+        border.width: 1
+        border.color: root.hair
+        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: root.bevel }
+        Text {
+            id: kcText
+            anchors.centerIn: parent
+            text: parent.label
+            color: root.textPrimary
+            font.pixelSize: 11
+            font.weight: Font.Medium
         }
     }
 
@@ -2027,6 +2173,20 @@ Window {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
+
+                    GhostButton {
+                        id: helpBtn
+                        width: 28; height: 28
+                        iconName: "keyboard"; iconSize: 18
+                        onClicked: helpDialog.open()
+                        HoverHandler { id: helpHover }
+                        GraphiteTip {
+                            parent: helpBtn
+                            x: 0; y: helpBtn.height + 4
+                            visible: helpHover.hovered
+                            text: "Keyboard shortcuts (?)"
+                        }
+                    }
 
                     UtilityButton {
                         id: resetAllBtn
