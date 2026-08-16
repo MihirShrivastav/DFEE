@@ -31,6 +31,29 @@ Window {
     readonly property color accentText: "#161618"       // text on a light accent fill
     readonly property color knob: "#c4c4c9"             // slider knob
     readonly property color danger: "#e0655b"
+
+    // Control state fills — one token per interaction state so buttons, chips and
+    // list rows share exactly the same greys instead of a dozen hand-picked hexes.
+    readonly property color ctrl: "#2e2e34"             // raised control base (buttons, chips)
+    readonly property color ctrlPressed: "#26262b"      // pressed raised control
+    readonly property color ctrlHover: "#232327"        // hover fill on flat rows / list items
+    readonly property color ctrlActive: "#33333a"       // selected / active control
+    readonly property color bevel: "#16ffffff"          // 1px top highlight on raised controls
+    readonly property color raiseTop: "#34343a"         // primary-button gradient — top
+    readonly property color raiseBottom: "#242429"      // primary-button gradient — bottom
+    readonly property color raiseTopDown: "#26262b"     // primary-button gradient (pressed) — top
+    readonly property color raiseBottomDown: "#1d1d20"  // primary-button gradient (pressed) — bottom
+
+    // Corner radii — a control radius shared by every button/field/card, plus a
+    // small radius for chips inside rows. Pills use height/2 at the call site.
+    readonly property int radiusControl: 8
+    readonly property int radiusSmall: 6
+
+    // Type scale (documented so nothing drifts off it):
+    //   22  app title            15  dialog title
+    //   13  section title / body  12  field label      11  secondary / caption
+    //   10  ALL-CAPS micro label (letter-spaced, muted, used sparingly)
+    // Weights: Medium for titles/labels, Normal for body/values.
     property bool libraryOpen: true       // left folders pane
     property bool filmstripOpen: true     // bottom thumbnail strip
     property bool leftPanelOpen: true     // left presets/history panel (Lightroom mode)
@@ -908,16 +931,16 @@ Window {
         }
 
         background: Rectangle {
-            radius: 8
+            radius: root.radiusControl
             gradient: Gradient {
-                GradientStop { position: 0.0; color: !button.enabled ? root.panel : (button.down ? "#26262b" : "#34343a") }
-                GradientStop { position: 1.0; color: !button.enabled ? root.panel : (button.down ? "#1d1d20" : "#242429") }
+                GradientStop { position: 0.0; color: !button.enabled ? root.panel : (button.down ? root.raiseTopDown : root.raiseTop) }
+                GradientStop { position: 1.0; color: !button.enabled ? root.panel : (button.down ? root.raiseBottomDown : root.raiseBottom) }
             }
             border.width: 1
             border.color: root.hair
             Rectangle {
                 anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
-                height: 1; radius: 1; color: "#16ffffff"; visible: button.enabled
+                height: 1; radius: 1; color: root.bevel; visible: button.enabled
             }
         }
     }
@@ -939,8 +962,8 @@ Window {
         }
 
         background: Rectangle {
-            radius: 8
-            color: button.down ? "#1c1c1f" : root.inset
+            radius: root.radiusControl
+            color: button.down ? root.ctrlPressed : root.inset
             border.width: 1
             border.color: root.hair
         }
@@ -952,9 +975,9 @@ Window {
         property bool selected: false
         signal clicked()
         implicitWidth: chipText.implicitWidth + 22
-        height: 26
-        radius: 13
-        color: selected ? "#33333a" : root.inset
+        height: 28
+        radius: height / 2
+        color: selected ? root.ctrlActive : root.inset
         border.width: 1
         border.color: selected ? root.border : root.hair
         Text {
@@ -1266,7 +1289,7 @@ Window {
                             visible: modelData.kind === "preset"
                             Rectangle {
                                 anchors.fill: parent; anchors.margins: 2; radius: 6
-                                color: presetHover.hovered ? "#1e1e22" : "transparent"
+                                color: presetHover.hovered ? root.ctrlHover : "transparent"
                             }
                             HoverHandler { id: presetHover }
                             Text {
@@ -1321,7 +1344,7 @@ Window {
                     readonly property bool future: index < engine.historyIndex
                     Rectangle {
                         anchors.fill: parent; anchors.margins: 2; radius: 6
-                        color: current ? "#33333a" : (histHover.hovered ? "#1e1e22" : "transparent")
+                        color: current ? root.ctrlActive : (histHover.hovered ? root.ctrlHover : "transparent")
                         border.width: current ? 1 : 0; border.color: root.hair
                     }
                     HoverHandler { id: histHover }
@@ -1825,7 +1848,7 @@ Window {
                         contentItem: Text { id: cmpText; text: modelData.label; color: cmpBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
                         background: Rectangle {
                             radius: 7
-                            color: cmpBtn.selected ? "#33333a" : "transparent"
+                            color: cmpBtn.selected ? root.ctrlActive : "transparent"
                             border.width: cmpBtn.selected ? 1 : 0
                             border.color: root.hair
                         }
@@ -2012,7 +2035,7 @@ Window {
                             contentItem: Text { text: tabBtn.text; color: tabBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
                             background: Rectangle {
                                 radius: 7
-                                color: tabBtn.selected ? "#33333a" : "transparent"
+                                color: tabBtn.selected ? root.ctrlActive : "transparent"
                                 border.width: tabBtn.selected ? 1 : 0
                                 border.color: root.hair
                                 Rectangle { visible: tabBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
@@ -2507,7 +2530,7 @@ Window {
                                             contentItem: Text { text: segBtn.text; color: segBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
                                             background: Rectangle {
                                                 radius: 7
-                                                color: segBtn.selected ? "#33333a" : "transparent"
+                                                color: segBtn.selected ? root.ctrlActive : "transparent"
                                                 border.width: segBtn.selected ? 1 : 0
                                                 border.color: root.hair
                                                 Rectangle { visible: segBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
@@ -2808,7 +2831,7 @@ Window {
                                             contentItem: Text { text: hslTabBtn.text; color: hslTabBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
                                             background: Rectangle {
                                                 radius: 7
-                                                color: hslTabBtn.selected ? "#33333a" : "transparent"
+                                                color: hslTabBtn.selected ? root.ctrlActive : "transparent"
                                                 border.width: hslTabBtn.selected ? 1 : 0
                                                 border.color: root.hair
                                                 Rectangle { visible: hslTabBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
@@ -3141,7 +3164,7 @@ Window {
                                         contentItem: Text { text: fmtBtn.text; color: fmtBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
                                         background: Rectangle {
                                             radius: 6
-                                            color: fmtBtn.selected ? "#33333a" : "transparent"
+                                            color: fmtBtn.selected ? root.ctrlActive : "transparent"
                                             border.width: 1
                                             border.color: fmtBtn.selected ? root.hair : root.border
                                             Rectangle { visible: fmtBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
