@@ -1375,7 +1375,7 @@ Window {
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 delegate: Item {
                     width: historyList.width
-                    height: 30
+                    height: 32                       // match the preset-row height for a uniform list rhythm
                     readonly property bool current: index === engine.historyIndex
                     // Rows newer than the current step (undone future) read dimmed.
                     readonly property bool future: index < engine.historyIndex
@@ -1436,7 +1436,7 @@ Window {
                 height: 26
                 Text {
                     anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                    text: "Library"; color: root.textPrimary; font.pixelSize: 14; font.weight: Font.Medium
+                    text: "Library"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium
                 }
                 Row {
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
