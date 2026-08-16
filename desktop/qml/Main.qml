@@ -482,8 +482,8 @@ Window {
         modal: true
         dim: true
         anchors.centerIn: Overlay.overlay
-        width: 460
-        padding: 24
+        width: 620
+        padding: 28
         background: Rectangle { radius: 14; color: root.panelRaised; border.width: 1; border.color: root.border }
         Overlay.modal: Rectangle { color: "#99000000" }
 
@@ -527,9 +527,12 @@ Window {
                             height: 26
                             Text {
                                 anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                anchors.right: keyRow.left; anchors.rightMargin: 12
                                 text: modelData.desc; color: root.textSecondary; font.pixelSize: 12
+                                elide: Text.ElideRight
                             }
                             Row {
+                                id: keyRow
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 spacing: 4
                                 Repeater {
