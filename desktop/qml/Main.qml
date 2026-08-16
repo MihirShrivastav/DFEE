@@ -1123,8 +1123,9 @@ Window {
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.hair }
             Text {
                 anchors.left: parent.left; anchors.leftMargin: 14; anchors.verticalCenter: parent.verticalCenter
-                text: title; color: root.textSecondary; font.pixelSize: 11; font.weight: Font.SemiBold
-                // letter-spaced caps, Lightroom-style section label
+                // Tier-1 section title: matches the right-pane card headers exactly
+                // (sentence case, 13px Medium, primary) for a consistent hierarchy.
+                text: title; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium
             }
             ChevronToggle {
                 anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
@@ -1162,7 +1163,7 @@ Window {
 
             // ── PRESETS ────────────────────────────────────────────────
             SectionHeader {
-                title: "PRESETS"; expanded: leftPanel.presetsOpen
+                title: "Presets"; expanded: leftPanel.presetsOpen
                 onToggled: leftPanel.presetsOpen = !leftPanel.presetsOpen
             }
             // New-from-current action row (only when presets section is open).
@@ -1301,7 +1302,7 @@ Window {
 
             // ── HISTORY ────────────────────────────────────────────────
             SectionHeader {
-                title: "HISTORY"; expanded: leftPanel.historyOpen
+                title: "History"; expanded: leftPanel.historyOpen
                 onToggled: leftPanel.historyOpen = !leftPanel.historyOpen
             }
             ListView {
