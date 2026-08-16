@@ -709,6 +709,8 @@ RenderPlan RenderPlanSolver::solve(
         plan.film_response.characteristic_curve = map_characteristic_curve(
             authored, controls.film_contrast, controls.highlight_rolloff, controls.shadow_lift);
         plan.film_response.use_characteristic_curve = true;
+        // Shadow Lift drives a black-preserving toe in the renderer (not d_min).
+        plan.film_response.shadow_lift_norm = shadow_lift_norm;
         // Fixed 18% mid-grey reference for curve placement. Do NOT use the scene's measured
         // midtone_anchor here: the pre-film exposure stage already normalizes the scene toward
         // 0.18, so re-centering on the scene key double-applies exposure (lifts mids ~1 stop,

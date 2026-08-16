@@ -1348,6 +1348,38 @@ Image FilmRenderer::apply_film_tone_response(
         if (tone_k <= 0.0F) {
             return rgb_linear;
         }
+
+        // Shadow Lift — a black-preserving toe on the FINAL perceptual tone. Unlike a
+        // d_min floor lift (which shifts true black up uniformly and reads as a milky
+        // fog), this maps 0 -> 0 and the knee -> knee while opening up the shadow mids
+        // with a gamma, so crushed shadow gradation is recovered without haze. Applied
+        // at full strength (after the RAW/TIFF tone blend) so it works on TIFF too.
+        const float sl = clampf(response.shadow_lift_norm, -1.0F, 1.0F);
+        const bool do_shadow = std::abs(sl) > 1.0e-3F;
+        constexpr float kShadowKnee = 0.5F;       // tone below this is treated as shadow
+        constexpr float kShadowGammaSpan = 0.55F; // + lifts (gamma<1), - deepens (gamma>1)
+        constexpr int kSL = 1024;
+        std::array<float, kSL> shadow_lut{};
+        if (do_shadow) {
+            const float sgamma = 1.0F - sl * kShadowGammaSpan;
+            for (int i = 0; i < kSL; ++i) {
+                float y = static_cast<float>(i) / static_cast<float>(kSL - 1);
+                if (y < kShadowKnee) {
+                    const float u = y / kShadowKnee;
+                    const float lifted = kShadowKnee * std::pow(u, sgamma);
+                    const float w = 1.0F - u;   // feather to identity at the knee (no slope kink)
+                    y = y + (lifted - y) * w;
+                }
+                shadow_lut[static_cast<std::size_t>(i)] = clamp01(y);
+            }
+        }
+        const auto shadow_apply = [&](float y) -> float {
+            if (!do_shadow) return y;
+            const int idx = std::clamp(
+                static_cast<int>(clamp01(y) * static_cast<float>(kSL - 1) + 0.5F), 0, kSL - 1);
+            return shadow_lut[static_cast<std::size_t>(idx)];
+        };
+
         parallel_for_index(static_cast<std::ptrdiff_t>(n), [&](std::ptrdiff_t pidx) {
             const std::size_t b = static_cast<std::size_t>(pidx) * 3U;
             const float r = rgb_linear.pixels[b + 0];
@@ -1364,8 +1396,9 @@ Image FilmRenderer::apply_film_tone_response(
             // be blended as a tone delta here, not as a linear-light image mix. At
             // zero strength this is exactly identity; at one it is the full stock
             // curve used for RAW. The same scale preserves RGB chroma.
-            const float output_tone = std::max(
+            float output_tone = std::max(
                 0.0F, input_tone + tone_k * (stock_tone - input_tone));
+            output_tone = shadow_apply(output_tone);
             const float out_lin = std::pow(output_tone, 2.2F);
             if (luma > 1.0e-4F) {
                 const float sgain = std::min(out_lin / luma, 16.0F);   // chroma-preserving luminance scale

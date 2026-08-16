@@ -156,6 +156,10 @@ struct FilmResponsePlan {
     float scene_midtone_anchor = 0.18F;
     float scene_exposure_shift = 0.0F;
     std::array<float, 3> curve_gamma_mult{1.0F, 1.0F, 1.0F}; // per-dye-layer gamma; absorbs crossover
+    // Shadow Lift for the characteristic-curve (filmic_v4) path, normalized to
+    // [-1, 1]. Applied as a black-preserving toe on the final tone (see renderer)
+    // rather than as a d_min floor lift, which reads as milky fog.
+    float shadow_lift_norm = 0.0F;
 };
 
 struct MaterialEffectsPlan {
