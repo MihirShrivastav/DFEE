@@ -36,6 +36,7 @@ qt_add_qml_module(DFEE
 # maps e.g. resources/fonts/Geist-Regular.ttf -> :/fonts/Geist-Regular.ttf and
 # resources/boxart/portra_400.svg -> :/boxart/portra_400.svg.
 file(GLOB DFEE_BOXART CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/boxart/*.svg")
+file(GLOB DFEE_ICONS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/icons/*.svg")
 qt_add_resources(DFEE "app_assets"
     PREFIX "/"
     BASE "resources"
@@ -44,6 +45,7 @@ qt_add_resources(DFEE "app_assets"
         resources/fonts/Geist-Medium.ttf
         resources/fonts/Geist-SemiBold.ttf
         ${DFEE_BOXART}
+        ${DFEE_ICONS}
 )
 
 target_compile_definitions(DFEE PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Dialogs
+import QtQuick.Effects
 
 Window {
     id: root
@@ -170,7 +171,7 @@ Window {
                     }
                 }
                 PresetChip {
-                    label: "＋ New group"
+                    label: "New group"
                     selected: presetNameDialog.creatingGroup
                     onClicked: { presetNameDialog.creatingGroup = true; newGroupField.forceActiveFocus(); }
                 }
@@ -288,7 +289,7 @@ Window {
                     }
                 }
                 PresetChip {
-                    label: "＋ New group"
+                    label: "New group"
                     selected: editPresetDialog.creatingGroup
                     onClicked: { editPresetDialog.creatingGroup = true; editNewGroupField.forceActiveFocus(); }
                 }
@@ -611,22 +612,72 @@ Window {
     }
 
     // Small down/up chevron used in card headers (and reused as the combo indicator style).
-    component ChevronToggle: Canvas {
+    // Tintable monochrome icon from the bundled Phosphor set (white SVGs at
+    // :/icons/<name>.svg). Recolored to `color` via MultiEffect so icons honour
+    // the palette tokens and react to state exactly like text did.
+    component AppIcon: Item {
+        id: appIcon
+        property string name: ""
+        property color color: root.textSecondary
+        property int size: 16
+        implicitWidth: size
+        implicitHeight: size
+        Image {
+            id: appIconSrc
+            anchors.fill: parent
+            source: appIcon.name.length ? ("qrc:/icons/" + appIcon.name + ".svg") : ""
+            sourceSize.width: appIcon.size * 2   // supersample for crisp edges at any DPI
+            sourceSize.height: appIcon.size * 2
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+            visible: false
+        }
+        MultiEffect {
+            anchors.fill: appIconSrc
+            source: appIconSrc
+            colorization: 1.0
+            colorizationColor: appIcon.color
+        }
+    }
+
+    // Expand/collapse caret (Phosphor). open → points up (collapse), closed →
+    // points down (expand), preserving the prior convention. ~14px footprint.
+    component ChevronToggle: Item {
         property bool open: true
-        width: 12
-        height: 7
-        onOpenChanged: requestPaint()
-        onPaint: {
-            var c = getContext("2d");
-            c.reset();
-            c.strokeStyle = "#8b8b90";
-            c.lineWidth = 1.5;
-            c.lineCap = "round";
-            c.beginPath();
-            // collapsed → point down (expand); expanded → point up (collapse)
-            if (open) { c.moveTo(1, 6); c.lineTo(6, 1); c.lineTo(11, 6); }
-            else { c.moveTo(1, 1); c.lineTo(6, 6); c.lineTo(11, 1); }
-            c.stroke();
+        property color color: root.textSecondary
+        width: 14
+        height: 14
+        AppIcon {
+            anchors.centerIn: parent
+            name: "caret-down"
+            size: 12
+            color: parent.color
+            rotation: parent.open ? 180 : 0
+            Behavior on rotation { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        }
+    }
+
+    // Hover-revealed row action (edit / delete on preset & group rows). Tints on
+    // its own hover and carries a padded hit area around the small glyph.
+    component RowAction: Item {
+        id: ra
+        property string name: ""
+        property color hoverColor: root.textPrimary
+        signal triggered()
+        implicitWidth: 16
+        implicitHeight: 16
+        AppIcon {
+            anchors.centerIn: parent
+            name: ra.name
+            size: 15
+            color: raMouse.containsMouse ? ra.hoverColor : root.textSecondary
+        }
+        MouseArea {
+            id: raMouse
+            anchors.fill: parent; anchors.margins: -5
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ra.triggered()
         }
     }
 
@@ -997,18 +1048,32 @@ Window {
     }
 
     // Ghost icon button — transparent, subtle hover/press fill. For chevrons and
-    // other icon-only affordances that shouldn't read as a raised chip.
+    // other icon-only affordances that shouldn't read as a raised chip. Set
+    // iconName for a Phosphor glyph, or text for a character.
     component GhostButton: Button {
         id: gb
+        property string iconName: ""
+        property int iconSize: 16
         width: 24
         height: 24
         font.pixelSize: 16
-        contentItem: Text {
-            text: gb.text
-            color: root.textSecondary
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font: gb.font
+        contentItem: Item {
+            Text {
+                anchors.centerIn: parent
+                visible: gb.iconName.length === 0
+                text: gb.text
+                color: root.textSecondary
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                font: gb.font
+            }
+            AppIcon {
+                anchors.centerIn: parent
+                visible: gb.iconName.length > 0
+                name: gb.iconName
+                size: gb.iconSize
+                color: root.textSecondary
+            }
         }
         background: Rectangle {
             radius: root.radiusSmall
@@ -1146,10 +1211,10 @@ Window {
             anchors.fill: parent
             visible: !root.leftPanelOpen
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.leftPanelOpen = true }
-            Text {
+            AppIcon {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top; anchors.topMargin: 18
-                text: "›"; color: root.textSecondary; font.pixelSize: 16
+                name: "caret-right"; size: 16
             }
         }
 
@@ -1216,7 +1281,7 @@ Window {
                     id: panelCollapseBtn
                     anchors.right: parent.right; anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    text: "‹"
+                    iconName: "caret-left"
                     onClicked: root.leftPanelOpen = false
                     HoverHandler { id: panelCollapseHover }
                     GraphiteTip {
@@ -1242,7 +1307,13 @@ Window {
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.margins: 10; anchors.verticalCenter: parent.verticalCenter
                     enabled: engine.hasImage
-                    text: "＋  New preset from current"
+                    text: "New preset from current"
+                    contentItem: Row {
+                        spacing: 6
+                        anchors.centerIn: parent
+                        AppIcon { anchors.verticalCenter: parent.verticalCenter; name: "plus"; size: 13; color: newPresetBtn.enabled ? root.textPrimary : root.textMuted }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: newPresetBtn.text; color: newPresetBtn.enabled ? root.textPrimary : root.textMuted; font.pixelSize: 12; font.weight: Font.Medium }
+                    }
                     onClicked: presetNameDialog.open()
                 }
             }
@@ -1260,7 +1331,7 @@ Window {
                     width: parent.width - 40
                     visible: engine.presets.length === 0
                     horizontalAlignment: Text.AlignHCenter
-                    text: "No presets yet.\nBuild a look, then save it with ＋."
+                    text: "No presets yet.\nBuild a look and save it as a preset."
                     color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3
                 }
 
@@ -1307,15 +1378,9 @@ Window {
                                 visible: groupHover.hovered
                                 anchors.right: parent.right; anchors.rightMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 10
-                                Text {
-                                    text: "✎"; color: root.textSecondary; font.pixelSize: 13
-                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: groupRenameDialog.openFor(modelData.name) }
-                                }
-                                Text {
-                                    text: "×"; color: root.textSecondary; font.pixelSize: 16
-                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: groupDeleteConfirm.openFor(modelData.name, modelData.count) }
-                                }
+                                spacing: 12
+                                RowAction { name: "pencil-simple"; onTriggered: groupRenameDialog.openFor(modelData.name) }
+                                RowAction { name: "x"; hoverColor: root.danger; onTriggered: groupDeleteConfirm.openFor(modelData.name, modelData.count) }
                             }
                         }
 
@@ -1345,15 +1410,9 @@ Window {
                                 visible: presetHover.hovered
                                 anchors.right: parent.right; anchors.rightMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 10
-                                Text {
-                                    text: "✎"; color: root.textSecondary; font.pixelSize: 13
-                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: editPresetDialog.openFor(modelData.id, modelData.name, modelData.group) }
-                                }
-                                Text {
-                                    text: "×"; color: root.textSecondary; font.pixelSize: 16
-                                    MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: engine.deletePreset(modelData.id) }
-                                }
+                                spacing: 12
+                                RowAction { name: "pencil-simple"; onTriggered: editPresetDialog.openFor(modelData.id, modelData.name, modelData.group) }
+                                RowAction { name: "x"; hoverColor: root.danger; onTriggered: engine.deletePreset(modelData.id) }
                             }
                         }
                     }
@@ -1417,10 +1476,10 @@ Window {
             anchors.fill: parent
             visible: !root.libraryOpen
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.libraryOpen = true }
-            Text {
+            AppIcon {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top; anchors.topMargin: 18
-                text: "›"; color: root.textSecondary; font.pixelSize: 16
+                name: "caret-right"; size: 16
             }
         }
 
@@ -1449,7 +1508,7 @@ Window {
                     }
                     GhostButton {
                         id: libCollapseBtn
-                        text: "‹"
+                        iconName: "caret-left"
                         onClicked: root.libraryOpen = false
                     }
                 }
@@ -1479,15 +1538,13 @@ Window {
                     }
                     HoverHandler { id: folderHover }
                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: library.selectFolder(modelData.path) }
-                    Button {
+                    GhostButton {
                         id: rmBtn
                         anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
                         width: 22; height: 22
                         visible: folderHover.hovered
-                        text: "×"
+                        iconName: "x"; iconSize: 14
                         onClicked: library.removeFolder(modelData.path)
-                        contentItem: Text { text: rmBtn.text; color: root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 14 }
-                        background: Rectangle { color: "transparent" }
                     }
                 }
             }
@@ -1519,7 +1576,7 @@ Window {
             anchors.fill: parent
             visible: !root.filmstripOpen
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.filmstripOpen = true }
-            Text { anchors.centerIn: parent; text: "▴"; color: root.textSecondary; font.pixelSize: 12 }
+            AppIcon { anchors.centerIn: parent; name: "caret-up"; size: 14 }
         }
 
         // Expanded: thumbnails + collapse toggle.
@@ -1548,8 +1605,7 @@ Window {
                 id: filmCollapseBtn
                 anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 4
                 width: 22; height: 22
-                font.pixelSize: 12
-                text: "▾"
+                iconName: "caret-down"; iconSize: 14
                 onClicked: root.filmstripOpen = false
             }
             Text {
@@ -1712,7 +1768,7 @@ Window {
                     width: 28; height: 28; radius: 14
                     color: "#e9e9ec"
                     border.width: 1; border.color: "#40000000"
-                    Text { anchors.centerIn: parent; text: "↔"; color: "#161618"; font.pixelSize: 14 }
+                    AppIcon { anchors.centerIn: parent; name: "arrows-left-right"; size: 16; color: "#161618" }
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -2231,8 +2287,8 @@ Window {
                                     border.color: stockBox.activeFocus ? root.border : root.hair
                                 }
                                 indicator: ChevronToggle {
-                                    x: stockBox.width - 24
-                                    y: (stockBox.height - 7) / 2
+                                    x: stockBox.width - 26
+                                    y: (stockBox.height - 14) / 2
                                     open: false
                                 }
                                 popup: Popup {
@@ -2252,10 +2308,16 @@ Window {
                                             color: root.inset
                                             border.width: 1
                                             border.color: stockSearch.activeFocus ? root.border : root.hair
+                                            AppIcon {
+                                                anchors.left: parent.left; anchors.leftMargin: 10
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                name: "magnifying-glass"; size: 15
+                                                color: root.textMuted
+                                            }
                                             TextField {
                                                 id: stockSearch
                                                 anchors.fill: parent
-                                                leftPadding: 10; rightPadding: 10
+                                                leftPadding: 33; rightPadding: 10
                                                 verticalAlignment: TextInput.AlignVCenter
                                                 placeholderText: "Search film stocks…"
                                                 color: root.textPrimary
@@ -2434,7 +2496,7 @@ Window {
                                     border.width: 1
                                     border.color: printBox.activeFocus ? root.border : root.hair
                                 }
-                                indicator: ChevronToggle { x: printBox.width - 24; y: (printBox.height - 7) / 2; open: false }
+                                indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: false }
                                 popup: Popup {
                                     y: printBox.height + 4
                                     width: printBox.width
