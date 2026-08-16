@@ -33,6 +33,7 @@ Window {
     readonly property color danger: "#e0655b"
     property bool libraryOpen: true       // left folders pane
     property bool filmstripOpen: true     // bottom thumbnail strip
+    property bool leftPanelOpen: true     // left presets/history panel (Lightroom mode)
     property bool peekBefore: false       // "\" — momentary before/after (Lightroom-style toggle)
 
     // ── Keyboard shortcuts (Tier 1) ─────────────────────────────────────
@@ -1054,7 +1055,8 @@ Window {
         anchors.bottom: filmstrip.top
         // Presets and history are navigational, not the primary working
         // surface. Keep the rail readable while giving the photo more room.
-        width: engine.lightroomRoundTrip ? 232 : 0
+        // Collapses to a slim reopen rail so the photo can fill the window.
+        width: engine.lightroomRoundTrip ? (root.leftPanelOpen ? 232 : 22) : 0
         visible: engine.lightroomRoundTrip
         color: root.bg
         border.width: 1
@@ -1064,9 +1066,22 @@ Window {
         property bool presetsOpen: true
         property bool historyOpen: true
         readonly property int headerH: 40
+        readonly property int topBarH: 30
         // Body height shared by the two lists once the fixed chrome is removed.
-        readonly property real bodyH: Math.max(0, height - 2 * headerH - 44)
+        readonly property real bodyH: Math.max(0, height - topBarH - 2 * headerH - 44)
         function sectionH(mine, other) { return !mine ? 0 : (other ? bodyH * 0.5 : bodyH) }
+
+        // Collapsed: a slim rail with a reopen chevron (matches the library pane).
+        Item {
+            anchors.fill: parent
+            visible: !root.leftPanelOpen
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.leftPanelOpen = true }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: parent.top; anchors.topMargin: 18
+                text: "›"; color: root.textSecondary; font.pixelSize: 16
+            }
+        }
 
         // Group collapse state (map group name -> collapsed bool).
         property var collapsedGroups: ({})
@@ -1120,6 +1135,30 @@ Window {
 
         Column {
             anchors.fill: parent
+            visible: root.leftPanelOpen
+
+            // Panel top bar — right-aligned collapse control.
+            Item {
+                width: parent.width
+                height: leftPanel.topBarH
+                Button {
+                    id: panelCollapseBtn
+                    width: 24; height: 24
+                    anchors.right: parent.right; anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "‹"
+                    onClicked: root.leftPanelOpen = false
+                    contentItem: Text { text: panelCollapseBtn.text; color: root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 16 }
+                    background: Rectangle { radius: 6; color: panelCollapseBtn.down ? "#20ffffff" : "transparent" }
+                    HoverHandler { id: panelCollapseHover }
+                    GraphiteTip {
+                        parent: panelCollapseBtn
+                        x: -6; y: panelCollapseBtn.height + 4
+                        visible: panelCollapseHover.hovered
+                        text: "Hide panel"
+                    }
+                }
+            }
 
             // ── PRESETS ────────────────────────────────────────────────
             SectionHeader {
