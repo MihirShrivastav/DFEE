@@ -646,11 +646,11 @@ Window {
             font.weight: Font.Medium
         }
         background: Rectangle {
-            radius: 7
-            color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? "#26262b" : "#2e2e34")
+            radius: root.radiusControl
+            color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? root.ctrlPressed : root.ctrl)
             border.width: 1
             border.color: geoBtn.active ? "#4a4a52" : root.hair
-            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
+            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: root.bevel }
         }
         HoverHandler { id: geoHover }
         GraphiteTip {
@@ -969,6 +969,53 @@ Window {
         }
     }
 
+    // Compact raised utility button (Reset, Open, New preset, Add). Flat ctrl fill,
+    // hairline border, subtle top bevel. Size via width/height at the call site.
+    component UtilityButton: Button {
+        id: ub
+        height: 28
+        font.pixelSize: 12
+        font.weight: Font.Medium
+        contentItem: Text {
+            text: ub.text
+            color: ub.enabled ? root.textPrimary : root.textMuted
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font: ub.font
+        }
+        background: Rectangle {
+            radius: root.radiusControl
+            color: ub.down ? root.ctrlPressed : root.ctrl
+            border.width: 1
+            border.color: root.hair
+            opacity: ub.enabled ? 1.0 : 0.5
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
+                height: 1; radius: 1; color: root.bevel; visible: ub.enabled
+            }
+        }
+    }
+
+    // Ghost icon button — transparent, subtle hover/press fill. For chevrons and
+    // other icon-only affordances that shouldn't read as a raised chip.
+    component GhostButton: Button {
+        id: gb
+        width: 24
+        height: 24
+        font.pixelSize: 16
+        contentItem: Text {
+            text: gb.text
+            color: root.textSecondary
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font: gb.font
+        }
+        background: Rectangle {
+            radius: root.radiusSmall
+            color: gb.down ? "#20ffffff" : (gb.hovered ? root.hair : "transparent")
+        }
+    }
+
     // Small pill/chip toggle — used by the preset save dialog's group picker.
     component PresetChip: Rectangle {
         property string label: ""
@@ -1165,15 +1212,12 @@ Window {
             Item {
                 width: parent.width
                 height: leftPanel.topBarH
-                Button {
+                GhostButton {
                     id: panelCollapseBtn
-                    width: 24; height: 24
                     anchors.right: parent.right; anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     text: "‹"
                     onClicked: root.leftPanelOpen = false
-                    contentItem: Text { text: panelCollapseBtn.text; color: root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 16 }
-                    background: Rectangle { radius: 6; color: panelCollapseBtn.down ? "#20ffffff" : "transparent" }
                     HoverHandler { id: panelCollapseHover }
                     GraphiteTip {
                         parent: panelCollapseBtn
@@ -1193,19 +1237,12 @@ Window {
             Item {
                 width: parent.width; height: leftPanel.presetsOpen ? 40 : 0
                 visible: leftPanel.presetsOpen
-                Button {
+                UtilityButton {
                     id: newPresetBtn
                     anchors.left: parent.left; anchors.right: parent.right
                     anchors.margins: 10; anchors.verticalCenter: parent.verticalCenter
-                    height: 28
                     enabled: engine.hasImage
                     text: "＋  New preset from current"
-                    contentItem: Text { text: newPresetBtn.text; color: newPresetBtn.enabled ? root.textPrimary : root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
-                    background: Rectangle {
-                        radius: 7; color: newPresetBtn.down ? "#26262b" : "#2e2e34"
-                        border.width: 1; border.color: root.hair; opacity: newPresetBtn.enabled ? 1.0 : 0.5
-                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
-                    }
                     onClicked: presetNameDialog.open()
                 }
             }
@@ -1404,21 +1441,16 @@ Window {
                 Row {
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                     spacing: 6
-                    Button {
+                    UtilityButton {
                         id: addFolderBtn
                         width: 50; height: 24
                         text: "Add"
                         onClicked: folderDialog.open()
-                        contentItem: Text { text: addFolderBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                        background: Rectangle { radius: 6; color: addFolderBtn.down ? "#26262b" : "#2e2e34"; border.width: 1; border.color: root.hair }
                     }
-                    Button {
+                    GhostButton {
                         id: libCollapseBtn
-                        width: 24; height: 24
                         text: "‹"
                         onClicked: root.libraryOpen = false
-                        contentItem: Text { text: libCollapseBtn.text; color: root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 16 }
-                        background: Rectangle { radius: 6; color: libCollapseBtn.down ? "#20ffffff" : "transparent" }
                     }
                 }
             }
@@ -1512,14 +1544,13 @@ Window {
                     name: modelData.name
                 }
             }
-            Button {
+            GhostButton {
                 id: filmCollapseBtn
                 anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 4
                 width: 22; height: 22
+                font.pixelSize: 12
                 text: "▾"
                 onClicked: root.filmstripOpen = false
-                contentItem: Text { text: filmCollapseBtn.text; color: root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
-                background: Rectangle { radius: 6; color: filmCollapseBtn.down ? "#20ffffff" : "transparent" }
             }
             Text {
                 anchors.centerIn: parent
@@ -1941,25 +1972,15 @@ Window {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: 8
 
-                    Button {
+                    UtilityButton {
                         id: resetAllBtn
                         width: visible ? 68 : 0
-                        height: 27
                         // Reset is meaningless with no image; disable rather than hide it
                         // so its slot in the header never jumps around (Lightroom-style).
                         enabled: engine.hasImage
                         visible: true
                         text: "Reset"
                         onClicked: resetConfirm.open()
-                        contentItem: Text { text: resetAllBtn.text; color: resetAllBtn.enabled ? root.textPrimary : root.textMuted; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
-                        background: Rectangle {
-                            radius: 7
-                            color: resetAllBtn.down ? "#26262b" : "#2e2e34"
-                            border.width: 1
-                            border.color: root.hair
-                            opacity: resetAllBtn.enabled ? 1.0 : 0.5
-                            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
-                        }
                         HoverHandler { id: resetAllHover }
                         GraphiteTip {
                             parent: resetAllBtn
@@ -1970,21 +1991,12 @@ Window {
                         }
                     }
 
-                    Button {
+                    UtilityButton {
                         id: openBtn
                         width: visible ? 68 : 0
-                        height: 27
                         visible: !engine.lightroomRoundTrip
                         text: "Open"
                         onClicked: openDialog.open()
-                        contentItem: Text { text: openBtn.text; color: root.textPrimary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
-                        background: Rectangle {
-                            radius: 7
-                            color: openBtn.down ? "#26262b" : "#2e2e34"
-                            border.width: 1
-                            border.color: root.hair
-                            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
-                        }
                     }
                 }
             }
@@ -3034,7 +3046,7 @@ Window {
                                     ]
                                     onActivated: previewCanvas.selectAspect(model[currentIndex].r)
                                     contentItem: Text { leftPadding: 10; text: aspectBox.displayText; color: root.textPrimary; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
-                                    background: Rectangle { radius: 7; color: "#26262b"; border.width: 1; border.color: root.hair }
+                                    background: Rectangle { radius: root.radiusControl; color: root.inset; border.width: 1; border.color: root.hair }
                                 }
 
                                 GeoButton {
