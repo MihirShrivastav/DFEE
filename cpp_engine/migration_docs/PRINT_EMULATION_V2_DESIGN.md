@@ -42,9 +42,12 @@ which must be verified against representative images.
 1. **Tone response is one print characteristic curve.** The curve is evaluated from
    linear luminance relative to an 18-percent print aim. It has an authored middle
    slope, usable latitude, toe and shoulder joins, and paper black/white limits.
-2. **Strength blends a tone delta.** At zero strength the stage is exact identity. At
-   partial strength it blends source and print tone in perceptual tone, then returns to
-   linear RGB with a luminance-preserving scale. It never linearly mixes two images.
+2. **Strength blends a neutral-print tone delta.** The print stage receives an already
+   developed image, so it subtracts a neutral print aim from the authored material
+   curve before adding that delta to source tone. At zero strength the stage is exact
+   identity. At partial strength it blends in perceptual tone, then returns to linear
+   RGB with a luminance-preserving scale. It never linearly mixes two images or
+   re-develops a display-referred source.
 3. **Dye behavior is restrained and tone-zone aware.** Neutral balance and optional
    zone biases operate in OKLab after tone mapping. Chroma changes are proportional to
    existing chroma, so neutral patches remain neutral unless the profile deliberately

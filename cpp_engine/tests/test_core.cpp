@@ -1973,6 +1973,24 @@ void test_print_v2_material_response() {
     assert(printed.at(4, 0, 0) > printed.at(0, 0, 0));
     assert(printed.at(252, 0, 0) < printed.at(256, 0, 0));
 
+    // A material that matches the neutral print aim must not re-develop a
+    // display-referred source. It is an exact tone delta before the colour step.
+    auto neutral_aim = pf;
+    neutral_aim.characteristic_curve = {
+        .gamma = 1.0F,
+        .latitude_stops = 6.4F,
+        .toe_onset = 2.0F,
+        .toe_hardness = 0.85F,
+        .shoulder_onset = 1.8F,
+        .shoulder_hardness = 0.95F,
+        .d_min = 0.0F,
+        .d_max = 1.0F,
+    };
+    const auto neutral_output = renderer.apply_print_finish(ramp, neutral_aim);
+    for (std::size_t i = 0; i < ramp.value_count(); ++i) {
+        assert(std::fabs(neutral_output.pixels[i] - ramp.pixels[i]) < 2.0e-4F);
+    }
+
     auto open_paper = pf;
     open_paper.print_black_point = 100.0F;
     const auto opened = renderer.apply_print_finish(ramp, open_paper);

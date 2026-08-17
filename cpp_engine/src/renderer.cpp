@@ -2581,6 +2581,21 @@ Image FilmRenderer::apply_print_finish(
             curve.toe_hardness = std::min(2.50F, curve.toe_hardness * (1.0F - paper_black * 0.28F));
         }
 
+        // Print happens after DFEE's camera-film response, which is already a
+        // viewable display-referred image. Applying a print curve as an absolute
+        // display transform would re-develop that image and darken every ordinary
+        // shadow. Compare the authored material against a neutral print aim
+        // instead, then apply only that tone delta to the rendered source.
+        const CharacteristicCurve neutral_print_aim{
+            .gamma = 1.0F,
+            .latitude_stops = 6.4F,
+            .toe_onset = 2.0F,
+            .toe_hardness = 0.85F,
+            .shoulder_onset = 1.8F,
+            .shoulder_hardness = 0.95F,
+            .d_min = 0.0F,
+            .d_max = 1.0F,
+        };
         const float head_c = clampf(print_finish.print_c / 100.0F, -1.0F, 1.0F);
         const float head_m = clampf(print_finish.print_m / 100.0F, -1.0F, 1.0F);
         const float head_y = clampf(print_finish.print_y / 100.0F, -1.0F, 1.0F);
@@ -2592,8 +2607,11 @@ Image FilmRenderer::apply_print_finish(
             const float b = std::max(0.0F, rgb_linear.pixels[base + 2]);
             const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * g + 0.0722F * b);
             const float source_tone = std::pow(luma, 1.0F / 2.2F);
-            const float print_tone = curve_eval(curve, scene_logE(luma, 0.18F, 0.0F));
-            const float output_tone = std::max(0.0F, source_tone + blend * (print_tone - source_tone));
+            const float log_e = scene_logE(luma, 0.18F, 0.0F);
+            const float neutral_tone = curve_eval(neutral_print_aim, log_e);
+            const float print_tone = curve_eval(curve, log_e);
+            const float output_tone = std::max(
+                0.0F, source_tone + blend * (print_tone - neutral_tone));
             const float output_luma = std::pow(output_tone, 2.2F);
             const float gain = luma > 1.0e-5F ? std::min(output_luma / luma, 16.0F) : 0.0F;
 
