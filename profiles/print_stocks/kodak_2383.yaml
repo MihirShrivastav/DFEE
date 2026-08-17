@@ -1,11 +1,20 @@
 print_stock_id: kodak_2383
 print_stock_name: Kodak Vision 2383
+print_pipeline: print_v2
 # The industry-standard theatrical print film. Applied as a final photochemical
 # stage on top of a developed camera negative. Defines "the Hollywood look" —
 # warm highlights, rich blacks, golden skin tones, gentle highlight rolloff.
 # Used on: The Dark Knight, No Country for Old Men, Inception, There Will Be Blood.
 
 tone:
+  gamma: 1.03
+  latitude_stops: 6.4
+  toe_onset: 1.95
+  toe_hardness: 0.86
+  shoulder_onset: 1.75
+  shoulder_hardness: 0.96
+  d_min: 0.010
+  d_max: 0.985
   shadow_lift: 0.008          # Lower D-min for richer, more sophisticated blacks
   contrast_boost: 1.04        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.78     # Highlight compression point — where print starts rolling off
@@ -19,6 +28,13 @@ tone:
   channel_shoulder_mult: [1.0, 1.0, 0.92]
 
 color:
+  neutral_balance_lab: [0.0, 0.0, 0.0]
+  v2_shadow_bias_lab: [0.0, -0.05, -0.12]
+  v2_midtone_bias_lab: [0.0, 0.10, 0.20]
+  v2_highlight_bias_lab: [0.0, 0.0, 0.04]
+  chroma_scale: 1.035
+  shadow_chroma_scale: 0.985
+  highlight_chroma_scale: 0.950
   shadow_bias_lab: [0.3, -0.1, -0.5]  # Cool-neutral shadows — separation vs warm highlights (depth, not a flat wash)
   midtone_bias_lab: [0.0, 0.5, 1.1]   # Warm golden skin midtones (gentler)
   highlight_bias_lab: [0.0, 0.2, 0.9] # Warm highlights — the signature 2383 trait

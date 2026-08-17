@@ -326,7 +326,7 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
         {"sharpness", {0.0, 2.0}},
         {"sharpness_mask", {0.0, 1.0}},
         // Print finish
-        {"print_strength", {0.0, 2.0}},
+        {"print_strength", {0.0, 1.0}},
         {"print_c", {-100.0, 100.0}},
         {"print_m", {-100.0, 100.0}},
         {"print_y", {-100.0, 100.0}},

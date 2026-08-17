@@ -2551,6 +2551,84 @@ Image FilmRenderer::apply_print_finish(
         return rgb_linear;
     }
 
+    if (print_finish.use_print_v2) {
+        // A colour print is a single timed exposure-to-density response. Keep its
+        // characteristic curve in perceptual tone, just as filmic_v4 does, then
+        // restore linear light by a luminance-preserving scale. This deliberately
+        // replaces the legacy stack of RGB multipliers, black lift, and a separate
+        // highlight scaler which could fight each other and destroy the image.
+        const float blend = clamp01(strength);
+        CharacteristicCurve curve = print_finish.characteristic_curve;
+        curve.gamma = clampf(
+            curve.gamma * (1.0F + clampf(print_finish.print_contrast / 100.0F, -1.0F, 1.0F) * 0.20F),
+            0.55F,
+            1.65F);
+        // Legacy Black Point remains available as a narrowly bounded paper-base
+        // adjustment. It changes the curve endpoint rather than lifting every pixel.
+        curve.d_min = clampf(
+            curve.d_min + clampf(print_finish.print_black_point / 100.0F, -1.0F, 1.0F) * 0.035F,
+            0.0F,
+            std::min(0.18F, curve.d_max - 0.05F));
+
+        const float head_c = clampf(print_finish.print_c / 100.0F, -1.0F, 1.0F);
+        const float head_m = clampf(print_finish.print_m / 100.0F, -1.0F, 1.0F);
+        const float head_y = clampf(print_finish.print_y / 100.0F, -1.0F, 1.0F);
+        Image out(rgb_linear.width, rgb_linear.height, 3);
+        parallel_for_index(static_cast<std::ptrdiff_t>(rgb_linear.pixel_count()), [&](std::ptrdiff_t pidx) {
+            const std::size_t base = static_cast<std::size_t>(pidx) * 3U;
+            const float r = std::max(0.0F, rgb_linear.pixels[base + 0]);
+            const float g = std::max(0.0F, rgb_linear.pixels[base + 1]);
+            const float b = std::max(0.0F, rgb_linear.pixels[base + 2]);
+            const float luma = std::max(0.0F, 0.2126F * r + 0.7152F * g + 0.0722F * b);
+            const float source_tone = std::pow(luma, 1.0F / 2.2F);
+            const float print_tone = curve_eval(curve, scene_logE(luma, 0.18F, 0.0F));
+            const float output_tone = std::max(0.0F, source_tone + blend * (print_tone - source_tone));
+            const float output_luma = std::pow(output_tone, 2.2F);
+            const float gain = luma > 1.0e-5F ? std::min(output_luma / luma, 16.0F) : 0.0F;
+
+            const OklabPixel source_lab = rgb_to_oklab_pixel(r * gain, g * gain, b * gain);
+            OklchPixel lch = oklab_to_oklch_pixel(source_lab);
+            const float shadow = 1.0F - smoothstep01(0.12F, 0.45F, output_tone);
+            const float highlight = smoothstep01(0.62F, 0.94F, output_tone);
+            const float midtone = clamp01(1.0F - shadow - highlight);
+            const float chroma_scale = clampf(
+                print_finish.chroma_scale * midtone +
+                    print_finish.shadow_chroma_scale * shadow +
+                    print_finish.highlight_chroma_scale * highlight,
+                0.65F,
+                1.35F);
+            lch.c = std::max(0.0F, lch.c * (1.0F + blend * (chroma_scale - 1.0F)));
+            OklabPixel print_lab = oklch_to_oklab_pixel(lch);
+
+            // Profile balance and printer timing act around neutral, are strongest in
+            // printable tone, and are too small to turn a timing correction into a
+            // broad RGB channel clip.
+            const float printable = std::sin(std::numbers::pi_v<float> * clamp01(output_tone));
+            const float profile_scale = blend * 0.01F;
+            print_lab.l += print_finish.neutral_balance_lab[0] * profile_scale * printable;
+            print_lab.a += print_finish.neutral_balance_lab[1] * profile_scale * printable;
+            print_lab.b += print_finish.neutral_balance_lab[2] * profile_scale * printable;
+            const float zone_scale = blend * printable;
+            print_lab.l += (print_finish.shadow_bias_lab[0] * shadow +
+                print_finish.midtone_bias_lab[0] * midtone +
+                print_finish.highlight_bias_lab[0] * highlight) * profile_scale;
+            print_lab.a += (print_finish.shadow_bias_lab[1] * shadow +
+                print_finish.midtone_bias_lab[1] * midtone +
+                print_finish.highlight_bias_lab[1] * highlight) * profile_scale;
+            print_lab.b += (print_finish.shadow_bias_lab[2] * shadow +
+                print_finish.midtone_bias_lab[2] * midtone +
+                print_finish.highlight_bias_lab[2] * highlight) * profile_scale;
+            print_lab.a += (head_m - head_c) * 0.028F * zone_scale;
+            print_lab.b += (head_y - head_c * 0.20F) * 0.022F * zone_scale;
+
+            const auto pixel = oklab_to_rgb_pixel(print_lab);
+            out.pixels[base + 0] = pixel[0];
+            out.pixels[base + 1] = pixel[1];
+            out.pixels[base + 2] = pixel[2];
+        });
+        return out;
+    }
+
     Image rgb = rgb_linear;
     const float print_c = print_finish.print_c / 100.0F;
     const float print_m = print_finish.print_m / 100.0F;

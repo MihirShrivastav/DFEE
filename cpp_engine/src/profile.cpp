@@ -288,15 +288,20 @@ void validate_native_print_stock_contract(const PrintStockProfile& profile) {
     static const std::unordered_set<std::string> kNumericFields{
         "tone.shadow_lift", "tone.contrast_boost", "tone.highlight_rolloff", "tone.highlight_rolloff_rate", "tone.toe_depth",
         "tone.print_toe", "tone.print_shoulder",
+        "tone.gamma", "tone.latitude_stops", "tone.toe_onset", "tone.toe_hardness",
+        "tone.shoulder_onset", "tone.shoulder_hardness", "tone.d_min", "tone.d_max",
+        "color.chroma_scale", "color.shadow_chroma_scale", "color.highlight_chroma_scale",
         "color.blue_suppression", "color.red_boost", "color.green_shift", "color.saturation_scale",
         "grain.strength", "grain.size",
     };
     static const std::unordered_set<std::string> kArrayFields{
         "color.shadow_bias_lab", "color.midtone_bias_lab", "color.highlight_bias_lab",
+        "color.neutral_balance_lab", "color.v2_shadow_bias_lab", "color.v2_midtone_bias_lab",
+        "color.v2_highlight_bias_lab",
         "tone.channel_toe_mult", "tone.channel_shoulder_mult",
     };
     static const std::unordered_set<std::string> kStringFields{
-        "print_stock_id", "print_stock_name",
+        "print_stock_id", "print_stock_name", "print_pipeline",
     };
     validate_profile_fields(profile, kNumericFields, kArrayFields, kStringFields, {}, "Print stock");
 }

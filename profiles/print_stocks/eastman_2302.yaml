@@ -1,5 +1,6 @@
 print_stock_id: eastman_2302
 print_stock_name: Eastman Color Print 5381
+print_pipeline: print_v2
 # Classic 1970s–80s theatrical print stock era. Higher contrast, warmer orange base
 # density, slightly faded dye stability (period-accurate), rich deep blacks.
 # The look of classic Scorsese, Coppola, Kubrick — Taxi Driver, The Godfather era.
@@ -7,6 +8,14 @@ print_stock_name: Eastman Color Print 5381
 # the cyan dye fades first, shifting towards warm orange-red over time.
 
 tone:
+  gamma: 0.97
+  latitude_stops: 6.1
+  toe_onset: 2.05
+  toe_hardness: 0.78
+  shoulder_onset: 1.65
+  shoulder_hardness: 0.86
+  d_min: 0.026
+  d_max: 0.972
   shadow_lift: 0.018          # Vintage D-min
   contrast_boost: 1.02        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.72     # Earlier rolloff — old prints compressed highlights faster
@@ -19,6 +28,13 @@ tone:
   channel_shoulder_mult: [1.06, 1.0, 0.85]
 
 color:
+  neutral_balance_lab: [0.0, 0.04, 0.08]
+  v2_shadow_bias_lab: [0.0, 0.04, 0.08]
+  v2_midtone_bias_lab: [0.0, 0.10, 0.22]
+  v2_highlight_bias_lab: [0.0, 0.05, 0.10]
+  chroma_scale: 0.955
+  shadow_chroma_scale: 0.920
+  highlight_chroma_scale: 0.900
   shadow_bias_lab: [0.6, 0.2, 0.4]    # Gently warm-faded shadows (vintage lift, not orange-brown mud)
   midtone_bias_lab: [0.0, 0.7, 1.6]   # Golden-orange Eastman midtones (much gentler)
   highlight_bias_lab: [0.0, 0.4, 1.0] # Warm vintage highlights

@@ -228,6 +228,15 @@ struct PrintFinishPlan {
     float saturation_scale = 1.0F;
     float grain_strength = 0.0F;
     float grain_size = 0.3F;
+
+    // Print V2 models the print as one bounded exposure-to-density response. Legacy
+    // profiles retain the original path until they are individually reauthored.
+    bool use_print_v2 = false;
+    CharacteristicCurve characteristic_curve{};
+    std::array<float, 3> neutral_balance_lab{0.0F, 0.0F, 0.0F};
+    float chroma_scale = 1.0F;
+    float shadow_chroma_scale = 1.0F;
+    float highlight_chroma_scale = 1.0F;
 };
 
 struct RenderPlan {

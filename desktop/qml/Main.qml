@@ -2695,12 +2695,12 @@ Window {
                                 spacing: 12
                                 visible: printCard.active
                                 opacity: printCard.active ? 1.0 : 0.4
-                                FilmSlider { controlKey: "print_strength"; label: "Print strength"; minimum: 0; maximum: 2; increment: 0.05; decimals: true; neutral: 1.0; tooltip: "How strongly the print-stock emulation is applied over the negative." }
-                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger color head — subtractive cyan filtration (removes red). Forward cools the print." }
-                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger color head — subtractive magenta filtration (removes green)." }
-                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Enlarger color head — subtractive yellow filtration (removes blue). Forward warms the print." }
-                                FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Steepness of the print's tone curve — the paper grade." }
-                                FilmSlider { controlKey: "print_black_point"; label: "Black point (lift)"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Print base density — lifts or deepens the darkest blacks of the print." }
+                                FilmSlider { controlKey: "print_strength"; label: "Print strength"; minimum: 0; maximum: 1; increment: 0.05; decimals: true; neutral: 1.0; tooltip: "Blend between the source and the selected print material. One is the calibrated stock response." }
+                                FilmSlider { controlKey: "print_c"; label: "Color head: cyan"; minimum: -100; maximum: 100; bipolar: true; tooltip: "A bounded cyan printer-timing correction. It cools the printable mid-scale without clipping red." }
+                                FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true; tooltip: "A bounded magenta printer-timing correction. It shifts the printable mid-scale without clipping green." }
+                                FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true; tooltip: "A bounded yellow printer-timing correction. It warms the printable mid-scale without clipping blue." }
+                                FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Adjust the middle slope of the selected print material while retaining its toe and shoulder." }
+                                FilmSlider { controlKey: "print_black_point"; label: "Paper black"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Adjust the print material's paper-black endpoint without globally lifting or crushing shadows." }
                             }
                         }
                     }

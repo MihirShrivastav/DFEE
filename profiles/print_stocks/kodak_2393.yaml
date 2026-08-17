@@ -1,10 +1,19 @@
 print_stock_id: kodak_2393
 print_stock_name: Kodak Vision Premier 2393
+print_pipeline: print_v2
 # Premium discontinued theatrical print stock. Deeper blacks, richer saturation,
 # higher contrast than 2383. Often described as "OLED-like" — punchy D-max, vivid
 # dyes, and more aggressive compression. Sought after for high-impact theatrical releases.
 
 tone:
+  gamma: 1.13
+  latitude_stops: 5.8
+  toe_onset: 1.72
+  toe_hardness: 1.00
+  shoulder_onset: 1.55
+  shoulder_hardness: 1.08
+  d_min: 0.007
+  d_max: 0.988
   shadow_lift: 0.004          # Clean, deep OLED-like blacks
   contrast_boost: 1.06        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.75     # Earlier highlight shoulder — compresses sooner
@@ -17,6 +26,13 @@ tone:
   channel_shoulder_mult: [1.02, 1.0, 0.90]
 
 color:
+  neutral_balance_lab: [0.0, 0.0, 0.0]
+  v2_shadow_bias_lab: [0.0, -0.03, -0.08]
+  v2_midtone_bias_lab: [0.0, 0.12, 0.25]
+  v2_highlight_bias_lab: [0.0, 0.0, 0.03]
+  chroma_scale: 1.085
+  shadow_chroma_scale: 1.000
+  highlight_chroma_scale: 0.965
   shadow_bias_lab: [0.3, -0.1, -0.5]  # Cool-neutral shadows for print separation/depth
   midtone_bias_lab: [0.0, 0.6, 1.3]   # Vivid warm golden midtones (gentler than before)
   highlight_bias_lab: [0.0, 0.2, 0.8] # Warm highlights

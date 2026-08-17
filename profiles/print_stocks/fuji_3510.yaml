@@ -1,10 +1,19 @@
 print_stock_id: fuji_3510
 print_stock_name: Fujifilm Eterna CP 3510
+print_pipeline: print_v2
 # Fujifilm's theatrical color print film — an alternative to Kodak's warmer palette.
 # Known for cooler, teal-leaning shadows, muted pastel tones, and a more atmospheric,
 # moody quality. The "Fuji look" — favored by Sofia Coppola, Wes Anderson era of cinema.
 
 tone:
+  gamma: 0.99
+  latitude_stops: 6.8
+  toe_onset: 2.10
+  toe_hardness: 0.78
+  shoulder_onset: 1.92
+  shoulder_hardness: 0.82
+  d_min: 0.013
+  d_max: 0.985
   shadow_lift: 0.010          # Sophisticated soft shadow base
   contrast_boost: 1.02        # Small global punch on top of the per-channel print curve
   highlight_rolloff: 0.80     # Later highlight rolloff — holds highlights longer
@@ -17,6 +26,13 @@ tone:
   channel_shoulder_mult: [0.94, 1.0, 1.03]
 
 color:
+  neutral_balance_lab: [0.0, -0.01, -0.03]
+  v2_shadow_bias_lab: [0.0, -0.08, -0.16]
+  v2_midtone_bias_lab: [0.0, -0.03, 0.02]
+  v2_highlight_bias_lab: [0.0, -0.02, -0.04]
+  chroma_scale: 0.970
+  shadow_chroma_scale: 0.965
+  highlight_chroma_scale: 0.940
   shadow_bias_lab: [0.2, -0.6, -1.0]  # Subtle teal shadow bias
   midtone_bias_lab: [0.0, 0.2, 0.5]   # Muted, desaturated midtones
   highlight_bias_lab: [0.0, -0.2, 0.3] # Cool-neutral highlights

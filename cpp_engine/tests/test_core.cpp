@@ -1922,6 +1922,91 @@ void test_print_per_channel_curve() {
     }
 }
 
+void test_print_v2_material_response() {
+    dfee::Image ramp(257, 1, 3);
+    for (int x = 0; x < ramp.width; ++x) {
+        const float value = static_cast<float>(x) / static_cast<float>(ramp.width - 1);
+        ramp.at(x, 0, 0) = value;
+        ramp.at(x, 0, 1) = value;
+        ramp.at(x, 0, 2) = value;
+    }
+
+    dfee::PrintFinishPlan pf;
+    pf.use_print_v2 = true;
+    pf.strength = 1.0F;
+    pf.characteristic_curve = {
+        .gamma = 1.04F,
+        .latitude_stops = 6.2F,
+        .toe_onset = 1.9F,
+        .toe_hardness = 0.9F,
+        .shoulder_onset = 1.7F,
+        .shoulder_hardness = 1.0F,
+        .d_min = 0.012F,
+        .d_max = 0.985F,
+    };
+    pf.chroma_scale = 1.0F;
+    pf.shadow_chroma_scale = 1.0F;
+    pf.highlight_chroma_scale = 1.0F;
+    const dfee::FilmRenderer renderer;
+
+    // Zero strength is exact identity, which makes print strength safe for recipes
+    // and allows users to audition a stock without changing source placement.
+    auto disabled = pf;
+    disabled.strength = 0.0F;
+    const auto identity = renderer.apply_print_finish(ramp, disabled);
+    assert(identity.pixels == ramp.pixels);
+
+    const auto printed = renderer.apply_print_finish(ramp, pf);
+    float previous = -1.0F;
+    for (int x = 0; x < ramp.width; ++x) {
+        const float r = printed.at(x, 0, 0);
+        const float g = printed.at(x, 0, 1);
+        const float b = printed.at(x, 0, 2);
+        assert(r >= previous - 1.0e-5F);
+        assert(r >= 0.0F && r <= 1.0F);
+        assert(std::fabs(r - g) < 1.0e-5F);
+        assert(std::fabs(r - b) < 1.0e-5F);
+        previous = r;
+    }
+    // The material curve leaves useful separation close to both endpoints rather
+    // than flattening the toe or shoulder into a hard global clip.
+    assert(printed.at(4, 0, 0) > printed.at(0, 0, 0));
+    assert(printed.at(252, 0, 0) < printed.at(256, 0, 0));
+
+    auto timed = pf;
+    timed.print_c = 100.0F;
+    timed.print_m = -100.0F;
+    timed.print_y = 100.0F;
+    const auto timing_extreme = renderer.apply_print_finish(ramp, timed);
+    for (float value : timing_extreme.pixels) {
+        assert(std::isfinite(value));
+        assert(value >= 0.0F && value <= 1.0F);
+    }
+}
+
+void test_print_v2_profile_roles() {
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const auto camera_stock = dfee::load_film_stock_profile(repo_root / "profiles" / "stocks" / "portra_400.yaml");
+    const auto print_2383 = dfee::load_print_stock_profile(
+        repo_root / "profiles" / "print_stocks" / "kodak_2383.yaml");
+    const auto print_2393 = dfee::load_print_stock_profile(
+        repo_root / "profiles" / "print_stocks" / "kodak_2393.yaml");
+    dfee::SolverInput input;
+    input.tonal_distribution.midtone_anchor = 0.18F;
+    input.tonal_distribution.highlight_headroom = 0.3F;
+    input.tonal_distribution.shadow_depth = 0.08F;
+    const dfee::RenderPlanSolver solver;
+    const auto plan_2383 = solver.solve(input, camera_stock, {}, &print_2383);
+    const auto plan_2393 = solver.solve(input, camera_stock, {}, &print_2393);
+    assert(plan_2383.print_finish.has_value());
+    assert(plan_2393.print_finish.has_value());
+    assert(plan_2383.print_finish->use_print_v2);
+    assert(plan_2393.print_finish->use_print_v2);
+    assert(plan_2393.print_finish->characteristic_curve.gamma >
+        plan_2383.print_finish->characteristic_curve.gamma);
+    assert(plan_2393.print_finish->chroma_scale > plan_2383.print_finish->chroma_scale);
+}
+
 void test_print_finish() {
     dfee::Image rgb(8, 8, 3);
     for (int y = 0; y < rgb.height; ++y) {
@@ -4056,6 +4141,8 @@ int main() {
         test_filmic_grain_profile_placement_and_texture_masking();
         test_print_finish();
         test_print_per_channel_curve();
+        test_print_v2_material_response();
+        test_print_v2_profile_roles();
         test_profile_loading();
 #if DFEE_HAS_OPENCV
         test_tiff_ingestion();

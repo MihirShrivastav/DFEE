@@ -949,15 +949,42 @@ RenderPlan RenderPlanSolver::solve(
             .print_shoulder = get_numeric(print_stock->numeric_values, "tone.print_shoulder", 0.0F),
             .channel_toe_mult = get_array3(print_stock->numeric_arrays, "tone.channel_toe_mult", {1.0F, 1.0F, 1.0F}),
             .channel_shoulder_mult = get_array3(print_stock->numeric_arrays, "tone.channel_shoulder_mult", {1.0F, 1.0F, 1.0F}),
-            .shadow_bias_lab = get_array3(print_stock->numeric_arrays, "color.shadow_bias_lab", {0.0F, 0.0F, 0.0F}),
-            .midtone_bias_lab = get_array3(print_stock->numeric_arrays, "color.midtone_bias_lab", {0.0F, 0.0F, 0.0F}),
-            .highlight_bias_lab = get_array3(print_stock->numeric_arrays, "color.highlight_bias_lab", {0.0F, 0.0F, 0.0F}),
+            .shadow_bias_lab = get_array3(
+                print_stock->numeric_arrays,
+                "color.v2_shadow_bias_lab",
+                get_array3(print_stock->numeric_arrays, "color.shadow_bias_lab", {0.0F, 0.0F, 0.0F})),
+            .midtone_bias_lab = get_array3(
+                print_stock->numeric_arrays,
+                "color.v2_midtone_bias_lab",
+                get_array3(print_stock->numeric_arrays, "color.midtone_bias_lab", {0.0F, 0.0F, 0.0F})),
+            .highlight_bias_lab = get_array3(
+                print_stock->numeric_arrays,
+                "color.v2_highlight_bias_lab",
+                get_array3(print_stock->numeric_arrays, "color.highlight_bias_lab", {0.0F, 0.0F, 0.0F})),
             .blue_suppression = get_numeric(print_stock->numeric_values, "color.blue_suppression", 0.0F),
             .red_boost = get_numeric(print_stock->numeric_values, "color.red_boost", 0.0F),
             .green_shift = get_numeric(print_stock->numeric_values, "color.green_shift", 0.0F),
             .saturation_scale = get_numeric(print_stock->numeric_values, "color.saturation_scale", 1.0F),
             .grain_strength = get_numeric(print_stock->numeric_values, "grain.strength", 0.0F),
             .grain_size = get_numeric(print_stock->numeric_values, "grain.size", 0.3F),
+            .use_print_v2 = get_string(print_stock->string_values, "print_pipeline", "") == "print_v2",
+            .characteristic_curve = CharacteristicCurve{
+                .gamma = get_numeric(print_stock->numeric_values, "tone.gamma", 1.0F),
+                .latitude_stops = get_numeric(print_stock->numeric_values, "tone.latitude_stops", 6.0F),
+                .toe_onset = get_numeric(print_stock->numeric_values, "tone.toe_onset", 2.0F),
+                .toe_hardness = get_numeric(print_stock->numeric_values, "tone.toe_hardness", 1.0F),
+                .shoulder_onset = get_numeric(print_stock->numeric_values, "tone.shoulder_onset", 1.8F),
+                .shoulder_hardness = get_numeric(print_stock->numeric_values, "tone.shoulder_hardness", 1.0F),
+                .d_min = get_numeric(print_stock->numeric_values, "tone.d_min", 0.0F),
+                .d_max = get_numeric(print_stock->numeric_values, "tone.d_max", 1.0F),
+            },
+            .neutral_balance_lab = get_array3(
+                print_stock->numeric_arrays, "color.neutral_balance_lab", {0.0F, 0.0F, 0.0F}),
+            .chroma_scale = get_numeric(print_stock->numeric_values, "color.chroma_scale", 1.0F),
+            .shadow_chroma_scale = get_numeric(
+                print_stock->numeric_values, "color.shadow_chroma_scale", 1.0F),
+            .highlight_chroma_scale = get_numeric(
+                print_stock->numeric_values, "color.highlight_chroma_scale", 1.0F),
         };
     }
 

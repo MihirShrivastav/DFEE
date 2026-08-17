@@ -1817,6 +1817,7 @@ std::string serialize_feature_report_json(
     if (render_plan.print_finish.has_value()) {
         const auto& print_finish = *render_plan.print_finish;
         out << "{"
+            << "\"pipeline\": \"" << (print_finish.use_print_v2 ? "print_v2" : "legacy") << "\","
             << "\"strength\": " << json_number(print_finish.strength) << ","
             << "\"print_c\": " << json_number(print_finish.print_c) << ","
             << "\"print_m\": " << json_number(print_finish.print_m) << ","
@@ -1835,6 +1836,20 @@ std::string serialize_feature_report_json(
             << "\"red_boost\": " << json_number(print_finish.red_boost) << ","
             << "\"green_shift\": " << json_number(print_finish.green_shift) << ","
             << "\"saturation_scale\": " << json_number(print_finish.saturation_scale) << ","
+            << "\"characteristic_curve\": {"
+            << "\"gamma\": " << json_number(print_finish.characteristic_curve.gamma) << ","
+            << "\"latitude_stops\": " << json_number(print_finish.characteristic_curve.latitude_stops) << ","
+            << "\"toe_onset\": " << json_number(print_finish.characteristic_curve.toe_onset) << ","
+            << "\"toe_hardness\": " << json_number(print_finish.characteristic_curve.toe_hardness) << ","
+            << "\"shoulder_onset\": " << json_number(print_finish.characteristic_curve.shoulder_onset) << ","
+            << "\"shoulder_hardness\": " << json_number(print_finish.characteristic_curve.shoulder_hardness) << ","
+            << "\"d_min\": " << json_number(print_finish.characteristic_curve.d_min) << ","
+            << "\"d_max\": " << json_number(print_finish.characteristic_curve.d_max)
+            << "},"
+            << "\"neutral_balance_lab\": " << json_float_array3(print_finish.neutral_balance_lab) << ","
+            << "\"chroma_scale\": " << json_number(print_finish.chroma_scale) << ","
+            << "\"shadow_chroma_scale\": " << json_number(print_finish.shadow_chroma_scale) << ","
+            << "\"highlight_chroma_scale\": " << json_number(print_finish.highlight_chroma_scale) << ","
             << "\"grain_strength\": " << json_number(print_finish.grain_strength) << ","
             << "\"grain_size\": " << json_number(print_finish.grain_size)
             << "}";
