@@ -823,7 +823,6 @@ Window {
         color: root.ctrl
         border.width: 1
         border.color: root.hair
-        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: root.bevel }
         Text {
             id: kcText
             anchors.centerIn: parent
@@ -854,8 +853,7 @@ Window {
             color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? root.ctrlPressed : root.ctrl)
             border.width: 1
             border.color: geoBtn.active ? "#4a4a52" : root.hair
-            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: root.bevel }
-        }
+            }
         HoverHandler { id: geoHover }
         GraphiteTip {
             parent: geoBtn
@@ -970,7 +968,6 @@ Window {
             }
             border.width: 1
             border.color: root.hair
-            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; color: "#16ffffff" }
             Text { anchors.centerIn: parent; text: "−"; color: root.textPrimary; font.pixelSize: 15 }
         }
 
@@ -985,7 +982,6 @@ Window {
             }
             border.width: 1
             border.color: root.hair
-            Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; color: "#16ffffff" }
             Text { anchors.centerIn: parent; text: "+"; color: root.textPrimary; font.pixelSize: 15 }
         }
     }
@@ -1142,15 +1138,11 @@ Window {
             }
             border.width: 1
             border.color: root.hair
-            Rectangle {
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
-                height: 1; radius: 1; color: root.bevel; visible: button.enabled
-            }
         }
     }
 
     // Secondary action — a gentle raised control (subtler than PrimaryButton),
-    // sharing the same radius, hairline and top bevel for a consistent family.
+    // sharing the same radius and hairline for a consistent family.
     component SecondaryButton: Button {
         id: button
         width: parent.width
@@ -1171,15 +1163,11 @@ Window {
             color: button.down ? root.panelRaised : root.inset
             border.width: 1
             border.color: root.hair
-            Rectangle {
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
-                height: 1; radius: 1; color: root.bevel; visible: button.enabled
-            }
         }
     }
 
     // Compact raised utility button (Reset, Open, New preset, Add). Flat ctrl fill,
-    // hairline border, subtle top bevel. Size via width/height at the call site.
+    // hairline border. Size via width/height at the call site.
     component UtilityButton: Button {
         id: ub
         height: 28
@@ -1198,10 +1186,6 @@ Window {
             border.width: 1
             border.color: root.hair
             opacity: ub.enabled ? 1.0 : 0.5
-            Rectangle {
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
-                height: 1; radius: 1; color: root.bevel; visible: ub.enabled
-            }
         }
     }
 
@@ -2278,7 +2262,6 @@ Window {
                                 color: tabBtn.selected ? root.ctrlActive : "transparent"
                                 border.width: tabBtn.selected ? 1 : 0
                                 border.color: root.hair
-                                Rectangle { visible: tabBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
                             }
                         }
                     }
@@ -2779,7 +2762,6 @@ Window {
                                                 color: segBtn.selected ? root.ctrlActive : "transparent"
                                                 border.width: segBtn.selected ? 1 : 0
                                                 border.color: root.hair
-                                                Rectangle { visible: segBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
                                             }
                                         }
                                     }
@@ -3080,7 +3062,6 @@ Window {
                                                 color: hslTabBtn.selected ? root.ctrlActive : "transparent"
                                                 border.width: hslTabBtn.selected ? 1 : 0
                                                 border.color: root.hair
-                                                Rectangle { visible: hslTabBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
                                             }
                                         }
                                     }
@@ -3413,7 +3394,6 @@ Window {
                                             color: fmtBtn.selected ? root.ctrlActive : "transparent"
                                             border.width: 1
                                             border.color: fmtBtn.selected ? root.hair : root.border
-                                            Rectangle { visible: fmtBtn.selected; anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#16ffffff" }
                                         }
                                     }
                                 }
