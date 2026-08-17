@@ -19,8 +19,12 @@ Window {
     readonly property color bg: "#0f0f10"
     readonly property color canvas: "#0f0f10"
     readonly property color panel: "#1a1a1c"
-    readonly property color panelRaised: "#202023"
-    readonly property color inset: "#141416"          // recessed fields / slider grooves
+    readonly property color panelRaised: "#1c1c1e"    // dialogs/popovers — same family as the develop cards
+    // Input surface. On these already-dark cards a near-black "well" reads as a
+    // cheap pasted-on box, so inputs are a subtle surface a touch LIGHTER than the
+    // card (Linear/Vercel-style), defined by a soft border rather than by darkness.
+    readonly property color inset: "#232327"
+    readonly property color well: "#141416"           // true recess — slider grooves + histogram only
     readonly property color border: "#26262b"
     readonly property color hair: "#14ffffff"           // ~0.08 white hairline (#AARRGGBB)
     readonly property color textPrimary: "#c7c7cc"      // softened — no pure white
@@ -684,7 +688,7 @@ Window {
         width: parent.width
         height: 84
         radius: 10
-        color: root.inset
+        color: root.well
         border.width: 1
         border.color: root.hair
 
@@ -1088,7 +1092,7 @@ Window {
             width: control.availableWidth
             height: 4
             radius: 2
-            color: root.inset                       // recessed groove
+            color: root.well                        // recessed groove
             // subtle top inset line for depth
             Rectangle { width: parent.width; height: 1; radius: 1; color: "#66000000" }
             Rectangle {                              // filled portion — subtle grey, monochrome
@@ -1145,7 +1149,8 @@ Window {
         }
     }
 
-    // Secondary action — flatter, recessed, hairline outline.
+    // Secondary action — a gentle raised control (subtler than PrimaryButton),
+    // sharing the same radius, hairline and top bevel for a consistent family.
     component SecondaryButton: Button {
         id: button
         width: parent.width
@@ -1155,7 +1160,7 @@ Window {
 
         contentItem: Text {
             text: button.text
-            color: button.enabled ? root.textSecondary : root.textMuted
+            color: button.enabled ? root.textPrimary : root.textMuted
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             font: button.font
@@ -1163,9 +1168,13 @@ Window {
 
         background: Rectangle {
             radius: root.radiusControl
-            color: button.down ? root.ctrlPressed : root.inset
+            color: button.down ? root.panelRaised : root.inset
             border.width: 1
             border.color: root.hair
+            Rectangle {
+                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
+                height: 1; radius: 1; color: root.bevel; visible: button.enabled
+            }
         }
     }
 
