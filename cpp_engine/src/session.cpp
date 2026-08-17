@@ -1202,6 +1202,11 @@ void apply_gamma_additive_tone(
 // it: strength = 1 - (control/100) * kMaxToneAtten. Capped below 1.0 so the stock's
 // tone character always shows through (we tame, not bypass).
 constexpr float kMaxToneAtten = 0.70F;
+// Monochrome TIFFs get a much gentler tame: there is no colour to double-map, and a
+// B&W stock's whole identity is its tonal rendering. At control=100 the film tone is
+// held back far less than for colour negatives, so switching B&W stocks on a TIFF
+// actually changes the tonality (previously ~0.44 strength washed them together).
+constexpr float kMaxToneAttenMono = 0.45F;
 
 // Adjust a render plan for a rendered (TIFF) input. A Lightroom TIFF is already
 // exposed and tone-mapped, so:
@@ -1212,7 +1217,9 @@ constexpr float kMaxToneAtten = 0.70F;
 // Manual user exposure/tone sliders still apply on top (added after this).
 void apply_rendered_input_adjustments(RenderPlan& plan, const float rendered_input_control) {
     const float c = std::clamp(rendered_input_control / 100.0F, 0.0F, 1.0F);
-    plan.film_response.tone_response_strength = std::clamp(1.0F - c * kMaxToneAtten, 0.0F, 1.0F);
+    const float atten = (plan.film_response.stock_type == "monochrome")
+        ? kMaxToneAttenMono : kMaxToneAtten;
+    plan.film_response.tone_response_strength = std::clamp(1.0F - c * atten, 0.0F, 1.0F);
 
     auto& norm = plan.pre_film_normalization;
     // Scale the auto adjustments down with the control (0 = keep RAW-style auto,
