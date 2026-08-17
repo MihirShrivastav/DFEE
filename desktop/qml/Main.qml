@@ -591,15 +591,20 @@ Window {
         return (stockId && stockId !== "none") ? ("qrc:/boxart/" + stockId + ".svg") : ""
     }
 
+    // Film-stock box art tile. When a stock is selected it frames the colourful
+    // box art; when empty it is NOT a grey block — just a muted film glyph, so an
+    // empty slot reads as intentional ("no film loaded") rather than a broken image.
     component BoxartSwatch: Rectangle {
         property string stockId: ""
         property int cell: 26
+        readonly property string boxSource: root.boxartFor(stockId)
+        readonly property bool empty: boxSource === ""
         width: cell
         height: cell
-        radius: 4
+        radius: 5
         clip: true
-        color: root.inset
-        border.width: 1
+        color: empty ? "transparent" : root.inset
+        border.width: empty ? 0 : 1
         border.color: root.hair
         Image {
             anchors.fill: parent
@@ -607,8 +612,15 @@ Window {
             sourceSize.height: parent.cell * 2
             fillMode: Image.PreserveAspectCrop
             smooth: true
-            source: root.boxartFor(parent.stockId)
-            visible: source != ""
+            source: parent.boxSource
+            visible: !parent.empty
+        }
+        AppIcon {
+            anchors.centerIn: parent
+            visible: parent.empty
+            name: "film-strip"
+            size: Math.round(parent.cell * 0.62)
+            color: root.textMuted
         }
     }
 
@@ -2408,19 +2420,20 @@ Window {
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: parent.width - 46
                                             spacing: 2
+                                            readonly property bool noneSelected: engine.stock === "none"
                                             Text {
                                                 width: parent.width
-                                                text: stockBox.displayText
-                                                color: root.textPrimary
+                                                text: parent.noneSelected ? "Choose a film stock" : stockBox.displayText
+                                                color: parent.noneSelected ? root.textSecondary : root.textPrimary
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 13
                                                 font.weight: Font.Medium
                                             }
                                             Text {
                                                 width: parent.width
-                                                text: engine.stock === "none" ? "No film stock"
-                                                      : (stockBox.currentIndex >= 0 && engine.stockModel[stockBox.currentIndex]
-                                                         ? engine.stockModel[stockBox.currentIndex].typeLabel : "")
+                                                visible: !parent.noneSelected
+                                                text: (stockBox.currentIndex >= 0 && engine.stockModel[stockBox.currentIndex]
+                                                       ? engine.stockModel[stockBox.currentIndex].typeLabel : "")
                                                 color: root.textMuted
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 11
@@ -2428,16 +2441,19 @@ Window {
                                         }
                                     }
                                 }
+                                // Flush at rest (defined by a hairline, not a grey block); fills
+                                // subtly only on hover/open, so the card stays calm.
                                 background: Rectangle {
                                     radius: 8
-                                    color: root.inset
+                                    color: (stockBox.hovered || stockBox.popup.visible) ? root.inset : "transparent"
                                     border.width: 1
-                                    border.color: stockBox.activeFocus ? root.border : root.hair
+                                    border.color: stockBox.popup.visible ? root.border : root.hair
+                                    Behavior on color { ColorAnimation { duration: 90 } }
                                 }
                                 indicator: ChevronToggle {
                                     x: stockBox.width - 26
                                     y: (stockBox.height - 14) / 2
-                                    open: false
+                                    open: stockBox.popup.visible
                                 }
                                 popup: Popup {
                                     id: stockPopup
@@ -2449,18 +2465,23 @@ Window {
                                     contentItem: Column {
                                         id: searchCol
                                         spacing: 4
+                                        // A clean search header — no grey box, just the glyph and a
+                                        // hairline underline that brightens on focus.
                                         Rectangle {
                                             width: parent.width
-                                            height: 34
-                                            radius: 8
-                                            color: root.inset
-                                            border.width: 1
-                                            border.color: stockSearch.activeFocus ? root.border : root.hair
+                                            height: 38
+                                            color: "transparent"
+                                            Rectangle {
+                                                anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+                                                anchors.leftMargin: 4; anchors.rightMargin: 4
+                                                height: 1
+                                                color: stockSearch.activeFocus ? root.border : root.hair
+                                            }
                                             AppIcon {
-                                                anchors.left: parent.left; anchors.leftMargin: 10
+                                                anchors.left: parent.left; anchors.leftMargin: 8
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 name: "magnifying-glass"; size: 15
-                                                color: root.textMuted
+                                                color: stockSearch.activeFocus ? root.textSecondary : root.textMuted
                                             }
                                             TextField {
                                                 id: stockSearch
@@ -2639,11 +2660,12 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: root.inset
+                                    color: (printBox.hovered || printBox.popup.visible) ? root.inset : "transparent"
                                     border.width: 1
-                                    border.color: printBox.activeFocus ? root.border : root.hair
+                                    border.color: printBox.popup.visible ? root.border : root.hair
+                                    Behavior on color { ColorAnimation { duration: 90 } }
                                 }
-                                indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: false }
+                                indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
                                     y: printBox.height + 4
                                     width: printBox.width
@@ -3243,7 +3265,13 @@ Window {
                                     ]
                                     onActivated: previewCanvas.selectAspect(model[currentIndex].r)
                                     contentItem: Text { leftPadding: 10; text: aspectBox.displayText; color: root.textPrimary; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
-                                    background: Rectangle { radius: root.radiusControl; color: root.inset; border.width: 1; border.color: root.hair }
+                                    background: Rectangle {
+                                        radius: root.radiusControl
+                                        color: (aspectBox.hovered || aspectBox.popup.visible) ? root.inset : "transparent"
+                                        border.width: 1
+                                        border.color: aspectBox.popup.visible ? root.border : root.hair
+                                        Behavior on color { ColorAnimation { duration: 90 } }
+                                    }
                                 }
 
                                 GeoButton {
