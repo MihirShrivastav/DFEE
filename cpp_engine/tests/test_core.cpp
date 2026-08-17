@@ -1973,6 +1973,13 @@ void test_print_v2_material_response() {
     assert(printed.at(4, 0, 0) > printed.at(0, 0, 0));
     assert(printed.at(252, 0, 0) < printed.at(256, 0, 0));
 
+    auto open_paper = pf;
+    open_paper.print_black_point = 100.0F;
+    const auto opened = renderer.apply_print_finish(ramp, open_paper);
+    // Paper black changes a visible lower-tone sample, not merely histogram bins
+    // at the mathematical zero endpoint.
+    assert(opened.at(16, 0, 0) > printed.at(16, 0, 0) + 2.0e-3F);
+
     auto timed = pf;
     timed.print_c = 100.0F;
     timed.print_m = -100.0F;

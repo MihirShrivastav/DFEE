@@ -2563,12 +2563,23 @@ Image FilmRenderer::apply_print_finish(
             curve.gamma * (1.0F + clampf(print_finish.print_contrast / 100.0F, -1.0F, 1.0F) * 0.20F),
             0.55F,
             1.65F);
-        // Legacy Black Point remains available as a narrowly bounded paper-base
-        // adjustment. It changes the curve endpoint rather than lifting every pixel.
-        curve.d_min = clampf(
-            curve.d_min + clampf(print_finish.print_black_point / 100.0F, -1.0F, 1.0F) * 0.035F,
-            0.0F,
-            std::min(0.18F, curve.d_max - 0.05F));
+        // Paper black must affect the visible toe, not only the mathematical
+        // asymptote. Positive values open the paper base; negative values tighten
+        // the toe and lower its floor. Both remain bounded material adjustments,
+        // never a global shadow lift or hard black clamp.
+        const float paper_black = clampf(print_finish.print_black_point / 100.0F, -1.0F, 1.0F);
+        if (paper_black >= 0.0F) {
+            curve.d_min = clampf(
+                curve.d_min + paper_black * 0.090F,
+                0.0F,
+                std::min(0.18F, curve.d_max - 0.05F));
+            curve.toe_onset = std::min(curve.toe_onset * (1.0F + paper_black * 0.18F), 5.0F);
+            curve.toe_hardness = std::max(0.30F, curve.toe_hardness * (1.0F - paper_black * 0.20F));
+        } else {
+            curve.d_min = std::max(0.0F, curve.d_min * (1.0F + paper_black * 0.85F));
+            curve.toe_onset = std::max(0.05F, curve.toe_onset * (1.0F + paper_black * 0.12F));
+            curve.toe_hardness = std::min(2.50F, curve.toe_hardness * (1.0F - paper_black * 0.28F));
+        }
 
         const float head_c = clampf(print_finish.print_c / 100.0F, -1.0F, 1.0F);
         const float head_m = clampf(print_finish.print_m / 100.0F, -1.0F, 1.0F);

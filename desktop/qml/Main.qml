@@ -2700,7 +2700,7 @@ Window {
                                 FilmSlider { controlKey: "print_m"; label: "Color head: magenta"; minimum: -100; maximum: 100; bipolar: true; tooltip: "A bounded magenta printer-timing correction. It shifts the printable mid-scale without clipping green." }
                                 FilmSlider { controlKey: "print_y"; label: "Color head: yellow"; minimum: -100; maximum: 100; bipolar: true; tooltip: "A bounded yellow printer-timing correction. It warms the printable mid-scale without clipping blue." }
                                 FilmSlider { controlKey: "print_contrast"; label: "Print contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Adjust the middle slope of the selected print material while retaining its toe and shoulder." }
-                                FilmSlider { controlKey: "print_black_point"; label: "Paper black"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Adjust the print material's paper-black endpoint without globally lifting or crushing shadows." }
+                                FilmSlider { controlKey: "print_black_point"; label: "Paper black"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Positive opens the paper base and lower shadows; negative produces a denser, tighter print toe. It never globally lifts or clips the image." }
                             }
                         }
                     }
