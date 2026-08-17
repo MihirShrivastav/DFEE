@@ -104,12 +104,14 @@ color_character:
 characteristic_curve:
   # ILFORD Pan F Plus 50: ultra-fine-grain, slow, high-acutance B&W — the most contrasty and
   # crisp of the family. Steeper straight line, deep clean blacks, a shorter firm toe.
-  gamma: 1.3
+  # Highest contrast, short tonal scale: steepest slope, firm early shoulder and a
+  # short hard toe with deep clean blacks.
+  gamma: 1.34
   latitude_stops: 7.8
-  toe_onset: 2.6
-  toe_hardness: 0.85
-  shoulder_onset: 3.8
-  shoulder_hardness: 0.75
+  toe_onset: 2.5
+  toe_hardness: 0.88
+  shoulder_onset: 2.9
+  shoulder_hardness: 0.82
   d_min: 0.01
   d_max: 0.99
   channel_gamma_mult: [1.0, 1.0, 1.0]

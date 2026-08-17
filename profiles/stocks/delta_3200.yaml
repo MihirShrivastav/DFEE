@@ -106,12 +106,14 @@ characteristic_curve:
   # for EI 3200 with extended development. Its measured ISO speed is 1000;
   # the default curve therefore preserves shadow and highlight transitions
   # instead of turning the marketed EI into a harsh, contrast-heavy grade.
-  gamma: 1.06
-  latitude_stops: 9.2
-  toe_onset: 3.4
-  toe_hardness: 0.58
-  shoulder_onset: 4.3
-  shoulder_hardness: 0.58
+  # Softest of the family: lowest contrast, widest latitude, an open gentle toe
+  # and a soft shoulder — smooth transitions rather than a harsh high-EI grade.
+  gamma: 1.03
+  latitude_stops: 9.4
+  toe_onset: 3.5
+  toe_hardness: 0.50
+  shoulder_onset: 4.4
+  shoulder_hardness: 0.52
   d_min: 0.028
   d_max: 0.978
   channel_gamma_mult: [1.0, 1.0, 1.0]

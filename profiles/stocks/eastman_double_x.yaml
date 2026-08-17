@@ -103,12 +103,14 @@ characteristic_curve:
   # Kodak specifies daylight EI 250 / tungsten EI 200 for development to
   # gamma 0.65. Preserve that controlled, print-chain-friendly response with
   # a broad toe and shoulder, not a high-contrast still-film interpretation.
-  gamma: 1.10
-  latitude_stops: 9.0
-  toe_onset: 3.5
-  toe_hardness: 0.64
+  # Cinema neg: controlled low-ish contrast, broad open toe and a soft gradual
+  # shoulder — the classic wide-latitude "silver" motion-picture response.
+  gamma: 1.07
+  latitude_stops: 9.2
+  toe_onset: 3.6
+  toe_hardness: 0.56
   shoulder_onset: 4.2
-  shoulder_hardness: 0.62
+  shoulder_hardness: 0.54
   d_min: 0.022
   d_max: 0.982
   channel_gamma_mult: [1.0, 1.0, 1.0]

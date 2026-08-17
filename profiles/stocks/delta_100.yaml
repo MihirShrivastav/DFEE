@@ -102,12 +102,14 @@ characteristic_curve:
   # ILFORD Delta 100 Professional: Core-Shell tabular-grain ISO 100 negative.
   # ID-11 stock normal processing is intended for average print contrast, with
   # exceptionally fine grain and high detail rather than Tri-X-style punch.
-  gamma: 1.18
+  # T-grain: clean fine-detail response with a gentle, fairly late shoulder (holds
+  # highlights) — a touch softer and smoother than T-MAX 100.
+  gamma: 1.17
   latitude_stops: 8.8
-  toe_onset: 3.2
-  toe_hardness: 0.68
-  shoulder_onset: 4.4
-  shoulder_hardness: 0.62
+  toe_onset: 3.1
+  toe_hardness: 0.70
+  shoulder_onset: 3.8
+  shoulder_hardness: 0.56
   d_min: 0.012
   d_max: 0.988
   channel_gamma_mult: [1.0, 1.0, 1.0]

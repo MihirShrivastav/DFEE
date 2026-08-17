@@ -104,12 +104,14 @@ color_character:
 characteristic_curve:
   # ILFORD FP4 Plus 125: classic medium-speed cubic-grain negative — moderate, well-behaved
   # contrast, fine grain, wide printable latitude with a long gentle toe and shoulder.
+  # Classic cubic grain: smooth, well-behaved gradation — a moderate toe and a
+  # medium shoulder (between Tri-X's blow-out and T-MAX's long hold).
   gamma: 1.16
   latitude_stops: 8.8
   toe_onset: 3.2
-  toe_hardness: 0.7
-  shoulder_onset: 4.2
-  shoulder_hardness: 0.64
+  toe_hardness: 0.66
+  shoulder_onset: 3.9
+  shoulder_hardness: 0.60
   d_min: 0.014
   d_max: 0.986
   channel_gamma_mult: [1.0, 1.0, 1.0]
