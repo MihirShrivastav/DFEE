@@ -896,12 +896,6 @@ Window {
             border.width: 1
             border.color: root.hair
             opacity: cb.enabled ? 1.0 : 0.5
-            // top bevel highlight when checked
-            Rectangle {
-                visible: cb.checked
-                anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 }
-                height: 1; radius: 1; color: "#16ffffff"
-            }
             Canvas {
                 anchors.fill: parent
                 visible: cb.checked
@@ -2318,8 +2312,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: recipeCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: recipeCol
                         x: 16; y: 16
@@ -2603,8 +2596,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: printCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: printCol
                         x: 16; y: 16
@@ -2705,8 +2697,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: exposureCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: exposureCol
                         x: 16; y: 16
@@ -2785,8 +2776,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: toneCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: toneCol
                         x: 16; y: 16
@@ -2841,8 +2831,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: colorCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: colorCol
                         x: 16; y: 16
@@ -2887,8 +2876,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: colorBalanceCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: colorBalanceCol
                         x: 16; y: 16
@@ -2928,8 +2916,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: lightCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: lightCol
                         x: 16; y: 16
@@ -2972,8 +2959,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: detailCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: detailCol
                         x: 16; y: 16
@@ -3015,8 +3001,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: hslCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: hslCol
                         x: 16; y: 16
@@ -3102,8 +3087,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: gradeCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: gradeCol
                         x: 16; y: 16
@@ -3159,8 +3143,7 @@ Window {
                     border.width: 1
                     border.color: root.hair
                     implicitHeight: materialCol.implicitHeight + 32
-                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                    
                     Column {
                         id: materialCol
                         x: 16; y: 16
@@ -3221,8 +3204,7 @@ Window {
                         border.width: 1
                         border.color: root.hair
                         implicitHeight: cropCol.implicitHeight + 32
-                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                        
                         Column {
                             id: cropCol
                             x: 16; y: 16
@@ -3296,8 +3278,7 @@ Window {
                         border.width: 1
                         border.color: root.hair
                         implicitHeight: orientCol.implicitHeight + 32
-                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                        
                         Column {
                             id: orientCol
                             x: 16; y: 16
@@ -3359,8 +3340,7 @@ Window {
                         border.width: 1
                         border.color: root.hair
                         implicitHeight: exportCol.implicitHeight + 32
-                        Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; margins: 1 } height: 1; radius: 1; color: "#12ffffff" }
-
+                        
                         Column {
                             id: exportCol
                             x: 16; y: 16
