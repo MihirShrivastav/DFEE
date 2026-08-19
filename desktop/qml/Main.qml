@@ -781,15 +781,18 @@ Window {
                 var oy = height * 0.5;
                 var radius = side * 0.455;
 
-                ctx.strokeStyle = "rgba(220,220,226,0.13)";
+                // Graticule — each shape is its own path so an arc never draws a
+                // connecting line from the previous point (that was the stray diagonal).
+                ctx.strokeStyle = "rgba(220,220,226,0.12)";
                 ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(ox, oy, radius, 0, Math.PI * 2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(ox, oy, radius * 0.5, 0, Math.PI * 2); ctx.stroke();
                 ctx.beginPath();
-                ctx.arc(ox, oy, radius, 0, Math.PI * 2);
                 ctx.moveTo(ox - radius, oy); ctx.lineTo(ox + radius, oy);
                 ctx.moveTo(ox, oy - radius); ctx.lineTo(ox, oy + radius);
-                ctx.arc(ox, oy, radius * 0.5, 0, Math.PI * 2);
                 ctx.stroke();
 
+                // Target boxes at the primaries / secondaries.
                 function drawTarget(red, green, blue) {
                     var luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
                     var cb = (blue - luma) / 1.8556;
@@ -797,14 +800,16 @@ Window {
                     var tx = ox + (cb / 0.5) * radius;
                     var ty = oy - (cr / 0.5) * radius;
                     ctx.strokeStyle = "rgba(" + Math.round(red * 255) + "," +
-                        Math.round(green * 255) + "," + Math.round(blue * 255) + ",0.55)";
-                    ctx.beginPath();
-                    ctx.arc(tx, ty, 3, 0, Math.PI * 2);
-                    ctx.stroke();
+                        Math.round(green * 255) + "," + Math.round(blue * 255) + ",0.65)";
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(tx - 3, ty - 3, 6, 6);
                 }
                 drawTarget(1, 0, 0); drawTarget(0, 1, 0); drawTarget(0, 0, 1);
                 drawTarget(0, 1, 1); drawTarget(1, 0, 1); drawTarget(1, 1, 0);
 
+                // Density trace, colourised by each cell's own hue: grey at the
+                // neutral centre, saturated toward the rim (DaVinci-style colour
+                // scope). Additive so overlapping glow builds up smoothly.
                 var maxCount = 1;
                 for (var i = 0; i < samples.length; ++i)
                     if (samples[i] > maxCount) maxCount = samples[i];
@@ -820,13 +825,23 @@ Window {
                         var dy = (yy + 0.5) / cells * 2 - 1;
                         if (dx * dx + dy * dy > 1) continue;
                         var density = Math.log(1 + count) / logMax;
-                        var alpha = Math.min(0.60, 0.035 + 0.34 * density);
-                        ctx.fillStyle = "rgba(188, 233, 219, " + alpha + ")";
+                        // cell centre -> Cb/Cr -> hue colour at mid luma
+                        var cbv = dx * 0.5;
+                        var crv = -dy * 0.5;
+                        var cR = 0.5 + 1.5748 * crv;
+                        var cB = 0.5 + 1.8556 * cbv;
+                        var cG = (0.5 - 0.2126 * cR - 0.0722 * cB) / 0.7152;
+                        cR = Math.max(0, Math.min(1, cR));
+                        cG = Math.max(0, Math.min(1, cG));
+                        cB = Math.max(0, Math.min(1, cB));
+                        var alpha = Math.min(0.5, 0.05 + 0.42 * density);
+                        ctx.fillStyle = "rgba(" + Math.round(cR * 255) + "," +
+                            Math.round(cG * 255) + "," + Math.round(cB * 255) + "," + alpha + ")";
                         ctx.beginPath();
                         ctx.arc(
                             ox - radius + (xx + 0.5) * cell,
                             oy - radius + (yy + 0.5) * cell,
-                            Math.max(1.3, cell * (0.9 + density * 0.75)),
+                            Math.max(1.1, cell * (0.8 + density * 0.45)),
                             0,
                             Math.PI * 2);
                         ctx.fill();
