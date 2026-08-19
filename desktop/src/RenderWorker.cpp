@@ -12,6 +12,8 @@
 #include <QDebug>
 
 namespace {
+constexpr int kVectorscopeSize = 96;
+
 // Compute a 256-bin per-channel histogram from a preview image. Runs on the
 // worker thread; the preview is small (~1k px edge) so a full scan is cheap.
 void computeHistogram(const QImage& src, QVariantList& r, QVariantList& g, QVariantList& b) {
@@ -33,6 +35,36 @@ void computeHistogram(const QImage& src, QVariantList& r, QVariantList& g, QVari
         g.append(binG[i]);
         b.append(binB[i]);
     }
+}
+
+// Rec.709 Cb/Cr density field from the rendered preview. Sampling is capped:
+// the scope is a live compositional diagnostic, not a full-resolution export.
+void computeVectorscope(const QImage& src, QVariantList& scope) {
+    int bins[kVectorscopeSize * kVectorscopeSize] = {};
+    const QImage im = src.convertToFormat(QImage::Format_RGB888);
+    const int step = im.width() * im.height() > 250000 ? 2 : 1;
+    for (int y = 0; y < im.height(); y += step) {
+        const uchar* line = im.constScanLine(y);
+        for (int x = 0; x < im.width(); x += step) {
+            const uchar* px = line + x * 3;
+            const float red = static_cast<float>(px[0]) / 255.0F;
+            const float green = static_cast<float>(px[1]) / 255.0F;
+            const float blue = static_cast<float>(px[2]) / 255.0F;
+            const float luma = 0.2126F * red + 0.7152F * green + 0.0722F * blue;
+            const float cb = (blue - luma) / 1.8556F;
+            const float cr = (red - luma) / 1.5748F;
+            const int sx = std::clamp(
+                static_cast<int>(((cb / 0.5F + 1.0F) * 0.5F) * (kVectorscopeSize - 1) + 0.5F),
+                0, kVectorscopeSize - 1);
+            const int sy = std::clamp(
+                static_cast<int>(((-cr / 0.5F + 1.0F) * 0.5F) * (kVectorscopeSize - 1) + 0.5F),
+                0, kVectorscopeSize - 1);
+            ++bins[sy * kVectorscopeSize + sx];
+        }
+    }
+    scope.clear();
+    scope.reserve(kVectorscopeSize * kVectorscopeSize);
+    for (int value : bins) scope.append(value);
 }
 }  // namespace
 
@@ -168,9 +200,11 @@ void RenderWorker::doRender(const dfee::NativePreviewRenderRequest& request)
     if (!img.isNull()) {
         QVariantList hr, hg, hb;
         computeHistogram(img, hr, hg, hb);
+        QVariantList scope;
+        computeVectorscope(img, scope);
         QMetaObject::invokeMethod(controller_, "onHistogram", Qt::QueuedConnection,
                                   Q_ARG(QVariantList, hr), Q_ARG(QVariantList, hg),
-                                  Q_ARG(QVariantList, hb));
+                                  Q_ARG(QVariantList, hb), Q_ARG(QVariantList, scope));
     }
 
     QMetaObject::invokeMethod(controller_, "onPreviewReady",

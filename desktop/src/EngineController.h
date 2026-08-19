@@ -46,6 +46,7 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantList histogramR READ histogramR NOTIFY histogramChanged)
     Q_PROPERTY(QVariantList histogramG READ histogramG NOTIFY histogramChanged)
     Q_PROPERTY(QVariantList histogramB READ histogramB NOTIFY histogramChanged)
+    Q_PROPERTY(QVariantList vectorscope READ vectorscope NOTIFY histogramChanged)
     // Edit history (newest-first list of {label}), the current step's row in that
     // list, and undo/redo availability. In-memory, reseeded per opened image.
     Q_PROPERTY(QVariantList history READ history NOTIFY historyChanged)
@@ -125,6 +126,7 @@ public:
     QVariantList histogramR() const { return histogramR_; }
     QVariantList histogramG() const { return histogramG_; }
     QVariantList histogramB() const { return histogramB_; }
+    QVariantList vectorscope() const { return vectorscope_; }
 
     QVariantList history() const;
     int historyIndex() const { return history_.isEmpty() ? -1 : (int(history_.size()) - 1 - historyIndex_); }
@@ -160,7 +162,8 @@ public:
     // Called by RenderWorker (via QueuedConnection) to update GUI-thread state.
     Q_INVOKABLE void onPreviewReady();
     Q_INVOKABLE void onBeforeReady(bool ok);
-    Q_INVOKABLE void onHistogram(const QVariantList& r, const QVariantList& g, const QVariantList& b);
+    Q_INVOKABLE void onHistogram(
+        const QVariantList& r, const QVariantList& g, const QVariantList& b, const QVariantList& scope);
     Q_INVOKABLE void onRenderFailed(const QString& msg);
     Q_INVOKABLE void onWorkerBusyChanged(bool busy);
     Q_INVOKABLE void onExportDone(const QString& msg);
@@ -249,6 +252,7 @@ private:
     QVariantList histogramR_;
     QVariantList histogramG_;
     QVariantList histogramB_;
+    QVariantList vectorscope_;
 
     // Film parameters — declared now, wired in Task 4.
     double filmExposure_ = 0.0;

@@ -702,12 +702,13 @@ void EngineController::onBeforeReady(bool ok)
     emit beforeChanged();
 }
 
-void EngineController::onHistogram(const QVariantList& r, const QVariantList& g,
-                                  const QVariantList& b)
+void EngineController::onHistogram(
+    const QVariantList& r, const QVariantList& g, const QVariantList& b, const QVariantList& scope)
 {
     histogramR_ = r;
     histogramG_ = g;
     histogramB_ = b;
+    vectorscope_ = scope;
     emit histogramChanged();
 }
 

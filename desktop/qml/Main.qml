@@ -756,6 +756,71 @@ Window {
         }
     }
 
+    // The worker computes this compact Rec.709 Cb/Cr density field from the
+    // rendered preview, so it describes exactly the image currently on canvas.
+    component Vectorscope: Rectangle {
+        width: parent.width
+        height: 152
+        radius: 10
+        color: root.well
+        border.width: 1
+        border.color: root.hair
+
+        Canvas {
+            anchors.fill: parent
+            anchors.margins: 8
+            property var samples: engine.vectorscope
+            onSamplesChanged: requestPaint()
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.clearRect(0, 0, width, height);
+                if (!samples || samples.length !== 9216) return;
+                var side = Math.min(width, height);
+                var ox = (width - side) * 0.5 + side * 0.5;
+                var oy = height * 0.5;
+                var radius = side * 0.455;
+
+                ctx.strokeStyle = "rgba(220,220,226,0.13)";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(ox, oy, radius, 0, Math.PI * 2);
+                ctx.moveTo(ox - radius, oy); ctx.lineTo(ox + radius, oy);
+                ctx.moveTo(ox, oy - radius); ctx.lineTo(ox, oy + radius);
+                ctx.arc(ox, oy, radius * 0.5, 0, Math.PI * 2);
+                ctx.stroke();
+
+                var maxCount = 1;
+                for (var i = 0; i < samples.length; ++i)
+                    if (samples[i] > maxCount) maxCount = samples[i];
+                var logMax = Math.log(1 + maxCount);
+                var cells = 96;
+                var cell = (radius * 2) / cells;
+                for (var yy = 0; yy < cells; ++yy) {
+                    for (var xx = 0; xx < cells; ++xx) {
+                        var count = samples[yy * cells + xx];
+                        if (count <= 0) continue;
+                        var dx = (xx + 0.5) / cells * 2 - 1;
+                        var dy = (yy + 0.5) / cells * 2 - 1;
+                        if (dx * dx + dy * dy > 1) continue;
+                        var alpha = Math.min(0.92, 0.06 + 0.86 * Math.log(1 + count) / logMax);
+                        var hue = (Math.atan2(-dy, dx) * 180 / Math.PI + 360) % 360;
+                        ctx.fillStyle = "hsla(" + hue + ", 72%, 66%, " + alpha + ")";
+                        ctx.fillRect(ox - radius + xx * cell, oy - radius + yy * cell, cell + 0.5, cell + 0.5);
+                    }
+                }
+            }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            visible: !engine.hasImage
+            text: "Vectorscope"
+            color: root.textMuted
+            font.pixelSize: 11
+        }
+    }
+
     // Small down/up chevron used in card headers (and reused as the combo indicator style).
     // Tintable monochrome icon from the bundled Phosphor set (white SVGs at
     // :/icons/<name>.svg). Recolored to `color` via MultiEffect so icons honour
@@ -2219,7 +2284,59 @@ Window {
                 }
             }
 
-            Histogram {}
+            Column {
+                id: scopePanel
+                width: parent.width
+                spacing: 7
+                property string activeScope: "histogram"
+
+                Row {
+                    width: parent.width
+                    height: 28
+                    spacing: 0
+                    Repeater {
+                        model: [
+                            { key: "histogram", label: "Histogram" },
+                            { key: "vectorscope", label: "Vectorscope" }
+                        ]
+                        delegate: Rectangle {
+                            required property var modelData
+                            width: parent.width / 2
+                            height: parent.height
+                            radius: 6
+                            color: scopePanel.activeScope === modelData.key ? root.inset : "transparent"
+                            border.width: 1
+                            border.color: scopePanel.activeScope === modelData.key ? root.hair : "transparent"
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.modelData.label
+                                color: scopePanel.activeScope === parent.modelData.key
+                                    ? root.textPrimary : root.textMuted
+                                font.pixelSize: 11
+                                font.weight: Font.Medium
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: scopePanel.activeScope = parent.modelData.key
+                            }
+                        }
+                    }
+                }
+
+                Item {
+                    width: parent.width
+                    height: scopePanel.activeScope === "vectorscope" ? 152 : 84
+                    Histogram {
+                        anchors.fill: parent
+                        visible: scopePanel.activeScope === "histogram"
+                    }
+                    Vectorscope {
+                        anchors.fill: parent
+                        visible: scopePanel.activeScope === "vectorscope"
+                    }
+                }
+            }
 
             Text {
                 width: parent.width
