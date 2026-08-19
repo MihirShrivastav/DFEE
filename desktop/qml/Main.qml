@@ -792,21 +792,6 @@ Window {
                 ctx.moveTo(ox, oy - radius); ctx.lineTo(ox, oy + radius);
                 ctx.stroke();
 
-                // Target boxes at the primaries / secondaries.
-                function drawTarget(red, green, blue) {
-                    var luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-                    var cb = (blue - luma) / 1.8556;
-                    var cr = (red - luma) / 1.5748;
-                    var tx = ox + (cb / 0.5) * radius;
-                    var ty = oy - (cr / 0.5) * radius;
-                    ctx.strokeStyle = "rgba(" + Math.round(red * 255) + "," +
-                        Math.round(green * 255) + "," + Math.round(blue * 255) + ",0.65)";
-                    ctx.lineWidth = 1;
-                    ctx.strokeRect(tx - 3, ty - 3, 6, 6);
-                }
-                drawTarget(1, 0, 0); drawTarget(0, 1, 0); drawTarget(0, 0, 1);
-                drawTarget(0, 1, 1); drawTarget(1, 0, 1); drawTarget(1, 1, 0);
-
                 // Density trace, colourised by each cell's own hue: grey at the
                 // neutral centre, saturated toward the rim (DaVinci-style colour
                 // scope). Additive so overlapping glow builds up smoothly.
