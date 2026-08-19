@@ -12,7 +12,7 @@
 #include <QDebug>
 
 namespace {
-constexpr int kVectorscopeSize = 96;
+constexpr int kVectorscopeSize = 64;
 
 // Compute a 256-bin per-channel histogram from a preview image. Runs on the
 // worker thread; the preview is small (~1k px edge) so a full scan is cheap.

@@ -775,7 +775,7 @@ Window {
                 var ctx = getContext("2d");
                 ctx.reset();
                 ctx.clearRect(0, 0, width, height);
-                if (!samples || samples.length !== 9216) return;
+                if (!samples || samples.length !== 4096) return;
                 var side = Math.min(width, height);
                 var ox = (width - side) * 0.5 + side * 0.5;
                 var oy = height * 0.5;
@@ -790,12 +790,28 @@ Window {
                 ctx.arc(ox, oy, radius * 0.5, 0, Math.PI * 2);
                 ctx.stroke();
 
+                function drawTarget(red, green, blue) {
+                    var luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+                    var cb = (blue - luma) / 1.8556;
+                    var cr = (red - luma) / 1.5748;
+                    var tx = ox + (cb / 0.5) * radius;
+                    var ty = oy - (cr / 0.5) * radius;
+                    ctx.strokeStyle = "rgba(" + Math.round(red * 255) + "," +
+                        Math.round(green * 255) + "," + Math.round(blue * 255) + ",0.55)";
+                    ctx.beginPath();
+                    ctx.arc(tx, ty, 3, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                drawTarget(1, 0, 0); drawTarget(0, 1, 0); drawTarget(0, 0, 1);
+                drawTarget(0, 1, 1); drawTarget(1, 0, 1); drawTarget(1, 1, 0);
+
                 var maxCount = 1;
                 for (var i = 0; i < samples.length; ++i)
                     if (samples[i] > maxCount) maxCount = samples[i];
                 var logMax = Math.log(1 + maxCount);
-                var cells = 96;
+                var cells = 64;
                 var cell = (radius * 2) / cells;
+                ctx.globalCompositeOperation = "lighter";
                 for (var yy = 0; yy < cells; ++yy) {
                     for (var xx = 0; xx < cells; ++xx) {
                         var count = samples[yy * cells + xx];
@@ -803,12 +819,20 @@ Window {
                         var dx = (xx + 0.5) / cells * 2 - 1;
                         var dy = (yy + 0.5) / cells * 2 - 1;
                         if (dx * dx + dy * dy > 1) continue;
-                        var alpha = Math.min(0.92, 0.06 + 0.86 * Math.log(1 + count) / logMax);
-                        var hue = (Math.atan2(-dy, dx) * 180 / Math.PI + 360) % 360;
-                        ctx.fillStyle = "hsla(" + hue + ", 72%, 66%, " + alpha + ")";
-                        ctx.fillRect(ox - radius + xx * cell, oy - radius + yy * cell, cell + 0.5, cell + 0.5);
+                        var density = Math.log(1 + count) / logMax;
+                        var alpha = Math.min(0.60, 0.035 + 0.34 * density);
+                        ctx.fillStyle = "rgba(188, 233, 219, " + alpha + ")";
+                        ctx.beginPath();
+                        ctx.arc(
+                            ox - radius + (xx + 0.5) * cell,
+                            oy - radius + (yy + 0.5) * cell,
+                            Math.max(1.3, cell * (0.9 + density * 0.75)),
+                            0,
+                            Math.PI * 2);
+                        ctx.fill();
                     }
                 }
+                ctx.globalCompositeOperation = "source-over";
             }
         }
 
