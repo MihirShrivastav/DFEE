@@ -132,6 +132,6 @@ characteristic_curve:
   toe_hardness: 0.82
   shoulder_onset: 4.1
   shoulder_hardness: 0.70
-  d_min: 0.020
+  d_min: 0.030
   d_max: 0.990
   channel_gamma_mult: [1.0, 1.0, 1.0]
