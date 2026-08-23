@@ -22,12 +22,17 @@ float curve_eval(const CharacteristicCurve& c, float logE) {
     // foot = joinHeight - d_min. If the authored toe_onset places the join right on
     // the black floor (foot -> 0) the curvature explodes and the toe collapses into a
     // FLAT crush at d_min — every shadow past the join slams to black with no
-    // gradation. Guaranteeing a minimum foot keeps the toe long and gentle so shadow
-    // detail is retained; the floor (d_min) is unchanged, so blacks stay deep (no
-    // milkiness) — only the gradation above them is recovered.
-    constexpr float kMinToeFoot = 0.12f;                 // min straight-line height above d_min at the join
+    // gradation. Guaranteeing a foot keeps the toe long and gentle so shadow detail
+    // is retained; the floor (d_min) is unchanged, so blacks stay deep (no milkiness)
+    // — only the gradation above them is recovered.
+    //
+    // The foot is stock-specific, scaled from the authored latitude so identity is
+    // preserved: wide-latitude negatives (Portra, latitude ~10) get a long open toe
+    // with lots of shadow gradation; short-latitude reversal stocks (Velvia, ~5.4)
+    // keep a short toe that blocks up — the real difference between the two.
+    const float toe_foot = std::clamp(0.035f * latitude - 0.12f, 0.05f, 0.22f);
     const float toe_limit = std::max(
-        0.05f, (kMidOut - d_min - kMinToeFoot) / std::max(s, 1.0e-4f));
+        0.05f, (kMidOut - d_min - toe_foot) / std::max(s, 1.0e-4f));
     const float toe_onset = std::clamp(c.toe_onset, 0.05f, toe_limit);
     float y;
     if (logE < -toe_onset) {
