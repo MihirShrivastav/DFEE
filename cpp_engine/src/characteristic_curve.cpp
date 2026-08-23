@@ -17,10 +17,17 @@ float curve_eval(const CharacteristicCurve& c, float logE) {
     const float d_min = std::clamp(c.d_min, 0.0f, 0.9f);
     const float d_max = std::clamp(c.d_max, d_min + 0.05f, 1.0f);
     const float lin = kMidOut + s * logE;                // straight-line output
-    // A C1 exponential toe can only join the straight line above the black floor.
-    // Cap an incompatible authored onset just before that intersection rather than
-    // collapsing the toe to a near-zero-width segment and crushing shadow detail.
-    const float toe_limit = std::max(0.05f, (kMidOut - d_min) / std::max(s, 1.0e-4f) - 1.0e-3f);
+    // The C1 exponential toe joins the straight line at height (kMidOut - s*toe_onset)
+    // and rolls down to d_min with curvature k = (s/foot)*toe_hardness, where
+    // foot = joinHeight - d_min. If the authored toe_onset places the join right on
+    // the black floor (foot -> 0) the curvature explodes and the toe collapses into a
+    // FLAT crush at d_min — every shadow past the join slams to black with no
+    // gradation. Guaranteeing a minimum foot keeps the toe long and gentle so shadow
+    // detail is retained; the floor (d_min) is unchanged, so blacks stay deep (no
+    // milkiness) — only the gradation above them is recovered.
+    constexpr float kMinToeFoot = 0.12f;                 // min straight-line height above d_min at the join
+    const float toe_limit = std::max(
+        0.05f, (kMidOut - d_min - kMinToeFoot) / std::max(s, 1.0e-4f));
     const float toe_onset = std::clamp(c.toe_onset, 0.05f, toe_limit);
     float y;
     if (logE < -toe_onset) {
