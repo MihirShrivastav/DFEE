@@ -133,6 +133,16 @@ Window {
         enabled: !root.textEntry
         onActivated: helpDialog.opened ? helpDialog.close() : helpDialog.open()
     }
+    Shortcut {
+        sequence: "Ctrl+0"
+        enabled: engine.hasImage && !root.textEntry
+        onActivated: imageArea.resetZoom()
+    }
+    Shortcut {
+        sequence: "Ctrl+1"
+        enabled: engine.hasImage && !root.textEntry
+        onActivated: imageArea.setZoom(1.0, imageArea.width / 2, imageArea.height / 2)
+    }
 
     // New-preset wizard (from the Presets panel ＋): name + group picker. Film Lab styled.
     Popup {
@@ -2008,6 +2018,7 @@ Window {
             return (afterImg.paintedHeight > 0) ? (afterImg.paintedWidth / afterImg.paintedHeight) : 1.0;
         }
         function enterCropMode() {
+            imageArea.resetZoom();
             cropX = engine.filmControls.crop_x;
             cropY = engine.filmControls.crop_y;
             cropW = engine.filmControls.crop_w;
@@ -2077,15 +2088,51 @@ Window {
             // image (matters for tall/portrait frames that fill the height).
             anchors.topMargin: (engine.hasImage && engine.hasBefore) ? 62 : 28
             visible: engine.hasImage
+            clip: true
 
             readonly property string afterSrc: engine.hasImage ? ("image://preview/frame?rev=" + engine.previewRevision) : ""
             readonly property string beforeSrc: engine.hasBefore ? ("image://preview/before?rev=" + engine.beforeRevision) : ""
             readonly property bool split: previewCanvas.compareMode === 1 && engine.hasBefore
             readonly property bool sideBySide: previewCanvas.compareMode === 2 && engine.hasBefore
             readonly property bool peeking: root.peekBefore && engine.hasBefore && previewCanvas.compareMode === 0
+            property real zoom: 1.0
+            property real panX: 0.0
+            property real panY: 0.0
+            readonly property bool zoomed: zoom > 1.001
+
+            function clampPan() {
+                var maxX = Math.max(0, width * (zoom - 1) / 2);
+                var maxY = Math.max(0, height * (zoom - 1) / 2);
+                panX = Math.max(-maxX, Math.min(maxX, panX));
+                panY = Math.max(-maxY, Math.min(maxY, panY));
+            }
+
+            function resetZoom() {
+                zoom = 1.0;
+                panX = 0.0;
+                panY = 0.0;
+            }
+
+            function setZoom(nextZoom, focusX, focusY) {
+                var oldZoom = zoom;
+                var bounded = Math.max(1.0, Math.min(4.0, nextZoom));
+                if (Math.abs(bounded - oldZoom) < 0.0001) return;
+                var dx = focusX - width / 2;
+                var dy = focusY - height / 2;
+                panX = dx - (dx - panX) * bounded / oldZoom;
+                panY = dy - (dy - panY) * bounded / oldZoom;
+                zoom = bounded;
+                clampPan();
+            }
 
             // Edited / Split — the film ("after") fills; "before" is clipped on the left.
             // While peeking ("\") the full frame shows the unedited original instead.
+            Item {
+                id: zoomSurface
+                anchors.fill: parent
+                transformOrigin: Item.Center
+                scale: imageArea.zoom
+                transform: Translate { x: imageArea.panX; y: imageArea.panY }
             Image {
                 id: afterImg
                 anchors.fill: parent
@@ -2165,6 +2212,7 @@ Window {
                     Image { anchors.fill: parent; fillMode: Image.PreserveAspectFit; cache: false; source: imageArea.afterSrc }
                     Text { anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 2 } text: "After"; color: root.textSecondary; font.pixelSize: 11 }
                 }
+            }
             }
 
             // ── Interactive crop overlay (Slice 1c) ──────────────────────
@@ -2273,6 +2321,43 @@ Window {
                     onReleased: grab = ""
                 }
             }
+
+            MouseArea {
+                id: zoomMouse
+                anchors.fill: parent
+                enabled: !previewCanvas.cropMode
+                hoverEnabled: true
+                cursorShape: pressed && imageArea.zoomed ? Qt.SizeAllCursor : Qt.ArrowCursor
+                property real startX: 0
+                property real startY: 0
+                property real startPanX: 0
+                property real startPanY: 0
+                onPressed: (mouse) => {
+                    if (!imageArea.zoomed) {
+                        mouse.accepted = false;
+                        return;
+                    }
+                    startX = mouse.x;
+                    startY = mouse.y;
+                    startPanX = imageArea.panX;
+                    startPanY = imageArea.panY;
+                }
+                onPositionChanged: (mouse) => {
+                    if (!pressed || !imageArea.zoomed) return;
+                    imageArea.panX = startPanX + mouse.x - startX;
+                    imageArea.panY = startPanY + mouse.y - startY;
+                    imageArea.clampPan();
+                }
+                onWheel: (wheel) => {
+                    var factor = wheel.angleDelta.y > 0 ? 1.16 : 1 / 1.16;
+                    imageArea.setZoom(imageArea.zoom * factor, wheel.x, wheel.y);
+                    wheel.accepted = true;
+                }
+                onDoubleClicked: (mouse) => {
+                    if (imageArea.zoomed) imageArea.resetZoom();
+                    else imageArea.setZoom(2.0, mouse.x, mouse.y);
+                }
+            }
         }
 
         // Floating before/after mode switch (only when a "before" is available).
@@ -2307,6 +2392,50 @@ Window {
                             border.color: root.hair
                         }
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            id: zoomControls
+            visible: engine.hasImage && !previewCanvas.cropMode
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: statusText.visible ? 46 : 12
+            width: zoomRow.width + 10
+            height: 30
+            radius: 8
+            color: "#d9161618"
+            border.width: 1
+            border.color: root.hair
+            z: 4
+
+            Row {
+                id: zoomRow
+                anchors.centerIn: parent
+                spacing: 2
+                GhostButton {
+                    width: 24; height: 24; text: "-"; iconSize: 14
+                    enabled: imageArea.zoom > 1.001
+                    onClicked: imageArea.setZoom(imageArea.zoom / 1.25, imageArea.width / 2, imageArea.height / 2)
+                }
+                Text {
+                    width: 44
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: Math.round(imageArea.zoom * 100) + "%"
+                    color: root.textSecondary
+                    horizontalAlignment: Text.AlignHCenter
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                }
+                GhostButton {
+                    width: 24; height: 24; iconName: "plus"; iconSize: 14
+                    enabled: imageArea.zoom < 3.999
+                    onClicked: imageArea.setZoom(imageArea.zoom * 1.25, imageArea.width / 2, imageArea.height / 2)
+                }
+                UtilityButton {
+                    width: 38; height: 24; text: "Fit"
+                    onClicked: imageArea.resetZoom()
                 }
             }
         }
