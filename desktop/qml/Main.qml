@@ -1384,9 +1384,8 @@ Window {
         }
     }
 
-    // Compact raised utility button (Reset, Open, New preset, Add). It keeps the
-    // primary button's shallow bevel at a smaller scale so header actions read as
-    // buttons rather than outlined fields.
+    // Compact primary action (Reset, Open, New preset, Add). It deliberately
+    // shares the exact surface treatment of the main Save/Return action.
     component UtilityButton: Button {
         id: ub
         height: 28
@@ -1402,20 +1401,12 @@ Window {
         background: Rectangle {
             radius: root.radiusControl
             gradient: Gradient {
-                GradientStop { position: 0.0; color: !ub.enabled ? root.panel : (ub.down ? "#29292e" : (ub.hovered ? "#3c3c44" : "#35353c")) }
-                GradientStop { position: 1.0; color: !ub.enabled ? root.panel : (ub.down ? "#202024" : (ub.hovered ? "#29292f" : "#25252a")) }
+                GradientStop { position: 0.0; color: !ub.enabled ? root.panel : (ub.down ? root.raiseTopDown : (ub.hovered ? "#3b3b42" : root.raiseTop)) }
+                GradientStop { position: 1.0; color: !ub.enabled ? root.panel : (ub.down ? root.raiseBottomDown : (ub.hovered ? "#2a2a30" : root.raiseBottom)) }
             }
             border.width: 1
-            border.color: ub.activeFocus ? root.textSecondary : (ub.enabled ? "#4a4a52" : root.hair)
+            border.color: ub.activeFocus ? root.textSecondary : root.hair
             opacity: ub.enabled ? 1.0 : 0.5
-            Rectangle {
-                width: parent.width - 2
-                height: 1
-                x: 1
-                y: 1
-                radius: 1
-                color: "#24ffffff"
-            }
         }
         scale: ub.down ? 0.985 : 1.0
         Behavior on scale { NumberAnimation { duration: 70 } }
