@@ -36,6 +36,11 @@ Window {
     readonly property color accentText: "#161618"       // text on a light accent fill
     readonly property color knob: "#c4c4c9"             // slider knob
     readonly property color danger: "#e0655b"
+    readonly property color dangerPressed: "#b94d47"
+    readonly property color accentBlue: "#6ea8d9"
+    readonly property color accentAmber: "#d8a458"
+    readonly property color accentMagenta: "#c77db7"
+    readonly property color accentGreen: "#7eae84"
 
     // Control state fills — one token per interaction state so buttons, chips and
     // list rows share exactly the same greys instead of a dozen hand-picked hexes.
@@ -238,7 +243,7 @@ Window {
             Row {
                 anchors.right: parent.right
                 spacing: 8
-                SecondaryButton { width: 96; text: "Cancel"; onClicked: presetNameDialog.close() }
+                TextButton { text: "Cancel"; onClicked: presetNameDialog.close() }
                 PrimaryButton {
                     width: 110
                     text: presetNameDialog.overwrites ? "Replace" : "Save"
@@ -354,7 +359,7 @@ Window {
             Row {
                 anchors.right: parent.right
                 spacing: 8
-                SecondaryButton { width: 96; text: "Cancel"; onClicked: editPresetDialog.close() }
+                TextButton { text: "Cancel"; onClicked: editPresetDialog.close() }
                 PrimaryButton {
                     width: 110
                     text: editPresetDialog.overwrites ? "Replace" : "Save"
@@ -405,7 +410,7 @@ Window {
             Row {
                 anchors.right: parent.right
                 spacing: 8
-                SecondaryButton { width: 96; text: "Cancel"; onClicked: groupRenameDialog.close() }
+                TextButton { text: "Cancel"; onClicked: groupRenameDialog.close() }
                 PrimaryButton { width: 96; text: "Rename"; enabled: groupRenameField.text.trim().length > 0; onClicked: groupRenameDialog.commit() }
             }
         }
@@ -437,8 +442,8 @@ Window {
             Row {
                 anchors.right: parent.right
                 spacing: 8
-                SecondaryButton { width: 96; text: "Cancel"; onClicked: groupDeleteConfirm.close() }
-                PrimaryButton { width: 96; text: "Delete"; onClicked: { engine.deleteGroup(groupDeleteConfirm.groupName); groupDeleteConfirm.close(); } }
+                TextButton { text: "Cancel"; onClicked: groupDeleteConfirm.close() }
+                DestructiveButton { width: 96; text: "Delete"; onClicked: { engine.deleteGroup(groupDeleteConfirm.groupName); groupDeleteConfirm.close(); } }
             }
         }
     }
@@ -473,8 +478,8 @@ Window {
             Row {
                 anchors.right: parent.right
                 spacing: 8
-                SecondaryButton { width: 96; text: "Cancel"; onClicked: resetConfirm.close() }
-                PrimaryButton { width: 96; text: "Reset"; onClicked: { engine.resetAllEdits(); resetConfirm.close(); } }
+                TextButton { text: "Cancel"; onClicked: resetConfirm.close() }
+                DestructiveButton { width: 96; text: "Reset"; onClicked: { engine.resetAllEdits(); resetConfirm.close(); } }
             }
         }
     }
@@ -951,10 +956,12 @@ Window {
         }
         background: Rectangle {
             radius: root.radiusControl
-            color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? root.ctrlPressed : root.ctrl)
+            color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? root.ctrlPressed : (geoBtn.hovered ? root.ctrlHover : root.ctrl))
             border.width: 1
-            border.color: geoBtn.active ? "#4a4a52" : root.hair
+            border.color: geoBtn.active || geoBtn.activeFocus ? "#4a4a52" : root.hair
             }
+        scale: geoBtn.down ? 0.985 : 1.0
+        Behavior on scale { NumberAnimation { duration: 70 } }
         HoverHandler { id: geoHover }
         GraphiteTip {
             parent: geoBtn
@@ -1174,8 +1181,37 @@ Window {
 
     component InspectorSlider: Slider {
         id: control
+        property bool bipolarTrack: false
+        property real neutralValue: 0
+        property color fillColor: root.textSecondary
+        property real precisionStep: stepSize > 0 ? stepSize : 1
+        property real resetValue: neutralValue
+        signal adjusted(real nextValue)
         width: parent.width
         implicitHeight: 24
+
+        function clampValue(candidate) {
+            return Math.max(from, Math.min(to, candidate));
+        }
+
+        function modifierScale(modifiers) {
+            if ((modifiers & Qt.ControlModifier) && (modifiers & Qt.ShiftModifier)) return 0.01;
+            if (modifiers & Qt.AltModifier) return 0.05;
+            if (modifiers & Qt.ShiftModifier) return 0.10;
+            if (modifiers & Qt.ControlModifier) return 0.25;
+            return 1.0;
+        }
+
+        function updateFromMouse(mouse, precisionDrag, dragStartX, dragStartValue) {
+            var span = to - from;
+            var next = precisionDrag
+                ? dragStartValue + ((mouse.x - dragStartX) / Math.max(1, width))
+                    * span * modifierScale(mouse.modifiers)
+                : from + Math.max(0, Math.min(1, mouse.x / Math.max(1, width))) * span;
+            next = clampValue(Math.round(next / precisionStep) * precisionStep);
+            value = next;
+            adjusted(next);
+        }
 
         background: Rectangle {
             x: control.leftPadding
@@ -1187,10 +1223,18 @@ Window {
             // subtle top inset line for depth
             Rectangle { width: parent.width; height: 1; radius: 1; color: "#66000000" }
             Rectangle {                              // filled portion — subtle grey, monochrome
-                width: control.visualPosition * parent.width
+                readonly property real neutralPosition: Math.max(0, Math.min(1,
+                    (control.neutralValue - control.from) / Math.max(0.0001, control.to - control.from)))
+                readonly property real startPosition: control.bipolarTrack
+                    ? Math.min(control.visualPosition, neutralPosition) : 0
+                readonly property real endPosition: control.bipolarTrack
+                    ? Math.max(control.visualPosition, neutralPosition) : control.visualPosition
+                x: startPosition * parent.width
+                width: Math.max(0, (endPosition - startPosition) * parent.width)
                 height: parent.height
                 radius: parent.radius
-                color: "#3c3c41"
+                color: control.fillColor
+                opacity: control.enabled ? 0.82 : 0.35
             }
         }
 
@@ -1206,6 +1250,44 @@ Window {
             }
             border.width: 1
             border.color: "#6e000000"
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: pressed ? Qt.SizeHorCursor : Qt.PointingHandCursor
+            property real dragStartX: 0
+            property real dragStartValue: 0
+            onPressed: (mouse) => {
+                control.forceActiveFocus();
+                dragStartX = mouse.x;
+                dragStartValue = control.value;
+                control.updateFromMouse(mouse, mouse.modifiers !== Qt.NoModifier, dragStartX, dragStartValue);
+            }
+            onPositionChanged: (mouse) => {
+                if (pressed) control.updateFromMouse(mouse, mouse.modifiers !== Qt.NoModifier, dragStartX, dragStartValue);
+            }
+            onDoubleClicked: {
+                control.value = control.resetValue;
+                control.adjusted(control.resetValue);
+            }
+            onWheel: (wheel) => {
+                var direction = wheel.angleDelta.y > 0 ? 1 : -1;
+                var next = control.clampValue(control.value + direction * control.precisionStep
+                    * control.modifierScale(wheel.modifiers));
+                control.value = next;
+                control.adjusted(next);
+                wheel.accepted = true;
+            }
+        }
+
+        Keys.onLeftPressed: (event) => {
+            var next = clampValue(value - precisionStep * modifierScale(event.modifiers));
+            value = next; adjusted(next); event.accepted = true;
+        }
+        Keys.onRightPressed: (event) => {
+            var next = clampValue(value + precisionStep * modifierScale(event.modifiers));
+            value = next; adjusted(next); event.accepted = true;
         }
     }
 
@@ -1228,12 +1310,14 @@ Window {
         background: Rectangle {
             radius: root.radiusControl
             gradient: Gradient {
-                GradientStop { position: 0.0; color: !button.enabled ? root.panel : (button.down ? root.raiseTopDown : root.raiseTop) }
-                GradientStop { position: 1.0; color: !button.enabled ? root.panel : (button.down ? root.raiseBottomDown : root.raiseBottom) }
+                GradientStop { position: 0.0; color: !button.enabled ? root.panel : (button.down ? root.raiseTopDown : (button.hovered ? "#3b3b42" : root.raiseTop)) }
+                GradientStop { position: 1.0; color: !button.enabled ? root.panel : (button.down ? root.raiseBottomDown : (button.hovered ? "#2a2a30" : root.raiseBottom)) }
             }
             border.width: 1
-            border.color: root.hair
+            border.color: button.activeFocus ? root.textSecondary : root.hair
         }
+        scale: button.down ? 0.985 : 1.0
+        Behavior on scale { NumberAnimation { duration: 70 } }
     }
 
     // Secondary action — a gentle raised control (subtler than PrimaryButton),
@@ -1255,9 +1339,51 @@ Window {
 
         background: Rectangle {
             radius: root.radiusControl
-            color: button.down ? root.panelRaised : root.inset
+            color: button.down ? root.panelRaised : (button.hovered ? root.ctrlHover : root.inset)
             border.width: 1
-            border.color: root.hair
+            border.color: button.activeFocus ? root.textSecondary : root.hair
+        }
+        scale: button.down ? 0.985 : 1.0
+        Behavior on scale { NumberAnimation { duration: 70 } }
+    }
+
+    // Dialog dismissal is intentionally text-like: it cannot compete with the
+    // action that changes data, but remains a generous click target.
+    component TextButton: Button {
+        id: textButton
+        width: 76
+        height: 34
+        font.pixelSize: 12
+        font.weight: Font.Medium
+        contentItem: Text {
+            text: textButton.text
+            color: textButton.enabled ? (textButton.hovered ? root.textPrimary : root.textSecondary) : root.textMuted
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font: textButton.font
+        }
+        background: Rectangle {
+            radius: root.radiusSmall
+            color: textButton.down ? "#1affffff" : (textButton.hovered ? root.hair : "transparent")
+            border.width: textButton.activeFocus ? 1 : 0
+            border.color: root.textSecondary
+        }
+    }
+
+    component DestructiveButton: PrimaryButton {
+        id: destructiveButton
+        background: Rectangle {
+            radius: root.radiusControl
+            color: destructiveButton.down ? root.dangerPressed : root.danger
+            border.width: 1
+            border.color: destructiveButton.activeFocus ? root.textPrimary : "#55ffffff"
+        }
+        contentItem: Text {
+            text: destructiveButton.text
+            color: "#171315"
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            font: destructiveButton.font
         }
     }
 
@@ -1277,11 +1403,13 @@ Window {
         }
         background: Rectangle {
             radius: root.radiusControl
-            color: ub.down ? root.ctrlPressed : root.ctrl
+            color: ub.down ? root.ctrlPressed : (ub.hovered ? root.ctrlHover : root.ctrl)
             border.width: 1
-            border.color: root.hair
+            border.color: ub.activeFocus ? root.textSecondary : root.hair
             opacity: ub.enabled ? 1.0 : 0.5
         }
+        scale: ub.down ? 0.985 : 1.0
+        Behavior on scale { NumberAnimation { duration: 70 } }
     }
 
     // Ghost icon button — transparent, subtle hover/press fill. For chevrons and
@@ -1360,6 +1488,16 @@ Window {
 
         readonly property real currentValue: Number(engine.filmControls[controlKey])
         readonly property bool dirty: Math.abs(currentValue - neutral) > 0.0001
+        readonly property color semanticFill: {
+            if (controlKey === "temp") return currentValue >= neutral ? root.accentAmber : root.accentBlue;
+            if (controlKey === "tint") return currentValue >= neutral ? root.accentMagenta : root.accentGreen;
+            if (controlKey.indexOf("color") >= 0 || controlKey === "saturation" || controlKey === "vibrance") return root.accentAmber;
+            if (controlKey.indexOf("grain") >= 0) return "#aaa18e";
+            if (controlKey.indexOf("halation") >= 0 || controlKey === "bloom") return "#d4876d";
+            if (controlKey === "exposure" || controlKey === "film_exposure_ev") return "#b9a871";
+            if (controlKey === "clarity" || controlKey === "texture" || controlKey === "dehaze" || controlKey.indexOf("sharp") >= 0) return root.accentBlue;
+            return root.textSecondary;
+        }
 
         // Fixed height so the row never grows when the Reset button appears —
         // the slider below must not shift. Children are vertically centred.
@@ -1403,8 +1541,13 @@ Window {
             to: sliderRow.maximum
             stepSize: sliderRow.increment
             value: sliderRow.autoValue ? sliderRow.neutral : sliderRow.currentValue
+            bipolarTrack: sliderRow.bipolar
+            neutralValue: sliderRow.neutral
+            resetValue: sliderRow.neutral
+            precisionStep: sliderRow.increment
+            fillColor: sliderRow.semanticFill
             opacity: sliderRow.available ? 1.0 : 0.35
-            onMoved: engine.setFilmControl(sliderRow.controlKey, value)
+            onAdjusted: engine.setFilmControl(sliderRow.controlKey, nextValue)
         }
 
         HoverHandler { id: sliderHover; enabled: sliderRow.tooltip.length > 0 }
