@@ -603,16 +603,16 @@ Window {
         return (stockId && stockId !== "none") ? ("qrc:/boxart/" + stockId + ".svg") : ""
     }
 
-    // Film-stock box art tile. When a stock is selected it frames the colourful
-    // box art; when empty it is NOT a grey block — just a muted film glyph, so an
-    // empty slot reads as intentional ("no film loaded") rather than a broken image.
+    // Film-stock box art tile. An empty stock has no visual placeholder: the
+    // selector text already communicates that no film has been selected.
     component BoxartSwatch: Rectangle {
         property string stockId: ""
         property int cell: 26
         readonly property string boxSource: root.boxartFor(stockId)
         readonly property bool empty: boxSource === ""
-        width: cell
-        height: cell
+        visible: !empty
+        width: empty ? 0 : cell
+        height: empty ? 0 : cell
         radius: 5
         clip: true
         color: empty ? "transparent" : root.inset
@@ -626,13 +626,6 @@ Window {
             smooth: true
             source: parent.boxSource
             visible: !parent.empty
-        }
-        AppIcon {
-            anchors.centerIn: parent
-            visible: parent.empty
-            name: "film-strip"
-            size: Math.round(parent.cell * 0.62)
-            color: root.textMuted
         }
     }
 
@@ -2809,9 +2802,16 @@ Window {
                                         anchors.right: parent.right
                                         anchors.rightMargin: 32
                                         anchors.verticalCenter: parent.verticalCenter
+                                        spacing: selectedStockSwatch.visible ? 10 : 0
+                                        BoxartSwatch {
+                                            id: selectedStockSwatch
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            cell: 30
+                                            stockId: engine.stock
+                                        }
                                         Column {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            width: parent.width
+                                            width: parent.width - selectedStockSwatch.width
                                             spacing: 2
                                             readonly property bool noneSelected: engine.stock === "none"
                                             Text {
