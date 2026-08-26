@@ -1268,14 +1268,6 @@ Window {
                 control.value = control.resetValue;
                 control.adjusted(control.resetValue);
             }
-            onWheel: (wheel) => {
-                var direction = wheel.angleDelta.y > 0 ? 1 : -1;
-                var next = control.clampValue(control.value + direction * control.precisionStep
-                    * control.modifierScale(wheel.modifiers));
-                control.value = next;
-                control.adjusted(next);
-                wheel.accepted = true;
-            }
         }
 
         Keys.onLeftPressed: (event) => {
