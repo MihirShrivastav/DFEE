@@ -2741,14 +2741,13 @@ Window {
 
                         Column {
                             width: parent.width
-                            spacing: 8
+                            spacing: 0
                             visible: recipeCard.open
 
-                            InspectorLabel { text: "Film stock" }
                             ComboBox {
                                 id: stockBox
                                 width: parent.width
-                                height: 52
+                                height: 42
                                 model: engine.stockModel
                                 textRole: "name"
                                 valueRole: "id"
@@ -2806,19 +2805,13 @@ Window {
                                 contentItem: Item {
                                     Row {
                                         anchors.left: parent.left
-                                        anchors.leftMargin: 10
+                                        anchors.leftMargin: 8
                                         anchors.right: parent.right
                                         anchors.rightMargin: 32
                                         anchors.verticalCenter: parent.verticalCenter
-                                        spacing: 12
-                                        BoxartSwatch {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            cell: 34
-                                            stockId: engine.stock
-                                        }
                                         Column {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            width: parent.width - 46
+                                            width: parent.width
                                             spacing: 2
                                             readonly property bool noneSelected: engine.stock === "none"
                                             Text {
@@ -2841,14 +2834,10 @@ Window {
                                         }
                                     }
                                 }
-                                // Flush at rest (defined by a hairline, not a grey block); fills
-                                // subtly only on hover/open, so the card stays calm.
                                 background: Rectangle {
                                     radius: 8
-                                    color: (stockBox.hovered || stockBox.popup.visible) ? root.inset : "transparent"
-                                    border.width: 1
-                                    border.color: stockBox.popup.visible ? root.border : root.hair
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    color: "transparent"
+                                    border.width: 0
                                 }
                                 indicator: ChevronToggle {
                                     x: stockBox.width - 26
@@ -3038,11 +3027,10 @@ Window {
                             spacing: 12
                             visible: printCard.open
 
-                            InspectorLabel { text: "Print stock" }
                             ComboBox {
                                 id: printBox
                                 width: parent.width
-                                height: 38
+                                height: 36
                                 model: engine.printStockNames
                                 currentIndex: {
                                     for (var i = 0; i < engine.printStockNames.length; ++i)
@@ -3060,10 +3048,8 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: (printBox.hovered || printBox.popup.visible) ? root.inset : "transparent"
-                                    border.width: 1
-                                    border.color: printBox.popup.visible ? root.border : root.hair
-                                    Behavior on color { ColorAnimation { duration: 90 } }
+                                    color: "transparent"
+                                    border.width: 0
                                 }
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
@@ -3664,14 +3650,13 @@ Window {
                                         { label: "9:16", r: 0.5625 }
                                     ]
                                     onActivated: previewCanvas.selectAspect(model[currentIndex].r)
-                                    contentItem: Text { leftPadding: 10; text: aspectBox.displayText; color: root.textPrimary; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
+                                    contentItem: Text { leftPadding: 10; rightPadding: 32; text: aspectBox.displayText; color: root.textPrimary; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12 }
                                     background: Rectangle {
                                         radius: root.radiusControl
-                                        color: (aspectBox.hovered || aspectBox.popup.visible) ? root.inset : "transparent"
-                                        border.width: 1
-                                        border.color: aspectBox.popup.visible ? root.border : root.hair
-                                        Behavior on color { ColorAnimation { duration: 90 } }
+                                        color: "transparent"
+                                        border.width: 0
                                     }
+                                    indicator: ChevronToggle { x: aspectBox.width - 26; y: (aspectBox.height - 14) / 2; open: aspectBox.popup.visible }
                                 }
 
                                 GeoButton {
