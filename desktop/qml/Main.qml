@@ -25,6 +25,7 @@ Window {
     // card (Linear/Vercel-style), defined by a soft border rather than by darkness.
     readonly property color inset: "#232327"
     readonly property color well: "#141416"           // true recess — slider grooves + histogram only
+    readonly property color sliderFill: "#29292d"      // restrained filled portion, near the recessed groove
     readonly property color border: "#26262b"
     readonly property color hair: "#14ffffff"           // ~0.08 white hairline (#AARRGGBB)
     readonly property color textPrimary: "#c7c7cc"      // softened — no pure white
@@ -37,10 +38,6 @@ Window {
     readonly property color knob: "#c4c4c9"             // slider knob
     readonly property color danger: "#e0655b"
     readonly property color dangerPressed: "#b94d47"
-    readonly property color accentBlue: "#6ea8d9"
-    readonly property color accentAmber: "#d8a458"
-    readonly property color accentMagenta: "#c77db7"
-    readonly property color accentGreen: "#7eae84"
 
     // Control state fills — one token per interaction state so buttons, chips and
     // list rows share exactly the same greys instead of a dozen hand-picked hexes.
@@ -1376,7 +1373,7 @@ Window {
             radius: root.radiusControl
             color: destructiveButton.down ? root.dangerPressed : root.danger
             border.width: 1
-            border.color: destructiveButton.activeFocus ? root.textPrimary : "#55ffffff"
+            border.color: destructiveButton.activeFocus ? "#f28a82" : "#9d403d"
         }
         contentItem: Text {
             text: destructiveButton.text
@@ -1488,16 +1485,11 @@ Window {
 
         readonly property real currentValue: Number(engine.filmControls[controlKey])
         readonly property bool dirty: Math.abs(currentValue - neutral) > 0.0001
-        readonly property color semanticFill: {
-            if (controlKey === "temp") return currentValue >= neutral ? root.accentAmber : root.accentBlue;
-            if (controlKey === "tint") return currentValue >= neutral ? root.accentMagenta : root.accentGreen;
-            if (controlKey.indexOf("color") >= 0 || controlKey === "saturation" || controlKey === "vibrance") return root.accentAmber;
-            if (controlKey.indexOf("grain") >= 0) return "#aaa18e";
-            if (controlKey.indexOf("halation") >= 0 || controlKey === "bloom") return "#d4876d";
-            if (controlKey === "exposure" || controlKey === "film_exposure_ev") return "#b9a871";
-            if (controlKey === "clarity" || controlKey === "texture" || controlKey === "dehaze" || controlKey.indexOf("sharp") >= 0) return root.accentBlue;
-            return root.textSecondary;
+        function syncSliderValue() {
+            if (sliderControl) sliderControl.value = autoValue ? neutral : currentValue;
         }
+        onCurrentValueChanged: syncSliderValue()
+        onAutoValueChanged: syncSliderValue()
 
         // Fixed height so the row never grows when the Reset button appears —
         // the slider below must not shift. Children are vertically centred.
@@ -1545,7 +1537,7 @@ Window {
             neutralValue: sliderRow.neutral
             resetValue: sliderRow.neutral
             precisionStep: sliderRow.increment
-            fillColor: sliderRow.semanticFill
+            fillColor: root.sliderFill
             opacity: sliderRow.available ? 1.0 : 0.35
             onAdjusted: engine.setFilmControl(sliderRow.controlKey, nextValue)
         }
