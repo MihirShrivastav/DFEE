@@ -62,6 +62,10 @@ EngineController::EngineController(PreviewImageProvider* provider,
     , provider_(provider)
 {
     filmControls_ = defaultFilmControls();
+    previewDebounceTimer_.setSingleShot(true);
+    previewDebounceTimer_.setInterval(90);
+    connect(&previewDebounceTimer_, &QTimer::timeout,
+            this, &EngineController::dispatchScheduledRender);
     // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
     // so there is no concurrent access.
     loadStocks();
@@ -511,7 +515,14 @@ void EngineController::setAutoGrain(bool enabled)
 
 void EngineController::openFile(const QUrl& url)
 {
+    if (exporting_) {
+        status_ = "Finish the current export before opening another image.";
+        emit statusChanged();
+        return;
+    }
+
     const QString file = url.toLocalFile();
+    previewDebounceTimer_.stop();
     status_ = "Loading " + QFileInfo(file).fileName();
     emit statusChanged();
     // A new image starts a fresh history; seed the baseline once its first
@@ -541,6 +552,21 @@ void EngineController::openFile(const QUrl& url)
 }
 
 void EngineController::scheduleRender()
+{
+    if (currentFile_.isEmpty() || exporting_) return;
+
+    if (workerBusy_) {
+        dirty_ = true;
+        return;
+    }
+
+    // Coalesce high-frequency slider updates before taking the worker. This
+    // keeps the GUI responsive and prevents an early drag value from starting
+    // an expensive render that will immediately be superseded.
+    previewDebounceTimer_.start();
+}
+
+void EngineController::dispatchScheduledRender()
 {
     if (currentFile_.isEmpty() || exporting_) return;
 
@@ -715,6 +741,11 @@ void EngineController::onHistogram(
 void EngineController::exportImage()
 {
     if (currentFile_.isEmpty()) return;
+    if (exporting_) return;
+    // The export snapshot is built below, so a queued preview would only spend
+    // memory and CPU on an image the user is about to save at full resolution.
+    previewDebounceTimer_.stop();
+    dirty_ = false;
     status_ = "Exporting…";
     emit statusChanged();
     exporting_ = true;

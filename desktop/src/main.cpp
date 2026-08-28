@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QTextStream>
 #include "EngineController.h"
+#include "DesktopDiagnostics.h"
 #include "PreviewImageProvider.h"
 #include "ThumbnailImageProvider.h"
 #include "LibraryController.h"
@@ -29,6 +30,8 @@ int main(int argc, char* argv[]) {
     app.setApplicationName("Film Lab");
     app.setApplicationDisplayName("Film Lab");
     app.setOrganizationName("Film Lab");
+    dfee::desktop::installApplicationLogging();
+    qInfo() << "Film Lab startup" << "Qt" << qVersion();
 
     // Bundled Geist (Swiss grotesque) — the Graphite typeface. Embedded via qrc so it
     // renders identically everywhere, including headless/offscreen captures.
@@ -156,7 +159,7 @@ int main(int argc, char* argv[]) {
                 controller.setFilmControl("highlight_rolloff", 125.0);
                 controller.setFilmControl("film_contrast", 115.0);
                 controller.setFilmControl("emulsion_color_density", 20.0);
-                controller.setFilmControl("palette_range", -15.0);
+                controller.setFilmControl("shadow_color_retention", 15.0);
                 controller.setFilmControl("halation_strength", 80.0);
                 controller.setFilmControl("bloom", 12.0);
             });

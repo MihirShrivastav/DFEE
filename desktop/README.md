@@ -58,6 +58,16 @@ reports either the resulting path or an error.
 Current TIFF output is 16-bit RGB and intentionally uncompressed for
 compatibility. Lossless TIFF compression is a separate export-engine task.
 
+## Diagnostics And Beta Safety
+
+Film Lab writes rotated diagnostic logs to
+`%LOCALAPPDATA%\Film Lab\Film Lab\Logs`. They include application warnings and
+preview/export timings so beta failures can be investigated without a console.
+The native exporter estimates full-resolution peak memory before allocation and
+will reject an unsafe job rather than destabilize the machine. See
+[`BETA_HARDENING.md`](BETA_HARDENING.md) for the acceptance gates, diagnostic
+settings, and validation commands.
+
 ## Lightroom Classic Round-Trip
 
 Configure Lightroom Classic's **Additional External Editor** to launch `DFEE.exe`, then

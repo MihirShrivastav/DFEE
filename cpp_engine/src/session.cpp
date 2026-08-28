@@ -3055,10 +3055,13 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 const std::uint64_t safe_budget = budget_override.has_value()
                     ? *budget_override
                     : compute_safe_export_budget_bytes(memory_snapshot);
-                const bool enforce_budget =
-                    budget_override.has_value() ||
-                    memory_snapshot.low_memory_signal ||
-                    (memory_snapshot.available && memory_snapshot.available_physical < (2048ULL * 1024ULL * 1024ULL));
+                // A high-memory export must be rejected before allocations begin,
+                // not only after Windows has already entered low-memory state.
+                // Available commit headroom includes page-file capacity, while the
+                // safe budget retains a fixed reserve for Lightroom, Qt, and the
+                // operating system. An explicit environment override remains for
+                // controlled QA and diagnostic runs.
+                const bool enforce_budget = budget_override.has_value() || memory_snapshot.available;
                 if (enforce_budget && safe_budget > 0ULL && estimated_peak > safe_budget) {
                     response.status = "error";
                     std::ostringstream detail;

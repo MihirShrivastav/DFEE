@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QThread>
+#include <QTimer>
 #include <QUrl>
 #include <QImage>
 #include <QHash>
@@ -193,6 +194,7 @@ private:
     static QVariantMap defaultFilmControls();
     void loadStocks();
     void scheduleRender();
+    void dispatchScheduledRender();
     // Pick the sensible default exposure placement for the just-opened file:
     // already-developed inputs (TIFF / Lightroom round-trip) default to "as shot"
     // (they're exposed already); RAWs default to "auto balanced".
@@ -273,4 +275,8 @@ private:
     bool dirty_ = false;
     bool dirtyIsOpen_ = false;
     QString pendingFile_;
+    // Slider controls can emit many intermediate values per second. Retain only
+    // the latest immutable request after a short quiet period so the native
+    // worker spends its time rendering useful previews rather than stale ones.
+    QTimer previewDebounceTimer_;
 };

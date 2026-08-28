@@ -16,6 +16,8 @@ qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(DFEE
     src/main.cpp
+    src/DesktopDiagnostics.cpp
+    src/DesktopDiagnostics.h
     src/EngineController.cpp
     src/EngineController.h
     src/RenderWorker.cpp

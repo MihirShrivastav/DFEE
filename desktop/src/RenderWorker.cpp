@@ -8,11 +8,22 @@
 
 #include <QImage>
 #include <QMetaObject>
+#include <QElapsedTimer>
 #include <QVariantList>
 #include <QDebug>
 
 namespace {
 constexpr int kVectorscopeSize = 64;
+
+double totalEngineMilliseconds(const dfee::NativeEngineMetadata& metadata, const char* totalStage)
+{
+    for (const dfee::NativeStageTiming& timing : metadata.timings) {
+        if (timing.stage == totalStage) {
+            return timing.milliseconds;
+        }
+    }
+    return 0.0;
+}
 
 // Compute a 256-bin per-channel histogram from a preview image. Runs on the
 // worker thread; the preview is small (~1k px edge) so a full scan is cheap.
@@ -135,18 +146,30 @@ void RenderWorker::render(const dfee::NativePreviewRenderRequest& request)
 void RenderWorker::exportImage(const dfee::NativeExportRequest& request)
 {
     QString msg;
+    QElapsedTimer elapsed;
+    elapsed.start();
     try {
         const dfee::NativeExportResponse resp = session_->export_image(request);
         if (resp.ok) {
             msg = "Exported: " + QString::fromStdString(resp.output_path.string());
+            qInfo().noquote() << "DFEE export complete"
+                              << "format=" + QString::fromStdString(resp.export_format)
+                              << "elapsed_ms=" + QString::number(elapsed.elapsed())
+                              << "engine_ms=" + QString::number(
+                                  totalEngineMilliseconds(resp.engine, "export_image_total"), 'f', 1);
             if (qEnvironmentVariableIsSet("DFEE_SELFTEST_EXPORT")) {
                 qDebug() << "SELFTEST_EXPORT output_path:" << QString::fromStdString(resp.output_path.string());
             }
         } else {
             msg = "Export failed: " + QString::fromStdString(resp.error.user_message);
+            qWarning().noquote() << "DFEE export failed"
+                                 << "code=" + QString::fromStdString(resp.error.code)
+                                 << "elapsed_ms=" + QString::number(elapsed.elapsed())
+                                 << QString::fromStdString(resp.error.detail);
         }
     } catch (const std::exception& e) {
         msg = QString("Export failed: ") + e.what();
+        qCritical().noquote() << "DFEE export threw after" << elapsed.elapsed() << "ms:" << e.what();
     }
 
     QMetaObject::invokeMethod(controller_, "onExportDone",
@@ -173,10 +196,25 @@ void RenderWorker::resolveAutoGrain(const dfee::NativePreviewRenderRequest& requ
 void RenderWorker::doRender(const dfee::NativePreviewRenderRequest& request)
 {
     dfee::NativePreviewRenderResponse resp;
+    QElapsedTimer elapsed;
+    elapsed.start();
     try {
         resp = session_->render_preview(request);
     } catch (const std::exception& e) {
         const QString msg = QString("Render failed: %1").arg(e.what());
+        QMetaObject::invokeMethod(controller_, "onRenderFailed",
+                                  Qt::QueuedConnection, Q_ARG(QString, msg));
+        QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
+                                  Qt::QueuedConnection, Q_ARG(bool, false));
+        return;
+    }
+
+    if (!resp.ok) {
+        const QString msg = QString("Render failed: %1").arg(
+            QString::fromStdString(resp.error.user_message));
+        qWarning().noquote() << "DFEE preview failed"
+                             << "code=" + QString::fromStdString(resp.error.code)
+                             << QString::fromStdString(resp.error.detail);
         QMetaObject::invokeMethod(controller_, "onRenderFailed",
                                   Qt::QueuedConnection, Q_ARG(QString, msg));
         QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
@@ -206,6 +244,12 @@ void RenderWorker::doRender(const dfee::NativePreviewRenderRequest& request)
                                   Q_ARG(QVariantList, hr), Q_ARG(QVariantList, hg),
                                   Q_ARG(QVariantList, hb), Q_ARG(QVariantList, scope));
     }
+
+    qInfo().noquote() << "DFEE preview complete"
+                      << "elapsed_ms=" + QString::number(elapsed.elapsed())
+                      << "engine_ms=" + QString::number(
+                          totalEngineMilliseconds(resp.engine, "render_preview_total"), 'f', 1)
+                      << "size=" + QString::number(img.width()) + "x" + QString::number(img.height());
 
     QMetaObject::invokeMethod(controller_, "onPreviewReady",
                               Qt::QueuedConnection);

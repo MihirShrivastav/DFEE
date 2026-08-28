@@ -198,7 +198,7 @@ Window {
                 }
             }
 
-            Text { width: parent.width; text: "GROUP"; color: root.textMuted; font.pixelSize: 10; font.weight: Font.SemiBold }
+            Text { width: parent.width; text: "GROUP"; color: root.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
             Flow {
                 width: parent.width
                 spacing: 6
@@ -316,7 +316,7 @@ Window {
                     Keys.onEscapePressed: editPresetDialog.close()
                 }
             }
-            Text { width: parent.width; text: "GROUP"; color: root.textMuted; font.pixelSize: 10; font.weight: Font.SemiBold }
+            Text { width: parent.width; text: "GROUP"; color: root.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
             Flow {
                 width: parent.width
                 spacing: 6
@@ -535,7 +535,7 @@ Window {
                 Column {
                     width: parent.width
                     spacing: 9
-                    Text { text: modelData.title; color: root.textMuted; font.pixelSize: 10; font.weight: Font.SemiBold }
+                    Text { text: modelData.title; color: root.textMuted; font.pixelSize: 10; font.weight: Font.DemiBold }
                     Repeater {
                         model: modelData.items
                         Item {
