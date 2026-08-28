@@ -17,8 +17,8 @@
 #include <array>
 #include <cassert>
 #include <cmath>
-#if defined(_WIN32) && defined(_DEBUG)
 #include <cstdlib>
+#if defined(_WIN32) && defined(_DEBUG)
 #include <crtdbg.h>
 #endif
 #include <filesystem>
@@ -2404,12 +2404,14 @@ void test_tiff_ingestion() {
     const auto gray8_path = raw_dir / "native_core_test_gray8.tif";
     const auto bgra8_path = raw_dir / "native_core_test_bgra8.tif";
     const auto corrupt_path = raw_dir / "native_core_test_corrupt.tif";
+    const auto memory_budget_path = raw_dir / "native_core_test_memory_budget.tif";
 
     const auto cleanup = [&]() {
         std::filesystem::remove(srgb16_path);
         std::filesystem::remove(gray8_path);
         std::filesystem::remove(bgra8_path);
         std::filesystem::remove(corrupt_path);
+        std::filesystem::remove(memory_budget_path);
     };
     struct CleanupGuard {
         decltype(cleanup)& cleanup_fn;
@@ -2475,6 +2477,34 @@ void test_tiff_ingestion() {
         });
         assert(!decoded.ok);
         assert(decoded.error.code == "TIFF_DECODE_FAILED");
+    }
+
+    // Export must refuse an unsafe job before entering the full-resolution
+    // renderer. The tiny forced budget makes this deterministic on every CI
+    // machine while exercising the same preflight used for Windows headroom.
+    {
+        cv::Mat large_enough(512, 512, CV_16UC3, cv::Scalar(32768, 32768, 32768));
+        assert(cv::imwrite(memory_budget_path.string(), large_enough));
+#if defined(_WIN32)
+        assert(_putenv_s("DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB", "1") == 0);
+#else
+        assert(setenv("DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB", "1", 1) == 0);
+#endif
+        dfee::EngineSession session(repo_root);
+        dfee::NativeExportRequest request;
+        request.filename = memory_budget_path.string();
+        request.stock = "none";
+        request.export_format = "tiff";
+        const auto result = session.export_image(request);
+#if defined(_WIN32)
+        assert(_putenv_s("DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB", "") == 0);
+#else
+        unsetenv("DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB");
+#endif
+        assert(!result.ok);
+        assert(result.error.code == "EXPORT_MEMORY_BUDGET_EXCEEDED");
+        assert(!std::filesystem::exists(memory_budget_path.parent_path() /
+                                        "native_core_test_memory_budget_none_dfee.tif"));
     }
 }
 #endif  // DFEE_HAS_OPENCV
