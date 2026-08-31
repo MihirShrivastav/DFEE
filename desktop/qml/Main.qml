@@ -1443,9 +1443,10 @@ Window {
                 width: parent.width
                 height: parent.height - 2
                 radius: root.radiusControl
+                z: 1
                 gradient: Gradient {
-                    GradientStop { position: 0; color: segmentButton.down ? "#252528" : "#3c3c41" }
-                    GradientStop { position: 1; color: segmentButton.down ? "#1b1b1d" : "#26262b" }
+                    GradientStop { position: 0; color: segmentButton.down ? root.raiseTopDown : "#3c3c41" }
+                    GradientStop { position: 1; color: segmentButton.down ? root.raiseBottomDown : "#26262b" }
                 }
                 border.width: 1
                 border.color: "#19191b"
