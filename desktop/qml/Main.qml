@@ -41,15 +41,15 @@ Window {
 
     // Control state fills — one token per interaction state so buttons, chips and
     // list rows share exactly the same greys instead of a dozen hand-picked hexes.
-    readonly property color ctrl: "#2e2e34"             // raised control base (buttons, chips)
-    readonly property color ctrlPressed: "#26262b"      // pressed raised control
+    readonly property color ctrl: "#2d2d31"             // raised control base (buttons, chips)
+    readonly property color ctrlPressed: "#202023"      // pressed raised control
     readonly property color ctrlHover: "#232327"        // hover fill on flat rows / list items
     readonly property color ctrlActive: "#33333a"       // selected / active control
     readonly property color bevel: "#16ffffff"          // 1px top highlight on raised controls
-    readonly property color raiseTop: "#34343a"         // primary-button gradient — top
-    readonly property color raiseBottom: "#242429"      // primary-button gradient — bottom
-    readonly property color raiseTopDown: "#26262b"     // primary-button gradient (pressed) — top
-    readonly property color raiseBottomDown: "#1d1d20"  // primary-button gradient (pressed) — bottom
+    readonly property color raiseTop: "#3a3a3f"         // primary-button gradient — top
+    readonly property color raiseBottom: "#28282d"      // primary-button gradient — bottom
+    readonly property color raiseTopDown: "#29292d"     // primary-button gradient (pressed) — top
+    readonly property color raiseBottomDown: "#1e1e21"  // primary-button gradient (pressed) — bottom
 
     // Corner radii — a control radius shared by every button/field/card, plus a
     // small radius for chips inside rows. Pills use height/2 at the call site.
@@ -941,27 +941,15 @@ Window {
 
     // Beveled action button for the Geometry tab (rotate / flip / reset). `active`
     // highlights it as an engaged toggle (used by the Flip buttons).
-    component GeoButton: Button {
+    component GeoButton: TactileButton {
         id: geoBtn
         property bool active: false
         property string tooltip: ""
+        depressed: active
+        labelColor: geoBtn.active ? root.textPrimary : root.textSecondary
         height: 30
-        contentItem: Text {
-            text: geoBtn.text
-            color: geoBtn.active ? root.textPrimary : root.textSecondary
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.pixelSize: 12
-            font.weight: Font.Medium
-        }
-        background: Rectangle {
-            radius: root.radiusControl
-            color: geoBtn.active ? "#3a3a42" : (geoBtn.down ? root.ctrlPressed : (geoBtn.hovered ? root.ctrlHover : root.ctrl))
-            border.width: 1
-            border.color: geoBtn.active || geoBtn.activeFocus ? "#4a4a52" : root.hair
-            }
-        scale: geoBtn.down ? 0.985 : 1.0
-        Behavior on scale { NumberAnimation { duration: 70 } }
+        font.pixelSize: 12
+        font.weight: Font.Medium
         HoverHandler { id: geoHover }
         GraphiteTip {
             parent: geoBtn
@@ -989,35 +977,44 @@ Window {
             text: cb.tooltip
         }
 
-        indicator: Rectangle {
-            implicitWidth: 18
-            implicitHeight: 18
+        indicator: Item {
+            implicitWidth: 34
+            implicitHeight: 20
             x: 0
             y: (cb.height - height) / 2
-            radius: 5
-            // Tactile: recessed inset when off, raised dark bevel chip when on
-            // (matches the buttons and segmented — no clashing flat white).
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: cb.checked ? "#34343a" : root.inset }
-                GradientStop { position: 1.0; color: cb.checked ? "#242429" : root.inset }
+
+            Rectangle {
+                x: 1
+                y: 2
+                width: parent.width - 2
+                height: parent.height - 2
+                radius: height / 2
+                color: "#121214"
             }
-            border.width: 1
-            border.color: root.hair
-            opacity: cb.enabled ? 1.0 : 0.5
-            Canvas {
-                anchors.fill: parent
-                visible: cb.checked
-                onVisibleChanged: if (visible) requestPaint()
-                onPaint: {
-                    var c = getContext("2d");
-                    c.reset();
-                    c.strokeStyle = "#d7d7db";
-                    c.lineWidth = 2;
-                    c.lineCap = "round";
-                    c.lineJoin = "round";
-                    c.beginPath();
-                    c.moveTo(4.5, 9); c.lineTo(8, 12.5); c.lineTo(13.5, 5.5);
-                    c.stroke();
+
+            Rectangle {
+                x: 0
+                y: cb.down ? 2 : 0
+                width: parent.width
+                height: parent.height - 2
+                radius: height / 2
+                gradient: Gradient {
+                    GradientStop { position: 0; color: cb.checked ? "#45454b" : root.raiseTop }
+                    GradientStop { position: 1; color: cb.checked ? "#2c2c31" : root.raiseBottom }
+                }
+                border.width: 1
+                border.color: cb.activeFocus ? "#66666c" : "#141416"
+
+                Rectangle {
+                    width: 14
+                    height: 14
+                    x: cb.checked ? parent.width - width - 3 : 3
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: width / 2
+                    color: cb.checked ? "#d5d5da" : "#a1a1a7"
+                    border.width: 1
+                    border.color: "#18181a"
+                    Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                 }
             }
         }
@@ -1283,60 +1280,88 @@ Window {
         }
     }
 
-    // Primary action — a raised dark chip with a top bevel highlight (no more white).
-    component PrimaryButton: Button {
+    // Shared physical control. The face travels down into its contact shadow when
+    // pressed, while selected segments remain visually depressed until deselected.
+    component TactileButton: Button {
+        id: tactileButton
+        property bool depressed: false
+        property color labelColor: tactileButton.enabled ? root.textPrimary : root.textMuted
+
+        contentItem: Text {
+            text: tactileButton.text
+            color: tactileButton.labelColor
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            topPadding: tactileButton.down || tactileButton.depressed ? 2 : 0
+            font: tactileButton.font
+        }
+
+        background: Item {
+            readonly property bool pressedFace: tactileButton.down || tactileButton.depressed
+
+            Rectangle {
+                x: 1
+                y: 2
+                width: parent.width - 2
+                height: Math.max(0, parent.height - 2)
+                radius: root.radiusControl
+                color: tactileButton.enabled ? "#141416" : root.panel
+            }
+            Rectangle {
+                x: 0
+                y: parent.pressedFace ? 2 : 0
+                width: parent.width
+                height: Math.max(0, parent.height - (parent.pressedFace ? 2 : 2))
+                radius: root.radiusControl
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: !tactileButton.enabled ? root.panel
+                            : (parent.pressedFace ? root.raiseTopDown
+                                                  : (tactileButton.hovered ? "#414146" : root.raiseTop))
+                    }
+                    GradientStop {
+                        position: 1
+                        color: !tactileButton.enabled ? root.panel
+                            : (parent.pressedFace ? root.raiseBottomDown
+                                                  : (tactileButton.hovered ? "#2c2c31" : root.raiseBottom))
+                    }
+                }
+                border.width: 1
+                border.color: tactileButton.activeFocus ? "#66666c" : "#141416"
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 1
+                    height: 1
+                    radius: root.radiusControl
+                    color: parent.parent.pressedFace ? "#12ffffff" : "#2bffffff"
+                }
+            }
+        }
+        scale: tactileButton.down ? 0.985 : 1.0
+        Behavior on scale { NumberAnimation { duration: 55 } }
+    }
+
+    // Primary action — a raised graphite chip with a top bevel and contact shadow.
+    component PrimaryButton: TactileButton {
         id: button
         width: parent.width
         height: 38
         font.pixelSize: 13
         font.weight: Font.Medium
-
-        contentItem: Text {
-            text: button.text
-            color: button.enabled ? root.textPrimary : root.textMuted
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font: button.font
-        }
-
-        background: Rectangle {
-            radius: root.radiusControl
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: !button.enabled ? root.panel : (button.down ? root.raiseTopDown : (button.hovered ? "#3b3b42" : root.raiseTop)) }
-                GradientStop { position: 1.0; color: !button.enabled ? root.panel : (button.down ? root.raiseBottomDown : (button.hovered ? "#2a2a30" : root.raiseBottom)) }
-            }
-            border.width: 1
-            border.color: button.activeFocus ? root.textSecondary : root.hair
-        }
-        scale: button.down ? 0.985 : 1.0
-        Behavior on scale { NumberAnimation { duration: 70 } }
     }
 
     // Secondary action — a gentle raised control (subtler than PrimaryButton),
     // sharing the same radius and hairline for a consistent family.
-    component SecondaryButton: Button {
+    component SecondaryButton: TactileButton {
         id: button
         width: parent.width
         height: 38
         font.pixelSize: 13
         font.weight: Font.Medium
-
-        contentItem: Text {
-            text: button.text
-            color: button.enabled ? root.textPrimary : root.textMuted
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font: button.font
-        }
-
-        background: Rectangle {
-            radius: root.radiusControl
-            color: button.down ? root.panelRaised : (button.hovered ? root.ctrlHover : root.inset)
-            border.width: 1
-            border.color: button.activeFocus ? root.textSecondary : root.hair
-        }
-        scale: button.down ? 0.985 : 1.0
-        Behavior on scale { NumberAnimation { duration: 70 } }
     }
 
     // Dialog dismissal is intentionally text-like: it cannot compete with the
@@ -1364,47 +1389,49 @@ Window {
 
     component DestructiveButton: PrimaryButton {
         id: destructiveButton
-        background: Rectangle {
-            radius: root.radiusControl
-            color: destructiveButton.down ? root.dangerPressed : root.danger
-            border.width: 1
-            border.color: destructiveButton.activeFocus ? "#f28a82" : "#9d403d"
-        }
-        contentItem: Text {
-            text: destructiveButton.text
-            color: "#171315"
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font: destructiveButton.font
+        labelColor: "#171315"
+        background: Item {
+            Rectangle {
+                x: 1
+                y: 2
+                width: parent.width - 2
+                height: parent.height - 2
+                radius: root.radiusControl
+                color: "#411f20"
+            }
+            Rectangle {
+                x: 0
+                y: destructiveButton.down ? 2 : 0
+                width: parent.width
+                height: parent.height - 2
+                radius: root.radiusControl
+                gradient: Gradient {
+                    GradientStop { position: 0; color: destructiveButton.down ? "#bf504a" : "#ef7168" }
+                    GradientStop { position: 1; color: destructiveButton.down ? "#9f413e" : "#d55b55" }
+                }
+                border.width: 1
+                border.color: destructiveButton.activeFocus ? "#ffaea7" : "#8e3938"
+            }
         }
     }
 
     // Compact primary action (Reset, Open, New preset, Add). It deliberately
     // shares the exact surface treatment of the main Save/Return action.
-    component UtilityButton: Button {
+    component UtilityButton: TactileButton {
         id: ub
         height: 28
         font.pixelSize: 12
         font.weight: Font.Medium
-        contentItem: Text {
-            text: ub.text
-            color: ub.enabled ? root.textPrimary : root.textMuted
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font: ub.font
-        }
-        background: Rectangle {
-            radius: root.radiusControl
-            gradient: Gradient {
-                GradientStop { position: 0.0; color: !ub.enabled ? root.panel : (ub.down ? root.raiseTopDown : (ub.hovered ? "#3b3b42" : root.raiseTop)) }
-                GradientStop { position: 1.0; color: !ub.enabled ? root.panel : (ub.down ? root.raiseBottomDown : (ub.hovered ? "#2a2a30" : root.raiseBottom)) }
-            }
-            border.width: 1
-            border.color: ub.activeFocus ? root.textSecondary : root.hair
-            opacity: ub.enabled ? 1.0 : 0.5
-        }
-        scale: ub.down ? 0.985 : 1.0
-        Behavior on scale { NumberAnimation { duration: 70 } }
+    }
+
+    component TactileSegmentButton: TactileButton {
+        id: segmentButton
+        property bool selected: false
+        depressed: selected
+        height: 30
+        font.pixelSize: 12
+        font.weight: Font.Medium
+        labelColor: selected ? root.textPrimary : root.textSecondary
     }
 
     // Ghost icon button — transparent, subtle hover/press fill. For chevrons and
@@ -2371,19 +2398,14 @@ Window {
                 spacing: 4
                 Repeater {
                     model: [{ label: "Edited", m: 0 }, { label: "Split", m: 1 }, { label: "Side by side", m: 2 }]
-                    delegate: Button {
+                    delegate: TactileSegmentButton {
                         id: cmpBtn
                         height: 26
-                        width: cmpText.implicitWidth + 20
-                        readonly property bool selected: previewCanvas.compareMode === modelData.m
+                        width: modelData.label.length * 7 + 20
+                        selected: previewCanvas.compareMode === modelData.m
                         onClicked: previewCanvas.compareMode = modelData.m
-                        contentItem: Text { id: cmpText; text: modelData.label; color: cmpBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                        background: Rectangle {
-                            radius: 7
-                            color: cmpBtn.selected ? root.ctrlActive : "transparent"
-                            border.width: cmpBtn.selected ? 1 : 0
-                            border.color: root.hair
-                        }
+                        text: modelData.label
+                        font.pixelSize: 11
                     }
                 }
             }
@@ -2648,20 +2670,13 @@ Window {
                     spacing: 4
                     Repeater {
                         model: ["Develop", "Geometry", "Export"]
-                        delegate: Button {
+                        delegate: TactileSegmentButton {
                             id: tabBtn
                             width: (parent.width - 8) / 3
                             height: parent.height
                             text: modelData
-                            readonly property bool selected: inspector.activeTab === index
+                            selected: inspector.activeTab === index
                             onClicked: inspector.activeTab = index
-                            contentItem: Text { text: tabBtn.text; color: tabBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 12; font.weight: Font.Medium }
-                            background: Rectangle {
-                                radius: 7
-                                color: tabBtn.selected ? root.ctrlActive : "transparent"
-                                border.width: tabBtn.selected ? 1 : 0
-                                border.color: root.hair
-                            }
                         }
                     }
                 }
@@ -3148,20 +3163,14 @@ Window {
                                     spacing: 4
                                     Repeater {
                                         model: [{ label: "Auto balanced", value: "auto_balanced" }, { label: "As shot", value: "as_shot" }]
-                                        delegate: Button {
+                                        delegate: TactileSegmentButton {
                                             id: segBtn
                                             width: (parent.width - 4) / 2
                                             height: parent.height
                                             text: modelData.label
-                                            readonly property bool selected: engine.filmControls.exposure_placement === modelData.value
+                                            selected: engine.filmControls.exposure_placement === modelData.value
                                             onClicked: engine.setFilmControl("exposure_placement", modelData.value)
-                                            contentItem: Text { text: segBtn.text; color: segBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                                            background: Rectangle {
-                                                radius: 7
-                                                color: segBtn.selected ? root.ctrlActive : "transparent"
-                                                border.width: segBtn.selected ? 1 : 0
-                                                border.color: root.hair
-                                            }
+                                            font.pixelSize: 11
                                         }
                                     }
                                 }
@@ -3442,20 +3451,14 @@ Window {
                                     spacing: 4
                                     Repeater {
                                         model: [{ label: "Hue", v: "h" }, { label: "Saturation", v: "s" }, { label: "Luminance", v: "l" }]
-                                        delegate: Button {
+                                        delegate: TactileSegmentButton {
                                             id: hslTabBtn
                                             width: (parent.width - 8) / 3
                                             height: parent.height
                                             text: modelData.label
-                                            readonly property bool selected: hslCard.suffix === modelData.v
+                                            selected: hslCard.suffix === modelData.v
                                             onClicked: hslCard.suffix = modelData.v
-                                            contentItem: Text { text: hslTabBtn.text; color: hslTabBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                                            background: Rectangle {
-                                                radius: 7
-                                                color: hslTabBtn.selected ? root.ctrlActive : "transparent"
-                                                border.width: hslTabBtn.selected ? 1 : 0
-                                                border.color: root.hair
-                                            }
+                                            font.pixelSize: 11
                                         }
                                     }
                                 }
@@ -3773,21 +3776,15 @@ Window {
                                         { id: "tiff", label: "16-bit TIFF" },
                                         { id: "jpeg", label: "JPEG" }
                                     ]
-                                    delegate: Button {
+                                    delegate: TactileSegmentButton {
                                         id: fmtBtn
                                         width: (parent.width - 6) / 2
                                         height: 32
                                         text: modelData.label
-                                        readonly property bool selected: engine.exportFormat === modelData.id
+                                        selected: engine.exportFormat === modelData.id
                                         enabled: !engine.exporting
                                         onClicked: engine.exportFormat = modelData.id
-                                        contentItem: Text { text: fmtBtn.text; color: fmtBtn.selected ? root.textPrimary : root.textSecondary; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 11; font.weight: Font.Medium }
-                                        background: Rectangle {
-                                            radius: 6
-                                            color: fmtBtn.selected ? root.ctrlActive : "transparent"
-                                            border.width: 1
-                                            border.color: fmtBtn.selected ? root.hair : root.border
-                                        }
+                                        font.pixelSize: 11
                                     }
                                 }
                             }
