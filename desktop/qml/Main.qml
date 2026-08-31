@@ -26,30 +26,6 @@ Window {
     readonly property color inset: "#222222"
     readonly property color steelSliderStart: "#242424"
     readonly property color steelSliderEnd: "#d8d8d8"
-    readonly property color cyanSliderStart: "#277789"
-    readonly property color cyanSliderEnd: "#55bdca"
-    readonly property color magentaSliderStart: "#77426c"
-    readonly property color magentaSliderEnd: "#c374ae"
-    readonly property color yellowSliderStart: "#756222"
-    readonly property color yellowSliderEnd: "#d4b84c"
-    readonly property color warmSliderStart: "#8f5730"
-    readonly property color warmSliderEnd: "#d89b5a"
-    readonly property color coolSliderStart: "#315f7d"
-    readonly property color coolSliderEnd: "#63a1c5"
-    readonly property color greenSliderStart: "#346d57"
-    readonly property color greenSliderEnd: "#69ad81"
-    readonly property color chromaSliderStart: "#4b7481"
-    readonly property color chromaSliderEnd: "#c28a5b"
-    readonly property color slateButtonTop: "#40596d"
-    readonly property color slateButtonBottom: "#2c4050"
-    readonly property color slateButtonHoverTop: "#4a667c"
-    readonly property color slateButtonHoverBottom: "#334a5c"
-    readonly property color slateButtonPressedTop: "#2b4152"
-    readonly property color slateButtonPressedBottom: "#243744"
-    readonly property color slateToggleOn: "#2e3d49"
-    readonly property color slateToggleOff: "#25313b"
-    readonly property color slateShadow: "#3d0a1016"
-    readonly property color slateOutline: "#6a89a0"
     readonly property color flatControl: "#242424"
     readonly property color flatControlHover: "#2a2a2a"
     readonly property color flatControlActive: "#303030"
@@ -113,49 +89,24 @@ Window {
         engine.stock = m[(cur + dir + m.length) % m.length].id;
     }
 
-    function sliderPalette(key) {
-        var neutral = {
-            positiveStart: steelSliderStart, positiveEnd: steelSliderEnd,
-            negativeStart: steelSliderEnd, negativeEnd: steelSliderStart
-        };
-        if (key === "temp" || key === "temperature") return {
-            positiveStart: warmSliderStart, positiveEnd: warmSliderEnd,
-            negativeStart: coolSliderEnd, negativeEnd: coolSliderStart
-        };
-        if (key === "tint") return {
-            positiveStart: magentaSliderStart, positiveEnd: magentaSliderEnd,
-            negativeStart: greenSliderEnd, negativeEnd: greenSliderStart
-        };
-        if (key === "print_c") return {
-            positiveStart: cyanSliderStart, positiveEnd: cyanSliderEnd,
-            negativeStart: warmSliderEnd, negativeEnd: warmSliderStart
-        };
-        if (key === "print_m") return {
-            positiveStart: magentaSliderStart, positiveEnd: magentaSliderEnd,
-            negativeStart: greenSliderEnd, negativeEnd: greenSliderStart
-        };
-        if (key === "print_y") return {
-            positiveStart: yellowSliderStart, positiveEnd: yellowSliderEnd,
-            negativeStart: coolSliderEnd, negativeEnd: coolSliderStart
-        };
-        if (key === "vibrance" || key === "saturation") return {
-            positiveStart: chromaSliderStart, positiveEnd: chromaSliderEnd,
-            negativeStart: chromaSliderEnd, negativeEnd: chromaSliderStart
-        };
-        return neutral;
+    function hasColorTrack(key) {
+        return key === "temp" || key === "temperature" || key === "tint";
     }
 
-    function hasColorTrack(key) {
-        return key === "temp" || key === "temperature" || key === "tint"
-            || key === "vibrance" || key === "saturation" || key.indexOf("hsl_") === 0;
+    function hasChromaTrack(key) {
+        return key === "vibrance" || key === "saturation" || key === "film_color_density"
+            || key === "emulsion_color_density" || key === "highlight_color_hold"
+            || key === "shadow_color_retention" || key === "crossover" || key === "cg_crossbalance"
+            || key === "print_c" || key === "print_m" || key === "print_y"
+            || key.indexOf("hsl_") === 0;
     }
 
     function colorTrackPalette(key) {
         if (key === "temp" || key === "temperature") {
-            return { start: "#397fa5", middle: "#6f7880", end: "#c87938" };
+            return { start: "#bd842f", middle: "#6e6e6e", end: "#4d94b2" };
         }
         if (key === "tint") {
-            return { start: "#3d9267", middle: "#6f7880", end: "#b4649b" };
+            return { start: "#ad4b9b", middle: "#6e6e6e", end: "#2e9c68" };
         }
         return { start: "#357d9a", middle: "#56a36b", end: "#cf7455" };
     }
@@ -1249,6 +1200,7 @@ Window {
         property color trackStartColor: root.steelSliderStart
         property color trackMiddleColor: root.steelSliderEnd
         property color trackEndColor: root.steelSliderEnd
+        property bool chromaTrack: false
         property real precisionStep: stepSize > 0 ? stepSize : 1
         property real resetValue: neutralValue
         signal adjusted(real nextValue)
@@ -1303,6 +1255,20 @@ Window {
                 }
                 opacity: control.enabled ? 0.86 : 0.35
             }
+            Rectangle {
+                x: control.neutralPosition * parent.width
+                width: (1 - control.neutralPosition) * parent.width
+                height: parent.height
+                radius: parent.radius
+                visible: control.chromaTrack
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: "#247c9d" }
+                    GradientStop { position: 0.52; color: "#3fa66a" }
+                    GradientStop { position: 1; color: "#d17655" }
+                }
+                opacity: control.enabled ? 0.88 : 0.35
+            }
             Rectangle {                              // filled portion — subtle grey, monochrome
                 readonly property real startPosition: control.bipolarTrack
                     ? Math.min(control.visualPosition, control.neutralPosition) : 0
@@ -1312,7 +1278,7 @@ Window {
                 width: Math.max(0, (endPosition - startPosition) * parent.width)
                 height: parent.height
                 radius: parent.radius
-                visible: !control.fullColorTrack
+                visible: !control.fullColorTrack && !control.chromaTrack
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop {
@@ -1562,11 +1528,12 @@ Window {
         property bool decimals: false
         property bool available: true
         property bool autoValue: false
-        property color positiveFillStart: root.sliderPalette(controlKey).positiveStart
-        property color positiveFillEnd: root.sliderPalette(controlKey).positiveEnd
-        property color negativeFillStart: root.sliderPalette(controlKey).negativeStart
-        property color negativeFillEnd: root.sliderPalette(controlKey).negativeEnd
+        property color positiveFillStart: root.steelSliderStart
+        property color positiveFillEnd: root.steelSliderEnd
+        property color negativeFillStart: root.steelSliderEnd
+        property color negativeFillEnd: root.steelSliderStart
         readonly property bool fullColorTrack: root.hasColorTrack(controlKey)
+        readonly property bool chromaTrack: root.hasChromaTrack(controlKey)
         readonly property var colorTrackPalette: root.colorTrackPalette(controlKey)
         width: parent.width
         spacing: 2
@@ -1630,6 +1597,7 @@ Window {
             negativeFillStartColor: sliderRow.negativeFillStart
             negativeFillEndColor: sliderRow.negativeFillEnd
             fullColorTrack: sliderRow.fullColorTrack
+            chromaTrack: sliderRow.chromaTrack
             trackStartColor: sliderRow.colorTrackPalette.start
             trackMiddleColor: sliderRow.colorTrackPalette.middle
             trackEndColor: sliderRow.colorTrackPalette.end
