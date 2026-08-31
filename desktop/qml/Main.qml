@@ -76,7 +76,7 @@ Window {
 
     // True while any text field has focus — bare-letter/character shortcuts are
     // suppressed then so typing never triggers them.
-    readonly property bool textEntry: stockSearch.activeFocus || presetNameField.activeFocus
+    readonly property bool textEntry: stockSearch.activeFocus || printSearch.activeFocus || presetNameField.activeFocus
         || newGroupField.activeFocus || editNameField.activeFocus
         || editNewGroupField.activeFocus || groupRenameField.activeFocus
 
@@ -2946,6 +2946,7 @@ Window {
 
                                 contentItem: Item {
                                     Row {
+                                        visible: !stockBox.popup.visible
                                         anchors.left: parent.left
                                         anchors.leftMargin: 8
                                         anchors.right: parent.right
@@ -2982,11 +2983,41 @@ Window {
                                             }
                                         }
                                     }
+                                    AppIcon {
+                                        visible: stockBox.popup.visible
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: "magnifying-glass"
+                                        size: 15
+                                        color: stockSearch.activeFocus ? root.textSecondary : root.textMuted
+                                    }
+                                    TextField {
+                                        id: stockSearch
+                                        visible: stockBox.popup.visible
+                                        anchors.fill: parent
+                                        leftPadding: 38
+                                        rightPadding: 32
+                                        verticalAlignment: TextInput.AlignVCenter
+                                        placeholderText: "Search film stocks..."
+                                        color: root.textPrimary
+                                        placeholderTextColor: root.textMuted
+                                        font.pixelSize: 13
+                                        selectByMouse: true
+                                        background: null
+                                        onTextChanged: { stockBox.query = text; stockList.currentIndex = 0; }
+                                        Keys.onReturnPressed: stockBox.chooseTop()
+                                        Keys.onEnterPressed: stockBox.chooseTop()
+                                        Keys.onEscapePressed: stockPopup.close()
+                                        Keys.onDownPressed: stockList.incrementCurrentIndex()
+                                        Keys.onUpPressed: stockList.decrementCurrentIndex()
+                                    }
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: stockBox.hovered || stockBox.activeFocus ? root.ctrlHover : root.inset
-                                    border.width: 0
+                                    color: stockBox.popup.visible ? root.flatControl : (stockBox.hovered ? root.flatControlHover : root.inset)
+                                    border.width: 1
+                                    border.color: stockBox.popup.visible ? root.flatRule : "transparent"
                                 }
                                 indicator: ChevronToggle {
                                     x: stockBox.width - 26
@@ -3006,6 +3037,7 @@ Window {
                                         // A clean search header — no grey box, just the glyph and a
                                         // hairline underline that brightens on focus.
                                         Rectangle {
+                                            visible: false
                                             width: parent.width
                                             height: 38
                                             color: "transparent"
@@ -3013,16 +3045,16 @@ Window {
                                                 anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
                                                 anchors.leftMargin: 4; anchors.rightMargin: 4
                                                 height: 1
-                                                color: stockSearch.activeFocus ? root.border : root.hair
+                                                color: popupStockSearch.activeFocus ? root.border : root.hair
                                             }
                                             AppIcon {
                                                 anchors.left: parent.left; anchors.leftMargin: 8
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 name: "magnifying-glass"; size: 15
-                                                color: stockSearch.activeFocus ? root.textSecondary : root.textMuted
+                                                color: popupStockSearch.activeFocus ? root.textSecondary : root.textMuted
                                             }
                                             TextField {
-                                                id: stockSearch
+                                                id: popupStockSearch
                                                 anchors.fill: parent
                                                 leftPadding: 33; rightPadding: 10
                                                 verticalAlignment: TextInput.AlignVCenter
@@ -3090,8 +3122,8 @@ Window {
                                                     }
                                                 }
                                                 background: Rectangle {
-                                                    radius: 8
-                                                    color: stockRow.highlighted ? "#16ffffff" : "transparent"
+                                                    radius: 6
+                                                    color: stockRow.highlighted ? root.flatControlActive : "transparent"
                                                 }
                                             }
                                             Text {
@@ -3105,9 +3137,9 @@ Window {
                                     }
                                     background: Rectangle {
                                         radius: 10
-                                        color: root.panelRaised
+                                        color: root.panel
                                         border.width: 1
-                                        border.color: root.border
+                                        border.color: root.flatRule
                                     }
                                 }
                                 delegate: ItemDelegate {
@@ -3132,8 +3164,8 @@ Window {
                                         }
                                     }
                                     background: Rectangle {
-                                        radius: 8
-                                        color: stockItem.highlighted ? "#16ffffff" : "transparent"
+                                        radius: 6
+                                        color: stockItem.highlighted ? root.flatControlActive : "transparent"
                                     }
                                 }
                             }
@@ -3182,33 +3214,116 @@ Window {
                                     return 0;
                                 }
                                 onActivated: engine.setFilmControl("print_stock", engine.printStockIdAt(currentIndex))
-                                contentItem: Text {
-                                    leftPadding: 12; rightPadding: 32
-                                    text: printBox.displayText
-                                    color: root.textPrimary
-                                    verticalAlignment: Text.AlignVCenter
-                                    elide: Text.ElideRight
-                                    font.pixelSize: 13
+                                property string query: ""
+                                property var filteredPrintIndexes: {
+                                    var matches = [];
+                                    var needle = query.trim().toLowerCase();
+                                    for (var i = 0; i < engine.printStockNames.length; ++i) {
+                                        var name = engine.printStockNames[i];
+                                        var id = engine.printStockIdAt(i);
+                                        if (needle.length === 0 || name.toLowerCase().indexOf(needle) >= 0
+                                                || id.toLowerCase().indexOf(needle) >= 0)
+                                            matches.push(i);
+                                    }
+                                    return matches;
+                                }
+                                function pick(index) {
+                                    engine.setFilmControl("print_stock", engine.printStockIdAt(index));
+                                    printBox.popup.close();
+                                }
+                                function chooseTop() {
+                                    if (filteredPrintIndexes.length === 0) return;
+                                    var row = Math.max(0, Math.min(printList.currentIndex, filteredPrintIndexes.length - 1));
+                                    pick(filteredPrintIndexes[row]);
+                                }
+                                contentItem: Item {
+                                    Text {
+                                        visible: !printBox.popup.visible
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.right: parent.right
+                                        anchors.rightMargin: 32
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: printBox.displayText
+                                        color: root.textPrimary
+                                        verticalAlignment: Text.AlignVCenter
+                                        elide: Text.ElideRight
+                                        font.pixelSize: 13
+                                    }
+                                    AppIcon {
+                                        visible: printBox.popup.visible
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: "magnifying-glass"
+                                        size: 15
+                                        color: printSearch.activeFocus ? root.textSecondary : root.textMuted
+                                    }
+                                    TextField {
+                                        id: printSearch
+                                        visible: printBox.popup.visible
+                                        anchors.fill: parent
+                                        leftPadding: 38
+                                        rightPadding: 32
+                                        verticalAlignment: TextInput.AlignVCenter
+                                        placeholderText: "Search print finishes..."
+                                        color: root.textPrimary
+                                        placeholderTextColor: root.textMuted
+                                        font.pixelSize: 13
+                                        selectByMouse: true
+                                        background: null
+                                        onTextChanged: { printBox.query = text; printList.currentIndex = 0; }
+                                        Keys.onReturnPressed: printBox.chooseTop()
+                                        Keys.onEnterPressed: printBox.chooseTop()
+                                        Keys.onEscapePressed: printPopup.close()
+                                        Keys.onDownPressed: printList.incrementCurrentIndex()
+                                        Keys.onUpPressed: printList.decrementCurrentIndex()
+                                    }
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: printBox.hovered || printBox.activeFocus ? root.ctrlHover : root.inset
-                                    border.width: 0
+                                    color: printBox.popup.visible ? root.flatControl : (printBox.hovered ? root.flatControlHover : root.inset)
+                                    border.width: 1
+                                    border.color: printBox.popup.visible ? root.flatRule : "transparent"
                                 }
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
+                                    id: printPopup
                                     y: printBox.height + 4
                                     width: printBox.width
-                                    implicitHeight: Math.min(contentItem.implicitHeight + 8, 300)
+                                    implicitHeight: Math.min(printList.contentHeight + 8, 300)
                                     padding: 4
+                                    onOpened: { printBox.query = ""; printSearch.text = ""; printSearch.forceActiveFocus(); printList.currentIndex = 0; }
                                     contentItem: ListView {
+                                        id: printList
                                         clip: true
-                                        implicitHeight: contentHeight
-                                        model: printBox.popup.visible ? printBox.delegateModel : null
-                                        currentIndex: printBox.highlightedIndex
+                                        implicitHeight: Math.min(contentHeight, 292)
+                                        model: printBox.filteredPrintIndexes
+                                        currentIndex: 0
                                         ScrollIndicator.vertical: ScrollIndicator { }
+                                        delegate: ItemDelegate {
+                                            id: printRow
+                                            width: printList.width - 8
+                                            height: 36
+                                            hoverEnabled: true
+                                            highlighted: printList.currentIndex === index
+                                            onHoveredChanged: if (hovered) printList.currentIndex = index
+                                            onClicked: printBox.pick(modelData)
+                                            contentItem: Text {
+                                                leftPadding: 8
+                                                text: engine.printStockNames[modelData]
+                                                color: root.textPrimary
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                                font.pixelSize: 13
+                                            }
+                                            background: Rectangle {
+                                                radius: 6
+                                                color: printRow.highlighted ? root.flatControlActive : "transparent"
+                                            }
+                                        }
                                     }
-                                    background: Rectangle { radius: 10; color: root.panelRaised; border.width: 1; border.color: root.border }
+                                    background: Rectangle { radius: 10; color: root.panel; border.width: 1; border.color: root.flatRule }
                                 }
                                 delegate: ItemDelegate {
                                     id: printItem
