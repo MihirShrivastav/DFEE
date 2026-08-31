@@ -988,7 +988,7 @@ Window {
                 width: parent.width
                 height: parent.height
                 radius: height / 2
-                color: cb.checked ? "#2b2b30" : "#202023"
+                color: cb.checked ? "#242424" : "#1a1a1a"
 
                 Rectangle {
                     width: 14
@@ -1280,9 +1280,9 @@ Window {
 
         background: Rectangle {
             radius: 6
-            color: !tactileButton.enabled ? "#1d1d20"
-                : (tactileButton.down || tactileButton.depressed ? "#202023"
-                    : (tactileButton.hovered ? "#35353a" : "#2b2b30"))
+            color: !tactileButton.enabled ? "#1b1b1b"
+                : (tactileButton.down || tactileButton.depressed ? "#1c1c1c"
+                    : (tactileButton.hovered ? "#2a2a2a" : "#242424"))
         }
     }
 
@@ -2643,7 +2643,7 @@ Window {
                 height: 34
                 visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
                 radius: 7
-                color: "#27272c"
+                color: "#222222"
                 Row {
                     anchors.fill: parent
                     anchors.margins: 3
@@ -2702,17 +2702,17 @@ Window {
                     spacing: 14
                     visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
 
-                // ── Film recipe card ───────────────────────────────────
+                // ── Film stock section ─────────────────────────────────
                 Rectangle {
-                    id: recipeCard
+                    id: filmStockCard
                     property bool open: true
                     visible: inspector.developModule === 0
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: recipeCol.implicitHeight + 32
+                    implicitHeight: filmStockCol.implicitHeight + 32
                     
                     Column {
-                        id: recipeCol
+                        id: filmStockCol
                         x: 16; y: 16
                         width: parent.width - 32
                         spacing: 14
@@ -2720,18 +2720,16 @@ Window {
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Recipe"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
-                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: recipeCard.open }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: recipeCard.open = !recipeCard.open }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Stock"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: filmStockCard.open }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: filmStockCard.open = !filmStockCard.open }
                         }
 
                         Column {
                             width: parent.width
                             spacing: 0
-                            visible: recipeCard.open
+                            visible: filmStockCard.open
 
-                            InspectorLabel { text: "Film stock" }
-                            Item { width: 1; height: 4 }
                             ComboBox {
                                 id: stockBox
                                 width: parent.width
@@ -2831,7 +2829,7 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: stockBox.hovered || stockBox.activeFocus ? "#35353a" : "#2b2b30"
+                                    color: stockBox.hovered || stockBox.activeFocus ? "#2a2a2a" : "#242424"
                                     border.width: 0
                                 }
                                 indicator: ChevronToggle {
@@ -3038,7 +3036,7 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: printBox.hovered || printBox.activeFocus ? "#35353a" : "#2b2b30"
+                                    color: printBox.hovered || printBox.activeFocus ? "#2a2a2a" : "#242424"
                                     border.width: 0
                                 }
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
@@ -3301,7 +3299,7 @@ Window {
                             width: parent.width
                             spacing: 12
                             visible: lightCard.open
-                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Overall brightness of the finished image, in stops — a grade applied after the film response. For the film's own exposure (which drives its tone and rolloff), use Film exposure in the Film Recipe." }
+                            FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Overall brightness of the finished image, in stops — a grade applied after the film response. For the film's own exposure (which drives its tone and rolloff), use Film exposure in the Film Stock section." }
                             FilmSlider { controlKey: "contrast"; label: "Contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Global contrast — spreads or compresses the tonal range around the midtones." }
                             FilmSlider { controlKey: "highlights"; label: "Highlights"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Recovers or brightens the brighter tones without moving whites." }
                             FilmSlider { controlKey: "shadows"; label: "Shadows"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Opens or deepens the darker tones without moving blacks." }
@@ -3798,7 +3796,7 @@ Window {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: engine.lightroomRoundTrip ? "Applying your film recipe…" : "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
+                text: engine.lightroomRoundTrip ? "Applying your film treatment…" : "Rendering and saving " + root.exportFormatLabel(engine.exportFormat)
                 color: root.textSecondary
                 font.pixelSize: 12
             }
