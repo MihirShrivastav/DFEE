@@ -2831,9 +2831,8 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: "#111113"
-                                    border.width: 1
-                                    border.color: stockBox.activeFocus || stockBox.hovered ? "#d4d4d9" : "#55555b"
+                                    color: stockBox.hovered || stockBox.activeFocus ? "#35353a" : "#2b2b30"
+                                    border.width: 0
                                 }
                                 indicator: ChevronToggle {
                                     x: stockBox.width - 26
@@ -3039,9 +3038,8 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: "#111113"
-                                    border.width: 1
-                                    border.color: printBox.activeFocus || printBox.hovered ? "#d4d4d9" : "#55555b"
+                                    color: printBox.hovered || printBox.activeFocus ? "#35353a" : "#2b2b30"
+                                    border.width: 0
                                 }
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
