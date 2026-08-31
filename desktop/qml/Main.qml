@@ -40,6 +40,16 @@ Window {
     readonly property color greenSliderEnd: "#69ad81"
     readonly property color chromaSliderStart: "#4b7481"
     readonly property color chromaSliderEnd: "#c28a5b"
+    readonly property color slateButtonTop: "#40596d"
+    readonly property color slateButtonBottom: "#2c4050"
+    readonly property color slateButtonHoverTop: "#4a667c"
+    readonly property color slateButtonHoverBottom: "#334a5c"
+    readonly property color slateButtonPressedTop: "#2b4152"
+    readonly property color slateButtonPressedBottom: "#243744"
+    readonly property color slateToggleOn: "#365167"
+    readonly property color slateToggleOff: "#263947"
+    readonly property color slateShadow: "#8c0a1016"
+    readonly property color slateOutline: "#6a89a0"
     readonly property color well: "#141416"           // true recess — slider grooves + histogram only
     readonly property color sliderFill: "#29292d"      // restrained filled portion, near the recessed groove
     readonly property color border: "#26262b"
@@ -1039,7 +1049,10 @@ Window {
                 width: parent.width
                 height: parent.height
                 radius: height / 2
-                color: cb.checked ? root.ctrlActive : root.well
+                color: cb.checked ? root.slateToggleOn : root.slateToggleOff
+                border.width: 1
+                border.color: cb.checked ? root.slateOutline : root.border
+                Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 Rectangle {
                     width: 14
@@ -1047,9 +1060,10 @@ Window {
                     x: cb.checked ? parent.width - width - 3 : 3
                     anchors.verticalCenter: parent.verticalCenter
                     radius: width / 2
-                    color: cb.checked ? root.accent : root.textMuted
+                    color: cb.checked ? "#c6d9e7" : "#8da0ad"
                     border.width: 0
-                    Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
+                    Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                    Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
                 }
             }
         }
@@ -1097,8 +1111,8 @@ Window {
             height: spin.height
             topLeftRadius: 8; bottomLeftRadius: 8
             gradient: Gradient {
-                GradientStop { position: 0.0; color: spin.down.pressed ? "#26262b" : "#33333a" }
-                GradientStop { position: 1.0; color: spin.down.pressed ? "#1d1d20" : "#242429" }
+                    GradientStop { position: 0.0; color: spin.down.pressed ? root.slateButtonPressedTop : root.slateButtonTop }
+                    GradientStop { position: 1.0; color: spin.down.pressed ? root.slateButtonPressedBottom : root.slateButtonBottom }
             }
             border.width: 1
             border.color: root.hair
@@ -1111,8 +1125,8 @@ Window {
             height: spin.height
             topRightRadius: 8; bottomRightRadius: 8
             gradient: Gradient {
-                GradientStop { position: 0.0; color: spin.up.pressed ? "#26262b" : "#33333a" }
-                GradientStop { position: 1.0; color: spin.up.pressed ? "#1d1d20" : "#242429" }
+                    GradientStop { position: 0.0; color: spin.up.pressed ? root.slateButtonPressedTop : root.slateButtonTop }
+                    GradientStop { position: 1.0; color: spin.up.pressed ? root.slateButtonPressedBottom : root.slateButtonBottom }
             }
             border.width: 1
             border.color: root.hair
@@ -1343,11 +1357,40 @@ Window {
             font: tactileButton.font
         }
 
-        background: Rectangle {
-            radius: 6
-            color: !tactileButton.enabled ? root.panel
-                : (tactileButton.down || tactileButton.depressed ? root.ctrlPressed
-                    : (tactileButton.hovered ? root.ctrlHover : root.ctrl))
+        background: Item {
+            Rectangle {
+                x: 1
+                y: tactileButton.down || tactileButton.depressed ? 1 : 3
+                width: parent.width - 2
+                height: parent.height - 2
+                radius: 6
+                color: root.slateShadow
+                Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            }
+            Rectangle {
+                id: buttonFace
+                x: 0
+                y: tactileButton.down || tactileButton.depressed ? 1 : 0
+                width: parent.width
+                height: parent.height - 2
+                radius: 6
+                opacity: tactileButton.enabled ? 1.0 : 0.48
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: tactileButton.down || tactileButton.depressed ? root.slateButtonPressedTop
+                            : (tactileButton.hovered ? root.slateButtonHoverTop : root.slateButtonTop)
+                    }
+                    GradientStop {
+                        position: 1
+                        color: tactileButton.down || tactileButton.depressed ? root.slateButtonPressedBottom
+                            : (tactileButton.hovered ? root.slateButtonHoverBottom : root.slateButtonBottom)
+                    }
+                }
+                border.width: tactileButton.activeFocus ? 1 : 0
+                border.color: root.slateOutline
+                Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+            }
         }
     }
 
@@ -1448,9 +1491,39 @@ Window {
             verticalAlignment: Text.AlignVCenter
             font: segmentButton.font
         }
-        background: Rectangle {
-            radius: 5
-            color: segmentButton.selected ? root.well : "transparent"
+        background: Item {
+            Rectangle {
+                x: 1
+                y: segmentButton.selected ? 2 : 0
+                width: parent.width - 2
+                height: parent.height - 2
+                radius: 5
+                visible: segmentButton.selected
+                color: root.slateShadow
+                Behavior on y { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+            }
+            Rectangle {
+                x: 0
+                y: segmentButton.selected && segmentButton.down ? 1 : 0
+                width: parent.width
+                height: parent.height - 2
+                radius: 5
+                opacity: segmentButton.selected ? 1.0 : (segmentButton.hovered ? 0.32 : 0.0)
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: segmentButton.selected && segmentButton.down ? root.slateButtonPressedTop
+                            : root.slateButtonTop
+                    }
+                    GradientStop {
+                        position: 1
+                        color: segmentButton.selected && segmentButton.down ? root.slateButtonPressedBottom
+                            : root.slateButtonBottom
+                    }
+                }
+                Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            }
         }
     }
 
