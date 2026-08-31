@@ -10,6 +10,11 @@ its own just shows this reminder and closes.)
    - Portable:  unzip the "FilmLab" folder anywhere (keep all files together)
                 and note the path to FilmLab.exe.
 
+   To update an existing installer-based copy, run the newer FilmLab-Setup.exe.
+   It closes Film Lab if needed and replaces the app files in the same location.
+   Your settings and logs are kept. To remove it completely, use "Uninstall Film
+   Lab" from the Start menu or Windows Settings > Apps.
+
 2. HOOK IT INTO LIGHTROOM CLASSIC (one time)
    Edit > Preferences > External Editing.
    Under "Additional External Editor" set:

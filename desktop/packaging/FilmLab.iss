@@ -4,7 +4,9 @@
 ; Output: desktop\out\dist\FilmLab-Setup.exe
 
 #define AppName "Film Lab"
-#define AppVersion "0.1.0"
+#ifndef AppVersion
+  #define AppVersion "0.1.0-beta.1"
+#endif
 #define AppExe "FilmLab.exe"
 
 [Setup]
@@ -16,6 +18,12 @@ AppPublisher={#AppName}
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
+UsePreviousAppDir=yes
+CloseApplications=yes
+CloseApplicationsFilter={#AppExe}
+RestartApplications=no
+Uninstallable=yes
+CreateUninstallRegKey=yes
 UninstallDisplayIcon={app}\{#AppExe}
 OutputDir=..\out\dist
 OutputBaseFilename=FilmLab-Setup
@@ -24,6 +32,12 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+
+[InstallDelete]
+; The install directory contains only staged runtime files. Clear it during an
+; upgrade so removed Qt plugins or engine DLLs cannot survive into the new build.
+; User settings, logs, and presets are stored under %LOCALAPPDATA%, never here.
+Type: filesandordirs; Name: "{app}\*"
 
 [Files]
 ; The staged, self-contained deploy folder produced by deploy.ps1.
