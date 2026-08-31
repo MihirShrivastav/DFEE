@@ -2908,6 +2908,16 @@ Window {
                                     var i = Math.max(0, Math.min(stockList.currentIndex, filteredStocks.length - 1));
                                     pick(filteredStocks[i].id);
                                 }
+                                function selectedStockIndex() {
+                                    for (var i = 0; i < filteredStocks.length; ++i)
+                                        if (filteredStocks[i].id === engine.stock) return i;
+                                    return 0;
+                                }
+                                function focusSelectedStock() {
+                                    var index = selectedStockIndex();
+                                    stockList.currentIndex = index;
+                                    stockList.positionViewAtIndex(index, ListView.Center);
+                                }
                                 function rankStocks(qraw) {
                                     var q = qraw.toLowerCase().trim();
                                     var qn = q.replace(/[^a-z0-9]/g, "");
@@ -3036,7 +3046,12 @@ Window {
                                     width: stockBox.width
                                     implicitHeight: Math.min(searchCol.implicitHeight + 8, 400)
                                     padding: 4
-                                    onOpened: { stockBox.query = ""; stockSearch.text = ""; stockSearch.forceActiveFocus(); stockList.currentIndex = 0; }
+                                    onOpened: { stockBox.query = ""; stockSearch.text = ""; stockSearch.forceActiveFocus(); stockPopupFocus.start(); }
+                                    Timer {
+                                        id: stockPopupFocus
+                                        interval: 0
+                                        onTriggered: stockBox.focusSelectedStock()
+                                    }
                                     contentItem: Column {
                                         id: searchCol
                                         spacing: 4
@@ -3242,6 +3257,17 @@ Window {
                                     var row = Math.max(0, Math.min(printList.currentIndex, filteredPrintIndexes.length - 1));
                                     pick(filteredPrintIndexes[row]);
                                 }
+                                function selectedPrintIndex() {
+                                    var selectedId = engine.filmControls.print_stock;
+                                    for (var i = 0; i < filteredPrintIndexes.length; ++i)
+                                        if (engine.printStockIdAt(filteredPrintIndexes[i]) === selectedId) return i;
+                                    return 0;
+                                }
+                                function focusSelectedPrint() {
+                                    var index = selectedPrintIndex();
+                                    printList.currentIndex = index;
+                                    printList.positionViewAtIndex(index, ListView.Center);
+                                }
                                 contentItem: Item {
                                     Text {
                                         visible: !printBox.popup.visible
@@ -3305,7 +3331,12 @@ Window {
                                     width: printBox.width
                                     implicitHeight: Math.min(printList.contentHeight + 8, 300)
                                     padding: 4
-                                    onOpened: { printBox.query = ""; printSearch.text = ""; printSearch.forceActiveFocus(); printList.currentIndex = 0; }
+                                    onOpened: { printBox.query = ""; printSearch.text = ""; printSearch.forceActiveFocus(); printPopupFocus.start(); }
+                                    Timer {
+                                        id: printPopupFocus
+                                        interval: 0
+                                        onTriggered: printBox.focusSelectedPrint()
+                                    }
                                     contentItem: ListView {
                                         id: printList
                                         clip: true
