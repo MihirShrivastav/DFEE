@@ -2948,7 +2948,7 @@ Window {
                                     Row {
                                         visible: !stockBox.popup.visible
                                         anchors.left: parent.left
-                                        anchors.leftMargin: 8
+                                        anchors.leftMargin: 12
                                         anchors.right: parent.right
                                         anchors.rightMargin: 32
                                         anchors.verticalCenter: parent.verticalCenter
@@ -2970,7 +2970,7 @@ Window {
                                                 color: parent.noneSelected ? root.textSecondary : root.textPrimary
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 13
-                                                font.weight: Font.Medium
+                                                font.weight: Font.Normal
                                             }
                                             Text {
                                                 width: parent.width
@@ -3011,6 +3011,12 @@ Window {
                                         Keys.onEscapePressed: stockPopup.close()
                                         Keys.onDownPressed: stockList.incrementCurrentIndex()
                                         Keys.onUpPressed: stockList.decrementCurrentIndex()
+                                    }
+                                    MouseArea {
+                                        visible: !stockBox.popup.visible
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: stockBox.popup.open()
                                     }
                                 }
                                 background: Rectangle {
@@ -3278,6 +3284,12 @@ Window {
                                         Keys.onEscapePressed: printPopup.close()
                                         Keys.onDownPressed: printList.incrementCurrentIndex()
                                         Keys.onUpPressed: printList.decrementCurrentIndex()
+                                    }
+                                    MouseArea {
+                                        visible: !printBox.popup.visible
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: printBox.popup.open()
                                     }
                                 }
                                 background: Rectangle {
