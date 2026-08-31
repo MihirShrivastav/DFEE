@@ -988,9 +988,7 @@ Window {
                 width: parent.width
                 height: parent.height
                 radius: height / 2
-                color: cb.checked ? "#171719" : "#0f0f11"
-                border.width: 1
-                border.color: cb.activeFocus || cb.hovered ? "#d4d4d9" : "#77777d"
+                color: cb.checked ? "#2b2b30" : "#202023"
 
                 Rectangle {
                     width: 14
@@ -998,9 +996,8 @@ Window {
                     x: cb.checked ? parent.width - width - 3 : 3
                     anchors.verticalCenter: parent.verticalCenter
                     radius: width / 2
-                    color: cb.checked ? "#e2e2e6" : "#74747a"
-                    border.width: 1
-                    border.color: "#18181a"
+                    color: cb.checked ? "#101012" : "#76767c"
+                    border.width: 0
                     Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                 }
             }
@@ -1283,12 +1280,9 @@ Window {
 
         background: Rectangle {
             radius: 6
-            color: !tactileButton.enabled ? "#111113"
-                : (tactileButton.down || tactileButton.depressed ? "#0b0b0c"
-                    : (tactileButton.hovered ? "#171719" : "#111113"))
-            border.width: 1
-            border.color: tactileButton.activeFocus || tactileButton.hovered
-                ? "#d4d4d9" : "#77777d"
+            color: !tactileButton.enabled ? "#1d1d20"
+                : (tactileButton.down || tactileButton.depressed ? "#202023"
+                    : (tactileButton.hovered ? "#35353a" : "#2b2b30"))
         }
     }
 
@@ -1391,9 +1385,7 @@ Window {
         }
         background: Rectangle {
             radius: 5
-            color: segmentButton.selected ? "#111113" : "transparent"
-            border.width: segmentButton.selected ? 1 : 0
-            border.color: segmentButton.down ? "#f0f0f2" : "#a7a7ad"
+            color: segmentButton.selected ? "#101012" : "transparent"
         }
     }
 
@@ -2651,9 +2643,7 @@ Window {
                 height: 34
                 visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
                 radius: 7
-                color: "#101012"
-                border.width: 1
-                border.color: "#444449"
+                color: "#27272c"
                 Row {
                     anchors.fill: parent
                     anchors.margins: 3
