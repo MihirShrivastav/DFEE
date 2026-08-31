@@ -90,15 +90,15 @@ Window {
     }
 
     function hasColorTrack(key) {
-        return key === "temp" || key === "temperature" || key === "tint";
+        return key === "temp" || key === "temperature" || key === "tint"
+            || key === "print_c" || key === "print_m" || key === "print_y"
+            || key.indexOf("hsl_") === 0;
     }
 
     function hasChromaTrack(key) {
         return key === "vibrance" || key === "saturation" || key === "film_color_density"
             || key === "emulsion_color_density" || key === "highlight_color_hold"
-            || key === "shadow_color_retention" || key === "crossover" || key === "cg_crossbalance"
-            || key === "print_c" || key === "print_m" || key === "print_y"
-            || key.indexOf("hsl_") === 0;
+            || key === "shadow_color_retention" || key === "crossover" || key === "cg_crossbalance";
     }
 
     function colorTrackPalette(key) {
@@ -108,7 +108,38 @@ Window {
         if (key === "tint") {
             return { start: "#ad4b9b", middle: "#6e6e6e", end: "#2e9c68" };
         }
-        return { start: "#357d9a", middle: "#56a36b", end: "#cf7455" };
+        if (key === "print_c") {
+            return { start: "#b45d4b", middle: "#6e6e6e", end: "#348fa7" };
+        }
+        if (key === "print_m") {
+            return { start: "#459466", middle: "#6e6e6e", end: "#b35295" };
+        }
+        if (key === "print_y") {
+            return { start: "#4b78a9", middle: "#6e6e6e", end: "#c7ad39" };
+        }
+
+        var parts = key.split("_");
+        var hue = parts.length === 3 ? parts[1] : "";
+        var channel = parts.length === 3 ? parts[2] : "";
+        var hues = {
+            red:     { start: "#e79a45", middle: "#db5657", end: "#b84fac" },
+            orange:  { start: "#d9c13d", middle: "#dd8240", end: "#d05a56" },
+            yellow:  { start: "#54a96a", middle: "#c4b636", end: "#e0843f" },
+            green:   { start: "#32a58d", middle: "#4ca962", end: "#b0bd38" },
+            aqua:    { start: "#507bbb", middle: "#36afa8", end: "#4ba46c" },
+            blue:    { start: "#855fbd", middle: "#4c87c3", end: "#38a7af" },
+            purple:  { start: "#cb529c", middle: "#8d60b9", end: "#507bc0" },
+            magenta: { start: "#d75b66", middle: "#bd5599", end: "#885eb5" }
+        };
+        var hueColors = hues[hue] || { start: "#606060", middle: "#808080", end: "#a0a0a0" };
+        if (channel === "h") return hueColors;
+        if (channel === "s") {
+            return { start: "#3d3d3d", middle: Qt.darker(hueColors.middle, 1.45), end: hueColors.middle };
+        }
+        if (channel === "l") {
+            return { start: Qt.darker(hueColors.middle, 2.5), middle: hueColors.middle, end: Qt.lighter(hueColors.middle, 1.7) };
+        }
+        return { start: "#555555", middle: "#808080", end: "#b0b0b0" };
     }
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────
@@ -1256,16 +1287,19 @@ Window {
                 opacity: control.enabled ? 0.86 : 0.35
             }
             Rectangle {
-                x: control.neutralPosition * parent.width
-                width: (1 - control.neutralPosition) * parent.width
+                width: parent.width
                 height: parent.height
                 radius: parent.radius
                 visible: control.chromaTrack
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: "#247c9d" }
-                    GradientStop { position: 0.52; color: "#3fa66a" }
-                    GradientStop { position: 1; color: "#d17655" }
+                    GradientStop { position: 0.0; color: "#4c454d" }
+                    GradientStop { position: 0.18; color: "#4d576f" }
+                    GradientStop { position: 0.35; color: "#377082" }
+                    GradientStop { position: 0.52; color: "#358e85" }
+                    GradientStop { position: 0.68; color: "#7d955c" }
+                    GradientStop { position: 0.84; color: "#b88654" }
+                    GradientStop { position: 1.0; color: "#cf7057" }
                 }
                 opacity: control.enabled ? 0.88 : 0.35
             }
@@ -1602,7 +1636,7 @@ Window {
             trackMiddleColor: sliderRow.colorTrackPalette.middle
             trackEndColor: sliderRow.colorTrackPalette.end
             opacity: sliderRow.available ? 1.0 : 0.35
-            onAdjusted: engine.setFilmControl(sliderRow.controlKey, nextValue)
+            onAdjusted: (nextValue) => engine.setFilmControl(sliderRow.controlKey, nextValue)
         }
 
         HoverHandler { id: sliderHover; enabled: sliderRow.tooltip.length > 0 }
@@ -3560,10 +3594,6 @@ Window {
                                     controlKey: "hsl_" + modelData.key + "_" + hslCard.suffix
                                     label: modelData.label
                                     minimum: -100; maximum: 100; bipolar: true
-                                    positiveFillStart: Qt.darker(modelData.dot, 1.7)
-                                    positiveFillEnd: modelData.dot
-                                    negativeFillStart: Qt.lighter(modelData.dot, 1.15)
-                                    negativeFillEnd: Qt.darker(modelData.dot, 1.7)
                                 }
                             }
                         }
