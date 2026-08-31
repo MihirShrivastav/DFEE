@@ -1286,6 +1286,8 @@ Window {
         id: tactileButton
         property bool depressed: false
         property color labelColor: tactileButton.enabled ? root.textPrimary : root.textMuted
+        property color pressedTop: root.raiseTopDown
+        property color pressedBottom: root.raiseBottomDown
 
         contentItem: Text {
             text: tactileButton.text
@@ -1317,27 +1319,15 @@ Window {
                     GradientStop {
                         position: 0
                         color: !tactileButton.enabled ? root.panel
-                            : (parent.pressedFace ? root.raiseTopDown
+                            : (parent.pressedFace ? tactileButton.pressedTop
                                                   : (tactileButton.hovered ? "#414146" : root.raiseTop))
                     }
                     GradientStop {
                         position: 1
                         color: !tactileButton.enabled ? root.panel
-                            : (parent.pressedFace ? root.raiseBottomDown
+                            : (parent.pressedFace ? tactileButton.pressedBottom
                                                   : (tactileButton.hovered ? "#2c2c31" : root.raiseBottom))
                     }
-                }
-                border.width: 1
-                border.color: tactileButton.activeFocus ? "#66666c" : "#141416"
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.margins: 1
-                    height: 1
-                    radius: root.radiusControl
-                    color: parent.parent.pressedFace ? "#12ffffff" : "#2bffffff"
                 }
             }
         }
@@ -1428,6 +1418,8 @@ Window {
         id: segmentButton
         property bool selected: false
         depressed: selected
+        pressedTop: "#222225"
+        pressedBottom: "#19191b"
         height: 30
         font.pixelSize: 12
         font.weight: Font.Medium
@@ -2389,9 +2381,8 @@ Window {
             width: compareRow.width + 8
             height: 32
             radius: 9
-            color: "#cc161618"
-            border.width: 1
-            border.color: root.hair
+            color: "transparent"
+            border.width: 0
             Row {
                 id: compareRow
                 anchors.centerIn: parent
@@ -2660,9 +2651,8 @@ Window {
                 width: parent.width
                 height: 34
                 radius: 9
-                color: root.inset
-                border.width: 1
-                border.color: root.hair
+                color: "transparent"
+                border.width: 0
                 visible: !engine.lightroomRoundTrip
                 Row {
                     anchors.fill: parent
@@ -3146,9 +3136,8 @@ Window {
                                 width: parent.width
                                 height: 36
                                 radius: 9
-                                color: root.inset
-                                border.width: 1
-                                border.color: root.hair
+                                color: "transparent"
+                                border.width: 0
                                 HoverHandler { id: placementHover }
                                 GraphiteTip {
                                     parent: placementTrack
@@ -3442,9 +3431,8 @@ Window {
                                 width: parent.width
                                 height: 34
                                 radius: 9
-                                color: root.inset
-                                border.width: 1
-                                border.color: root.hair
+                                color: "transparent"
+                                border.width: 0
                                 Row {
                                     anchors.fill: parent
                                     anchors.margins: 3
