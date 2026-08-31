@@ -1280,8 +1280,8 @@ Window {
         }
     }
 
-    // Shared physical control. The face travels down into its contact shadow when
-    // pressed, while selected segments remain visually depressed until deselected.
+    // Shared physical action button: raised graphite face at rest, then the same
+    // face seats into its dark contact shadow while pressed.
     component TactileButton: Button {
         id: tactileButton
         property bool depressed: false
@@ -1302,12 +1302,12 @@ Window {
             readonly property bool pressedFace: tactileButton.down || tactileButton.depressed
 
             Rectangle {
-                x: 1
+                x: 0
                 y: 2
-                width: parent.width - 2
+                width: parent.width
                 height: Math.max(0, parent.height - 2)
                 radius: root.radiusControl
-                color: tactileButton.enabled ? "#141416" : root.panel
+                color: tactileButton.enabled ? "#121214" : root.panel
             }
             Rectangle {
                 x: 0
@@ -1320,15 +1320,17 @@ Window {
                         position: 0
                         color: !tactileButton.enabled ? root.panel
                             : (parent.pressedFace ? tactileButton.pressedTop
-                                                  : (tactileButton.hovered ? "#414146" : root.raiseTop))
+                                                  : (tactileButton.hovered ? "#444449" : "#3c3c41"))
                     }
                     GradientStop {
                         position: 1
                         color: !tactileButton.enabled ? root.panel
                             : (parent.pressedFace ? tactileButton.pressedBottom
-                                                  : (tactileButton.hovered ? "#2c2c31" : root.raiseBottom))
+                                                  : (tactileButton.hovered ? "#29292e" : "#26262b"))
                     }
                 }
+                border.width: 1
+                border.color: "#19191b"
             }
         }
         scale: tactileButton.down ? 0.985 : 1.0
@@ -1395,6 +1397,7 @@ Window {
                 width: parent.width
                 height: parent.height - 2
                 radius: root.radiusControl
+                z: 1
                 gradient: Gradient {
                     GradientStop { position: 0; color: destructiveButton.down ? "#bf504a" : "#ef7168" }
                     GradientStop { position: 1; color: destructiveButton.down ? "#9f413e" : "#d55b55" }
@@ -1414,16 +1417,50 @@ Window {
         font.weight: Font.Medium
     }
 
-    component TactileSegmentButton: TactileButton {
+    // A segmented control is a flat track. Only the current choice has the
+    // physical button face; the other labels stay part of the track.
+    component TactileSegmentButton: Button {
         id: segmentButton
         property bool selected: false
-        depressed: selected
-        pressedTop: "#222225"
-        pressedBottom: "#19191b"
+        property color labelColor: selected ? root.textPrimary : root.textSecondary
         height: 30
         font.pixelSize: 12
         font.weight: Font.Medium
-        labelColor: selected ? root.textPrimary : root.textSecondary
+
+        contentItem: Text {
+            text: segmentButton.text
+            color: segmentButton.labelColor
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+            topPadding: segmentButton.selected && segmentButton.down ? 2 : 0
+            font: segmentButton.font
+        }
+        background: Item {
+            Rectangle {
+                visible: segmentButton.selected
+                x: 0
+                y: segmentButton.down ? 2 : 0
+                width: parent.width
+                height: parent.height - 2
+                radius: root.radiusControl
+                gradient: Gradient {
+                    GradientStop { position: 0; color: segmentButton.down ? "#252528" : "#3c3c41" }
+                    GradientStop { position: 1; color: segmentButton.down ? "#1b1b1d" : "#26262b" }
+                }
+                border.width: 1
+                border.color: "#19191b"
+            }
+            Rectangle {
+                visible: segmentButton.selected && !segmentButton.down
+                x: 0
+                y: 2
+                width: parent.width
+                height: parent.height - 2
+                radius: root.radiusControl
+                color: "#121214"
+                z: 0
+            }
+        }
     }
 
     // Ghost icon button — transparent, subtle hover/press fill. For chevrons and
@@ -2381,7 +2418,7 @@ Window {
             width: compareRow.width + 8
             height: 32
             radius: 9
-            color: "transparent"
+            color: root.inset
             border.width: 0
             Row {
                 id: compareRow
@@ -2651,7 +2688,7 @@ Window {
                 width: parent.width
                 height: 34
                 radius: 9
-                color: "transparent"
+                color: root.inset
                 border.width: 0
                 visible: !engine.lightroomRoundTrip
                 Row {
@@ -3136,7 +3173,7 @@ Window {
                                 width: parent.width
                                 height: 36
                                 radius: 9
-                                color: "transparent"
+                                color: root.inset
                                 border.width: 0
                                 HoverHandler { id: placementHover }
                                 GraphiteTip {
@@ -3431,7 +3468,7 @@ Window {
                                 width: parent.width
                                 height: 34
                                 radius: 9
-                                color: "transparent"
+                                color: root.inset
                                 border.width: 0
                                 Row {
                                     anchors.fill: parent
