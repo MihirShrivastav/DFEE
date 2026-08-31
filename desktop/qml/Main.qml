@@ -132,10 +132,7 @@ Window {
             positiveStart: yellowSliderStart, positiveEnd: yellowSliderEnd,
             negativeStart: coolSliderEnd, negativeEnd: coolSliderStart
         };
-        if (key === "vibrance" || key === "saturation" || key === "film_color_density"
-                || key === "emulsion_color_density" || key === "highlight_color_hold"
-                || key === "shadow_color_retention" || key === "crossover"
-                || key === "cg_crossbalance") return {
+        if (key === "vibrance" || key === "saturation") return {
             positiveStart: chromaSliderStart, positiveEnd: chromaSliderEnd,
             negativeStart: chromaSliderEnd, negativeEnd: chromaSliderStart
         };
@@ -144,10 +141,7 @@ Window {
 
     function hasColorTrack(key) {
         return key === "temp" || key === "temperature" || key === "tint"
-            || key === "vibrance" || key === "saturation" || key === "film_color_density"
-            || key === "emulsion_color_density" || key === "highlight_color_hold"
-            || key === "shadow_color_retention" || key === "crossover" || key === "cg_crossbalance"
-            || key.indexOf("hsl_") === 0;
+            || key === "vibrance" || key === "saturation" || key.indexOf("hsl_") === 0;
     }
 
     function colorTrackPalette(key) {
@@ -1302,6 +1296,7 @@ Window {
                 radius: parent.radius
                 visible: control.fullColorTrack
                 gradient: Gradient {
+                    orientation: Gradient.Horizontal
                     GradientStop { position: 0; color: control.trackStartColor }
                     GradientStop { position: 0.5; color: control.trackMiddleColor }
                     GradientStop { position: 1; color: control.trackEndColor }
@@ -1319,6 +1314,7 @@ Window {
                 radius: parent.radius
                 visible: !control.fullColorTrack
                 gradient: Gradient {
+                    orientation: Gradient.Horizontal
                     GradientStop {
                         position: 0
                         color: control.fillsNegative ? control.negativeFillStartColor : control.fillStartColor
