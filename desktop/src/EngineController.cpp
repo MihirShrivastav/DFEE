@@ -441,6 +441,60 @@ void EngineController::resetAllEdits()
     scheduleRender();
 }
 
+void EngineController::resetControlGroup(const QString& group)
+{
+    static const QHash<QString, QStringList> groups = {
+        {QStringLiteral("film_tone"), {QStringLiteral("rendered_input"), QStringLiteral("adaptive"),
+            QStringLiteral("profile_strength"), QStringLiteral("highlight_rolloff"),
+            QStringLiteral("film_contrast"), QStringLiteral("shadow_lift")}},
+        {QStringLiteral("color_character"), {QStringLiteral("film_color_density"),
+            QStringLiteral("emulsion_color_density"), QStringLiteral("highlight_color_hold"),
+            QStringLiteral("shadow_color_retention"), QStringLiteral("crossover"),
+            QStringLiteral("cg_crossbalance")}},
+        {QStringLiteral("print"), {QStringLiteral("print_stock"), QStringLiteral("print_strength"),
+            QStringLiteral("print_c"), QStringLiteral("print_m"), QStringLiteral("print_y"),
+            QStringLiteral("print_contrast"), QStringLiteral("print_black_point")}},
+        {QStringLiteral("material"), {QStringLiteral("grain_auto"), QStringLiteral("grain_strength"),
+            QStringLiteral("grain_size"), QStringLiteral("grain_roughness"),
+            QStringLiteral("halation_strength"), QStringLiteral("halation_threshold"),
+            QStringLiteral("bloom")}},
+        {QStringLiteral("light"), {QStringLiteral("exposure"), QStringLiteral("contrast"),
+            QStringLiteral("highlights"), QStringLiteral("shadows"), QStringLiteral("whites"),
+            QStringLiteral("blacks"), QStringLiteral("midtones"), QStringLiteral("texture"),
+            QStringLiteral("clarity"), QStringLiteral("dehaze"), QStringLiteral("sharpness"),
+            QStringLiteral("sharpness_mask")}},
+        {QStringLiteral("color_balance"), {QStringLiteral("temp"), QStringLiteral("tint"),
+            QStringLiteral("vibrance"), QStringLiteral("saturation")}},
+        {QStringLiteral("grade"), {QStringLiteral("cg_shadow_hue"), QStringLiteral("cg_shadow_sat"),
+            QStringLiteral("cg_shadow_lum"), QStringLiteral("cg_midtone_hue"),
+            QStringLiteral("cg_midtone_sat"), QStringLiteral("cg_midtone_lum"),
+            QStringLiteral("cg_highlight_hue"), QStringLiteral("cg_highlight_sat"),
+            QStringLiteral("cg_highlight_lum"), QStringLiteral("cg_global_hue"),
+            QStringLiteral("cg_global_sat"), QStringLiteral("cg_global_lum"),
+            QStringLiteral("cg_balance"), QStringLiteral("cg_blending")}},
+    };
+    const auto it = groups.constFind(group);
+    if (it == groups.cend()) return;
+
+    const QVariantMap defaults = defaultFilmControls();
+    bool changed = false;
+    for (const QString& key : *it) {
+        const QVariant value = defaults.value(key);
+        if (filmControls_.value(key) != value) {
+            filmControls_.insert(key, value);
+            changed = true;
+        }
+    }
+    if (!changed) return;
+    if (group == QStringLiteral("material")) {
+        grainResolving_ = false;
+        emit grainResolvingChanged();
+    }
+    emit filmControlsChanged();
+    recordHistory(QStringLiteral("Reset %1").arg(group));
+    scheduleRender();
+}
+
 void EngineController::setCrop(double x, double y, double w, double h)
 {
     const double cx = std::clamp(x, 0.0, 1.0);

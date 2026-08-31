@@ -1280,61 +1280,26 @@ Window {
         }
     }
 
-    // Shared physical action button: raised graphite face at rest, then the same
-    // face seats into its dark contact shadow while pressed.
+    // Shared flat action surface for the near-black inspector.
     component TactileButton: Button {
         id: tactileButton
         property bool depressed: false
         property color labelColor: tactileButton.enabled ? root.textPrimary : root.textMuted
-        property color pressedTop: root.raiseTopDown
-        property color pressedBottom: root.raiseBottomDown
 
         contentItem: Text {
             text: tactileButton.text
             color: tactileButton.labelColor
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            topPadding: tactileButton.down || tactileButton.depressed ? 2 : 0
             font: tactileButton.font
         }
 
-        background: Item {
-            readonly property bool pressedFace: tactileButton.down || tactileButton.depressed
-
-            Rectangle {
-                x: 0
-                y: 2
-                width: parent.width
-                height: Math.max(0, parent.height - 2)
-                radius: root.radiusControl
-                color: tactileButton.enabled ? "#121214" : root.panel
-            }
-            Rectangle {
-                x: 0
-                y: parent.pressedFace ? 2 : 0
-                width: parent.width
-                height: Math.max(0, parent.height - (parent.pressedFace ? 2 : 2))
-                radius: root.radiusControl
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0
-                        color: !tactileButton.enabled ? root.panel
-                            : (parent.pressedFace ? tactileButton.pressedTop
-                                                  : (tactileButton.hovered ? "#444449" : "#3c3c41"))
-                    }
-                    GradientStop {
-                        position: 1
-                        color: !tactileButton.enabled ? root.panel
-                            : (parent.pressedFace ? tactileButton.pressedBottom
-                                                  : (tactileButton.hovered ? "#29292e" : "#26262b"))
-                    }
-                }
-                border.width: 1
-                border.color: "#19191b"
-            }
+        background: Rectangle {
+            radius: 6
+            color: !tactileButton.enabled ? "#171719"
+                : (tactileButton.down || tactileButton.depressed ? "#202023"
+                    : (tactileButton.hovered ? "#303035" : "#29292e"))
         }
-        scale: tactileButton.down ? 0.985 : 1.0
-        Behavior on scale { NumberAnimation { duration: 55 } }
     }
 
     // Primary action — a raised graphite chip with a top bevel and contact shadow.
@@ -1432,35 +1397,13 @@ Window {
             color: segmentButton.labelColor
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
-            topPadding: segmentButton.selected && segmentButton.down ? 2 : 0
             font: segmentButton.font
         }
-        background: Item {
-            Rectangle {
-                visible: segmentButton.selected
-                x: 0
-                y: segmentButton.down ? 2 : 0
-                width: parent.width
-                height: parent.height - 2
-                radius: root.radiusControl
-                z: 1
-                gradient: Gradient {
-                    GradientStop { position: 0; color: segmentButton.down ? root.raiseTopDown : "#3c3c41" }
-                    GradientStop { position: 1; color: segmentButton.down ? root.raiseBottomDown : "#26262b" }
-                }
-                border.width: 1
-                border.color: "#19191b"
-            }
-            Rectangle {
-                visible: segmentButton.selected && !segmentButton.down
-                x: 0
-                y: 2
-                width: parent.width
-                height: parent.height - 2
-                radius: root.radiusControl
-                color: "#121214"
-                z: 0
-            }
+        background: Rectangle {
+            radius: 5
+            color: segmentButton.selected
+                ? (segmentButton.down ? "#202023" : "#303035")
+                : "transparent"
         }
     }
 
@@ -2530,6 +2473,7 @@ Window {
     Rectangle {
         id: inspector
         property int activeTab: 0                     // 0 = Develop, 1 = Geometry, 2 = Export
+        property int developModule: 0                 // 0 = Film, 1 = Light, 2 = Color
         // Leaving the Geometry tab commits an in-progress crop so the overlay never
         // lingers over the preview on another tab.
         onActiveTabChanged: if (activeTab !== 1 && previewCanvas.cropMode) previewCanvas.applyCropMode()
@@ -2709,6 +2653,35 @@ Window {
                     }
                 }
             }
+
+            // The develop workflow is intentionally limited to three broad modules.
+            // Geometry and Export retain their own tab workflows below.
+            Rectangle {
+                width: parent.width
+                height: 34
+                visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
+                radius: 7
+                color: "#18181a"
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 3
+                    spacing: 3
+                    Repeater {
+                        model: [
+                            { label: "Film", module: 0 },
+                            { label: "Light", module: 1 },
+                            { label: "Color", module: 2 }
+                        ]
+                        delegate: TactileSegmentButton {
+                            width: (parent.width - 6) / 3
+                            height: parent.height
+                            text: modelData.label
+                            selected: inspector.developModule === modelData.module
+                            onClicked: inspector.developModule = modelData.module
+                        }
+                    }
+                }
+            }
         }
 
         Flickable {
@@ -2751,14 +2724,9 @@ Window {
                 Rectangle {
                     id: recipeCard
                     property bool open: true
+                    visible: inspector.developModule === 0
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: recipeCol.implicitHeight + 32
                     
                     Column {
@@ -3039,15 +3007,10 @@ Window {
                 Rectangle {
                     id: printCard
                     property bool open: false
+                    visible: inspector.developModule === 0
                     readonly property bool active: engine.filmControls.print_stock !== undefined && engine.filmControls.print_stock !== "none"
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: printCol.implicitHeight + 32
                     
                     Column {
@@ -3139,14 +3102,9 @@ Window {
                 Rectangle {
                     id: exposureCard
                     property bool open: true
+                    visible: inspector.developModule === 0
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: exposureCol.implicitHeight + 32
                     
                     Column {
@@ -3211,14 +3169,9 @@ Window {
                 Rectangle {
                     id: toneCard
                     property bool open: true
+                    visible: inspector.developModule === 0
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: toneCol.implicitHeight + 32
                     
                     Column {
@@ -3266,14 +3219,9 @@ Window {
                 Rectangle {
                     id: colorCard
                     property bool open: true
+                    visible: inspector.developModule === 0
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: colorCol.implicitHeight + 32
                     
                     Column {
@@ -3311,14 +3259,9 @@ Window {
                 Rectangle {
                     id: colorBalanceCard
                     property bool open: false
+                    visible: inspector.developModule === 2
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: colorBalanceCol.implicitHeight + 32
                     
                     Column {
@@ -3351,14 +3294,9 @@ Window {
                 Rectangle {
                     id: lightCard
                     property bool open: false
+                    visible: inspector.developModule === 1
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: lightCol.implicitHeight + 32
                     
                     Column {
@@ -3394,14 +3332,9 @@ Window {
                 Rectangle {
                     id: detailCard
                     property bool open: false
+                    visible: inspector.developModule === 1
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: detailCol.implicitHeight + 32
                     
                     Column {
@@ -3435,15 +3368,10 @@ Window {
                 Rectangle {
                     id: hslCard
                     property bool open: false
+                    visible: inspector.developModule === 2
                     property string suffix: "h"
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: hslCol.implicitHeight + 32
                     
                     Column {
@@ -3515,14 +3443,9 @@ Window {
                 Rectangle {
                     id: gradeCard
                     property bool open: false
+                    visible: inspector.developModule === 2
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: gradeCol.implicitHeight + 32
                     
                     Column {
@@ -3571,14 +3494,9 @@ Window {
                 Rectangle {
                     id: materialCard
                     property bool open: true
+                    visible: inspector.developModule === 0
                     width: parent.width
-                    radius: 14
-                    gradient: Gradient {
-                        GradientStop { position: 0.0; color: "#1d1d20" }
-                        GradientStop { position: 1.0; color: "#191a1c" }
-                    }
-                    border.width: 1
-                    border.color: root.hair
+                    color: "transparent"
                     implicitHeight: materialCol.implicitHeight + 32
                     
                     Column {

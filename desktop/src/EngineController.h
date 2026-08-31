@@ -111,6 +111,8 @@ public:
     // Reset every edit — film stock, exposure placement and all develop
     // controls — back to the just-opened baseline for the current image.
     Q_INVOKABLE void resetAllEdits();
+    // Restore a named editing group from the same defaults used by Reset All.
+    Q_INVOKABLE void resetControlGroup(const QString& group);
     // Geometry (Phase 1). setCrop takes a normalized rect on the
     // flipped/rotated/straightened image; rotateQuadrant advances the 90-degree
     // orientation; resetGeometry clears crop/straighten/rotate/flip only.
