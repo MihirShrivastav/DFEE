@@ -984,26 +984,13 @@ Window {
             y: (cb.height - height) / 2
 
             Rectangle {
-                x: 1
-                y: 2
-                width: parent.width - 2
-                height: parent.height - 2
-                radius: height / 2
-                color: "#121214"
-            }
-
-            Rectangle {
                 x: 0
-                y: cb.down ? 2 : 0
                 width: parent.width
-                height: parent.height - 2
+                height: parent.height
                 radius: height / 2
-                gradient: Gradient {
-                    GradientStop { position: 0; color: cb.checked ? "#45454b" : root.raiseTop }
-                    GradientStop { position: 1; color: cb.checked ? "#2c2c31" : root.raiseBottom }
-                }
+                color: cb.checked ? "#171719" : "#0f0f11"
                 border.width: 1
-                border.color: cb.activeFocus ? "#66666c" : "#141416"
+                border.color: cb.activeFocus || cb.hovered ? "#d4d4d9" : "#77777d"
 
                 Rectangle {
                     width: 14
@@ -1011,7 +998,7 @@ Window {
                     x: cb.checked ? parent.width - width - 3 : 3
                     anchors.verticalCenter: parent.verticalCenter
                     radius: width / 2
-                    color: cb.checked ? "#d5d5da" : "#a1a1a7"
+                    color: cb.checked ? "#e2e2e6" : "#74747a"
                     border.width: 1
                     border.color: "#18181a"
                     Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
@@ -1296,9 +1283,12 @@ Window {
 
         background: Rectangle {
             radius: 6
-            color: !tactileButton.enabled ? "#171719"
-                : (tactileButton.down || tactileButton.depressed ? "#202023"
-                    : (tactileButton.hovered ? "#303035" : "#29292e"))
+            color: !tactileButton.enabled ? "#111113"
+                : (tactileButton.down || tactileButton.depressed ? "#0b0b0c"
+                    : (tactileButton.hovered ? "#171719" : "#111113"))
+            border.width: 1
+            border.color: tactileButton.activeFocus || tactileButton.hovered
+                ? "#d4d4d9" : "#77777d"
         }
     }
 
@@ -1401,9 +1391,9 @@ Window {
         }
         background: Rectangle {
             radius: 5
-            color: segmentButton.selected
-                ? (segmentButton.down ? "#202023" : "#303035")
-                : "transparent"
+            color: segmentButton.selected ? "#111113" : "transparent"
+            border.width: segmentButton.selected ? 1 : 0
+            border.color: segmentButton.down ? "#f0f0f2" : "#a7a7ad"
         }
     }
 
@@ -2661,7 +2651,9 @@ Window {
                 height: 34
                 visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
                 radius: 7
-                color: "#18181a"
+                color: "#101012"
+                border.width: 1
+                border.color: "#444449"
                 Row {
                     anchors.fill: parent
                     anchors.margins: 3
@@ -2748,6 +2740,8 @@ Window {
                             spacing: 0
                             visible: recipeCard.open
 
+                            InspectorLabel { text: "Film stock" }
+                            Item { width: 1; height: 4 }
                             ComboBox {
                                 id: stockBox
                                 width: parent.width
@@ -2847,8 +2841,9 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: "transparent"
-                                    border.width: 0
+                                    color: "#111113"
+                                    border.width: 1
+                                    border.color: stockBox.activeFocus || stockBox.hovered ? "#d4d4d9" : "#55555b"
                                 }
                                 indicator: ChevronToggle {
                                     x: stockBox.width - 26
@@ -3054,8 +3049,9 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: "transparent"
-                                    border.width: 0
+                                    color: "#111113"
+                                    border.width: 1
+                                    border.color: printBox.activeFocus || printBox.hovered ? "#d4d4d9" : "#55555b"
                                 }
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
