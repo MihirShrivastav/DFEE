@@ -16,14 +16,30 @@ Window {
     color: bg
 
     // Graphite palette — charcoal, monochrome. Color lives only in the photo + boxart.
-    readonly property color bg: "#0f0f10"
-    readonly property color canvas: "#0f0f10"
-    readonly property color panel: "#1a1a1c"
+    readonly property color bg: "#1a1f25"
+    readonly property color canvas: "#181d22"
+    readonly property color panel: "#20262d"
     readonly property color panelRaised: "#1c1c1e"    // dialogs/popovers — same family as the develop cards
     // Input surface. On these already-dark cards a near-black "well" reads as a
     // cheap pasted-on box, so inputs are a subtle surface a touch LIGHTER than the
     // card (Linear/Vercel-style), defined by a soft border rather than by darkness.
-    readonly property color inset: "#232327"
+    readonly property color inset: "#292f37"
+    readonly property color steelSliderStart: "#3d5368"
+    readonly property color steelSliderEnd: "#7390a9"
+    readonly property color cyanSliderStart: "#277789"
+    readonly property color cyanSliderEnd: "#55bdca"
+    readonly property color magentaSliderStart: "#77426c"
+    readonly property color magentaSliderEnd: "#c374ae"
+    readonly property color yellowSliderStart: "#756222"
+    readonly property color yellowSliderEnd: "#d4b84c"
+    readonly property color warmSliderStart: "#8f5730"
+    readonly property color warmSliderEnd: "#d89b5a"
+    readonly property color coolSliderStart: "#315f7d"
+    readonly property color coolSliderEnd: "#63a1c5"
+    readonly property color greenSliderStart: "#346d57"
+    readonly property color greenSliderEnd: "#69ad81"
+    readonly property color chromaSliderStart: "#4b7481"
+    readonly property color chromaSliderEnd: "#c28a5b"
     readonly property color well: "#141416"           // true recess — slider grooves + histogram only
     readonly property color sliderFill: "#29292d"      // restrained filled portion, near the recessed groove
     readonly property color border: "#26262b"
@@ -79,6 +95,41 @@ Window {
         var cur = 0;
         for (var i = 0; i < m.length; ++i) if (m[i].id === engine.stock) { cur = i; break; }
         engine.stock = m[(cur + dir + m.length) % m.length].id;
+    }
+
+    function sliderPalette(key) {
+        var neutral = {
+            positiveStart: steelSliderStart, positiveEnd: steelSliderEnd,
+            negativeStart: steelSliderEnd, negativeEnd: steelSliderStart
+        };
+        if (key === "temp" || key === "temperature") return {
+            positiveStart: warmSliderStart, positiveEnd: warmSliderEnd,
+            negativeStart: coolSliderEnd, negativeEnd: coolSliderStart
+        };
+        if (key === "tint") return {
+            positiveStart: magentaSliderStart, positiveEnd: magentaSliderEnd,
+            negativeStart: greenSliderEnd, negativeEnd: greenSliderStart
+        };
+        if (key === "print_c") return {
+            positiveStart: cyanSliderStart, positiveEnd: cyanSliderEnd,
+            negativeStart: warmSliderEnd, negativeEnd: warmSliderStart
+        };
+        if (key === "print_m") return {
+            positiveStart: magentaSliderStart, positiveEnd: magentaSliderEnd,
+            negativeStart: greenSliderEnd, negativeEnd: greenSliderStart
+        };
+        if (key === "print_y") return {
+            positiveStart: yellowSliderStart, positiveEnd: yellowSliderEnd,
+            negativeStart: coolSliderEnd, negativeEnd: coolSliderStart
+        };
+        if (key === "vibrance" || key === "saturation" || key === "film_color_density"
+                || key === "emulsion_color_density" || key === "highlight_color_hold"
+                || key === "shadow_color_retention" || key === "crossover"
+                || key === "cg_crossbalance") return {
+            positiveStart: chromaSliderStart, positiveEnd: chromaSliderEnd,
+            negativeStart: chromaSliderEnd, negativeEnd: chromaSliderStart
+        };
+        return neutral;
     }
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────
@@ -671,7 +722,7 @@ Window {
 
     component InspectorLabel: Text {
         color: root.textSecondary
-        font.pixelSize: 12
+        font.pixelSize: 11
         font.weight: Font.Medium
     }
 
@@ -988,7 +1039,7 @@ Window {
                 width: parent.width
                 height: parent.height
                 radius: height / 2
-                color: cb.checked ? "#242424" : "#1a1a1a"
+                color: cb.checked ? root.ctrlActive : root.well
 
                 Rectangle {
                     width: 14
@@ -996,7 +1047,7 @@ Window {
                     x: cb.checked ? parent.width - width - 3 : 3
                     anchors.verticalCenter: parent.verticalCenter
                     radius: width / 2
-                    color: cb.checked ? "#101012" : "#76767c"
+                    color: cb.checked ? root.accent : root.textMuted
                     border.width: 0
                     Behavior on x { NumberAnimation { duration: 100; easing.type: Easing.OutCubic } }
                 }
@@ -1164,12 +1215,15 @@ Window {
         id: control
         property bool bipolarTrack: false
         property real neutralValue: 0
-        property color fillColor: root.textSecondary
+        property color fillStartColor: root.steelSliderStart
+        property color fillEndColor: root.steelSliderEnd
+        property color negativeFillStartColor: root.steelSliderEnd
+        property color negativeFillEndColor: root.steelSliderStart
         property real precisionStep: stepSize > 0 ? stepSize : 1
         property real resetValue: neutralValue
         signal adjusted(real nextValue)
         width: parent.width
-        implicitHeight: 24
+        implicitHeight: 20
 
         function clampValue(candidate) {
             return Math.max(from, Math.min(to, candidate));
@@ -1194,27 +1248,38 @@ Window {
             adjusted(next);
         }
 
+        readonly property real neutralPosition: Math.max(0, Math.min(1,
+            (neutralValue - from) / Math.max(0.0001, to - from)))
+        readonly property bool fillsNegative: bipolarTrack && visualPosition < neutralPosition
+
         background: Rectangle {
             x: control.leftPadding
             y: control.topPadding + control.availableHeight / 2 - height / 2
             width: control.availableWidth
-            height: 4
+            height: 3
             radius: 2
             color: root.well                        // recessed groove
             // subtle top inset line for depth
             Rectangle { width: parent.width; height: 1; radius: 1; color: "#66000000" }
             Rectangle {                              // filled portion — subtle grey, monochrome
-                readonly property real neutralPosition: Math.max(0, Math.min(1,
-                    (control.neutralValue - control.from) / Math.max(0.0001, control.to - control.from)))
                 readonly property real startPosition: control.bipolarTrack
-                    ? Math.min(control.visualPosition, neutralPosition) : 0
+                    ? Math.min(control.visualPosition, control.neutralPosition) : 0
                 readonly property real endPosition: control.bipolarTrack
-                    ? Math.max(control.visualPosition, neutralPosition) : control.visualPosition
+                    ? Math.max(control.visualPosition, control.neutralPosition) : control.visualPosition
                 x: startPosition * parent.width
                 width: Math.max(0, (endPosition - startPosition) * parent.width)
                 height: parent.height
                 radius: parent.radius
-                color: control.fillColor
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: control.fillsNegative ? control.negativeFillStartColor : control.fillStartColor
+                    }
+                    GradientStop {
+                        position: 1
+                        color: control.fillsNegative ? control.negativeFillEndColor : control.fillEndColor
+                    }
+                }
                 opacity: control.enabled ? 0.82 : 0.35
             }
         }
@@ -1222,9 +1287,9 @@ Window {
         handle: Rectangle {                          // raised metallic knob
             x: control.leftPadding + control.visualPosition * (control.availableWidth - width)
             y: control.topPadding + control.availableHeight / 2 - height / 2
-            width: 14
-            height: 14
-            radius: 7
+            width: 12
+            height: 12
+            radius: 6
             gradient: Gradient {
                 GradientStop { position: 0.0; color: control.pressed ? "#d7d7db" : "#cdcdd2" }
                 GradientStop { position: 1.0; color: "#9a9aa1" }
@@ -1280,9 +1345,9 @@ Window {
 
         background: Rectangle {
             radius: 6
-            color: !tactileButton.enabled ? "#1b1b1b"
-                : (tactileButton.down || tactileButton.depressed ? "#1c1c1c"
-                    : (tactileButton.hovered ? "#2a2a2a" : "#242424"))
+            color: !tactileButton.enabled ? root.panel
+                : (tactileButton.down || tactileButton.depressed ? root.ctrlPressed
+                    : (tactileButton.hovered ? root.ctrlHover : root.ctrl))
         }
     }
 
@@ -1385,7 +1450,7 @@ Window {
         }
         background: Rectangle {
             radius: 5
-            color: segmentButton.selected ? "#101012" : "transparent"
+            color: segmentButton.selected ? root.well : "transparent"
         }
     }
 
@@ -1460,8 +1525,12 @@ Window {
         property bool decimals: false
         property bool available: true
         property bool autoValue: false
+        property color positiveFillStart: root.sliderPalette(controlKey).positiveStart
+        property color positiveFillEnd: root.sliderPalette(controlKey).positiveEnd
+        property color negativeFillStart: root.sliderPalette(controlKey).negativeStart
+        property color negativeFillEnd: root.sliderPalette(controlKey).negativeEnd
         width: parent.width
-        spacing: 4
+        spacing: 2
 
         readonly property real currentValue: Number(engine.filmControls[controlKey])
         readonly property bool dirty: Math.abs(currentValue - neutral) > 0.0001
@@ -1475,7 +1544,7 @@ Window {
         // the slider below must not shift. Children are vertically centred.
         Row {
             width: parent.width
-            height: 18
+            height: 16
             InspectorLabel {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width - valueLabel.width - resetButton.width - 8
@@ -1502,7 +1571,7 @@ Window {
                 text: sliderRow.autoValue ? "Auto" : ((sliderRow.bipolar && sliderRow.currentValue > 0 ? "+" : "") + (sliderRow.decimals ? sliderRow.currentValue.toFixed(2) : sliderRow.currentValue.toFixed(0)))
                 color: sliderRow.available && sliderRow.dirty ? root.textPrimary : root.textValue
                 horizontalAlignment: Text.AlignRight
-                font.pixelSize: 12
+                font.pixelSize: 11
             }
         }
         InspectorSlider {
@@ -1517,7 +1586,10 @@ Window {
             neutralValue: sliderRow.neutral
             resetValue: sliderRow.neutral
             precisionStep: sliderRow.increment
-            fillColor: root.sliderFill
+            fillStartColor: sliderRow.positiveFillStart
+            fillEndColor: sliderRow.positiveFillEnd
+            negativeFillStartColor: sliderRow.negativeFillStart
+            negativeFillEndColor: sliderRow.negativeFillEnd
             opacity: sliderRow.available ? 1.0 : 0.35
             onAdjusted: engine.setFilmControl(sliderRow.controlKey, nextValue)
         }
@@ -2643,7 +2715,7 @@ Window {
                 height: 34
                 visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
                 radius: 7
-                color: "#222222"
+                color: root.inset
                 Row {
                     anchors.fill: parent
                     anchors.margins: 3
@@ -2668,7 +2740,7 @@ Window {
 
         Flickable {
             anchors.top: inspectorTop.bottom
-            anchors.topMargin: 14
+            anchors.topMargin: 10
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
@@ -2693,13 +2765,13 @@ Window {
                 x: 18
                 y: 4
                 width: parent.width - 36
-                spacing: 14
+                spacing: 10
 
                 // ── Develop tab ────────────────────────────────────────
                 Column {
                     id: developContent
                     width: parent.width
-                    spacing: 14
+                    spacing: 8
                     visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
 
                 // ── Film stock section ─────────────────────────────────
@@ -2709,18 +2781,18 @@ Window {
                     visible: inspector.developModule === 0
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: filmStockCol.implicitHeight + 32
+                    implicitHeight: filmStockCol.implicitHeight + 20
                     
                     Column {
                         id: filmStockCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Stock"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Stock"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: filmStockCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: filmStockCard.open = !filmStockCard.open }
                         }
@@ -2829,7 +2901,7 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: stockBox.hovered || stockBox.activeFocus ? "#2a2a2a" : "#242424"
+                                    color: stockBox.hovered || stockBox.activeFocus ? root.ctrlHover : root.inset
                                     border.width: 0
                                 }
                                 indicator: ChevronToggle {
@@ -2993,18 +3065,18 @@ Window {
                     readonly property bool active: engine.filmControls.print_stock !== undefined && engine.filmControls.print_stock !== "none"
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: printCol.implicitHeight + 32
+                    implicitHeight: printCol.implicitHeight + 20
                     
                     Column {
                         id: printCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Print Finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Print Finish"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             Text { anchors.right: chev1.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: printCard.active && !printCard.open; text: "On"; color: root.textValue; font.pixelSize: 11 }
                             ChevronToggle { id: chev1; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: printCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: printCard.open = !printCard.open }
@@ -3012,7 +3084,7 @@ Window {
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: printCard.open
 
                             ComboBox {
@@ -3036,7 +3108,7 @@ Window {
                                 }
                                 background: Rectangle {
                                     radius: 8
-                                    color: printBox.hovered || printBox.activeFocus ? "#2a2a2a" : "#242424"
+                                    color: printBox.hovered || printBox.activeFocus ? root.ctrlHover : root.inset
                                     border.width: 0
                                 }
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
@@ -3087,25 +3159,25 @@ Window {
                     visible: inspector.developModule === 0
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: exposureCol.implicitHeight + 32
+                    implicitHeight: exposureCol.implicitHeight + 20
                     
                     Column {
                         id: exposureCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Exposure"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Exposure"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: exposureCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: exposureCard.open = !exposureCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: exposureCard.open
 
                             InspectorLabel { text: "Scene placement" }
@@ -3154,25 +3226,25 @@ Window {
                     visible: inspector.developModule === 0
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: toneCol.implicitHeight + 32
+                    implicitHeight: toneCol.implicitHeight + 20
                     
                     Column {
                         id: toneCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Tone"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Film Tone"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: toneCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: toneCard.open = !toneCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: toneCard.open
 
                             // Applies before the film tone, and only to already-rendered
@@ -3204,25 +3276,25 @@ Window {
                     visible: inspector.developModule === 0
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: colorCol.implicitHeight + 32
+                    implicitHeight: colorCol.implicitHeight + 20
                     
                     Column {
                         id: colorCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Character"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Character"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colorCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorCard.open = !colorCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: colorCard.open
                             opacity: engine.currentStockMonochrome ? 0.45 : 1.0
 
@@ -3244,25 +3316,25 @@ Window {
                     visible: inspector.developModule === 2
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: colorBalanceCol.implicitHeight + 32
+                    implicitHeight: colorBalanceCol.implicitHeight + 20
                     
                     Column {
                         id: colorBalanceCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Balance"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Balance"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: colorBalanceCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: colorBalanceCard.open = !colorBalanceCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: colorBalanceCard.open
                             FilmSlider { controlKey: "temp"; label: "Temperature"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance warmth — forward warms (more amber), back cools (more blue)." }
                             FilmSlider { controlKey: "tint"; label: "Tint"; minimum: -100; maximum: 100; bipolar: true; tooltip: "White balance green/magenta — forward toward magenta, back toward green." }
@@ -3279,25 +3351,25 @@ Window {
                     visible: inspector.developModule === 1
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: lightCol.implicitHeight + 32
+                    implicitHeight: lightCol.implicitHeight + 20
                     
                     Column {
                         id: lightCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Light"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Light"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: lightCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: lightCard.open = !lightCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: lightCard.open
                             FilmSlider { controlKey: "exposure"; label: "Exposure"; minimum: -3; maximum: 3; increment: 0.05; decimals: true; bipolar: true; tooltip: "Overall brightness of the finished image, in stops — a grade applied after the film response. For the film's own exposure (which drives its tone and rolloff), use Film exposure in the Film Stock section." }
                             FilmSlider { controlKey: "contrast"; label: "Contrast"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Global contrast — spreads or compresses the tonal range around the midtones." }
@@ -3317,25 +3389,25 @@ Window {
                     visible: inspector.developModule === 1
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: detailCol.implicitHeight + 32
+                    implicitHeight: detailCol.implicitHeight + 20
                     
                     Column {
                         id: detailCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Detail"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Detail"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: detailCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: detailCard.open = !detailCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: detailCard.open
                             FilmSlider { controlKey: "texture"; label: "Texture"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Medium-scale detail like skin and foliage — forward enhances, back smooths." }
                             FilmSlider { controlKey: "clarity"; label: "Clarity"; minimum: -100; maximum: 100; bipolar: true; tooltip: "Midtone local contrast — forward adds punch and presence, back softens." }
@@ -3354,25 +3426,25 @@ Window {
                     property string suffix: "h"
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: hslCol.implicitHeight + 32
+                    implicitHeight: hslCol.implicitHeight + 20
                     
                     Column {
                         id: hslCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "HSL"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "HSL"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: hslCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: hslCard.open = !hslCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: hslCard.open
 
                             Rectangle {                          // H/S/L tab track
@@ -3415,6 +3487,10 @@ Window {
                                     controlKey: "hsl_" + modelData.key + "_" + hslCard.suffix
                                     label: modelData.label
                                     minimum: -100; maximum: 100; bipolar: true
+                                    positiveFillStart: Qt.darker(modelData.dot, 1.7)
+                                    positiveFillEnd: modelData.dot
+                                    negativeFillStart: Qt.lighter(modelData.dot, 1.15)
+                                    negativeFillEnd: Qt.darker(modelData.dot, 1.7)
                                 }
                             }
                         }
@@ -3428,18 +3504,18 @@ Window {
                     visible: inspector.developModule === 2
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: gradeCol.implicitHeight + 32
+                    implicitHeight: gradeCol.implicitHeight + 20
                     
                     Column {
                         id: gradeCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Grading"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Color Grading"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: gradeCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: gradeCard.open = !gradeCard.open }
                         }
@@ -3479,25 +3555,25 @@ Window {
                     visible: inspector.developModule === 0
                     width: parent.width
                     color: "transparent"
-                    implicitHeight: materialCol.implicitHeight + 32
+                    implicitHeight: materialCol.implicitHeight + 20
                     
                     Column {
                         id: materialCol
-                        x: 16; y: 16
-                        width: parent.width - 32
-                        spacing: 14
+                        x: 12; y: 10
+                        width: parent.width - 24
+                        spacing: 10
 
                         Item {
                             width: parent.width
                             height: 20
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material Finish"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Material Finish"; color: root.textPrimary; font.pixelSize: 12; font.weight: Font.Medium }
                             ChevronToggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; open: materialCard.open }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: materialCard.open = !materialCard.open }
                         }
 
                         Column {
                             width: parent.width
-                            spacing: 12
+                            spacing: 8
                             visible: materialCard.open
 
                             InspectorLabel { text: "Grain" }
