@@ -46,9 +46,9 @@ Window {
     readonly property color slateButtonHoverBottom: "#334a5c"
     readonly property color slateButtonPressedTop: "#2b4152"
     readonly property color slateButtonPressedBottom: "#243744"
-    readonly property color slateToggleOn: "#365167"
-    readonly property color slateToggleOff: "#263947"
-    readonly property color slateShadow: "#8c0a1016"
+    readonly property color slateToggleOn: "#2e3d49"
+    readonly property color slateToggleOff: "#25313b"
+    readonly property color slateShadow: "#3d0a1016"
     readonly property color slateOutline: "#6a89a0"
     readonly property color well: "#141416"           // true recess — slider grooves + histogram only
     readonly property color sliderFill: "#29292d"      // restrained filled portion, near the recessed groove
@@ -140,6 +140,24 @@ Window {
             negativeStart: chromaSliderEnd, negativeEnd: chromaSliderStart
         };
         return neutral;
+    }
+
+    function hasColorTrack(key) {
+        return key === "temp" || key === "temperature" || key === "tint"
+            || key === "vibrance" || key === "saturation" || key === "film_color_density"
+            || key === "emulsion_color_density" || key === "highlight_color_hold"
+            || key === "shadow_color_retention" || key === "crossover" || key === "cg_crossbalance"
+            || key.indexOf("hsl_") === 0;
+    }
+
+    function colorTrackPalette(key) {
+        if (key === "temp" || key === "temperature") {
+            return { start: "#397fa5", middle: "#6f7880", end: "#c87938" };
+        }
+        if (key === "tint") {
+            return { start: "#3d9267", middle: "#6f7880", end: "#b4649b" };
+        }
+        return { start: "#357d9a", middle: "#56a36b", end: "#cf7455" };
     }
 
     // ── Keyboard shortcuts ──────────────────────────────────────────────
@@ -1060,7 +1078,7 @@ Window {
                     x: cb.checked ? parent.width - width - 3 : 3
                     anchors.verticalCenter: parent.verticalCenter
                     radius: width / 2
-                    color: cb.checked ? "#c6d9e7" : "#8da0ad"
+                    color: cb.checked ? "#79b5d4" : "#83939e"
                     border.width: 0
                     Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                     Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
@@ -1233,6 +1251,10 @@ Window {
         property color fillEndColor: root.steelSliderEnd
         property color negativeFillStartColor: root.steelSliderEnd
         property color negativeFillEndColor: root.steelSliderStart
+        property bool fullColorTrack: false
+        property color trackStartColor: root.steelSliderStart
+        property color trackMiddleColor: root.steelSliderEnd
+        property color trackEndColor: root.steelSliderEnd
         property real precisionStep: stepSize > 0 ? stepSize : 1
         property real resetValue: neutralValue
         signal adjusted(real nextValue)
@@ -1275,6 +1297,17 @@ Window {
             color: root.well                        // recessed groove
             // subtle top inset line for depth
             Rectangle { width: parent.width; height: 1; radius: 1; color: "#66000000" }
+            Rectangle {
+                anchors.fill: parent
+                radius: parent.radius
+                visible: control.fullColorTrack
+                gradient: Gradient {
+                    GradientStop { position: 0; color: control.trackStartColor }
+                    GradientStop { position: 0.5; color: control.trackMiddleColor }
+                    GradientStop { position: 1; color: control.trackEndColor }
+                }
+                opacity: control.enabled ? 0.86 : 0.35
+            }
             Rectangle {                              // filled portion — subtle grey, monochrome
                 readonly property real startPosition: control.bipolarTrack
                     ? Math.min(control.visualPosition, control.neutralPosition) : 0
@@ -1284,6 +1317,7 @@ Window {
                 width: Math.max(0, (endPosition - startPosition) * parent.width)
                 height: parent.height
                 radius: parent.radius
+                visible: !control.fullColorTrack
                 gradient: Gradient {
                     GradientStop {
                         position: 0
@@ -1360,9 +1394,9 @@ Window {
         background: Item {
             Rectangle {
                 x: 1
-                y: tactileButton.down || tactileButton.depressed ? 1 : 3
+                y: tactileButton.down || tactileButton.depressed ? 0 : 1
                 width: parent.width - 2
-                height: parent.height - 2
+                height: parent.height - 1
                 radius: 6
                 color: root.slateShadow
                 Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
@@ -1372,7 +1406,7 @@ Window {
                 x: 0
                 y: tactileButton.down || tactileButton.depressed ? 1 : 0
                 width: parent.width
-                height: parent.height - 2
+                height: parent.height - 1
                 radius: 6
                 opacity: tactileButton.enabled ? 1.0 : 0.48
                 gradient: Gradient {
@@ -1479,6 +1513,7 @@ Window {
     component TactileSegmentButton: Button {
         id: segmentButton
         property bool selected: false
+        property bool externalIndicator: false
         property color labelColor: selected ? root.textPrimary : root.textSecondary
         height: 30
         font.pixelSize: 12
@@ -1492,11 +1527,12 @@ Window {
             font: segmentButton.font
         }
         background: Item {
+            visible: !segmentButton.externalIndicator
             Rectangle {
                 x: 1
-                y: segmentButton.selected ? 2 : 0
+                y: segmentButton.selected ? 1 : 0
                 width: parent.width - 2
-                height: parent.height - 2
+                height: parent.height - 1
                 radius: 5
                 visible: segmentButton.selected
                 color: root.slateShadow
@@ -1506,7 +1542,7 @@ Window {
                 x: 0
                 y: segmentButton.selected && segmentButton.down ? 1 : 0
                 width: parent.width
-                height: parent.height - 2
+                height: parent.height - 1
                 radius: 5
                 opacity: segmentButton.selected ? 1.0 : (segmentButton.hovered ? 0.32 : 0.0)
                 gradient: Gradient {
@@ -1602,6 +1638,8 @@ Window {
         property color positiveFillEnd: root.sliderPalette(controlKey).positiveEnd
         property color negativeFillStart: root.sliderPalette(controlKey).negativeStart
         property color negativeFillEnd: root.sliderPalette(controlKey).negativeEnd
+        readonly property bool fullColorTrack: root.hasColorTrack(controlKey)
+        readonly property var colorTrackPalette: root.colorTrackPalette(controlKey)
         width: parent.width
         spacing: 2
 
@@ -1663,6 +1701,10 @@ Window {
             fillEndColor: sliderRow.positiveFillEnd
             negativeFillStartColor: sliderRow.negativeFillStart
             negativeFillEndColor: sliderRow.negativeFillEnd
+            fullColorTrack: sliderRow.fullColorTrack
+            trackStartColor: sliderRow.colorTrackPalette.start
+            trackMiddleColor: sliderRow.colorTrackPalette.middle
+            trackEndColor: sliderRow.colorTrackPalette.end
             opacity: sliderRow.available ? 1.0 : 0.35
             onAdjusted: engine.setFilmControl(sliderRow.controlKey, nextValue)
         }
@@ -2482,6 +2524,7 @@ Window {
 
         // Floating before/after mode switch (only when a "before" is available).
         Rectangle {
+            id: compareTrack
             visible: engine.hasImage && engine.hasBefore
             anchors.top: parent.top
             anchors.horizontalCenter: parent.horizontalCenter
@@ -2491,7 +2534,23 @@ Window {
             radius: 9
             color: root.inset
             border.width: 0
+            Rectangle {
+                readonly property var segmentWidths: [62, 55, 104]
+                width: segmentWidths[previewCanvas.compareMode]
+                height: parent.height - 6
+                x: previewCanvas.compareMode === 0 ? 4
+                    : (previewCanvas.compareMode === 1 ? 70 : 129)
+                y: 3
+                radius: 6
+                gradient: Gradient {
+                    GradientStop { position: 0; color: root.slateButtonTop }
+                    GradientStop { position: 1; color: root.slateButtonBottom }
+                }
+                Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+            }
             Row {
+                z: 1
                 id: compareRow
                 anchors.centerIn: parent
                 spacing: 4
@@ -2502,6 +2561,7 @@ Window {
                         height: 26
                         width: modelData.label.length * 7 + 20
                         selected: previewCanvas.compareMode === modelData.m
+                        externalIndicator: true
                         onClicked: previewCanvas.compareMode = modelData.m
                         text: modelData.label
                         font.pixelSize: 11
@@ -2757,13 +2817,27 @@ Window {
 
             // Tab switcher — hidden in Lightroom edit-in mode (Develop only there).
             Rectangle {
+                id: editorTabTrack
                 width: parent.width
                 height: 34
                 radius: 9
                 color: root.inset
                 border.width: 0
                 visible: !engine.lightroomRoundTrip
+                Rectangle {
+                    width: (editorTabTrack.width - 14) / 3
+                    height: editorTabTrack.height - 6
+                    x: 3 + inspector.activeTab * (width + 4)
+                    y: 3
+                    radius: 6
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: root.slateButtonTop }
+                        GradientStop { position: 1; color: root.slateButtonBottom }
+                    }
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
                 Row {
+                    z: 1
                     anchors.fill: parent
                     anchors.margins: 3
                     spacing: 4
@@ -2775,6 +2849,7 @@ Window {
                             height: parent.height
                             text: modelData
                             selected: inspector.activeTab === index
+                            externalIndicator: true
                             onClicked: inspector.activeTab = index
                         }
                     }
@@ -2784,12 +2859,26 @@ Window {
             // The develop workflow is intentionally limited to three broad modules.
             // Geometry and Export retain their own tab workflows below.
             Rectangle {
+                id: developModuleTrack
                 width: parent.width
                 height: 34
                 visible: inspector.activeTab === 0 || engine.lightroomRoundTrip
                 radius: 7
                 color: root.inset
+                Rectangle {
+                    width: (developModuleTrack.width - 12) / 3
+                    height: developModuleTrack.height - 6
+                    x: 3 + inspector.developModule * (width + 3)
+                    y: 3
+                    radius: 5
+                    gradient: Gradient {
+                        GradientStop { position: 0; color: root.slateButtonTop }
+                        GradientStop { position: 1; color: root.slateButtonBottom }
+                    }
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
                 Row {
+                    z: 1
                     anchors.fill: parent
                     anchors.margins: 3
                     spacing: 3
@@ -2804,6 +2893,7 @@ Window {
                             height: parent.height
                             text: modelData.label
                             selected: inspector.developModule === modelData.module
+                            externalIndicator: true
                             onClicked: inspector.developModule = modelData.module
                         }
                     }
@@ -3261,6 +3351,18 @@ Window {
                                 radius: 9
                                 color: root.inset
                                 border.width: 0
+                                Rectangle {
+                                    width: (placementTrack.width - 10) / 2
+                                    height: placementTrack.height - 6
+                                    x: 3 + (engine.filmControls.exposure_placement === "as_shot" ? 1 : 0) * (width + 4)
+                                    y: 3
+                                    radius: 6
+                                    gradient: Gradient {
+                                        GradientStop { position: 0; color: root.slateButtonTop }
+                                        GradientStop { position: 1; color: root.slateButtonBottom }
+                                    }
+                                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                }
                                 HoverHandler { id: placementHover }
                                 GraphiteTip {
                                     parent: placementTrack
@@ -3270,6 +3372,7 @@ Window {
                                     text: "Auto balanced sets a stock-aware starting exposure for the scene. As shot preserves the RAW's own exposure placement before the film response."
                                 }
                                 Row {
+                                    z: 1
                                     anchors.fill: parent
                                     anchors.margins: 3
                                     spacing: 4
@@ -3281,6 +3384,7 @@ Window {
                                             height: parent.height
                                             text: modelData.label
                                             selected: engine.filmControls.exposure_placement === modelData.value
+                                            externalIndicator: true
                                             onClicked: engine.setFilmControl("exposure_placement", modelData.value)
                                             font.pixelSize: 11
                                         }
@@ -3521,12 +3625,26 @@ Window {
                             visible: hslCard.open
 
                             Rectangle {                          // H/S/L tab track
+                                id: hslModeTrack
                                 width: parent.width
                                 height: 34
                                 radius: 9
                                 color: root.inset
                                 border.width: 0
+                                Rectangle {
+                                    width: (hslModeTrack.width - 14) / 3
+                                    height: hslModeTrack.height - 6
+                                    x: 3 + (hslCard.suffix === "h" ? 0 : (hslCard.suffix === "s" ? 1 : 2)) * (width + 4)
+                                    y: 3
+                                    radius: 6
+                                    gradient: Gradient {
+                                        GradientStop { position: 0; color: root.slateButtonTop }
+                                        GradientStop { position: 1; color: root.slateButtonBottom }
+                                    }
+                                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                                }
                                 Row {
+                                    z: 1
                                     anchors.fill: parent
                                     anchors.margins: 3
                                     spacing: 4
@@ -3538,6 +3656,7 @@ Window {
                                             height: parent.height
                                             text: modelData.label
                                             selected: hslCard.suffix === modelData.v
+                                            externalIndicator: true
                                             onClicked: hslCard.suffix = modelData.v
                                             font.pixelSize: 11
                                         }
