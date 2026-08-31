@@ -24,8 +24,8 @@ Window {
     // cheap pasted-on box, so inputs are a subtle surface a touch LIGHTER than the
     // card (Linear/Vercel-style), defined by a soft border rather than by darkness.
     readonly property color inset: "#222222"
-    readonly property color steelSliderStart: "#3d5368"
-    readonly property color steelSliderEnd: "#7390a9"
+    readonly property color steelSliderStart: "#242424"
+    readonly property color steelSliderEnd: "#d8d8d8"
     readonly property color cyanSliderStart: "#277789"
     readonly property color cyanSliderEnd: "#55bdca"
     readonly property color magentaSliderStart: "#77426c"
