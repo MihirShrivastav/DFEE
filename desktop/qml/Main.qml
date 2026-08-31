@@ -16,14 +16,14 @@ Window {
     color: bg
 
     // Graphite palette — charcoal, monochrome. Color lives only in the photo + boxart.
-    readonly property color bg: "#1b1d20"
-    readonly property color canvas: "#17191c"
-    readonly property color panel: "#202326"
+    readonly property color bg: "#181818"
+    readonly property color canvas: "#151515"
+    readonly property color panel: "#1d1d1d"
     readonly property color panelRaised: "#1c1c1e"    // dialogs/popovers — same family as the develop cards
     // Input surface. On these already-dark cards a near-black "well" reads as a
     // cheap pasted-on box, so inputs are a subtle surface a touch LIGHTER than the
     // card (Linear/Vercel-style), defined by a soft border rather than by darkness.
-    readonly property color inset: "#272a2e"
+    readonly property color inset: "#222222"
     readonly property color steelSliderStart: "#3d5368"
     readonly property color steelSliderEnd: "#7390a9"
     readonly property color cyanSliderStart: "#277789"
@@ -50,12 +50,12 @@ Window {
     readonly property color slateToggleOff: "#25313b"
     readonly property color slateShadow: "#3d0a1016"
     readonly property color slateOutline: "#6a89a0"
-    readonly property color flatControl: "#252a2f"
-    readonly property color flatControlHover: "#2b3036"
-    readonly property color flatControlActive: "#31363c"
-    readonly property color flatTrack: "#202429"
-    readonly property color flatRule: "#353b42"
-    readonly property color textHighlight: "#eef1f3"
+    readonly property color flatControl: "#242424"
+    readonly property color flatControlHover: "#2a2a2a"
+    readonly property color flatControlActive: "#303030"
+    readonly property color flatTrack: "#1a1a1a"
+    readonly property color flatRule: "#363636"
+    readonly property color textHighlight: "#eeeeee"
     readonly property color well: "#141416"           // true recess — slider grooves + histogram only
     readonly property color sliderFill: "#29292d"      // restrained filled portion, near the recessed groove
     readonly property color border: "#26262b"
