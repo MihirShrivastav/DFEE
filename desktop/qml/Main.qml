@@ -16,14 +16,14 @@ Window {
     color: bg
 
     // Graphite palette — charcoal, monochrome. Color lives only in the photo + boxart.
-    readonly property color bg: "#1a1f25"
-    readonly property color canvas: "#181d22"
-    readonly property color panel: "#20262d"
+    readonly property color bg: "#1b1d20"
+    readonly property color canvas: "#17191c"
+    readonly property color panel: "#202326"
     readonly property color panelRaised: "#1c1c1e"    // dialogs/popovers — same family as the develop cards
     // Input surface. On these already-dark cards a near-black "well" reads as a
     // cheap pasted-on box, so inputs are a subtle surface a touch LIGHTER than the
     // card (Linear/Vercel-style), defined by a soft border rather than by darkness.
-    readonly property color inset: "#292f37"
+    readonly property color inset: "#272a2e"
     readonly property color steelSliderStart: "#3d5368"
     readonly property color steelSliderEnd: "#7390a9"
     readonly property color cyanSliderStart: "#277789"
@@ -50,6 +50,12 @@ Window {
     readonly property color slateToggleOff: "#25313b"
     readonly property color slateShadow: "#3d0a1016"
     readonly property color slateOutline: "#6a89a0"
+    readonly property color flatControl: "#252a2f"
+    readonly property color flatControlHover: "#2b3036"
+    readonly property color flatControlActive: "#31363c"
+    readonly property color flatTrack: "#202429"
+    readonly property color flatRule: "#353b42"
+    readonly property color textHighlight: "#eef1f3"
     readonly property color well: "#141416"           // true recess — slider grooves + histogram only
     readonly property color sliderFill: "#29292d"      // restrained filled portion, near the recessed groove
     readonly property color border: "#26262b"
@@ -1061,9 +1067,9 @@ Window {
                 width: parent.width
                 height: parent.height
                 radius: height / 2
-                color: cb.checked ? root.slateToggleOn : root.slateToggleOff
+                color: cb.checked ? root.flatControlActive : root.flatTrack
                 border.width: 1
-                border.color: cb.checked ? root.slateOutline : root.border
+                border.color: cb.checked ? root.flatRule : root.border
                 Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                 Rectangle {
@@ -1072,7 +1078,7 @@ Window {
                     x: cb.checked ? parent.width - width - 3 : 3
                     anchors.verticalCenter: parent.verticalCenter
                     radius: width / 2
-                    color: cb.checked ? "#79b5d4" : "#83939e"
+                    color: cb.checked ? "#e3e7ea" : "#7c858e"
                     border.width: 0
                     Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
                     Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
@@ -1122,10 +1128,7 @@ Window {
             width: 32
             height: spin.height
             topLeftRadius: 8; bottomLeftRadius: 8
-            gradient: Gradient {
-                    GradientStop { position: 0.0; color: spin.down.pressed ? root.slateButtonPressedTop : root.slateButtonTop }
-                    GradientStop { position: 1.0; color: spin.down.pressed ? root.slateButtonPressedBottom : root.slateButtonBottom }
-            }
+                color: spin.down.pressed ? root.flatTrack : root.flatControl
             border.width: 1
             border.color: root.hair
             Text { anchors.centerIn: parent; text: "−"; color: root.textPrimary; font.pixelSize: 15 }
@@ -1136,10 +1139,7 @@ Window {
             width: 32
             height: spin.height
             topRightRadius: 8; bottomRightRadius: 8
-            gradient: Gradient {
-                    GradientStop { position: 0.0; color: spin.up.pressed ? root.slateButtonPressedTop : root.slateButtonTop }
-                    GradientStop { position: 1.0; color: spin.up.pressed ? root.slateButtonPressedBottom : root.slateButtonBottom }
-            }
+                color: spin.up.pressed ? root.flatTrack : root.flatControl
             border.width: 1
             border.color: root.hair
             Text { anchors.centerIn: parent; text: "+"; color: root.textPrimary; font.pixelSize: 15 }
@@ -1377,7 +1377,7 @@ Window {
     component TactileButton: Button {
         id: tactileButton
         property bool depressed: false
-        property color labelColor: tactileButton.enabled ? root.textPrimary : root.textMuted
+        property color labelColor: tactileButton.enabled ? root.textHighlight : root.textMuted
 
         contentItem: Text {
             text: tactileButton.text
@@ -1387,40 +1387,14 @@ Window {
             font: tactileButton.font
         }
 
-        background: Item {
-            Rectangle {
-                x: 1
-                y: tactileButton.down || tactileButton.depressed ? 0 : 1
-                width: parent.width - 2
-                height: parent.height - 1
-                radius: 6
-                color: root.slateShadow
-                Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-            }
-            Rectangle {
-                id: buttonFace
-                x: 0
-                y: tactileButton.down || tactileButton.depressed ? 1 : 0
-                width: parent.width
-                height: parent.height - 1
-                radius: 6
-                opacity: tactileButton.enabled ? 1.0 : 0.48
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0
-                        color: tactileButton.down || tactileButton.depressed ? root.slateButtonPressedTop
-                            : (tactileButton.hovered ? root.slateButtonHoverTop : root.slateButtonTop)
-                    }
-                    GradientStop {
-                        position: 1
-                        color: tactileButton.down || tactileButton.depressed ? root.slateButtonPressedBottom
-                            : (tactileButton.hovered ? root.slateButtonHoverBottom : root.slateButtonBottom)
-                    }
-                }
-                border.width: tactileButton.activeFocus ? 1 : 0
-                border.color: root.slateOutline
-                Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-            }
+        background: Rectangle {
+            radius: 5
+            color: !tactileButton.enabled ? root.flatTrack
+                : (tactileButton.down || tactileButton.depressed ? root.flatTrack
+                    : (tactileButton.hovered ? root.flatControlHover : root.flatControl))
+            border.width: tactileButton.activeFocus ? 1 : 0
+            border.color: root.textPrimary
+            Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
         }
     }
 
@@ -1468,30 +1442,13 @@ Window {
 
     component DestructiveButton: PrimaryButton {
         id: destructiveButton
-        labelColor: "#171315"
-        background: Item {
-            Rectangle {
-                x: 1
-                y: 2
-                width: parent.width - 2
-                height: parent.height - 2
-                radius: root.radiusControl
-                color: "#411f20"
-            }
-            Rectangle {
-                x: 0
-                y: destructiveButton.down ? 2 : 0
-                width: parent.width
-                height: parent.height - 2
-                radius: root.radiusControl
-                z: 1
-                gradient: Gradient {
-                    GradientStop { position: 0; color: destructiveButton.down ? "#bf504a" : "#ef7168" }
-                    GradientStop { position: 1; color: destructiveButton.down ? "#9f413e" : "#d55b55" }
-                }
-                border.width: 1
-                border.color: destructiveButton.activeFocus ? "#ffaea7" : "#8e3938"
-            }
+        labelColor: root.textHighlight
+        background: Rectangle {
+            radius: 5
+            color: destructiveButton.down ? "#9f413e" : "#b94d47"
+            border.width: destructiveButton.activeFocus ? 1 : 0
+            border.color: root.textHighlight
+            Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
         }
     }
 
@@ -1510,7 +1467,7 @@ Window {
         id: segmentButton
         property bool selected: false
         property bool externalIndicator: false
-        property color labelColor: selected ? root.textPrimary : root.textSecondary
+        property color labelColor: selected ? root.textHighlight : root.textSecondary
         height: 30
         font.pixelSize: 12
         font.weight: Font.Medium
@@ -1525,36 +1482,11 @@ Window {
         background: Item {
             visible: !segmentButton.externalIndicator
             Rectangle {
-                x: 1
-                y: segmentButton.selected ? 1 : 0
-                width: parent.width - 2
-                height: parent.height - 1
+                anchors.fill: parent
                 radius: 5
-                visible: segmentButton.selected
-                color: root.slateShadow
-                Behavior on y { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
-            }
-            Rectangle {
-                x: 0
-                y: segmentButton.selected && segmentButton.down ? 1 : 0
-                width: parent.width
-                height: parent.height - 1
-                radius: 5
-                opacity: segmentButton.selected ? 1.0 : (segmentButton.hovered ? 0.32 : 0.0)
-                gradient: Gradient {
-                    GradientStop {
-                        position: 0
-                        color: segmentButton.selected && segmentButton.down ? root.slateButtonPressedTop
-                            : root.slateButtonTop
-                    }
-                    GradientStop {
-                        position: 1
-                        color: segmentButton.selected && segmentButton.down ? root.slateButtonPressedBottom
-                            : root.slateButtonBottom
-                    }
-                }
-                Behavior on y { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                color: segmentButton.selected ? root.flatControlActive
+                    : (segmentButton.hovered ? root.flatControlHover : "transparent")
+                Behavior on color { ColorAnimation { duration: 100; easing.type: Easing.OutCubic } }
             }
         }
     }
@@ -2538,10 +2470,7 @@ Window {
                     : (previewCanvas.compareMode === 1 ? 70 : 129)
                 y: 3
                 radius: 6
-                gradient: Gradient {
-                    GradientStop { position: 0; color: root.slateButtonTop }
-                    GradientStop { position: 1; color: root.slateButtonBottom }
-                }
+                    color: root.flatControlActive
                 Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
             }
@@ -2826,10 +2755,7 @@ Window {
                     x: 3 + inspector.activeTab * (width + 4)
                     y: 3
                     radius: 6
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: root.slateButtonTop }
-                        GradientStop { position: 1; color: root.slateButtonBottom }
-                    }
+                    color: root.flatControlActive
                     Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }
                 Row {
@@ -2867,10 +2793,7 @@ Window {
                     x: 3 + inspector.developModule * (width + 3)
                     y: 3
                     radius: 5
-                    gradient: Gradient {
-                        GradientStop { position: 0; color: root.slateButtonTop }
-                        GradientStop { position: 1; color: root.slateButtonBottom }
-                    }
+                    color: root.flatControlActive
                     Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }
                 Row {
@@ -3353,10 +3276,7 @@ Window {
                                     x: 3 + (engine.filmControls.exposure_placement === "as_shot" ? 1 : 0) * (width + 4)
                                     y: 3
                                     radius: 6
-                                    gradient: Gradient {
-                                        GradientStop { position: 0; color: root.slateButtonTop }
-                                        GradientStop { position: 1; color: root.slateButtonBottom }
-                                    }
+                    color: root.flatControlActive
                                     Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                                 }
                                 HoverHandler { id: placementHover }
@@ -3633,10 +3553,7 @@ Window {
                                     x: 3 + (hslCard.suffix === "h" ? 0 : (hslCard.suffix === "s" ? 1 : 2)) * (width + 4)
                                     y: 3
                                     radius: 6
-                                    gradient: Gradient {
-                                        GradientStop { position: 0; color: root.slateButtonTop }
-                                        GradientStop { position: 1; color: root.slateButtonBottom }
-                                    }
+                    color: root.flatControlActive
                                     Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                                 }
                                 Row {
