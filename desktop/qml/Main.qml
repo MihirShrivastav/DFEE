@@ -2174,11 +2174,18 @@ Window {
 
         Item {
             id: imageArea
-            anchors.fill: parent
-            anchors.margins: 28
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.leftMargin: 28
+            anchors.rightMargin: 28
             // Reserve room for the floating compare switch so it never overlaps the
             // image (matters for tall/portrait frames that fill the height).
             anchors.topMargin: (engine.hasImage && engine.hasBefore) ? 62 : 28
+            // Bottom stops above the zoom bar so the image (even zoomed / panned, or a
+            // wide panorama) never slides under the controls — a strip is always kept.
+            anchors.bottom: zoomControls.top
+            anchors.bottomMargin: 10
             visible: engine.hasImage
             clip: true
 
