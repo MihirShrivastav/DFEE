@@ -505,6 +505,7 @@ int main(int argc, char** argv) {
     const fs::path corpus = fs::absolute(argv[1]);
     std::string profile = "Adobe Standard", placement = "auto_balanced", only_ext, out_path, dump_dir;
     std::string developer = "engine";  // engine | dcp (prototype DNG-profile developer)
+    std::optional<dcpdev::LookPreset> look_preset;  // e.g. Adobe Color
     dcpdev::DevelopOptions dcp_options;
     bool fit_exposure = false;
     bool use_fallback = true;  // --fallback 0 to score only cameras with an installed DCP
@@ -527,6 +528,22 @@ int main(int argc, char** argv) {
         else if (k == "--fallback") use_fallback = v != "0";
         else if (k == "--default-only") table_default_only = v != "0";
         else if (k == "--register") g_register = v != "0";
+        else if (k == "--look-preset") {
+            std::string err;
+            look_preset = dcpdev::load_look_preset(v, err);
+            if (!look_preset) {
+                std::cerr << "look preset: " << err << "\n";
+                return 2;
+            }
+            dcp_options.preset = &*look_preset;
+            std::cout << "look preset '" << look_preset->name << "': table " << look_preset->look.hue << "x"
+                      << look_preset->look.sat << "x" << look_preset->look.val << ", point curve "
+                      << look_preset->point_curve.size() << " pts\n";
+        } else if (k == "--curve-space") {
+            dcp_options.curve_space = v == "linear" ? dcpdev::CurveSpace::Linear
+                                    : v == "gamma22" ? dcpdev::CurveSpace::Gamma22
+                                                     : dcpdev::CurveSpace::Srgb;
+        }
         else if (k == "--exposure-table") {
             const YAML::Node t = YAML::LoadFile(v);
             exposure_default = t["default_proprietary"].as<double>(0.0);
@@ -556,7 +573,8 @@ int main(int argc, char** argv) {
             raw_by_stem[lower(e.path().stem().string())] = e.path();
         }
     }
-    const std::regex edit_suffix(R"((-Edit(-\d+)?)$)", std::regex::icase);
+    // "<raw stem>-Edit[-N].tif" (Lightroom edit-in) or "<raw stem>-AC.tif" (Adobe Color export).
+    const std::regex edit_suffix(R"((-Edit(-\d+)?|-AC)$)", std::regex::icase);
     std::vector<Pair> pairs;
     std::map<std::string, int> skipped;
     std::vector<fs::path> tifs;

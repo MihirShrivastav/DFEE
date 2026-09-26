@@ -17,6 +17,11 @@
 #include <memory>
 #include <mutex>
 
+#include <regex>
+#include <sstream>
+
+#include <zlib.h>
+
 #if __has_include(<libraw/libraw.h>)
 #include <libraw/libraw.h>
 #else
@@ -536,6 +541,102 @@ std::optional<Profile> load_dcp(const fs::path& path) {
     return p;
 }
 
+std::optional<LookPreset> load_look_preset(const fs::path& xmp_path, std::string& error) {
+    std::ifstream f(xmp_path, std::ios::binary);
+    if (!f) {
+        error = "cannot read " + xmp_path.string();
+        return std::nullopt;
+    }
+    const std::string xmp((std::istreambuf_iterator<char>(f)), {});
+    std::smatch m;
+    if (!std::regex_search(xmp, m, std::regex(R"(crs:LookTable="([0-9A-F]+)\")"))) {
+        error = "no crs:LookTable";
+        return std::nullopt;
+    }
+    const std::string key = "crs:Table_" + m[1].str() + "=\"";
+    const auto start = xmp.find(key);
+    if (start == std::string::npos) {
+        error = "look table payload missing";
+        return std::nullopt;
+    }
+    const auto begin = start + key.size();
+    const std::string text = xmp.substr(begin, xmp.find('"', begin) - begin);
+
+    // Text -> binary: Z85-like alphabet adjusted for XMP (dng_big_table::DecodeFromString).
+    static const unsigned char kDecode[96] = {
+        0xFF, 0x44, 0xFF, 0x54, 0x53, 0x52, 0xFF, 0x49, 0x4B, 0x4C, 0x46, 0x41, 0xFF, 0x3F, 0x3E, 0x45,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x40, 0xFF, 0xFF, 0x42, 0xFF, 0x47,
+        0x51, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x32,
+        0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x4D, 0xFF, 0x4E, 0x43, 0xFF,
+        0x48, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+        0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x4F, 0x4A, 0x50, 0xFF, 0xFF};
+    std::vector<unsigned char> bin;
+    bin.reserve(text.size() * 4 / 5 + 4);
+    std::uint32_t phase = 0, value = 0;
+    for (unsigned char e : text) {
+        if (e < 32 || e > 127) continue;
+        const std::uint32_t d = kDecode[e - 32];
+        if (d > 85) continue;
+        ++phase;
+        if (phase == 1) value = d;
+        else if (phase == 2) value += d * 85U;
+        else if (phase == 3) value += d * 85U * 85U;
+        else if (phase == 4) value += d * 85U * 85U * 85U;
+        else {
+            value += d * 85U * 85U * 85U * 85U;
+            for (int k = 0; k < 4; ++k) bin.push_back(static_cast<unsigned char>(value >> (8 * k)));
+            phase = 0;
+        }
+    }
+    for (std::uint32_t k = 0; k + 1 < phase; ++k) bin.push_back(static_cast<unsigned char>(value >> (8 * k)));
+    if (bin.size() < 5) {
+        error = "look table payload too short";
+        return std::nullopt;
+    }
+    // Binary -> uncompressed stream: 4-byte little-endian size, then zlib data.
+    uLongf size = bin[0] | (bin[1] << 8) | (bin[2] << 16) | (static_cast<uLongf>(bin[3]) << 24);
+    std::vector<unsigned char> raw(size);
+    if (::uncompress(raw.data(), &size, bin.data() + 4, static_cast<uLong>(bin.size() - 4)) != Z_OK) {
+        error = "look table zlib decode failed";
+        return std::nullopt;
+    }
+    raw.resize(size);
+    Reader r;
+    r.d = std::move(raw);
+    r.le = true;
+    if (r.d.size() < 24) {
+        error = "look table stream too short";
+        return std::nullopt;
+    }
+    // dng_look_table::GetStream: magic, version, hue/sat/val divisions, deltas, encoding.
+    const std::uint32_t version = r.u32(4);
+    LookPreset p;
+    p.look.hue = static_cast<int>(r.u32(8));
+    p.look.sat = static_cast<int>(r.u32(12));
+    p.look.val = static_cast<int>(r.u32(16));
+    const std::size_t n = static_cast<std::size_t>(p.look.hue) * p.look.sat * p.look.val;
+    if (version < 1 || version > 2 || r.d.size() < 20 + n * 12 + 4) {
+        error = "unexpected look table layout";
+        return std::nullopt;
+    }
+    p.look.data.resize(n * 3);
+    for (std::size_t i = 0; i < n * 3; ++i) p.look.data[i] = r.f32(20 + i * 4);
+    p.look_encoding = static_cast<int>(r.u32(20 + n * 12));
+
+    // Master PV2012 point curve: <crs:ToneCurvePV2012><rdf:Seq><rdf:li>x, y</rdf:li>...
+    const auto c0 = xmp.find("<crs:ToneCurvePV2012>");
+    if (c0 != std::string::npos) {
+        const auto c1 = xmp.find("</crs:ToneCurvePV2012>", c0);
+        const std::string block = xmp.substr(c0, c1 - c0);
+        const std::regex li(R"(<rdf:li>\s*([0-9.]+)\s*,\s*([0-9.]+)\s*</rdf:li>)");
+        for (std::sregex_iterator it(block.begin(), block.end(), li), end; it != end; ++it) {
+            p.point_curve.emplace_back(std::stof((*it)[1].str()), std::stof((*it)[2].str()));
+        }
+    }
+    p.name = xmp_path.stem().string();
+    return p;
+}
+
 std::optional<fs::path> find_adobe_standard(const std::string& unique_camera_model, const std::string& make,
                                             const std::string& model, std::string* matched_name) {
     static std::mutex mu;
@@ -749,8 +850,49 @@ cv::Mat develop(const RawInput& raw, const Profile& profile, const DevelopOption
         *log = buf;
     }
 
+    // A look preset (Adobe Color) replaces the DCP's own look table.
+    const HueSatTable& look_table = options.preset ? options.preset->look : profile.look;
+    const int look_encoding = options.preset ? options.preset->look_encoding : profile.look_encoding;
+    // Its point curve (0..255) is applied after the base tone, in an encoded space.
+    std::vector<std::pair<float, float>> pc;
+    if (options.preset) {
+        for (const auto& [x, yv] : options.preset->point_curve) pc.emplace_back(x / 255.0F, yv / 255.0F);
+    }
+    const Spline point_curve(pc);
+    const bool use_point_curve = pc.size() >= 2;
+    auto enc = [&](double v) {
+        v = std::clamp(v, 0.0, 1.0);
+        switch (options.curve_space) {
+            case CurveSpace::Srgb: return srgb_encode(v);
+            case CurveSpace::Gamma22: return std::pow(v, 1.0 / 2.2);
+            default: return v;
+        }
+    };
+    auto dec = [&](double v) {
+        v = std::clamp(v, 0.0, 1.0);
+        switch (options.curve_space) {
+            case CurveSpace::Srgb: return srgb_decode(v);
+            case CurveSpace::Gamma22: return std::pow(v, 2.2);
+            default: return v;
+        }
+    };
+    std::vector<float> pc_lut;
+    if (use_point_curve) {
+        pc_lut.resize(kToneTable + 1);
+        for (int i = 0; i <= kToneTable; ++i) {
+            const double x = static_cast<double>(i) / kToneTable;
+            pc_lut[i] = static_cast<float>(dec(std::clamp(point_curve.eval(enc(x)), 0.0, 1.0)));
+        }
+    }
+    auto point_fast = [&](float x) {
+        const double y = std::clamp(static_cast<double>(x), 0.0, 1.0) * kToneTable;
+        const int i = std::min(static_cast<int>(y), kToneTable - 1);
+        const double f = y - i;
+        return static_cast<float>(pc_lut[i] * (1.0 - f) + pc_lut[i + 1] * f);
+    };
+
     cv::Mat out(raw.camera.size(), CV_32FC3);
-    const bool look = options.look && profile.look.valid();
+    const bool look = options.look && look_table.valid();
     cv::parallel_for_(cv::Range(0, raw.camera.rows), [&](const cv::Range& range) {
         for (int y = range.start; y < range.end; ++y) {
             const auto* src = raw.camera.ptr<cv::Vec3f>(y);
@@ -767,8 +909,13 @@ cv::Mat develop(const RawInput& raw, const Profile& profile, const DevelopOption
                 r = static_cast<float>(ramp.eval(r));
                 gg = static_cast<float>(ramp.eval(gg));
                 b = static_cast<float>(ramp.eval(b));
-                if (look) apply_hue_sat(profile.look, profile.look_encoding == 1, r, gg, b);
+                if (look) apply_hue_sat(look_table, look_encoding == 1, r, gg, b);
                 rgb_tone(r, gg, b, tone_fast);
+                if (use_point_curve) {
+                    r = point_fast(r);
+                    gg = point_fast(gg);
+                    b = point_fast(b);
+                }
                 const Vec3 o = mul(rgb_to_final, Vec3{r, gg, b});
                 dst[x] = {static_cast<float>(srgb_encode(o[2])), static_cast<float>(srgb_encode(o[1])),
                           static_cast<float>(srgb_encode(o[0]))};  // BGR

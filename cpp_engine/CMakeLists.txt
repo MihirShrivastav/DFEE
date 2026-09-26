@@ -139,7 +139,8 @@ if(DFEE_BUILD_EXPERIMENTS)
 
     # Native-RAW parity scorer: RAW vs edit-free Lightroom TIFF references.
     add_executable(dfee_parity_score experiments/parity_score.cpp experiments/dcp_develop.cpp)
-    target_link_libraries(dfee_parity_score PRIVATE dfee_core)
+    find_package(ZLIB REQUIRED)  # decodes Camera Raw XMP look tables
+    target_link_libraries(dfee_parity_score PRIVATE dfee_core ZLIB::ZLIB)
     target_compile_definitions(dfee_parity_score PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 endif()
 

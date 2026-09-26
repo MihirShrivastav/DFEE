@@ -71,11 +71,29 @@ struct RawInput {
 [[nodiscard]] std::optional<RawInput> decode_raw(const std::filesystem::path& path, bool half_size,
                                                  std::string& error);
 
+// A Camera Raw "look" profile (e.g. Adobe Raw/Adobe Color.xmp): it keeps the camera's
+// Adobe Standard matrices + hue/sat map, REPLACES the DCP's look table with its own,
+// and adds a PV2012 point curve (0..255 input/output pairs).
+struct LookPreset {
+    std::string name;
+    HueSatTable look;
+    int look_encoding = 0;
+    std::vector<std::pair<float, float>> point_curve;  // master RGB curve, 0..255
+};
+
+// Decodes the XMP look table (DNG SDK big-table encoding: Z85-like text -> zlib ->
+// look-table stream) and the master ToneCurvePV2012.
+[[nodiscard]] std::optional<LookPreset> load_look_preset(const std::filesystem::path& xmp_path, std::string& error);
+
+enum class CurveSpace { Srgb, Gamma22, Linear };
+
 struct DevelopOptions {
     float exposure_bias = 0.0F;  // extra stops on top of the baseline exposure
     bool shadows = true;         // Camera Raw's default 0.5% black ("Shadows 5")
     bool hue_sat = true;
     bool look = true;
+    const LookPreset* preset = nullptr;          // replaces the DCP look table + adds its point curve
+    CurveSpace curve_space = CurveSpace::Srgb;   // encoding the point curve is applied in
 };
 
 // Returns a BGR CV_32FC3 image, sRGB-encoded, in [0,1].
