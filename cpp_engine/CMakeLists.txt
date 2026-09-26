@@ -136,6 +136,11 @@ if(DFEE_BUILD_EXPERIMENTS)
     add_executable(dfee_bespoke_portra800 experiments/bespoke_portra800.cpp)
     target_link_libraries(dfee_bespoke_portra800 PRIVATE dfee_core)
     target_compile_definitions(dfee_bespoke_portra800 PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+
+    # Native-RAW parity scorer: RAW vs edit-free Lightroom TIFF references.
+    add_executable(dfee_parity_score experiments/parity_score.cpp)
+    target_link_libraries(dfee_parity_score PRIVATE dfee_core)
+    target_compile_definitions(dfee_parity_score PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 endif()
 
 if(DFEE_BUILD_TESTS)
