@@ -1,0 +1,33 @@
+# Baseline exposure (EV) that Adobe Camera Raw / Lightroom applies internally to
+# proprietary RAW formats (NEF, CR2, CR3, ARW, RW2, RAF, ORF ...). DNG files carry
+# this value in their own BaselineExposure tag, so they are never looked up here.
+#
+# Source: fitted against edit-free Lightroom "Adobe Standard" renders with
+# `dfee_parity_score --developer dcp --fit-exposure 1` (corpus E:\raw_files,
+# 2026-09-27). Exact values can replace these later: converting one RAW per camera
+# with Adobe DNG Converter writes Adobe's value into the DNG's BaselineExposure tag.
+#
+# Keys are the Adobe profile camera names (as in "<camera> Adobe Standard.dcp").
+
+schema_version: 1
+
+# Used for a proprietary RAW from a camera not listed below (median of the fits).
+default_proprietary: 0.28
+
+cameras:
+  "Canon EOS 100D": 0.12
+  "Canon EOS 1100D": -0.17
+  "Canon EOS 5D Mark III": 0.17   # two files disagree (-0.01, +0.34); needs more samples
+  "Canon EOS 5DS R": 0.70
+  "Canon EOS 6D": 0.34
+  "Canon EOS R": 0.68
+  "Fujifilm X-Pro1": 0.77
+  "Nikon D5200": 0.42
+  "Nikon D7000": -0.01
+  "Nikon Z 5 2": 0.29
+  "Nikon Z 7": 0.30               # 5 files, spread 0.08
+  "Nikon Z 9": 0.29
+  "Panasonic DC-G99": 0.28
+  "Panasonic DC-S1R": 0.22
+  "Sony ILCE-1M2": 0.02
+  "Sony ILCE-7RM5": 0.39

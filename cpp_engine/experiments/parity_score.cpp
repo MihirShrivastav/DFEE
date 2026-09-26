@@ -38,6 +38,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <yaml-cpp/yaml.h>
 
 #include "dcp_develop.hpp"
 #include "dfee/bridge_types.hpp"
@@ -452,6 +453,10 @@ int main(int argc, char** argv) {
     dcpdev::DevelopOptions dcp_options;
     bool fit_exposure = false;
     bool use_fallback = true;  // --fallback 0 to score only cameras with an installed DCP
+    // Per-camera baseline exposure for proprietary RAWs (profiles/raw/baseline_exposure.yaml).
+    std::map<std::string, double> exposure_table;
+    double exposure_default = 0.0;
+    bool have_exposure_table = false, table_default_only = false;
     std::map<std::string, std::vector<double>> fitted;  // camera -> best exposure bias per file
     std::vector<std::string> stocks{"none"};
     int limit = 0, size = 384;
@@ -465,6 +470,13 @@ int main(int argc, char** argv) {
         else if (k == "--look") dcp_options.look = v != "0";
         else if (k == "--fit-exposure") fit_exposure = v != "0";
         else if (k == "--fallback") use_fallback = v != "0";
+        else if (k == "--default-only") table_default_only = v != "0";
+        else if (k == "--exposure-table") {
+            const YAML::Node t = YAML::LoadFile(v);
+            exposure_default = t["default_proprietary"].as<double>(0.0);
+            for (const auto& kv : t["cameras"]) exposure_table[kv.first.as<std::string>()] = kv.second.as<double>();
+            have_exposure_table = true;
+        }
         else if (k == "--stocks") stocks = split_csv(v);
         else if (k == "--placement") placement = v;
         else if (k == "--limit") limit = std::stoi(v);
@@ -595,7 +607,14 @@ int main(int argc, char** argv) {
                     std::cout << "  {" << cam << " fit " << std::showpos << std::setprecision(2) << best
                               << std::noshowpos << "EV}";
                 } else {
-                    ours = dcpdev::develop(small, *prof, dcp_options, &info);
+                    dcpdev::DevelopOptions o = dcp_options;
+                    if (have_exposure_table && !raw->has_baseline_exposure &&
+                        lower(p.raw.extension().string()) != ".dng") {
+                        const auto it = exposure_table.find(cam);
+                        o.exposure_bias += static_cast<float>(
+                            (!table_default_only && it != exposure_table.end()) ? it->second : exposure_default);
+                    }
+                    ours = dcpdev::develop(small, *prof, o, &info);
                     std::cout << "  {" << cam << ": " << info << "}";
                 }
             } else {
