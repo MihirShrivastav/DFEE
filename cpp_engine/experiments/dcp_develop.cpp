@@ -638,9 +638,11 @@ std::optional<LookPreset> load_look_preset(const fs::path& xmp_path, std::string
 }
 
 std::optional<fs::path> find_adobe_standard(const std::string& unique_camera_model, const std::string& make,
-                                            const std::string& model, std::string* matched_name) {
+                                            const std::string& model, std::string* matched_name,
+                                            const std::string& version) {
     static std::mutex mu;
-    static std::map<std::string, std::pair<fs::path, std::string>> index;  // normalised camera -> (path, camera)
+    // normalised camera + "|" + version ("" or "v2") -> (path, camera)
+    static std::map<std::string, std::pair<fs::path, std::string>> index;
     {
         std::lock_guard<std::mutex> lock(mu);
         if (index.empty()) {
@@ -652,17 +654,24 @@ std::optional<fs::path> find_adobe_standard(const std::string& unique_camera_mod
                 if (!fs::is_directory(root, ec)) continue;
                 for (const auto& e : fs::directory_iterator(root, ec)) {
                     if (e.path().extension() != ".dcp") continue;
-                    // Cheap: take the camera from the file name ("<camera> Adobe Standard.dcp").
+                    // Cheap: take the camera and profile version from the file name
+                    // ("<camera> Adobe Standard[ v2].dcp", occasionally "Adobe_Standard_v2").
                     std::string stem = e.path().stem().string();
+                    std::replace(stem.begin(), stem.end(), '_', ' ');
                     const auto pos = stem.rfind(" Adobe Standard");
                     const std::string cam = pos == std::string::npos ? stem : stem.substr(0, pos);
-                    index.emplace(normalise(cam), std::make_pair(e.path(), cam));
+                    std::string ver = pos == std::string::npos ? "" : stem.substr(pos + 15);
+                    ver.erase(0, ver.find_first_not_of(' '));
+                    index.emplace(normalise(cam) + "|" + normalise(ver), std::make_pair(e.path(), cam));
                 }
             }
         }
     }
+    // A requested version (e.g. "v2") falls back to the base profile when not installed.
+    const std::string want = normalise(version);
     auto hit = [&](const std::string& key) -> std::optional<fs::path> {
-        const auto it = index.find(normalise(key));
+        auto it = index.find(normalise(key) + "|" + want);
+        if (it == index.end() && !want.empty()) it = index.find(normalise(key) + "|");
         if (it == index.end()) return std::nullopt;
         if (matched_name) *matched_name = it->second.second;
         return it->second.first;
@@ -682,7 +691,10 @@ std::optional<fs::path> find_adobe_standard(const std::string& unique_camera_mod
     const std::string nm = normalise(model);
     if (!nm.empty()) {
         for (const auto& [key, val] : index) {
-            if (key.size() >= nm.size() && key.compare(key.size() - nm.size(), nm.size(), nm) == 0) {
+            const auto bar = key.rfind('|');
+            if (key.substr(bar + 1) != "") continue;  // fuzzy matches use the base profile
+            const std::string cam_key = key.substr(0, bar);
+            if (cam_key.size() >= nm.size() && cam_key.compare(cam_key.size() - nm.size(), nm.size(), nm) == 0) {
                 if (matched_name) *matched_name = val.second;
                 return val.first;
             }
@@ -850,12 +862,14 @@ cv::Mat develop(const RawInput& raw, const Profile& profile, const DevelopOption
         *log = buf;
     }
 
-    // A look preset (Adobe Color) replaces the DCP's own look table.
-    const HueSatTable& look_table = options.preset ? options.preset->look : profile.look;
-    const int look_encoding = options.preset ? options.preset->look_encoding : profile.look_encoding;
+    // A look preset (Adobe Color) supplies its own look table: replacing the DCP's, or
+    // (stack_looks, what Lightroom does) applied after it.
+    const bool preset_look = options.preset && options.preset_look;
+    const HueSatTable& look_table = preset_look ? options.preset->look : profile.look;
+    const int look_encoding = preset_look ? options.preset->look_encoding : profile.look_encoding;
     // Its point curve (0..255) is applied after the base tone, in an encoded space.
     std::vector<std::pair<float, float>> pc;
-    if (options.preset) {
+    if (options.preset && options.preset_curve) {
         for (const auto& [x, yv] : options.preset->point_curve) pc.emplace_back(x / 255.0F, yv / 255.0F);
     }
     const Spline point_curve(pc);
@@ -909,13 +923,21 @@ cv::Mat develop(const RawInput& raw, const Profile& profile, const DevelopOption
                 r = static_cast<float>(ramp.eval(r));
                 gg = static_cast<float>(ramp.eval(gg));
                 b = static_cast<float>(ramp.eval(b));
+                if (options.stack_looks && preset_look && options.look && profile.look.valid())
+                    apply_hue_sat(profile.look, profile.look_encoding == 1, r, gg, b);
                 if (look) apply_hue_sat(look_table, look_encoding == 1, r, gg, b);
+                auto apply_point = [&] {
+                    if (options.curve_rgb_preserving) {
+                        rgb_tone(r, gg, b, point_fast);
+                    } else {
+                        r = point_fast(r);
+                        gg = point_fast(gg);
+                        b = point_fast(b);
+                    }
+                };
+                if (use_point_curve && options.curve_before_tone) apply_point();
                 rgb_tone(r, gg, b, tone_fast);
-                if (use_point_curve) {
-                    r = point_fast(r);
-                    gg = point_fast(gg);
-                    b = point_fast(b);
-                }
+                if (use_point_curve && !options.curve_before_tone) apply_point();
                 const Vec3 o = mul(rgb_to_final, Vec3{r, gg, b});
                 dst[x] = {static_cast<float>(srgb_encode(o[2])), static_cast<float>(srgb_encode(o[1])),
                           static_cast<float>(srgb_encode(o[0]))};  // BGR

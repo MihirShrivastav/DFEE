@@ -19,6 +19,10 @@
 //   dfee_parity_score <corpus_dir> [--profile "Adobe Standard"] [--stocks none,portra_400]
 //                     [--placement auto_balanced] [--limit N] [--ext arw] [--size 384]
 //                     [--out report.json] [--dump dir]
+//   DCP developer: --developer dcp [--exposure-table yaml] [--look-preset "Adobe Color.xmp"]
+//                  [--preset-parts stack-look|stack|look|curve|both] [--curve-space srgb|gamma22|linear]
+//                  [--curve-mode channel|rgb] [--curve-order post|pre]
+//   Lightroom Adobe Color = --profile "Adobe Color" --look-preset <xmp> --preset-parts stack-look.
 
 #include <algorithm>
 #include <array>
@@ -129,10 +133,33 @@ bool is_zero_number(const std::string& v) {
     }
 }
 
+// The profile Lightroom rendered with. A look profile such as Adobe Color is recorded as
+// crs:CameraProfile="Adobe Standard" plus a <crs:Look crs:Name="Adobe Color"> block, so
+// the look name (when present) is the profile the user picked.
+std::optional<std::string> effective_profile(const std::string& xmp) {
+    if (const auto look = xmp.find("<crs:Look>"); look != std::string::npos) {
+        const auto end = xmp.find("</crs:Look>", look);
+        if (auto name = xmp_value(xmp.substr(look, end == std::string::npos ? std::string::npos : end - look),
+                                  "crs:Name"))
+            return name;
+    }
+    return xmp_value(xmp, "crs:CameraProfile");
+}
+
+// Revision suffix of the base camera profile ("Adobe Standard v2" -> "v2"; else "").
+std::string camera_profile_version(const std::string& xmp) {
+    static const std::string base = "Adobe Standard";
+    const std::string cp = xmp_value(xmp, "crs:CameraProfile").value_or("");
+    if (cp.rfind(base, 0) != 0) return "";
+    std::string v = cp.substr(base.size());
+    v.erase(0, v.find_first_not_of(' '));
+    return v;
+}
+
 // Returns an empty string when the TIFF is a clean reference, else the skip reason.
 std::string reference_problem(const TiffBlobs& b, const std::string& want_profile) {
     if (b.xmp.empty()) return "no XMP";
-    const auto profile = xmp_value(b.xmp, "crs:CameraProfile");
+    const auto profile = effective_profile(b.xmp);
     if (!profile) return "no Lightroom develop settings";
     if (profile->rfind(want_profile, 0) != 0) return "profile '" + *profile + "'";
     for (const char* k : {"crs:Exposure2012", "crs:Contrast2012", "crs:Highlights2012", "crs:Shadows2012",
@@ -489,7 +516,8 @@ std::vector<std::string> split_csv(const std::string& s) {
 
 struct Pair {
     fs::path tif, raw;
-    std::string brand;  // RAW extension, used to group results by camera family
+    std::string brand;            // RAW extension, used to group results by camera family
+    std::string profile_version;  // "" or e.g. "v2" ("Adobe Standard v2" in the reference)
 };
 
 }  // namespace
@@ -539,6 +567,14 @@ int main(int argc, char** argv) {
             std::cout << "look preset '" << look_preset->name << "': table " << look_preset->look.hue << "x"
                       << look_preset->look.sat << "x" << look_preset->look.val << ", point curve "
                       << look_preset->point_curve.size() << " pts\n";
+        } else if (k == "--preset-parts") {  // look | curve | both | stack (DCP look + preset look + curve)
+            dcp_options.preset_look = v != "curve";
+            dcp_options.preset_curve = v != "look" && v != "stack-look";
+            dcp_options.stack_looks = v == "stack" || v == "stack-look";
+        } else if (k == "--curve-order") {  // post (after base tone) | pre
+            dcp_options.curve_before_tone = v == "pre";
+        } else if (k == "--curve-mode") {  // channel | rgb
+            dcp_options.curve_rgb_preserving = v == "rgb";
         } else if (k == "--curve-space") {
             dcp_options.curve_space = v == "linear" ? dcpdev::CurveSpace::Linear
                                     : v == "gamma22" ? dcpdev::CurveSpace::Gamma22
@@ -601,7 +637,9 @@ int main(int argc, char** argv) {
             ++skipped[why.substr(0, why.find('='))];
             continue;
         }
-        pairs.push_back({tif, raw->second, brand});
+        // Lightroom defaults some cameras to a revised profile ("Adobe Standard v2"); develop
+        // with the same DCP version the reference names.
+        pairs.push_back({tif, raw->second, brand, camera_profile_version(blobs->xmp)});
         if (limit > 0 && static_cast<int>(pairs.size()) >= limit) break;
     }
 
@@ -644,7 +682,8 @@ int main(int argc, char** argv) {
                     continue;
                 }
                 std::string cam;
-                const auto dcp_path = dcpdev::find_adobe_standard(raw->unique_camera_model, raw->make, raw->model, &cam);
+                const auto dcp_path = dcpdev::find_adobe_standard(raw->unique_camera_model, raw->make, raw->model, &cam,
+                                                             p.profile_version);
                 auto prof = dcp_path ? dcpdev::load_dcp(*dcp_path) : std::nullopt;
                 if (!prof && use_fallback && raw->fallback_profile) {
                     prof = raw->fallback_profile;
@@ -689,7 +728,7 @@ int main(int argc, char** argv) {
                             (!table_default_only && it != exposure_table.end()) ? it->second : exposure_default);
                     }
                     ours = dcpdev::develop(small, *prof, o, &info);
-                    std::cout << "  {" << cam << ": " << info << "}";
+                    std::cout << "  {" << cam << (p.profile_version.empty() ? "" : " (" + p.profile_version + ")") << ": " << info << "}";
                 }
             } else {
                 auto req = base_request(p.raw, stock);

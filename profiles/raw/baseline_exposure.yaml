@@ -2,7 +2,8 @@
 # proprietary RAW formats (NEF, CR2, CR3, ARW, RW2, RAF, ORF ...). DNG files carry
 # this value in their own BaselineExposure tag, so they are never looked up here.
 #
-# Source: fitted against edit-free Lightroom "Adobe Standard" renders with
+# Source: fitted against edit-free Lightroom "Adobe Color" renders (developed with the
+# Adobe Standard DCP; Adobe Color's look table does not change exposure) with
 # `dfee_parity_score --developer dcp --fit-exposure 1` (corpus E:\raw_files,
 # 2026-09-27). Exact values can replace these later: converting one RAW per camera
 # with Adobe DNG Converter writes Adobe's value into the DNG's BaselineExposure tag.

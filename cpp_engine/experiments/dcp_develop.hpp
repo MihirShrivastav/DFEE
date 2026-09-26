@@ -51,10 +51,13 @@ struct Profile {
 
 // Finds the installed Adobe Standard DCP for a camera. Tries the DNG
 // UniqueCameraModel first, then make + model, then a normalised fuzzy match.
+// `version` selects a revised profile ("v2" -> "<camera> Adobe Standard v2.dcp"),
+// falling back to the base profile when that version is not installed.
 [[nodiscard]] std::optional<std::filesystem::path> find_adobe_standard(const std::string& unique_camera_model,
                                                                        const std::string& make,
                                                                        const std::string& model,
-                                                                       std::string* matched_name = nullptr);
+                                                                       std::string* matched_name = nullptr,
+                                                                       const std::string& version = {});
 
 struct RawInput {
     cv::Mat camera;                    // CV_32FC3 camera RGB in R,G,B order, NOT white balanced, [0,1]
@@ -71,9 +74,12 @@ struct RawInput {
 [[nodiscard]] std::optional<RawInput> decode_raw(const std::filesystem::path& path, bool half_size,
                                                  std::string& error);
 
-// A Camera Raw "look" profile (e.g. Adobe Raw/Adobe Color.xmp): it keeps the camera's
-// Adobe Standard matrices + hue/sat map, REPLACES the DCP's look table with its own,
-// and adds a PV2012 point curve (0..255 input/output pairs).
+// A Camera Raw "look" profile (e.g. Adobe Raw/Adobe Color.xmp): it names the camera's
+// Adobe Standard DCP as its base and carries its own look table plus a PV2012 point
+// curve (0..255 input/output pairs). Measured against Lightroom Adobe Color exports
+// (2026-09-27, 50 pairs): the preset table is applied ON TOP of the DCP's own look
+// table, and the point curve is not applied as a plain curve (adding it darkens
+// shadows ~1.5 L*, in every encoding and order tried). Best: --preset-parts stack-look.
 struct LookPreset {
     std::string name;
     HueSatTable look;
@@ -92,8 +98,13 @@ struct DevelopOptions {
     bool shadows = true;         // Camera Raw's default 0.5% black ("Shadows 5")
     bool hue_sat = true;
     bool look = true;
-    const LookPreset* preset = nullptr;          // replaces the DCP look table + adds its point curve
+    const LookPreset* preset = nullptr;          // look preset (Adobe Color); see stack_looks
     CurveSpace curve_space = CurveSpace::Srgb;   // encoding the point curve is applied in
+    bool preset_look = true;           // use the preset's look table (else keep the DCP's)
+    bool stack_looks = false;          // apply the DCP look, then the preset look (matches Lightroom)
+    bool preset_curve = true;          // apply the preset's point curve
+    bool curve_rgb_preserving = false; // point curve via RefBaselineRGBTone instead of per channel
+    bool curve_before_tone = false;    // apply the point curve before the base (ACR3/profile) tone
 };
 
 // Returns a BGR CV_32FC3 image, sRGB-encoded, in [0,1].
