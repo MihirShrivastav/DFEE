@@ -21,9 +21,11 @@ its own just shows this reminder and closes.)
        Application : <install folder>\FilmLab.exe
                      (installer default: C:\Program Files\Film Lab\FilmLab.exe)
        File Format : TIFF
-       Color Space : ProPhoto RGB
+       Color Space : sRGB
        Bit Depth   : 16 bits/component
        Compression : None
+   (Use sRGB exactly. Film Lab reads the TIFF as sRGB; ProPhoto or Adobe RGB
+    would come in with darker shadows and muted colour.)
    Then, from the "Preset" dropdown at the top of that panel, choose
    "Save Current Settings as New Preset..." and name it  Film Lab.
    Click OK.
