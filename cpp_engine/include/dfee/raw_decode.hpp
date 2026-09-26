@@ -31,6 +31,9 @@ struct DecodedRawImageResponse {
 };
 
 [[nodiscard]] bool is_tiff_filename(const std::string& filename);
+// True for display-referred inputs (a TIFF, or a RAW from the native developer): they
+// take the rendered-image film path (attenuated tone, no camera-cast or ISO handling).
+[[nodiscard]] bool is_rendered_input(const NativeRawMetadata& metadata);
 [[nodiscard]] DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest& request);
 [[nodiscard]] NativeRawDecodeResponse decode_raw_from_file(const NativeRawDecodeRequest& request);
 

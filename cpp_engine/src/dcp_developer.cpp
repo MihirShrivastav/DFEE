@@ -1,10 +1,13 @@
-// Prototype DNG-camera-profile RAW developer. See dcp_develop.hpp.
+// DNG-camera-profile RAW developer. See dfee/dcp_developer.hpp.
 //
 // Portions derived from the Adobe DNG SDK (dng_render.cpp, dng_color_spec.cpp,
 // dng_reference.cpp, dng_temperature.cpp, dng_camera_profile.cpp).
 // Copyright 2006-2012 Adobe Systems Incorporated. Used under the Adobe DNG SDK license.
 
-#include "dcp_develop.hpp"
+#include "dfee/dcp_developer.hpp"
+
+// Needs LibRaw (camera-RGB decode) and OpenCV (image buffers); compiled out otherwise.
+#if DFEE_HAS_LIBRAW && DFEE_HAS_OPENCV
 
 #include <algorithm>
 #include <cctype>
@@ -20,6 +23,8 @@
 #include <regex>
 #include <sstream>
 
+#include <yaml-cpp/yaml.h>
+
 #include <zlib.h>
 
 #if __has_include(<libraw/libraw.h>)
@@ -30,7 +35,7 @@
 
 namespace fs = std::filesystem;
 
-namespace dcpdev {
+namespace dfee::dcp {
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -93,7 +98,7 @@ struct Ruvt {
     double r, u, v, t;
 };
 const Ruvt kTempTable[] = {
-#include "temp_table.inc"
+#include "dcp/temp_table.inc"
 };
 
 double xy_to_temperature(const XY& xy) {  // Robertson's method, as dng_temperature
@@ -204,7 +209,7 @@ XY neutral_to_xy(const Spec& s, const Vec3& neutral) {
 // Tone functions (dng_render.cpp)
 // ---------------------------------------------------------------------------
 const float kAcr3[] = {
-#include "acr3_table.inc"
+#include "dcp/acr3_table.inc"
 };
 constexpr int kAcr3Size = static_cast<int>(sizeof(kAcr3) / sizeof(kAcr3[0]));
 
@@ -719,6 +724,28 @@ std::optional<RawInput> decode_raw(const fs::path& path, bool half_size, std::st
     prm.output_bps = 16;
     prm.gamm[0] = prm.gamm[1] = 1.0;
     prm.highlight = 0;
+    // Apply the DNG DefaultCrop, as Lightroom does (LibRaw does not). Same rule as the
+    // legacy decoder in raw_decode.cpp: cropbox is relative to the visible area.
+    {
+        const auto& sizes = proc->imgdata.sizes;
+        const auto& inset = sizes.raw_inset_crops[0];
+        if (inset.cwidth > 0 && inset.cheight > 0) {
+            const int vis_w = static_cast<int>(sizes.width);
+            const int vis_h = static_cast<int>(sizes.height);
+            const int cl = std::clamp(static_cast<int>(inset.cleft) - static_cast<int>(sizes.left_margin), 0,
+                                      std::max(0, vis_w - 1));
+            const int ct = std::clamp(static_cast<int>(inset.ctop) - static_cast<int>(sizes.top_margin), 0,
+                                      std::max(0, vis_h - 1));
+            const int cw = std::min(static_cast<int>(inset.cwidth), vis_w - cl);
+            const int ch = std::min(static_cast<int>(inset.cheight), vis_h - ct);
+            if (cw > 0 && ch > 0 && (cl > 0 || ct > 0 || cw < vis_w || ch < vis_h)) {
+                prm.cropbox[0] = static_cast<unsigned>(cl);
+                prm.cropbox[1] = static_cast<unsigned>(ct);
+                prm.cropbox[2] = static_cast<unsigned>(cw);
+                prm.cropbox[3] = static_cast<unsigned>(ch);
+            }
+        }
+    }
     if (proc->unpack() != LIBRAW_SUCCESS) {
         error = "LibRaw unpack failed";
         return std::nullopt;
@@ -947,4 +974,103 @@ cv::Mat develop(const RawInput& raw, const Profile& profile, const DevelopOption
     return out;
 }
 
-}  // namespace dcpdev
+namespace {
+
+struct ExposureTable {
+    float default_proprietary = kDefaultProprietaryBaselineExposure;
+    std::map<std::string, float> cameras;  // Adobe profile camera name -> EV
+};
+
+ExposureTable load_exposure_table(const fs::path& path) {
+    ExposureTable t;
+    std::error_code ec;
+    if (path.empty() || !fs::is_regular_file(path, ec)) return t;
+    try {
+        const YAML::Node root = YAML::LoadFile(path.string());
+        if (root["default_proprietary"]) t.default_proprietary = root["default_proprietary"].as<float>();
+        if (const YAML::Node cams = root["cameras"]; cams && cams.IsMap()) {
+            for (const auto& kv : cams) t.cameras[kv.first.as<std::string>()] = kv.second.as<float>();
+        }
+    } catch (const std::exception&) {
+        return ExposureTable{};  // a malformed table must not stop a RAW from opening
+    }
+    return t;
+}
+
+// Lightroom's "Adobe Color" look (camera-agnostic XMP), when Lightroom / Camera Raw is installed.
+std::optional<fs::path> find_adobe_color_xmp() {
+    for (const char* env : {"ProgramData", "APPDATA"}) {
+        const char* root = std::getenv(env);
+        if (!root) continue;
+        const fs::path p = fs::path(root) / "Adobe/CameraRaw/Settings/Adobe/Profiles/Adobe Raw/Adobe Color.xmp";
+        std::error_code ec;
+        if (fs::is_regular_file(p, ec)) return p;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
+std::optional<DevelopedRaw> develop_raw_file(const fs::path& path, const DeveloperSettings& settings, bool half_size,
+                                             std::string& error) {
+    auto raw = decode_raw(path, half_size, error);
+    if (!raw) return std::nullopt;
+
+    // Lightroom defaults cameras that have a revised profile to it ("Adobe Standard v2").
+    std::string camera;
+    const auto dcp_path = find_adobe_standard(raw->unique_camera_model, raw->make, raw->model, &camera, "v2");
+    std::optional<Profile> profile = dcp_path ? load_dcp(*dcp_path) : std::nullopt;
+    DevelopedRaw out;
+    if (profile) {
+        out.profile_source = dcp_path->stem().string();
+    } else if (raw->fallback_profile) {
+        profile = raw->fallback_profile;
+        out.profile_source = raw->fallback_source;
+    } else {
+        error = "no colour profile for " + raw->make + " " + raw->model;
+        return std::nullopt;
+    }
+
+    // Cached per process: the table and preset are small and do not change while running.
+    static std::mutex mu;
+    static std::map<std::string, ExposureTable> tables;
+    static std::optional<std::optional<LookPreset>> adobe_color;
+    const ExposureTable* table = nullptr;
+    const LookPreset* preset = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(mu);
+        const std::string key = settings.exposure_table.string();
+        auto it = tables.find(key);
+        if (it == tables.end()) it = tables.emplace(key, load_exposure_table(settings.exposure_table)).first;
+        table = &it->second;
+        if (!adobe_color) {
+            std::string preset_error;
+            const auto xmp = find_adobe_color_xmp();
+            adobe_color = xmp ? load_look_preset(*xmp, preset_error) : std::nullopt;
+        }
+        if (settings.adobe_color && *adobe_color) preset = &**adobe_color;
+    }
+
+    DevelopOptions options;
+    // DNGs carry their BaselineExposure; for proprietary RAWs it is Adobe's hidden
+    // per-camera value, measured into profiles/raw/baseline_exposure.yaml.
+    if (!raw->has_baseline_exposure) {
+        const auto it = table->cameras.find(camera);
+        options.exposure_bias = it != table->cameras.end() ? it->second : table->default_proprietary;
+    }
+    // Adobe Color: its look table applies on top of the DCP look; its point curve is left
+    // off (measured against Lightroom exports, 2026-09-27).
+    if (preset && dcp_path) {
+        options.preset = preset;
+        options.stack_looks = true;
+        options.preset_curve = false;
+        out.profile_source += " + " + preset->name;
+    }
+    out.exposure_ev = options.exposure_bias + raw->baseline_exposure + profile->baseline_exposure_offset;
+    out.srgb = develop(*raw, *profile, options);
+    return out;
+}
+
+}  // namespace dfee::dcp
+
+#endif  // DFEE_HAS_LIBRAW && DFEE_HAS_OPENCV

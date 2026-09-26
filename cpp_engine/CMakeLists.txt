@@ -26,6 +26,7 @@ add_library(dfee_core STATIC
     src/color_spaces.cpp
     src/curve_mapping.cpp
     src/cuda_runtime.cpp
+    src/dcp_developer.cpp
     src/image.cpp
     src/profile.cpp
     src/raw_decode.cpp
@@ -87,6 +88,10 @@ else()
     target_compile_definitions(dfee_core PUBLIC DFEE_HAS_OPENCV=0)
 endif()
 
+# zlib decodes Camera Raw XMP look tables (Adobe Color) in the native RAW developer.
+find_package(ZLIB REQUIRED)
+target_link_libraries(dfee_core PUBLIC ZLIB::ZLIB)
+
 find_package(yaml-cpp CONFIG QUIET)
 if(yaml-cpp_FOUND)
     target_link_libraries(dfee_core PUBLIC yaml-cpp::yaml-cpp)
@@ -138,9 +143,8 @@ if(DFEE_BUILD_EXPERIMENTS)
     target_compile_definitions(dfee_bespoke_portra800 PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 
     # Native-RAW parity scorer: RAW vs edit-free Lightroom TIFF references.
-    add_executable(dfee_parity_score experiments/parity_score.cpp experiments/dcp_develop.cpp)
-    find_package(ZLIB REQUIRED)  # decodes Camera Raw XMP look tables
-    target_link_libraries(dfee_parity_score PRIVATE dfee_core ZLIB::ZLIB)
+    add_executable(dfee_parity_score experiments/parity_score.cpp)
+    target_link_libraries(dfee_parity_score PRIVATE dfee_core)
     target_compile_definitions(dfee_parity_score PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 endif()
 

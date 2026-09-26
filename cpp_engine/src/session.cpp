@@ -1902,11 +1902,13 @@ NativeRenderWorkResult render_native_image(
     // estimating and applying a camera cast is both wasted compute and a wrong re-
     // correction. Leaving camera_input_bias unset makes the solver apply zero cast
     // correction (shadow_blue_norm / green_mag_stab gate on bias.has_value()).
-    if (metadata.camera_make != "Rendered") {
+    if (!is_rendered_input(metadata)) {
         result.solver_input.camera_input_bias = CameraBiasEstimator().estimate_bias(source_rgb, clipping_masks, result.zone_masks);
     }
     append_export_trace(project_root, "render_native_image:bias:done");
-    if (metadata.iso > 0) {
+    // A developed RAW keeps its real ISO in metadata, but like a Lightroom TIFF it does not
+    // drive Auto grain: the stocks' grain is calibrated on the rendered-image path.
+    if (metadata.iso > 0 && !is_rendered_input(metadata)) {
         result.solver_input.raw_iso = metadata.iso;
     }
     append_export_trace(project_root, "render_native_image:analyze:done");
@@ -2233,6 +2235,7 @@ NativeSelectResponse EngineSession::select_file(const NativeSelectRequest& reque
                     .filename = raw_path.string(),
                     .draft_mode = true,
                     .color_space = request.color_space,
+                    .raw_profiles_dir = (project_root_ / "profiles" / "raw").string(),
                 });
                 if (!file_response.ok) {
                     result.status = file_response.status;
@@ -2352,6 +2355,10 @@ NativeRawDecodeResponse EngineSession::decode_raw(const NativeRawDecodeRequest& 
                 .filename = (raw_dir_ / response.filename).string(),
                 .draft_mode = request.draft_mode,
                 .color_space = request.color_space,
+                .raw_developer = request.raw_developer,
+                .raw_profiles_dir = request.raw_profiles_dir.empty()
+                    ? (project_root_ / "profiles" / "raw").string()
+                    : request.raw_profiles_dir,
             });
             response.ok = file_response.ok;
             response.status = file_response.status;
@@ -2628,7 +2635,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     render_plan.pre_film_normalization);
                 // RAW baseline develop: give flat scene-linear RAW a camera-standard
                 // tone so a no-stock preview looks like a developed photo, not linear.
-                if (!is_tiff_filename(response.filename) &&
+                if (!preview_cache_->rendered_input &&
                     is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
                 }
@@ -2771,7 +2778,7 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         FilmicHalationSource halation_source;
         {
             ScopedStageTimer stage(response.engine, "render_preview_apply_pre_film_sliders");
-            if (is_tiff_filename(response.filename)) {
+            if (preview.rendered_input) {
                 apply_rendered_input_adjustments(render_plan, request.rendered_input);
             }
             rendered = apply_pre_film_preview_sliders(preview.rgb_linear, request, render_plan);
@@ -2786,8 +2793,9 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                     render_plan.pre_film_normalization);
                 // RAW baseline develop establishes the working baseline, but RAW has
                 // no baked display curve to protect. The stock must therefore retain
-                // its full tone response. `rendered_input` is TIFF-only.
-                if (!is_tiff_filename(response.filename) &&
+                // its full tone response. `rendered_input` applies to display-referred
+                // inputs only (TIFF, developed RAW).
+                if (!preview.rendered_input &&
                     is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                     rendered = apply_raw_baseline_develop(rendered);
                 }
@@ -3140,7 +3148,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                         neutral_input.tonal_distribution = analyzer.analyze_tonal(
                             analysis_luminance,
                             clipping_ratio_map);
-                        if (decoded.metadata.iso > 0) {
+                        if (decoded.metadata.iso > 0 && !is_rendered_input(decoded.metadata)) {
                             neutral_input.raw_iso = decoded.metadata.iso;
                         }
                         working_zone_masks = analyzer.generate_zone_masks(
@@ -3199,10 +3207,12 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                 analysis_clipping_masks = DecodedRawChannelMasks();
 
                 append_export_trace(project_root_, "export_image:fullres_prefilm:start");
+                // Read before the full decode is freed below.
+                const bool rendered_input = is_rendered_input(decoded.metadata);
                 Image fullres_prefilm;
                 {
                     ScopedStageTimer substage(response.engine, "export_image_render_prefilm_fullres");
-                    if (is_tiff_filename(response.filename)) {
+                    if (rendered_input) {
                         apply_rendered_input_adjustments(*render_plan, request.rendered_input);
                     }
                     fullres_prefilm = apply_pre_film_preview_sliders(decoded.rgb_linear, request, *render_plan);
@@ -3233,7 +3243,7 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                     // RAW baseline develop (matches the preview path). The full stock
                     // curve stays active; only already-rendered TIFF inputs attenuate
                     // it through the rendered-input control.
-                    if (!is_tiff_filename(response.filename) &&
+                    if (!rendered_input &&
                         is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
                         rendered = apply_raw_baseline_develop(rendered);
                     }
@@ -3646,7 +3656,7 @@ void EngineSession::populate_preview_analysis_cache(
     // Rendered inputs (TIFF) are already white-balanced upstream — skip camera-cast
     // estimation entirely (saves the mask resize + estimator pass, and avoids re-
     // correcting an already-neutral image). Unset bias => zero cast correction.
-    if (draft.decoded.metadata.camera_make != "Rendered") {
+    if (!is_rendered_input(draft.decoded.metadata)) {
         const auto preview_masks = resize_clipping_masks(
             draft.decoded.clipping_masks,
             draft.decoded.rgb_linear.width,
@@ -3656,7 +3666,7 @@ void EngineSession::populate_preview_analysis_cache(
         CameraBiasEstimator bias_estimator;
         solver_input.camera_input_bias = bias_estimator.estimate_bias(preview.rgb_linear, preview_masks, zone_masks);
     }
-    if (draft.decoded.metadata.iso > 0) {
+    if (draft.decoded.metadata.iso > 0 && !is_rendered_input(draft.decoded.metadata)) {
         solver_input.raw_iso = draft.decoded.metadata.iso;
     }
 
@@ -3756,6 +3766,7 @@ void EngineSession::refresh_preview_cache_from_draft() {
     preview.filename = draft_decode_cache_->filename;
     preview.rgb_linear = resize_image_to_max_edge(draft_decode_cache_->decoded.rgb_linear, 1024);
     preview.luminance = compute_luminance(preview.rgb_linear);
+    preview.rendered_input = is_rendered_input(draft_decode_cache_->decoded.metadata);
     preview_cache_ = std::move(preview);
     raw_preview_jpeg_cache_.reset();
     preview_analysis_cache_.reset();

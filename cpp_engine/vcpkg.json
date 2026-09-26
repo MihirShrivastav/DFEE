@@ -9,6 +9,7 @@
     "nlohmann-json",
     "tiff",
     "libpng",
-    "libjpeg-turbo"
+    "libjpeg-turbo",
+    "zlib"
   ]
 }

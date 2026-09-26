@@ -121,7 +121,9 @@ std::string serialize_native_raw_metadata_json(const NativeRawMetadata& metadata
         << "\"image_height\":" << metadata.image_height << ","
         << "\"image_width\":" << metadata.image_width << ","
         << "\"raw_height\":" << metadata.raw_height << ","
-        << "\"raw_width\":" << metadata.raw_width
+        << "\"raw_width\":" << metadata.raw_width << ","
+        << "\"input_kind\":\"" << escape_json(metadata.input_kind) << "\","
+        << "\"developer_profile\":\"" << escape_json(metadata.developer_profile) << "\""
         << "}";
     return out.str();
 }

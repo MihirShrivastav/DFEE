@@ -61,6 +61,7 @@ private:
         std::string filename;
         Image rgb_linear;
         LuminanceImage luminance;
+        bool rendered_input = false;  // display-referred source (TIFF or developed RAW)
     };
 
     struct CachedRawPreviewJpeg {

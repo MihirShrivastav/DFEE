@@ -65,6 +65,12 @@ struct NativeRawMetadata {
     int image_width = 0;
     int raw_height = 0;
     int raw_width = 0;
+    // How the pixels were produced. "raw": legacy LibRaw scene-linear decode (the film
+    // path adds its own baseline develop). "rendered": an already-developed image (TIFF).
+    // "developed_raw": the native Adobe-parity developer's display-referred output, which
+    // takes exactly the rendered-image (Lightroom TIFF) film path.
+    std::string input_kind = "raw";
+    std::string developer_profile;  // developed_raw only: camera profile (+ look) used
     std::string metadata_json;
 };
 
@@ -114,6 +120,10 @@ struct NativeRawDecodeRequest {
     std::string filename;
     bool draft_mode = true;
     std::string color_space = "srgb"; // for TIFF/rendered inputs: srgb | adobe_rgb | prophoto
+    // RAW inputs: "adobe" develops to Lightroom's default Adobe Color render and then
+    // follows the rendered-image path; "legacy" is the scene-linear LibRaw decode.
+    std::string raw_developer = "adobe";
+    std::string raw_profiles_dir;     // holds baseline_exposure.yaml; empty => built-in default
 };
 
 struct NativeRawDecodeSummary {

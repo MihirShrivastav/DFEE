@@ -10,12 +10,17 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 
 #if DFEE_HAS_OPENCV
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#endif
+
+#if DFEE_HAS_OPENCV && DFEE_HAS_LIBRAW
+#include "dfee/dcp_developer.hpp"
 #endif
 
 #if DFEE_HAS_LIBRAW
@@ -221,6 +226,56 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     return {{{{1.0F, 0.0F, 0.0F}}, {{0.0F, 1.0F, 0.0F}}, {{0.0F, 0.0F, 1.0F}}}};
 }
 
+// Shared tail of every display-referred decode (TIFF, developed RAW): optional draft
+// downscale, then the encoded RGB -> linear sRGB [0,1] working image. `space` names the
+// encoding of `bgr` (srgb | adobe_rgb | prophoto).
+void fill_from_rendered_bgr(cv::Mat bgr, const std::string& space, const bool draft_mode,
+                            DecodedRawImageResponse& response) {
+    if (draft_mode) {
+        const int longer = std::max(bgr.cols, bgr.rows);
+        constexpr int kDraftMaxEdge = 2048;
+        if (longer > kDraftMaxEdge) {
+            const double s = static_cast<double>(kDraftMaxEdge) / static_cast<double>(longer);
+            cv::resize(bgr, bgr, cv::Size(), s, s, cv::INTER_AREA);
+        }
+    }
+
+    const int width = bgr.cols;
+    const int height = bgr.rows;
+    const bool is_adobe = space == "adobe_rgb";
+    const bool is_prophoto = space == "prophoto";
+    const Mat3 m = primaries_to_srgb(space);
+    const bool identity = !is_adobe && !is_prophoto;
+
+    std::vector<float> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3U, 0.0F);
+    parallel_for_rows(height, [&](int y) {
+        const cv::Vec3f* srow = bgr.ptr<cv::Vec3f>(y);
+        for (int x = 0; x < width; ++x) {
+            float b = std::clamp(srow[x][0], 0.0F, 1.0F);
+            float g = std::clamp(srow[x][1], 0.0F, 1.0F);
+            float r = std::clamp(srow[x][2], 0.0F, 1.0F); // OpenCV is BGR
+            if (is_adobe) { r = adobe_eotf(r); g = adobe_eotf(g); b = adobe_eotf(b); }
+            else if (is_prophoto) { r = prophoto_eotf(r); g = prophoto_eotf(g); b = prophoto_eotf(b); }
+            else { r = srgb_eotf(r); g = srgb_eotf(g); b = srgb_eotf(b); }
+            float lr = r, lg = g, lb = b;
+            if (!identity) {
+                lr = m[0][0] * r + m[0][1] * g + m[0][2] * b;
+                lg = m[1][0] * r + m[1][1] * g + m[1][2] * b;
+                lb = m[2][0] * r + m[2][1] * g + m[2][2] * b;
+            }
+            const std::size_t base = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)) * 3U;
+            pixels[base + 0] = std::clamp(lr, 0.0F, 1.0F);
+            pixels[base + 1] = std::clamp(lg, 0.0F, 1.0F);
+            pixels[base + 2] = std::clamp(lb, 0.0F, 1.0F);
+        }
+    });
+
+    bgr.release();  // source consumed; free before computing derived data
+    response.ok = true;
+    response.status = "loaded";
+    fill_decoded_image_from_float_rgb(response.decoded, std::move(pixels), width, height, 3);
+}
+
 [[nodiscard]] DecodedRawImageResponse decode_tiff_image_from_file(const NativeRawDecodeRequest& request) {
     DecodedRawImageResponse response;
     response.filename = request.filename;
@@ -277,50 +332,9 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     }
     f.release();  // for 1/4-ch this frees the pre-convert buffer; for 3-ch bgr keeps the data
 
-    if (request.draft_mode) {
-        const int longer = std::max(bgr.cols, bgr.rows);
-        constexpr int kDraftMaxEdge = 2048;
-        if (longer > kDraftMaxEdge) {
-            const double s = static_cast<double>(kDraftMaxEdge) / static_cast<double>(longer);
-            cv::resize(bgr, bgr, cv::Size(), s, s, cv::INTER_AREA);
-        }
-    }
-
-    const int width = bgr.cols;
-    const int height = bgr.rows;
-    const std::string& space = request.color_space;
-    const bool is_adobe = space == "adobe_rgb";
-    const bool is_prophoto = space == "prophoto";
-    const Mat3 m = primaries_to_srgb(space);
-    const bool identity = !is_adobe && !is_prophoto;
-
-    std::vector<float> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3U, 0.0F);
-    parallel_for_rows(height, [&](int y) {
-        const cv::Vec3f* srow = bgr.ptr<cv::Vec3f>(y);
-        for (int x = 0; x < width; ++x) {
-            float b = std::clamp(srow[x][0], 0.0F, 1.0F);
-            float g = std::clamp(srow[x][1], 0.0F, 1.0F);
-            float r = std::clamp(srow[x][2], 0.0F, 1.0F); // OpenCV is BGR
-            if (is_adobe) { r = adobe_eotf(r); g = adobe_eotf(g); b = adobe_eotf(b); }
-            else if (is_prophoto) { r = prophoto_eotf(r); g = prophoto_eotf(g); b = prophoto_eotf(b); }
-            else { r = srgb_eotf(r); g = srgb_eotf(g); b = srgb_eotf(b); }
-            float lr = r, lg = g, lb = b;
-            if (!identity) {
-                lr = m[0][0] * r + m[0][1] * g + m[0][2] * b;
-                lg = m[1][0] * r + m[1][1] * g + m[1][2] * b;
-                lb = m[2][0] * r + m[2][1] * g + m[2][2] * b;
-            }
-            const std::size_t base = (static_cast<std::size_t>(y) * static_cast<std::size_t>(width) + static_cast<std::size_t>(x)) * 3U;
-            pixels[base + 0] = std::clamp(lr, 0.0F, 1.0F);
-            pixels[base + 1] = std::clamp(lg, 0.0F, 1.0F);
-            pixels[base + 2] = std::clamp(lb, 0.0F, 1.0F);
-        }
-    });
-
-    bgr.release();  // source consumed; free before computing derived data
-    response.ok = true;
-    response.status = "loaded";
-    fill_decoded_image_from_float_rgb(response.decoded, std::move(pixels), width, height, 3);
+    fill_from_rendered_bgr(std::move(bgr), request.color_space, request.draft_mode, response);
+    const int width = response.decoded.rgb_linear.width;
+    const int height = response.decoded.rgb_linear.height;
     auto& md = response.decoded.metadata;
     md = NativeRawMetadata{};
     md.image_width = width;
@@ -329,6 +343,7 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     md.raw_height = height;
     md.camera_make = "Rendered";
     md.camera_model = "TIFF";
+    md.input_kind = "rendered";
     // A rendered (already-developed) TIFF has no meaningful capture ISO. Leave it
     // unknown (0) so the solver's Auto-grain ISO push/pull does NOT fire: raw_iso is
     // used for nothing else, and a fabricated ISO 100 made every TIFF look 2-3 stops
@@ -338,9 +353,68 @@ using Mat3 = std::array<std::array<float, 3>, 3>;
     md.metadata_json = serialize_native_raw_metadata_json(md);
     return response;
 }
+
+#if DFEE_HAS_LIBRAW
+// Native Adobe-parity develop: the RAW becomes the image Lightroom would export (Adobe
+// Color, sRGB) and from there takes exactly the path a Lightroom TIFF takes.
+[[nodiscard]] DecodedRawImageResponse decode_developed_raw(const NativeRawDecodeRequest& request) {
+    DecodedRawImageResponse response;
+    response.filename = request.filename;
+
+    NativeRawMetadata md;
+    {
+        // Camera metadata only; the developer runs its own decode. Heap-allocated: a LibRaw
+        // is ~750 KB, and the legacy path's stack instance shares this call chain.
+        const auto header_owner = std::make_unique<LibRaw>();
+        LibRaw& header = *header_owner;
+        const int err = header.open_file(request.filename.c_str());
+        if (err != LIBRAW_SUCCESS) {
+            response.status = "error";
+            response.error = make_libraw_decode_error(
+                err,
+                request.filename,
+                "LIBRAW_OPEN_FAILED",
+                "The RAW file could not be opened by LibRaw.",
+                "LibRaw open_file failed");
+            if (response.error.code == "LIBRAW_UNSUPPORTED_RAW") {
+                response.status = "unsupported";
+            }
+            return response;
+        }
+        fill_metadata_from_raw_processor(md, header);
+    }
+
+    dcp::DeveloperSettings settings;
+    if (!request.raw_profiles_dir.empty()) {
+        settings.exposure_table = std::filesystem::path(request.raw_profiles_dir) / "baseline_exposure.yaml";
+    }
+    std::string error;
+    auto developed = dcp::develop_raw_file(request.filename, settings, request.draft_mode, error);
+    if (!developed) {
+        response.status = "error";
+        response.error = {
+            .code = "RAW_DEVELOP_FAILED",
+            .user_message = "The RAW file could not be developed.",
+            .detail = error + " (" + request.filename + ")",
+        };
+        return response;
+    }
+
+    fill_from_rendered_bgr(std::move(developed->srgb), "srgb", request.draft_mode, response);
+    md.input_kind = "developed_raw";
+    md.developer_profile = developed->profile_source;
+    md.metadata_json = serialize_native_raw_metadata_json(md);
+    response.decoded.metadata = std::move(md);
+    return response;
+}
+#endif  // DFEE_HAS_LIBRAW
 #endif  // DFEE_HAS_OPENCV
 
 }  // namespace
+
+bool is_rendered_input(const NativeRawMetadata& metadata) {
+    return metadata.input_kind == "rendered" || metadata.input_kind == "developed_raw";
+}
 
 bool is_tiff_filename(const std::string& filename) {
     auto pos = filename.find_last_of('.');
@@ -389,6 +463,12 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
         };
         return response;
     }
+
+#if DFEE_HAS_OPENCV
+    if (request.raw_developer != "legacy") {
+        return decode_developed_raw(request);
+    }
+#endif
 
     LibRaw raw_processor;
     int err = raw_processor.open_file(request.filename.c_str());

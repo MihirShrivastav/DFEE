@@ -1,4 +1,4 @@
-// Prototype DNG-camera-profile RAW developer (native RAW programme, phase P2 prototype).
+// DNG-camera-profile RAW developer (native RAW programme, phase P2).
 //
 // Reproduces Lightroom/Camera Raw's baseline rendering of a RAW with an Adobe DCP
 // profile, following the reference pipeline in Adobe's DNG SDK (dng_render.cpp,
@@ -11,8 +11,8 @@
 // data: they are read from the user's own Lightroom / DNG Converter installation and
 // are never bundled.
 //
-// Experiment-only for now: it is scored by dfee_parity_score before any of it is
-// promoted into the engine.
+// Measured with experiments/parity_score.cpp against edit-free Lightroom Adobe Color
+// exports: mean CIEDE2000 1.40 over 35 pairs, 1.39 on 15 held-out pairs (2026-09-27).
 
 #pragma once
 
@@ -25,7 +25,7 @@
 
 #include <opencv2/core.hpp>
 
-namespace dcpdev {
+namespace dfee::dcp {
 
 using Mat3 = std::array<double, 9>;  // row-major 3x3
 
@@ -111,4 +111,27 @@ struct DevelopOptions {
 [[nodiscard]] cv::Mat develop(const RawInput& raw, const Profile& profile, const DevelopOptions& options,
                               std::string* log = nullptr);
 
-}  // namespace dcpdev
+// ---- engine entry point ----------------------------------------------------------
+
+// Baseline exposure for a proprietary RAW whose camera is not in the exposure table
+// (median of the corpus fits in profiles/raw/baseline_exposure.yaml).
+inline constexpr float kDefaultProprietaryBaselineExposure = 0.28F;
+
+struct DeveloperSettings {
+    std::filesystem::path exposure_table;  // profiles/raw/baseline_exposure.yaml; empty => built-in default
+    bool adobe_color = true;               // apply Lightroom's Adobe Color look when installed
+};
+
+struct DevelopedRaw {
+    cv::Mat srgb;                // CV_32FC3 BGR, sRGB-encoded, [0,1] -- like a Lightroom sRGB export
+    std::string profile_source;  // e.g. "Nikon Z 7 Adobe Standard v2 + Adobe Color", "libraw-matrix"
+    float exposure_ev = 0.0F;    // total baseline exposure applied
+};
+
+// Develops a RAW file to Lightroom's default Adobe Color render: the installed Adobe
+// Standard DCP (revision v2 when present) when available, else the file's own matrices.
+[[nodiscard]] std::optional<DevelopedRaw> develop_raw_file(const std::filesystem::path& path,
+                                                           const DeveloperSettings& settings, bool half_size,
+                                                           std::string& error);
+
+}  // namespace dfee::dcp

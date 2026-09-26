@@ -44,7 +44,7 @@
 #include <opencv2/imgproc.hpp>
 #include <yaml-cpp/yaml.h>
 
-#include "dcp_develop.hpp"
+#include "dfee/dcp_developer.hpp"
 #include "dfee/bridge_types.hpp"
 #include "dfee/session.hpp"
 
@@ -53,6 +53,7 @@
 #endif
 
 namespace fs = std::filesystem;
+namespace dcpdev = dfee::dcp;
 
 namespace {
 

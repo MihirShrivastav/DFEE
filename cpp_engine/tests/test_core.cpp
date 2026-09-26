@@ -1,5 +1,6 @@
 #include "dfee/analyzer.hpp"
 #include "dfee/bias.hpp"
+#include "dfee/bridge_utils.hpp"
 #include "dfee/characteristic_curve.hpp"
 #include "dfee/color_spaces.hpp"
 #include "dfee/curve_mapping.hpp"
@@ -14,6 +15,7 @@
 #include "dfee/color_grading.hpp"
 #include "dfee/version.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
@@ -2395,6 +2397,84 @@ void test_loader_accepts_optional_color_character_group() {
 }
 
 #if DFEE_HAS_OPENCV
+// Input classification drives the film path: display-referred inputs (TIFF, RAWs from
+// the native Adobe-parity developer) take the rendered-image path; the legacy LibRaw
+// decode stays scene-linear.
+void test_input_kind_classification() {
+    // Throws rather than asserts so the checks also run in Release builds.
+    const auto expect = [](const bool ok, const char* what) {
+        if (!ok) {
+            throw std::runtime_error(std::string("input kind: expected ") + what);
+        }
+    };
+    dfee::NativeRawMetadata legacy;
+    expect(legacy.input_kind == "raw", "legacy.input_kind == \"raw\"");
+    expect(!dfee::is_rendered_input(legacy), "!dfee::is_rendered_input(legacy)");
+    dfee::NativeRawMetadata tiff;
+    tiff.input_kind = "rendered";
+    expect(dfee::is_rendered_input(tiff), "dfee::is_rendered_input(tiff)");
+    dfee::NativeRawMetadata developed;
+    developed.input_kind = "developed_raw";
+    developed.developer_profile = "Nikon Z 7 Adobe Standard v2 + Adobe Color";
+    expect(dfee::is_rendered_input(developed), "dfee::is_rendered_input(developed)");
+    const std::string json = dfee::serialize_native_raw_metadata_json(developed);
+    expect(json.find("\"input_kind\":\"developed_raw\"") != std::string::npos, "json.find(\"\\\"input_kind\\\":\\\"developed_raw\\\"\") != std::string::npos");
+    expect(json.find("\"developer_profile\":\"Nikon Z 7 Adobe Standard v2 + Adobe Color\"") != std::string::npos, "json.find(\"\\\"developer_profile\\\":\\\"Nikon Z 7 Adobe Standard v2 + Adobe Color\\\"\") != std::string::npos");
+
+    const std::filesystem::path repo_root = DFEE_REPO_ROOT;
+    const std::filesystem::path raw_dir = repo_root / "raw_files";
+    std::filesystem::create_directories(raw_dir);
+    const auto tif_path = raw_dir / "native_core_test_input_kind.tif";
+    {
+        cv::Mat img(4, 4, CV_16UC3, cv::Scalar(20000, 30000, 40000));
+        expect(cv::imwrite(tif_path.string(), img), "cv::imwrite(tif_path.string(), img)");
+        const auto decoded = dfee::decode_raw_image_from_file({.filename = tif_path.string(), .draft_mode = false});
+        std::filesystem::remove(tif_path);
+        expect(decoded.ok, "decoded.ok");
+        expect(decoded.decoded.metadata.input_kind == "rendered", "decoded.decoded.metadata.input_kind == \"rendered\"");
+        expect(dfee::is_rendered_input(decoded.decoded.metadata), "dfee::is_rendered_input(decoded.decoded.metadata)");
+    }
+
+#if DFEE_HAS_LIBRAW && DFEE_HAS_OPENCV
+    // A real RAW is needed for the developer itself; none is committed, so point
+    // DFEE_TEST_RAW at one (any supported camera) to exercise it.
+    const char* test_raw = std::getenv("DFEE_TEST_RAW");
+    if (test_raw == nullptr || !std::filesystem::is_regular_file(test_raw)) {
+        std::cout << "  [skip] developed-RAW decode: set DFEE_TEST_RAW to a RAW file\n";
+        return;
+    }
+    const auto developed_decode = dfee::decode_raw_image_from_file({
+        .filename = test_raw,
+        .draft_mode = true,
+        .raw_profiles_dir = (repo_root / "profiles" / "raw").string(),
+    });
+    expect(developed_decode.ok, "developed_decode.ok");
+    expect(developed_decode.decoded.metadata.input_kind == "developed_raw", "developed_decode.decoded.metadata.input_kind == \"developed_raw\"");
+    expect(!developed_decode.decoded.metadata.developer_profile.empty(), "!developed_decode.decoded.metadata.developer_profile.empty()");
+    expect(!developed_decode.decoded.metadata.camera_make.empty(), "!developed_decode.decoded.metadata.camera_make.empty()");
+    // Draft decodes are capped like a rendered TIFF draft.
+    expect(std::max(developed_decode.decoded.rgb_linear.width, developed_decode.decoded.rgb_linear.height) <= 2048, "std::max(developed_decode.decoded.rgb_linear.width, developed_decode.decoded.rgb_linear.height) <= 2048");
+    // Display-referred and in range: a developed frame is neither black nor blown.
+    double sum = 0.0;
+    for (const float v : developed_decode.decoded.rgb_linear.pixels) {
+        expect(v >= 0.0F && v <= 1.0F, "v >= 0.0F && v <= 1.0F");
+        sum += v;
+    }
+    const double mean = sum / static_cast<double>(developed_decode.decoded.rgb_linear.pixels.size());
+    expect(mean > 0.005 && mean < 0.9, "mean > 0.005 && mean < 0.9");
+
+    const auto legacy_decode = dfee::decode_raw_image_from_file({
+        .filename = test_raw,
+        .draft_mode = true,
+        .raw_developer = "legacy",
+    });
+    expect(legacy_decode.ok, "legacy_decode.ok");
+    expect(legacy_decode.decoded.metadata.input_kind == "raw", "legacy_decode.decoded.metadata.input_kind == \"raw\"");
+    expect(!dfee::is_rendered_input(legacy_decode.decoded.metadata), "!dfee::is_rendered_input(legacy_decode.decoded.metadata)");
+    std::cout << "  developed RAW: " << developed_decode.decoded.metadata.developer_profile << "\n";
+#endif
+}
+
 void test_tiff_ingestion() {
     const std::filesystem::path repo_root = DFEE_REPO_ROOT;
     const std::filesystem::path raw_dir = repo_root / "raw_files";
@@ -4200,6 +4280,7 @@ int main() {
         test_print_v2_profile_roles();
         test_profile_loading();
 #if DFEE_HAS_OPENCV
+        test_input_kind_classification();
         test_tiff_ingestion();
 #endif
         test_raw_failure_paths();
