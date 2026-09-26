@@ -39,6 +39,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "dcp_develop.hpp"
 #include "dfee/bridge_types.hpp"
 #include "dfee/session.hpp"
 
@@ -447,11 +448,23 @@ int main(int argc, char** argv) {
     }
     const fs::path corpus = fs::absolute(argv[1]);
     std::string profile = "Adobe Standard", placement = "auto_balanced", only_ext, out_path, dump_dir;
+    std::string developer = "engine";  // engine | dcp (prototype DNG-profile developer)
+    dcpdev::DevelopOptions dcp_options;
+    bool fit_exposure = false;
+    bool use_fallback = true;  // --fallback 0 to score only cameras with an installed DCP
+    std::map<std::string, std::vector<double>> fitted;  // camera -> best exposure bias per file
     std::vector<std::string> stocks{"none"};
     int limit = 0, size = 384;
     for (int i = 2; i + 1 < argc; i += 2) {
         const std::string k = argv[i], v = argv[i + 1];
         if (k == "--profile") profile = v;
+        else if (k == "--developer") developer = v;
+        else if (k == "--exposure-bias") dcp_options.exposure_bias = std::stof(v);
+        else if (k == "--shadows") dcp_options.shadows = v != "0";
+        else if (k == "--hue-sat") dcp_options.hue_sat = v != "0";
+        else if (k == "--look") dcp_options.look = v != "0";
+        else if (k == "--fit-exposure") fit_exposure = v != "0";
+        else if (k == "--fallback") use_fallback = v != "0";
         else if (k == "--stocks") stocks = split_csv(v);
         else if (k == "--placement") placement = v;
         else if (k == "--limit") limit = std::stoi(v);
@@ -533,9 +546,63 @@ int main(int argc, char** argv) {
 
         for (const std::string& stock : stocks) {
             std::string err;
-            auto req = base_request(p.raw, stock);
-            req.exposure_placement = placement;  // the app's default for RAW
-            auto ours = render(session, req, err);
+            std::optional<cv::Mat> ours;
+            if (developer == "dcp") {
+                if (stock != "none") {
+                    std::cout << "  [" << stock << ": film parity needs the engine developer; skipped]";
+                    continue;
+                }
+                const auto raw = dcpdev::decode_raw(p.raw, true, err);
+                if (!raw) {
+                    std::cout << "  [decode failed: " << err << "]";
+                    continue;
+                }
+                std::string cam;
+                const auto dcp_path = dcpdev::find_adobe_standard(raw->unique_camera_model, raw->make, raw->model, &cam);
+                auto prof = dcp_path ? dcpdev::load_dcp(*dcp_path) : std::nullopt;
+                if (!prof && use_fallback && raw->fallback_profile) {
+                    prof = raw->fallback_profile;
+                    cam = raw->make + " " + raw->model + " [" + raw->fallback_source + "]";
+                }
+                if (!prof) {
+                    std::cout << "  [no Adobe Standard DCP for '" << raw->make << " " << raw->model << "']";
+                    continue;
+                }
+                // Development is per-pixel, so develop a downscaled copy for speed.
+                dcpdev::RawInput small = *raw;
+                small.camera = shrink(raw->camera, size * 2);
+                std::string info;
+                if (fit_exposure) {
+                    // Golden-section search for the exposure bias that best matches Lightroom:
+                    // this measures the per-camera baseline exposure Adobe applies internally.
+                    auto score = [&](double bias) {
+                        dcpdev::DevelopOptions o = dcp_options;
+                        o.exposure_bias = static_cast<float>(bias);
+                        return compare(align_to(dcpdev::develop(small, *prof, o), ref), ref).de_mean;
+                    };
+                    double lo = -1.0, hi = 2.0;
+                    const double gr = 0.6180339887;
+                    double x1 = hi - gr * (hi - lo), x2 = lo + gr * (hi - lo), f1 = score(x1), f2 = score(x2);
+                    for (int it = 0; it < 16; ++it) {
+                        if (f1 < f2) { hi = x2; x2 = x1; f2 = f1; x1 = hi - gr * (hi - lo); f1 = score(x1); }
+                        else { lo = x1; x1 = x2; f1 = f2; x2 = lo + gr * (hi - lo); f2 = score(x2); }
+                    }
+                    const double best = 0.5 * (lo + hi);
+                    fitted[cam].push_back(best);
+                    dcpdev::DevelopOptions o = dcp_options;
+                    o.exposure_bias = static_cast<float>(best);
+                    ours = dcpdev::develop(small, *prof, o, &info);
+                    std::cout << "  {" << cam << " fit " << std::showpos << std::setprecision(2) << best
+                              << std::noshowpos << "EV}";
+                } else {
+                    ours = dcpdev::develop(small, *prof, dcp_options, &info);
+                    std::cout << "  {" << cam << ": " << info << "}";
+                }
+            } else {
+                auto req = base_request(p.raw, stock);
+                req.exposure_placement = placement;  // the app's default for RAW
+                ours = render(session, req, err);
+            }
             if (!ours) {
                 std::cout << "  [" << stock << " RAW render failed: " << err << "]";
                 continue;
@@ -585,6 +652,22 @@ int main(int argc, char** argv) {
         print_header();
         for (const auto& [brand, slot] : by_brand) {
             print_row(brand == "_all" ? "ALL" : brand, divided(slot.first, slot.second), slot.second);
+        }
+    }
+
+    if (!fitted.empty()) {
+        std::cout << "\n== fitted exposure bias per camera (Adobe's hidden baseline exposure) ==\n";
+        for (const auto& [cam, v] : fitted) {
+            double mean = 0, mn = 1e9, mx = -1e9;
+            for (double b : v) {
+                mean += b;
+                mn = std::min(mn, b);
+                mx = std::max(mx, b);
+            }
+            mean /= static_cast<double>(v.size());
+            std::cout << "  " << std::left << std::setw(28) << cam << std::right << " n=" << v.size() << "  mean "
+                      << std::showpos << std::fixed << std::setprecision(2) << mean << " EV  (range " << mn << " .. "
+                      << mx << ")" << std::noshowpos << "\n";
         }
     }
 
