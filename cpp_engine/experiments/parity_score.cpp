@@ -245,6 +245,54 @@ double mean_abs_diff(const cv::Mat& a, const cv::Mat& b) {
     return (m[0] + m[1] + m[2]) / 3.0;
 }
 
+bool g_register = true;  // --register 0 disables geometric registration
+
+// Affine-register `img` onto `ref` (ECC on luminance). Lightroom applies built-in lens
+// distortion correction for many mirrorless / Leica bodies and crops accordingly, so
+// the two renders differ slightly in geometry; registering keeps the score about
+// colour and tone rather than pixel alignment.
+cv::Mat register_to(const cv::Mat& img, const cv::Mat& ref) {
+    cv::Mat a, b;
+    cv::cvtColor(ref, a, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(img, b, cv::COLOR_BGR2GRAY);
+    // Local shifts on a 4x4 tile grid (phase correlation), then a least-squares affine
+    // mapping ref coordinates -> img coordinates.
+    constexpr int kGrid = 4;
+    const int tw = a.cols / kGrid, th = a.rows / kGrid;
+    std::vector<std::array<double, 4>> pts;  // (xr, yr, xi, yi)
+    cv::Mat win;
+    cv::createHanningWindow(win, cv::Size(tw, th), CV_32F);
+    for (int gy = 0; gy < kGrid; ++gy) {
+        for (int gx = 0; gx < kGrid; ++gx) {
+            const cv::Rect r(gx * tw, gy * th, tw, th);
+            double response = 0.0;
+            const cv::Point2d s = cv::phaseCorrelate(a(r), b(r), win, &response);
+            if (response < 0.05 || std::abs(s.x) > tw / 4.0 || std::abs(s.y) > th / 4.0) continue;
+            const double cx = r.x + tw / 2.0, cy = r.y + th / 2.0;
+            pts.push_back({cx, cy, cx + s.x, cy + s.y});
+        }
+    }
+    if (pts.size() < 6) return img;
+    // Solve [xi yi] = A * [xr yr 1] by normal equations (two 3x3 systems).
+    cv::Mat M = cv::Mat::zeros(3, 3, CV_64F), bx = cv::Mat::zeros(3, 1, CV_64F), by = cv::Mat::zeros(3, 1, CV_64F);
+    for (const auto& p : pts) {
+        const double v[3] = {p[0], p[1], 1.0};
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) M.at<double>(i, j) += v[i] * v[j];
+            bx.at<double>(i) += v[i] * p[2];
+            by.at<double>(i) += v[i] * p[3];
+        }
+    }
+    cv::Mat cx, cy;
+    if (!cv::solve(M, bx, cx, cv::DECOMP_SVD) || !cv::solve(M, by, cy, cv::DECOMP_SVD)) return img;
+    cv::Mat warp = (cv::Mat_<double>(2, 3) << cx.at<double>(0), cx.at<double>(1), cx.at<double>(2),
+                    cy.at<double>(0), cy.at<double>(1), cy.at<double>(2));
+    cv::Mat out;
+    // warp maps output(ref) coords -> source(img) coords, hence WARP_INVERSE_MAP.
+    cv::warpAffine(img, out, warp, ref.size(), cv::INTER_LINEAR | cv::WARP_INVERSE_MAP, cv::BORDER_REPLICATE);
+    return out;
+}
+
 // Resize `ours` onto `ref`'s grid, rotating by 90 degrees if orientations disagree.
 cv::Mat align_to(const cv::Mat& ours, const cv::Mat& ref) {
     std::vector<cv::Mat> candidates{ours};
@@ -265,7 +313,7 @@ cv::Mat align_to(const cv::Mat& ours, const cv::Mat& ref) {
             best = r;
         }
     }
-    return best;
+    return g_register ? register_to(best, ref) : best;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +352,14 @@ Metrics compare(const cv::Mat& ours_full, const cv::Mat& ref_full) {
     const int mx = ref_full.cols / 20, my = ref_full.rows / 20;
     const cv::Rect roi(mx, my, ref_full.cols - 2 * mx, ref_full.rows - 2 * my);
     const cv::Mat ours = ours_full(roi), ref = ref_full(roi);
-    const cv::Mat lo = to_lab(ours), lr = to_lab(ref);
+    // Light low-pass so any residual sub-pixel/radial misregistration does not read as
+    // colour error; flat-area colour and tone are unaffected.
+    cv::Mat ours_s = ours, ref_s = ref;
+    if (g_register) {
+        cv::GaussianBlur(ours, ours_s, cv::Size(), 1.2);
+        cv::GaussianBlur(ref, ref_s, cv::Size(), 1.2);
+    }
+    const cv::Mat lo = to_lab(ours_s), lr = to_lab(ref_s);
 
     Metrics m;
     std::vector<float> de, Lo, Lr;
@@ -471,6 +526,7 @@ int main(int argc, char** argv) {
         else if (k == "--fit-exposure") fit_exposure = v != "0";
         else if (k == "--fallback") use_fallback = v != "0";
         else if (k == "--default-only") table_default_only = v != "0";
+        else if (k == "--register") g_register = v != "0";
         else if (k == "--exposure-table") {
             const YAML::Node t = YAML::LoadFile(v);
             exposure_default = t["default_proprietary"].as<double>(0.0);

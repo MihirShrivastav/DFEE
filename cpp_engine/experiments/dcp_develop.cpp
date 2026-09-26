@@ -570,6 +570,13 @@ std::optional<fs::path> find_adobe_standard(const std::string& unique_camera_mod
         if (auto p = hit(unique_camera_model)) return p;
     if (auto p = hit(make + " " + model)) return p;
     if (auto p = hit(model)) return p;
+    // Variant bodies share their base model's sensor profile (e.g. "SL3-P" -> "SL3"):
+    // strip a trailing "-X" / " X" suffix and retry.
+    for (const std::string& base : {make + " " + model, model}) {
+        const auto cut = base.find_last_of("- ");
+        if (cut != std::string::npos && cut > 0 && base.size() - cut <= 4)
+            if (auto p = hit(base.substr(0, cut))) return p;
+    }
     // Fuzzy: a profile whose normalised name ends with the normalised model.
     const std::string nm = normalise(model);
     if (!nm.empty()) {
