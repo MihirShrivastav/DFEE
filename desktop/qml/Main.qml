@@ -693,7 +693,10 @@ Window {
     FileDialog {
         id: openDialog
         title: "Open image"
-        nameFilters: ["Supported images (*.tif *.tiff *.arw *.nef *.cr3 *.raf *.rw2 *.dng)"]
+        // Keep in sync with kNameFilters in LibraryController.cpp.
+        nameFilters: ["Supported images (*.tif *.tiff *.arw *.nef *.cr2 *.cr3 *.raf *.rw2 *.dng *.orf *.pef *.srw *.3fr)",
+                      "RAW photos (*.arw *.nef *.cr2 *.cr3 *.raf *.rw2 *.dng *.orf *.pef *.srw *.3fr)",
+                      "TIFF images (*.tif *.tiff)"]
         onAccepted: engine.openFile(selectedFile)
     }
 
@@ -2572,17 +2575,24 @@ Window {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            height: statusText.visible ? 38 : 0
+            // Grows to fit: open failures carry a sentence of guidance that must not be elided.
+            // Keyed off the status string, not statusText.visible: a child is invisible
+            // whenever this bar is, so that binding could never leave height 0.
+            height: engine.status.length > 0 ? Math.max(38, statusText.implicitHeight + 20) : 0
             color: "#cc101114"
             visible: height > 0
 
             Text {
                 id: statusText
-                anchors.fill: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: 16
                 anchors.rightMargin: 16
                 verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideMiddle
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
+                elide: Text.ElideRight
                 text: engine.status
                 color: engine.status.startsWith("Open failed:") || engine.status.startsWith("Render failed:") || engine.status.startsWith("Export failed:") ? root.danger : root.textSecondary
                 font.pixelSize: 12
@@ -3507,13 +3517,12 @@ Window {
                             spacing: 8
                             visible: toneCard.open
 
-                            // Applies before the film tone, and only to already-rendered
-                            // (TIFF) inputs — disabled for RAW, Lightroom-style.
+                            // Applies before the film tone. Every input is developed by then
+                            // (a Lightroom TIFF, or a RAW developed natively), so it always applies.
                             FilmSlider {
                                 controlKey: "rendered_input"; label: "Preserve rendered tone"
                                 minimum: 0; maximum: 100; neutral: 80
-                                available: engine.renderedInput
-                                tooltip: "For files that are already developed (TIFF/JPEG, e.g. sent from Lightroom): higher keeps the file's existing exposure and tone and applies the film look gently, protecting skies and bright highlights from being re-pushed. Lower treats it like a RAW and applies the full film tone. Has no effect on RAW files."
+                                tooltip: "Higher keeps the photo's developed exposure and tone and applies the film look gently, protecting skies and bright highlights from being pushed again. Lower lets the film's full tone curve through."
                             }
                             GraphiteCheck {
                                 caption: "Adaptive scene tone"

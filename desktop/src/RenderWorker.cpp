@@ -102,7 +102,19 @@ void RenderWorker::openAndRender(const dfee::NativePreviewRenderRequest& request
         dfee::NativeRawDecodeRequest dec;
         dec.filename  = request.filename;
         dec.draft_mode = true;
-        session_->decode_raw(dec);
+        const dfee::NativeRawDecodeResponse decoded = session_->decode_raw(dec);
+        if (!decoded.ok) {
+            // e.g. an unsupported camera or a Nikon HE* RAW: the engine's user_message
+            // explains what to do, so show it rather than a later render failure.
+            const QString msg = "Open failed: " + QString::fromStdString(decoded.error.user_message);
+            qWarning().noquote() << "DFEE open failed" << QString::fromStdString(decoded.error.code)
+                                 << QString::fromStdString(decoded.error.detail);
+            QMetaObject::invokeMethod(controller_, "onOpenFailed",
+                                      Qt::QueuedConnection, Q_ARG(QString, msg));
+            QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
+                                      Qt::QueuedConnection, Q_ARG(bool, false));
+            return;
+        }
     } catch (const std::exception& e) {
         const QString msg = QString("Open failed: %1").arg(e.what());
         QMetaObject::invokeMethod(controller_, "onRenderFailed",

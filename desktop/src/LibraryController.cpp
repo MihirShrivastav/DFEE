@@ -6,10 +6,11 @@
 #include <QVariantMap>
 
 namespace {
-// Supported input extensions for the library (RAW + rendered TIFF).
+// Supported input extensions for the library (RAW + rendered TIFF). Keep in sync with
+// the open dialog's nameFilters in Main.qml.
 const QStringList kNameFilters = {
     "*.tif", "*.tiff", "*.arw", "*.nef", "*.cr2", "*.cr3",
-    "*.raf", "*.rw2", "*.dng", "*.orf", "*.pef", "*.srw"
+    "*.raf", "*.rw2", "*.dng", "*.orf", "*.pef", "*.srw", "*.3fr"
 };
 }  // namespace
 

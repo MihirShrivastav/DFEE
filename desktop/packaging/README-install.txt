@@ -1,9 +1,12 @@
 Film Lab — installation & Lightroom setup
 ==========================================
 
-Film Lab edits your photos FROM Lightroom. It is not a standalone editor —
-you open it from Lightroom's "Edit In" menu. (Double-clicking FilmLab.exe on
-its own just shows this reminder and closes.)
+Film Lab works two ways:
+  - On its own: open Film Lab and edit RAW files (and TIFFs) directly from its
+    library. RAWs are developed to look like Lightroom's default rendering
+    before the film treatment is applied.
+  - From Lightroom: send a photo with Lightroom's "Edit In" menu and save the
+    result back into your catalog.
 
 1. INSTALL
    - Installer: run FilmLab-Setup.exe and follow the prompts, OR
@@ -15,7 +18,19 @@ its own just shows this reminder and closes.)
    Your settings and logs are kept. To remove it completely, use "Uninstall Film
    Lab" from the Start menu or Windows Settings > Apps.
 
-2. HOOK IT INTO LIGHTROOM CLASSIC (one time)
+2. USE IT ON ITS OWN
+   - Start Film Lab, add a folder of photos to the library (or use Open), and
+     pick a photo. Supported: most camera RAW files (Sony, Nikon, Canon, Fujifilm,
+     Panasonic, Olympus/OM, Pentax, Samsung, Hasselblad, DNG) and TIFF.
+   - Colour matches Lightroom most closely when Lightroom Classic (or Adobe's
+     free DNG Converter) is installed on the same computer: Film Lab then uses
+     the camera colour profiles those apps install. Without them it falls back
+     to generic camera colour.
+   - Export saves next to the original file.
+   - Not yet supported: Nikon "High Efficiency" RAW (HE / HE*). Send those
+     photos from Lightroom instead (below), or shoot Lossless compressed RAW.
+
+3. HOOK IT INTO LIGHTROOM CLASSIC (one time)
    Edit > Preferences > External Editing.
    Under "Additional External Editor" set:
        Application : <install folder>\FilmLab.exe
@@ -30,12 +45,10 @@ its own just shows this reminder and closes.)
    "Save Current Settings as New Preset..." and name it  Film Lab.
    Click OK.
 
-3. USE IT
+4. USE IT FROM LIGHTROOM
    - Select a photo in Lightroom.
    - Photo > Edit In > Film Lab.
    - Choose "Edit a Copy with Lightroom Adjustments" and click Edit.
    - Film Lab opens on that image. Pick a film stock, adjust, then click
      "Save & Return to Lightroom".
    - The finished copy appears stacked next to your original in Lightroom.
-
-That's it. Every future edit is just: Edit In > Film Lab.

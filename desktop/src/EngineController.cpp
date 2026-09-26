@@ -82,7 +82,9 @@ EngineController::EngineController(PreviewImageProvider* provider,
 QVariantMap EngineController::defaultFilmControls()
 {
     return QVariantMap{
-        {"exposure_placement", "auto_balanced"},
+        // Every input reaches the film path already developed (a Lightroom TIFF, or a
+        // RAW developed natively to Lightroom's default render), so it is exposed already.
+        {"exposure_placement", "as_shot"},
         {"film_exposure_ev", 0.0},
         {"adaptive", true},
         {"rendered_input", 80.0},
@@ -426,10 +428,6 @@ void EngineController::resetAllEdits()
     filmControls_ = defaultFilmControls();
     filmExposure_ = filmControls_.value("film_exposure_ev").toDouble();
     shadowLift_ = filmControls_.value("shadow_lift").toDouble();
-    // exposure_placement default depends on the loaded file (as_shot for
-    // already-developed TIFFs, auto_balanced for RAW); applyDefaultPlacement
-    // corrects the map's generic default to the right one for this image.
-    applyDefaultPlacement();
 
     if (stockId_ != "none") {
         stockId_ = "none";
@@ -597,7 +595,6 @@ void EngineController::openFile(const QUrl& url)
     }
 
     currentFile_ = file;
-    applyDefaultPlacement();
     workerBusy_  = true;
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
     QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
@@ -669,7 +666,7 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
         return static_cast<float>(filmControls_.value(key).toDouble());
     };
 
-    // Rendered-input handling (TIFF/already-developed files only). We deliberately
+    // Rendered-input handling (every input: TIFFs and natively developed RAWs). We deliberately
     // do NOT plumb film_color_compression or palette_range: both are retired in the
     // engine (compression follows film_color_density; the palette_range pass was
     // removed), so their neutral struct defaults are correct. adaptation is a live
@@ -862,14 +859,25 @@ void EngineController::onRenderFailed(const QString& msg)
     qDebug() << "DFEE:" << msg;
 }
 
-void EngineController::applyDefaultPlacement()
+void EngineController::onOpenFailed(const QString& msg)
 {
-    const QString want = renderedInput() ? QStringLiteral("as_shot")
-                                         : QStringLiteral("auto_balanced");
-    if (filmControls_.value("exposure_placement").toString() != want) {
-        filmControls_.insert("exposure_placement", want);
-        emit filmControlsChanged();
+    // A newer open queued behind this one keeps its own file; only clear if the
+    // failed file is still the current one.
+    if (!dirtyIsOpen_) {
+        currentFile_.clear();
+        pendingSeed_ = false;
+        if (hasImage_) {
+            hasImage_ = false;
+            emit hasImageChanged();
+        }
+        if (hasBefore_) {
+            hasBefore_ = false;
+            emit beforeChanged();
+        }
     }
+    status_ = msg;
+    emit statusChanged();
+    qDebug() << "DFEE:" << msg;
 }
 
 void EngineController::onWorkerBusyChanged(bool busy)
@@ -885,7 +893,6 @@ void EngineController::onWorkerBusyChanged(bool busy)
             dirtyIsOpen_  = false;
             currentFile_  = pendingFile_;
             pendingFile_.clear();
-            applyDefaultPlacement();
 
             workerBusy_ = true;
             const dfee::NativePreviewRenderRequest request = buildPreviewRequest();

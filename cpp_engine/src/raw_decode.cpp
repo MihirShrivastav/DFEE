@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -84,6 +85,24 @@ NativeError make_libraw_decode_error(
         .code = fallback_code,
         .user_message = fallback_user_message,
         .detail = fallback_detail_prefix + " for " + filename + ": " + error_text,
+    };
+}
+
+// Nikon High Efficiency RAWs (HE / HE*, TicoRAW-compressed) open but cannot be unpacked
+// by LibRaw 0.22. NEFCompression values follow ExifTool tag 0x0093 (see libraw_types.h):
+// 13 = HE, 14 = HE*. Returns an explanatory error for them, else nullopt.
+[[nodiscard]] std::optional<NativeError> unsupported_compression_error(const LibRaw& raw_processor,
+                                                                      const std::string& filename) {
+    const unsigned compression = raw_processor.imgdata.makernotes.nikon.NEFCompression;
+    if (compression != 13 && compression != 14) {
+        return std::nullopt;
+    }
+    return NativeError{
+        .code = "RAW_NIKON_HE_UNSUPPORTED",
+        .user_message = std::string("This photo was shot as Nikon High Efficiency") + (compression == 14 ? "*" : "") +
+                        " RAW, which Film Lab cannot open directly yet. Open it from Lightroom "
+                        "(Photo > Edit In > Film Lab), or shoot Lossless compressed RAW.",
+        .detail = "NEFCompression=" + std::to_string(compression) + " (TicoRAW) is not decodable by LibRaw for " + filename,
     };
 }
 
@@ -381,6 +400,11 @@ void fill_from_rendered_bgr(cv::Mat bgr, const std::string& space, const bool dr
             }
             return response;
         }
+        if (auto he = unsupported_compression_error(header, request.filename)) {
+            response.status = "unsupported";
+            response.error = std::move(*he);
+            return response;
+        }
         fill_metadata_from_raw_processor(md, header);
     }
 
@@ -483,6 +507,11 @@ DecodedRawImageResponse decode_raw_image_from_file(const NativeRawDecodeRequest&
         if (response.error.code == "LIBRAW_UNSUPPORTED_RAW") {
             response.status = "unsupported";
         }
+        return response;
+    }
+    if (auto he = unsupported_compression_error(raw_processor, request.filename)) {
+        response.status = "unsupported";
+        response.error = std::move(*he);
         return response;
     }
     fill_metadata_from_raw_processor(response.decoded.metadata, raw_processor);
