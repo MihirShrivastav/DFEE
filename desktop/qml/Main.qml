@@ -69,13 +69,32 @@ Window {
     //   13  section title / body  12  field label      11  secondary / caption
     //   10  ALL-CAPS micro label (letter-spaced, muted, used sparingly)
     // Weights: Medium for titles/labels, Normal for body/values.
-    property bool libraryOpen: true       // left folders pane
     property bool filmstripOpen: true     // bottom thumbnail strip
-    property bool leftPanelOpen: true     // left presets/history panel (Lightroom mode)
+    property bool leftPanelOpen: true     // left panel: folders (standalone), presets, history
     property bool peekBefore: false       // "\" — momentary before/after (Lightroom-style toggle)
 
     // True while any text field has focus — bare-letter/character shortcuts are
     // suppressed then so typing never triggers them.
+    // Hand keyboard focus back to the window after a popup closes, so window
+    // shortcuts never depend on where a dialog left focus.
+    function returnFocus() { root.contentItem.forceActiveFocus(); }
+    // Bare arrow keys navigate photos only when nothing else wants them: a focused
+    // slider nudges its value with them, a text field moves its caret.
+    readonly property bool arrowKeysFree: !textEntry
+        && !(activeFocusItem && activeFocusItem.objectName === "inspectorSlider")
+    // Open the previous (-1) / next (+1) photo of the current folder. Stops at the ends.
+    function navigatePhoto(step) {
+        var files = library.files;
+        if (files.length === 0) return;
+        var cur = engine.currentFile.toLowerCase();
+        var at = -1;
+        for (var i = 0; i < files.length; ++i) {
+            if (files[i].path.toLowerCase() === cur) { at = i; break; }
+        }
+        var next = at < 0 ? (step > 0 ? 0 : files.length - 1) : at + step;
+        if (next < 0 || next >= files.length || next === at) return;
+        engine.openFile(Qt.resolvedUrl("file:///" + files[next].path));
+    }
     readonly property bool textEntry: stockSearch.activeFocus || printSearch.activeFocus || presetNameField.activeFocus
         || newGroupField.activeFocus || editNameField.activeFocus
         || editNewGroupField.activeFocus || groupRenameField.activeFocus
@@ -190,9 +209,29 @@ Window {
         onActivated: root.cycleStock(1)
     }
     Shortcut {
-        sequences: ["?", "F1"]               // keyboard shortcuts help
-        enabled: !root.textEntry
-        onActivated: helpDialog.opened ? helpDialog.close() : helpDialog.open()
+        sequences: ["?", "F1"]               // keyboard shortcuts help (the sheet closes itself)
+        enabled: !root.textEntry && !helpDialog.opened
+        onActivated: helpDialog.open()
+    }
+    Shortcut {
+        sequence: "Left"                     // previous photo (when no slider/field wants arrows)
+        enabled: !engine.lightroomRoundTrip && root.arrowKeysFree
+        onActivated: root.navigatePhoto(-1)
+    }
+    Shortcut {
+        sequence: "Right"                    // next photo
+        enabled: !engine.lightroomRoundTrip && root.arrowKeysFree
+        onActivated: root.navigatePhoto(1)
+    }
+    Shortcut {
+        sequence: "Ctrl+Left"                // previous photo, whatever has focus (Lightroom)
+        enabled: !engine.lightroomRoundTrip && !root.textEntry
+        onActivated: root.navigatePhoto(-1)
+    }
+    Shortcut {
+        sequence: "Ctrl+Right"               // next photo
+        enabled: !engine.lightroomRoundTrip && !root.textEntry
+        onActivated: root.navigatePhoto(1)
     }
     Shortcut {
         sequence: "Ctrl+0"
@@ -209,6 +248,8 @@ Window {
     Popup {
         id: presetNameDialog
         modal: true
+        focus: true
+        onClosed: root.returnFocus()
         dim: true
         anchors.centerIn: Overlay.overlay
         width: 380
@@ -327,6 +368,8 @@ Window {
     Popup {
         id: editPresetDialog
         modal: true
+        focus: true
+        onClosed: root.returnFocus()
         dim: true
         anchors.centerIn: Overlay.overlay
         width: 380
@@ -442,6 +485,8 @@ Window {
     Popup {
         id: groupRenameDialog
         modal: true
+        focus: true
+        onClosed: root.returnFocus()
         dim: true
         anchors.centerIn: Overlay.overlay
         width: 340
@@ -488,6 +533,8 @@ Window {
     Popup {
         id: groupDeleteConfirm
         modal: true
+        focus: true
+        onClosed: root.returnFocus()
         dim: true
         anchors.centerIn: Overlay.overlay
         width: 360
@@ -521,6 +568,8 @@ Window {
     Popup {
         id: resetConfirm
         modal: true
+        focus: true
+        onClosed: root.returnFocus()
         dim: true
         anchors.centerIn: Overlay.overlay
         width: 340
@@ -557,6 +606,15 @@ Window {
     Popup {
         id: helpDialog
         modal: true
+        // A modal popup blocks the window's own "?" shortcut, so the sheet needs
+        // focus (Esc) and its own toggle key to close from the keyboard.
+        focus: true
+        onClosed: root.returnFocus()
+        Shortcut {
+            sequences: ["?", "F1"]
+            enabled: helpDialog.opened
+            onActivated: helpDialog.close()
+        }
         dim: true
         anchors.centerIn: Overlay.overlay
         width: 620
@@ -569,7 +627,11 @@ Window {
                 { keys: ["Ctrl", "Z"], desc: "Undo" },
                 { keys: ["Ctrl", "Y"], desc: "Redo" },
                 { keys: ["Ctrl", "Shift", "R"], desc: "Reset all edits" },
-                { keys: ["Ctrl", "S"], desc: "Save & return to Lightroom" }
+                { keys: ["Ctrl", "S"], desc: engine.lightroomRoundTrip ? "Save & return to Lightroom" : "Export" }
+            ]},
+            { title: "PHOTOS", items: [
+                { keys: ["\u2190", "\u2192"], desc: "Previous / next photo" },
+                { keys: ["Ctrl", "\u2190", "\u2192"], desc: "Previous / next (from a slider)" }
             ]},
             { title: "HELP", items: [
                 { keys: ["?"], desc: "Show this help" }
@@ -711,10 +773,11 @@ Window {
         property string path: ""
         property string name: ""
         property int edge: 128
+        readonly property bool current: path !== "" && path.toLowerCase() === engine.currentFile.toLowerCase()
         radius: 6
         color: root.inset
-        border.width: 1
-        border.color: root.hair
+        border.width: current ? 2 : 1
+        border.color: current ? root.textPrimary : root.hair
         clip: true
         Image {
             anchors.fill: parent
@@ -1224,6 +1287,7 @@ Window {
 
     component InspectorSlider: Slider {
         id: control
+        objectName: "inspectorSlider"   // root.arrowKeysFree: a focused slider keeps the arrows
         property bool bipolarTrack: false
         property real neutralValue: 0
         property color fillStartColor: root.steelSliderStart
@@ -1663,20 +1727,24 @@ Window {
         // Presets and history are navigational, not the primary working
         // surface. Keep the rail readable while giving the photo more room.
         // Collapses to a slim reopen rail so the photo can fill the window.
-        width: engine.lightroomRoundTrip ? (root.leftPanelOpen ? 232 : 22) : 0
-        visible: engine.lightroomRoundTrip
+        width: root.leftPanelOpen ? 232 : 22
         color: root.bg
         border.width: 1
         border.color: root.border
         clip: true
 
+        // Folders only in standalone mode: a Lightroom round-trip edits one file.
+        readonly property bool showFolders: !engine.lightroomRoundTrip
+        property bool foldersOpen: true
         property bool presetsOpen: true
         property bool historyOpen: true
         readonly property int headerH: 40
         readonly property int topBarH: 30
-        // Body height shared by the two lists once the fixed chrome is removed.
-        readonly property real bodyH: Math.max(0, height - topBarH - 2 * headerH - 44)
-        function sectionH(mine, other) { return !mine ? 0 : (other ? bodyH * 0.5 : bodyH) }
+        // Open sections split the body height evenly once the fixed chrome is removed.
+        readonly property int openSections: (showFolders && foldersOpen ? 1 : 0)
+                                            + (presetsOpen ? 1 : 0) + (historyOpen ? 1 : 0)
+        readonly property real bodyH: Math.max(0, height - topBarH - (showFolders ? 3 : 2) * headerH - 4)
+        function sectionH(mine) { return !mine || openSections === 0 ? 0 : bodyH / openSections }
 
         // Collapsed: a slim rail with a reopen chevron (matches the library pane).
         Item {
@@ -1723,7 +1791,10 @@ Window {
         component SectionHeader: Rectangle {
             property string title: ""
             property bool expanded: true
+            property string actionIcon: ""      // optional trailing action, left of the chevron
+            property string actionTip: ""
             signal toggled()
+            signal actionTriggered()
             width: parent ? parent.width : 0
             height: leftPanel.headerH
             color: "transparent"
@@ -1735,10 +1806,27 @@ Window {
                 text: title; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium
             }
             ChevronToggle {
+                id: sectionChevron
                 anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
                 open: expanded
             }
             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: parent.toggled() }
+            GhostButton {
+                id: sectionAction
+                visible: actionIcon !== ""
+                anchors.right: sectionChevron.left; anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                width: 24; height: 24
+                iconName: actionIcon; iconSize: 14
+                onClicked: parent.actionTriggered()
+                HoverHandler { id: sectionActionHover }
+                GraphiteTip {
+                    parent: sectionAction
+                    x: -6; y: sectionAction.height + 4
+                    visible: sectionActionHover.hovered && actionTip !== ""
+                    text: actionTip
+                }
+            }
         }
 
         Column {
@@ -1761,6 +1849,68 @@ Window {
                         x: -6; y: panelCollapseBtn.height + 4
                         visible: panelCollapseHover.hovered
                         text: "Hide panel"
+                    }
+                }
+            }
+
+            // ── FOLDERS (standalone) ───────────────────────────────────
+            SectionHeader {
+                visible: leftPanel.showFolders
+                height: leftPanel.showFolders ? leftPanel.headerH : 0
+                title: "Folders"; expanded: leftPanel.foldersOpen
+                actionIcon: "plus"; actionTip: "Add folder"
+                onToggled: leftPanel.foldersOpen = !leftPanel.foldersOpen
+                onActionTriggered: folderDialog.open()
+            }
+            Item {
+                width: parent.width
+                height: leftPanel.showFolders ? leftPanel.sectionH(leftPanel.foldersOpen) : 0
+                visible: leftPanel.showFolders && leftPanel.foldersOpen
+                clip: true
+
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width - 40
+                    visible: library.folders.length === 0
+                    horizontalAlignment: Text.AlignHCenter
+                    text: "No folders yet.\nAdd a folder of photos to browse it."
+                    color: root.textMuted; font.pixelSize: 12; wrapMode: Text.WordWrap; lineHeight: 1.3
+                }
+                ListView {
+                    id: folderList
+                    anchors.fill: parent
+                    anchors.topMargin: 4
+                    visible: library.folders.length > 0
+                    clip: true
+                    model: library.folders
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    delegate: Item {
+                        width: folderList.width
+                        height: 32                   // same row rhythm as presets / history
+                        readonly property bool selected: library.currentFolder === modelData.path
+                        Rectangle {
+                            anchors.fill: parent; anchors.margins: 2; radius: 6
+                            color: parent.selected ? root.ctrlActive : (folderHover.hovered ? root.ctrlHover : "transparent")
+                            border.width: parent.selected ? 1 : 0; border.color: root.hair
+                        }
+                        HoverHandler { id: folderHover }
+                        Text {
+                            anchors.left: parent.left; anchors.leftMargin: 14
+                            anchors.right: parent.right; anchors.rightMargin: 40
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.name; elide: Text.ElideMiddle
+                            color: parent.selected ? root.textPrimary : root.textSecondary
+                            font.pixelSize: 12
+                            font.weight: parent.selected ? Font.Medium : Font.Normal
+                        }
+                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: library.selectFolder(modelData.path) }
+                        RowAction {
+                            visible: folderHover.hovered
+                            anchors.right: parent.right; anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: "x"; hoverColor: root.danger
+                            onTriggered: library.removeFolder(modelData.path)
+                        }
                     }
                 }
             }
@@ -1793,7 +1943,7 @@ Window {
             Item {
                 width: parent.width
                 height: leftPanel.presetsOpen
-                        ? Math.max(0, leftPanel.sectionH(leftPanel.presetsOpen, leftPanel.historyOpen) - 40)
+                        ? Math.max(0, leftPanel.sectionH(leftPanel.presetsOpen) - 40)
                         : 0
                 visible: leftPanel.presetsOpen
                 clip: true
@@ -1899,7 +2049,7 @@ Window {
             ListView {
                 id: historyList
                 width: parent.width
-                height: leftPanel.sectionH(leftPanel.historyOpen, leftPanel.presetsOpen)
+                height: leftPanel.sectionH(leftPanel.historyOpen)
                 visible: leftPanel.historyOpen
                 clip: true
                 model: engine.history
@@ -1931,106 +2081,6 @@ Window {
         }
     }
 
-    // ── Library pane (left) — pinned FOLDERS only. Collapsible. Standalone only. ──
-    Rectangle {
-        id: libraryPane
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.bottom: filmstrip.top
-        width: engine.lightroomRoundTrip ? 0 : (root.libraryOpen ? 232 : 22)
-        visible: !engine.lightroomRoundTrip
-        color: root.bg
-        border.width: 1
-        border.color: root.border
-
-        // Collapsed: a slim rail with a reopen chevron.
-        Item {
-            anchors.fill: parent
-            visible: !root.libraryOpen
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.libraryOpen = true }
-            AppIcon {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top; anchors.topMargin: 18
-                name: "caret-right"; size: 16
-            }
-        }
-
-        // Expanded content.
-        Column {
-            anchors.fill: parent
-            anchors.margins: 14
-            spacing: 12
-            visible: root.libraryOpen
-
-            Item {
-                width: parent.width
-                height: 26
-                Text {
-                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                    text: "Library"; color: root.textPrimary; font.pixelSize: 13; font.weight: Font.Medium
-                }
-                Row {
-                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    spacing: 6
-                    UtilityButton {
-                        id: addFolderBtn
-                        width: 50; height: 24
-                        text: "Add"
-                        onClicked: folderDialog.open()
-                    }
-                    GhostButton {
-                        id: libCollapseBtn
-                        iconName: "caret-left"
-                        onClicked: root.libraryOpen = false
-                    }
-                }
-            }
-
-            // Pinned folders (folders only — thumbnails live in the filmstrip)
-            ListView {
-                id: folderList
-                width: parent.width
-                height: parent.height - y
-                clip: true
-                model: library.folders
-                spacing: 2
-                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 8 }
-                delegate: Rectangle {
-                    width: folderList.width
-                    height: 30
-                    radius: 6
-                    readonly property bool selected: library.currentFolder === modelData.path
-                    color: selected ? "#20ffffff" : (folderHover.hovered ? "#12ffffff" : "transparent")
-                    Text {
-                        anchors.left: parent.left; anchors.leftMargin: 10
-                        anchors.right: rmBtn.left; anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.name; elide: Text.ElideMiddle
-                        color: parent.selected ? root.textPrimary : root.textSecondary
-                        font.pixelSize: 12
-                    }
-                    HoverHandler { id: folderHover }
-                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: library.selectFolder(modelData.path) }
-                    GhostButton {
-                        id: rmBtn
-                        anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
-                        width: 22; height: 22
-                        visible: folderHover.hovered
-                        iconName: "x"; iconSize: 14
-                        onClicked: library.removeFolder(modelData.path)
-                    }
-                }
-            }
-        }
-        // Empty-state hint
-        Text {
-            visible: root.libraryOpen && library.folders.length === 0
-            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-            anchors.margins: 14; anchors.topMargin: 56
-            text: "Add a folder to browse your shots."
-            color: root.textMuted; font.pixelSize: 11; wrapMode: Text.WordWrap
-        }
-    }
-
     // ── Filmstrip (bottom) — current folder's thumbnails. Collapsible. Standalone only. ──
     Rectangle {
         id: filmstrip
@@ -2057,10 +2107,23 @@ Window {
             visible: root.filmstripOpen
 
             ListView {
+                id: filmList
                 anchors.fill: parent
                 anchors.margins: 8
                 anchors.rightMargin: 28
                 orientation: ListView.Horizontal
+                // Keep the current photo in view (arrow-key navigation, folder switches).
+                function followCurrent() {
+                    var cur = engine.currentFile.toLowerCase();
+                    for (var i = 0; i < library.files.length; ++i) {
+                        if (library.files[i].path.toLowerCase() === cur) { positionViewAtIndex(i, ListView.Contain); return; }
+                    }
+                }
+                Connections {
+                    target: engine
+                    function onCurrentFileChanged() { filmList.followCurrent() }
+                }
+                onCountChanged: followCurrent()
                 clip: true
                 spacing: 6
                 model: library.files
@@ -2091,7 +2154,7 @@ Window {
 
     Rectangle {
         id: previewCanvas
-        anchors.left: engine.lightroomRoundTrip ? leftPanel.right : libraryPane.right
+        anchors.left: leftPanel.right
         anchors.top: parent.top
         anchors.bottom: filmstrip.top
         anchors.right: inspector.left
@@ -3059,6 +3122,7 @@ Window {
                                 }
                                 popup: Popup {
                                     id: stockPopup
+                                    onClosed: root.returnFocus()
                                     y: stockBox.height + 4
                                     width: stockBox.width
                                     implicitHeight: Math.min(searchCol.implicitHeight + 8, 400)
@@ -3344,6 +3408,7 @@ Window {
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
                                     id: printPopup
+                                    onClosed: root.returnFocus()
                                     y: printBox.height + 4
                                     width: printBox.width
                                     implicitHeight: Math.min(printList.contentHeight + 8, 300)

@@ -38,6 +38,10 @@ class EngineController : public QObject {
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportingChanged)
     Q_PROPERTY(bool lightroomRoundTrip READ lightroomRoundTrip NOTIFY lightroomRoundTripChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
+    // The photo the user asked for most recently (an open still queued behind a busy
+    // worker counts), as a local path with forward slashes. Drives filmstrip
+    // highlighting and previous/next navigation.
+    Q_PROPERTY(QString currentFile READ currentFile NOTIFY currentFileChanged)
     Q_PROPERTY(bool hasBefore READ hasBefore NOTIFY beforeChanged)
     Q_PROPERTY(int beforeRevision READ beforeRevision NOTIFY beforeChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
@@ -113,6 +117,7 @@ public:
     void beginLightroomRoundTrip(const QString& tiffPath);
 
     bool hasImage() const { return hasImage_; }
+    QString currentFile() const { return dirtyIsOpen_ ? pendingFile_ : currentFile_; }
     bool hasBefore() const { return hasBefore_; }
     int beforeRevision() const { return beforeRevision_; }
     int previewRevision() const { return previewRevision_; }
@@ -177,6 +182,7 @@ signals:
     void exportingChanged();
     void lightroomRoundTripChanged();
     void hasImageChanged();
+    void currentFileChanged();
     void previewChanged();
     void beforeChanged();
     void statusChanged();

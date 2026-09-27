@@ -588,6 +588,7 @@ void EngineController::openFile(const QUrl& url)
         pendingFile_  = file;
         dirty_        = true;
         dirtyIsOpen_  = true;
+        emit currentFileChanged();
         // Do NOT update currentFile_ yet — the in-flight operation still owns
         // the session's decoded buffer.  currentFile_ is updated when the
         // deferred open actually fires.
@@ -595,6 +596,7 @@ void EngineController::openFile(const QUrl& url)
     }
 
     currentFile_ = file;
+    emit currentFileChanged();
     workerBusy_  = true;
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
     QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
@@ -865,6 +867,7 @@ void EngineController::onOpenFailed(const QString& msg)
     // failed file is still the current one.
     if (!dirtyIsOpen_) {
         currentFile_.clear();
+        emit currentFileChanged();
         pendingSeed_ = false;
         if (hasImage_) {
             hasImage_ = false;
@@ -893,6 +896,7 @@ void EngineController::onWorkerBusyChanged(bool busy)
             dirtyIsOpen_  = false;
             currentFile_  = pendingFile_;
             pendingFile_.clear();
+            emit currentFileChanged();
 
             workerBusy_ = true;
             const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
