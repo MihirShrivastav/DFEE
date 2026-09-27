@@ -26,6 +26,8 @@ qt_add_executable(DFEE
     src/ThumbnailImageProvider.h
     src/LibraryController.cpp
     src/LibraryController.h
+    src/UiScript.cpp
+    src/UiScript.h
 )
 
 qt_add_qml_module(DFEE

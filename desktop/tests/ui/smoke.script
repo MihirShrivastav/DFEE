@@ -1,0 +1,8 @@
+# Opens a RAW, picks a stock and a control, checks the controller state.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+stock:portra_400
+control:film_contrast=150
+expect:engine.stock=portra_400
+expect:engine.filmControls.film_contrast=150
+quit
