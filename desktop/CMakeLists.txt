@@ -30,6 +30,8 @@ qt_add_executable(DFEE
     src/UiScript.h
     src/EditStore.cpp
     src/EditStore.h
+    src/ImageInfo.cpp
+    src/ImageInfo.h
 )
 
 qt_add_qml_module(DFEE
@@ -82,3 +84,12 @@ add_custom_command(TARGET desktop_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:desktop_tests>/sqldrivers
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::QSQLiteDriverPlugin>
             $<TARGET_FILE_DIR:desktop_tests>/sqldrivers)
+
+qt_add_executable(image_info_tests
+    tests/image_info_test.cpp
+    src/ImageInfo.cpp
+    src/ImageInfo.h
+)
+target_include_directories(image_info_tests PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/../cpp_engine/include)
+target_link_libraries(image_info_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME image_info_tests COMMAND image_info_tests)

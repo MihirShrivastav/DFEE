@@ -2,6 +2,7 @@
 
 #include "EngineController.h"
 #include "PreviewImageProvider.h"
+#include "ImageInfo.h"
 
 #include "dfee/session.hpp"
 #include "dfee/bridge_types.hpp"
@@ -115,6 +116,8 @@ void RenderWorker::openAndRender(const dfee::NativePreviewRenderRequest& request
                                       Qt::QueuedConnection, Q_ARG(bool, false));
             return;
         }
+        QMetaObject::invokeMethod(controller_, "onImageInfo", Qt::QueuedConnection,
+                                  Q_ARG(QVariantMap, imageInfoFromMetadata(decoded.metadata)));
     } catch (const std::exception& e) {
         const QString msg = QString("Open failed: %1").arg(e.what());
         QMetaObject::invokeMethod(controller_, "onRenderFailed",
