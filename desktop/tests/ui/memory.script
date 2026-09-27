@@ -1,0 +1,17 @@
+# Edit A, open B at once (queued behind A's render): B must open clean.
+# Return to A: its look and history must come back.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+stock:portra_400
+control:film_contrast=150
+open:${SAMPLE_B}
+waitfor:engine.currentFile=${SAMPLE_B},15000
+waitfor:engine.stock=none,15000
+expect:engine.filmControls.film_contrast=100
+waitfor:engine.history.length=1,15000
+open:${SAMPLE_A}
+waitfor:engine.stock=portra_400,15000
+expect:engine.filmControls.film_contrast=150
+expect:engine.history.length=3
+expect:editStore.recordCount=1
+quit

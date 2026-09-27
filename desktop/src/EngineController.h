@@ -14,6 +14,7 @@
 #include <memory>
 
 #include "dfee/bridge_types.hpp"
+#include "EditStore.h"
 
 namespace dfee { class EngineSession; }
 class PreviewImageProvider;
@@ -42,6 +43,9 @@ class EngineController : public QObject {
     // worker counts), as a local path with forward slashes. Drives filmstrip
     // highlighting and previous/next navigation.
     Q_PROPERTY(QString currentFile READ currentFile NOTIFY currentFileChanged)
+    // Camera / capture details of the open photo (camera, lens, iso, shutter, aperture,
+    // focal, width, height, inputKind, developerProfile); empty until decoded.
+    Q_PROPERTY(QVariantMap imageInfo READ imageInfo NOTIFY imageInfoChanged)
     Q_PROPERTY(bool hasBefore READ hasBefore NOTIFY beforeChanged)
     Q_PROPERTY(int beforeRevision READ beforeRevision NOTIFY beforeChanged)
     Q_PROPERTY(int previewRevision READ previewRevision NOTIFY previewChanged)
@@ -67,6 +71,7 @@ public:
     // QQmlApplicationEngine that takes ownership is destroyed after main()
     // returns, which is after the controller's dtor).
     explicit EngineController(PreviewImageProvider* provider,
+                              EditStore* store,
                               QObject* parent = nullptr);
     ~EngineController() override;
 
@@ -118,6 +123,10 @@ public:
 
     bool hasImage() const { return hasImage_; }
     QString currentFile() const { return dirtyIsOpen_ ? pendingFile_ : currentFile_; }
+    QVariantMap imageInfo() const { return imageInfo_; }
+    // Persist the current photo's edits now (photo switch, export, quit).
+    Q_INVOKABLE void flushEdits();
+    Q_INVOKABLE void onImageInfo(const QVariantMap& info);
     bool hasBefore() const { return hasBefore_; }
     int beforeRevision() const { return beforeRevision_; }
     int previewRevision() const { return previewRevision_; }
@@ -183,6 +192,7 @@ signals:
     void lightroomRoundTripChanged();
     void hasImageChanged();
     void currentFileChanged();
+    void imageInfoChanged();
     void previewChanged();
     void beforeChanged();
     void statusChanged();
@@ -215,6 +225,15 @@ private:
     void seedHistory(const QString& label);
     // Restore the snapshot at an internal index (0 = baseline) without recording.
     void restoreHistory(int internalIndex);
+    // Per-photo memory. loadEditsFor replaces the whole edit state (stock, controls,
+    // history) with the photo's stored record, or with defaults if it has none.
+    void loadEditsFor(const QString& file);
+    void saveEditsFor(const QString& file);
+    void markEditsDirty();
+    bool isEdited() const;
+    static QVariantMap sparseControls(const QVariantMap& controls);
+    static QVariantMap mergeOnDefaults(const QVariantMap& sparse);
+    static bool sameControls(const QVariantMap& a, const QVariantMap& b);
     static QString friendlyLabel(const QString& key);   // control key -> display name
     static bool isGeometryKey(const QString& key);
 
@@ -264,6 +283,10 @@ private:
     int exportDpi_ = 300;
     bool exporting_ = false;
     bool lightroomRoundTrip_ = false;
+    EditStore* store_ = nullptr;          // not owned; null disables memory
+    QTimer saveTimer_;                    // debounced store write after an edit
+    QString grainRequestFile_;            // photo an Auto-grain request was made for
+    QVariantMap imageInfo_;
 
     // Coalescing state (read/written only on GUI thread).
     // dirty_ = a deferred op is pending while the worker is busy.

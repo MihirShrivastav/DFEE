@@ -1,0 +1,8 @@
+# Lightroom round-trip: edits must never reach the catalog.
+waitfor:engine.hasImage=true,30000
+stock:portra_400
+control:film_contrast=150
+wait:1200
+expect:engine.lightroomRoundTrip=true
+expect:editStore.recordCount=0
+quit

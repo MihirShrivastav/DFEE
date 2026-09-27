@@ -56,16 +56,30 @@ QString sanitizeComponent(const QString& s) {
 }  // namespace
 
 EngineController::EngineController(PreviewImageProvider* provider,
+                                   EditStore* store,
                                    QObject* parent)
     : QObject(parent)
     , session_(std::make_unique<dfee::EngineSession>(resolveProjectRoot()))
     , provider_(provider)
+    , store_(store)
 {
     filmControls_ = defaultFilmControls();
     previewDebounceTimer_.setSingleShot(true);
     previewDebounceTimer_.setInterval(90);
     connect(&previewDebounceTimer_, &QTimer::timeout,
             this, &EngineController::dispatchScheduledRender);
+    saveTimer_.setSingleShot(true);
+    saveTimer_.setInterval(400);
+    connect(&saveTimer_, &QTimer::timeout, this, [this]() { saveEditsFor(currentFile_); });
+    // On quit: save the open photo, then stop the worker while everything it touches
+    // still exists. main() destroys the QML engine -- which owns the preview image
+    // provider the worker writes into -- before this controller, so waiting for an
+    // in-flight open/render only in the destructor let it write into freed memory.
+    connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, [this]() {
+        flushEdits();
+        workerThread_.quit();
+        workerThread_.wait();
+    });
     // list_profiles() is called on the GUI thread BEFORE the worker thread starts,
     // so there is no concurrent access.
     loadStocks();
@@ -557,6 +571,7 @@ void EngineController::setAutoGrain(bool enabled)
         emit statusChanged();
         return;
     }
+    grainRequestFile_ = currentFile_;
     grainResolving_ = true;
     emit grainResolvingChanged();
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
@@ -577,9 +592,10 @@ void EngineController::openFile(const QUrl& url)
     previewDebounceTimer_.stop();
     status_ = "Loading " + QFileInfo(file).fileName();
     emit statusChanged();
-    // A new image starts a fresh history; seed the baseline once its first
-    // preview is ready (state is settled by then, including exposure placement).
-    pendingSeed_ = true;
+    // The new image's history is set up by loadEditsFor when the open actually
+    // dispatches (restored, or seeded on its first preview). Setting the seed flag
+    // here instead would let a still-running render of the OUTGOING photo re-seed
+    // that photo's history just before it is saved.
 
     if (workerBusy_) {
         // Latch the latest file for the pending open; mark it as an open (not
@@ -595,8 +611,12 @@ void EngineController::openFile(const QUrl& url)
         return;
     }
 
+    flushEdits();                         // persist the outgoing photo first
     currentFile_ = file;
     emit currentFileChanged();
+    imageInfo_.clear();
+    emit imageInfoChanged();
+    loadEditsFor(file);                   // before the first preview request
     workerBusy_  = true;
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
     QMetaObject::invokeMethod(worker_, [worker = worker_, request]() {
@@ -795,6 +815,7 @@ void EngineController::exportImage()
 {
     if (currentFile_.isEmpty()) return;
     if (exporting_) return;
+    flushEdits();
     // The export snapshot is built below, so a queued preview would only spend
     // memory and CPU on an image the user is about to save at full resolution.
     previewDebounceTimer_.stop();
@@ -834,6 +855,7 @@ void EngineController::onAutoGrainResolved(bool ok, double strength, double size
 {
     grainResolving_ = false;
     emit grainResolvingChanged();
+    if (grainRequestFile_ != currentFile_) return;  // the photo changed while resolving
     if (!ok) {
         status_ = "Could not resolve Auto grain: " + error;
         emit statusChanged();
@@ -868,6 +890,8 @@ void EngineController::onOpenFailed(const QString& msg)
     if (!dirtyIsOpen_) {
         currentFile_.clear();
         emit currentFileChanged();
+        imageInfo_.clear();
+        emit imageInfoChanged();
         pendingSeed_ = false;
         if (hasImage_) {
             hasImage_ = false;
@@ -894,9 +918,13 @@ void EngineController::onWorkerBusyChanged(bool busy)
             // select_file + decode_raw for the new file before rendering — a
             // plain render() would use the OLD decoded buffer.
             dirtyIsOpen_  = false;
+            flushEdits();                 // the outgoing photo's state is still loaded
             currentFile_  = pendingFile_;
             pendingFile_.clear();
             emit currentFileChanged();
+            imageInfo_.clear();
+            emit imageInfoChanged();
+            loadEditsFor(currentFile_);
 
             workerBusy_ = true;
             const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
@@ -969,6 +997,7 @@ void EngineController::recordHistory(const QString& label, const QString& coales
         historyIndex_ = int(history_.size()) - 1;
     }
     emit historyChanged();
+    markEditsDirty();
 }
 
 void EngineController::seedHistory(const QString& label)
@@ -995,6 +1024,122 @@ void EngineController::restoreHistory(int internalIndex)
     emit paramsChanged();
     emit historyChanged();
     scheduleRender();
+    markEditsDirty();
+}
+
+// ── Per-photo memory ────────────────────────────────────────────────────
+
+QVariantMap EngineController::sparseControls(const QVariantMap& controls)
+{
+    const QVariantMap defaults = defaultFilmControls();
+    QVariantMap sparse;
+    for (auto it = controls.cbegin(); it != controls.cend(); ++it) {
+        if (!defaults.contains(it.key())) continue;
+        if (!sameControls({{it.key(), it.value()}}, {{it.key(), defaults.value(it.key())}})) {
+            sparse.insert(it.key(), it.value());
+        }
+    }
+    return sparse;
+}
+
+QVariantMap EngineController::mergeOnDefaults(const QVariantMap& sparse)
+{
+    QVariantMap controls = defaultFilmControls();
+    for (auto it = sparse.cbegin(); it != sparse.cend(); ++it) {
+        if (controls.contains(it.key())) controls.insert(it.key(), it.value());  // drop unknown keys
+    }
+    return controls;
+}
+
+// Value-wise equality that treats 150 and 150.0 as equal (JSON returns doubles).
+bool EngineController::sameControls(const QVariantMap& a, const QVariantMap& b)
+{
+    if (a.size() != b.size()) return false;
+    for (auto it = a.cbegin(); it != a.cend(); ++it) {
+        const auto other = b.constFind(it.key());
+        if (other == b.cend()) return false;
+        const QVariant& x = it.value();
+        const QVariant& y = other.value();
+        bool okX = false, okY = false;
+        const double dx = x.toDouble(&okX);
+        const double dy = y.toDouble(&okY);
+        const bool numeric = okX && okY && x.typeId() != QMetaType::QString && y.typeId() != QMetaType::QString;
+        if (numeric ? !qFuzzyCompare(dx + 1.0, dy + 1.0) : x.toString() != y.toString()) return false;
+    }
+    return true;
+}
+
+bool EngineController::isEdited() const
+{
+    return stockId_ != QStringLiteral("none") || !sameControls(filmControls_, defaultFilmControls());
+}
+
+void EngineController::loadEditsFor(const QString& file)
+{
+    saveTimer_.stop();
+    filmControls_ = defaultFilmControls();
+    QString stock = QStringLiteral("none");
+    history_.clear();
+    historyIndex_ = -1;
+    pendingSeed_ = true;                  // seed "Import" on first preview unless restored
+    if (store_ && !lightroomRoundTrip_) {
+        if (const auto rec = store_->load(file)) {
+            filmControls_ = mergeOnDefaults(rec->controls);
+            stock = stockIds_.contains(rec->stock) ? rec->stock : QStringLiteral("none");
+            for (const StoredHistoryStep& s : rec->history) {
+                history_.append(HistoryEntry{s.label, s.coalesceKey,
+                    stockIds_.contains(s.stock) ? s.stock : QStringLiteral("none"),
+                    mergeOnDefaults(s.controls)});
+            }
+            if (!history_.isEmpty()) {
+                historyIndex_ = std::clamp(rec->historyIndex, 0, int(history_.size()) - 1);
+                pendingSeed_ = false;
+            }
+        }
+    }
+    filmExposure_ = filmControls_.value("film_exposure_ev").toDouble();
+    shadowLift_ = filmControls_.value("shadow_lift").toDouble();
+    if (stockId_ != stock) {
+        stockId_ = stock;
+        emit stockChanged();
+    }
+    if (grainResolving_) {
+        grainResolving_ = false;
+        emit grainResolvingChanged();
+    }
+    emit filmControlsChanged();
+    emit paramsChanged();
+    emit historyChanged();
+}
+
+void EngineController::saveEditsFor(const QString& file)
+{
+    if (!store_ || lightroomRoundTrip_ || file.isEmpty() || history_.isEmpty()) return;
+    EditRecord rec;
+    rec.stock = stockId_;
+    rec.controls = sparseControls(filmControls_);
+    for (const HistoryEntry& e : history_) {
+        rec.history.append({e.label, e.coalesceKey, e.stock, sparseControls(e.controls)});
+    }
+    rec.historyIndex = historyIndex_;
+    store_->save(file, rec, isEdited());
+}
+
+void EngineController::markEditsDirty()
+{
+    if (store_ && !lightroomRoundTrip_) saveTimer_.start();
+}
+
+void EngineController::flushEdits()
+{
+    saveTimer_.stop();
+    saveEditsFor(currentFile_);
+}
+
+void EngineController::onImageInfo(const QVariantMap& info)
+{
+    imageInfo_ = info;
+    emit imageInfoChanged();
 }
 
 QVariantList EngineController::history() const
