@@ -11,7 +11,7 @@ set(DFEE_BUILD_TESTS OFF)
 set(DFEE_BUILD_PYTHON OFF)
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../cpp_engine ${CMAKE_BINARY_DIR}/cpp_engine)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Quick Gui Concurrent QuickControls2)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Quick Gui Concurrent QuickControls2 Sql Test)
 qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(DFEE
@@ -28,6 +28,8 @@ qt_add_executable(DFEE
     src/LibraryController.h
     src/UiScript.cpp
     src/UiScript.h
+    src/EditStore.cpp
+    src/EditStore.h
 )
 
 qt_add_qml_module(DFEE
@@ -53,5 +55,30 @@ qt_add_resources(DFEE "app_assets"
 )
 
 target_compile_definitions(DFEE PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent Qt6::QuickControls2 dfee_core)
+target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent Qt6::QuickControls2 Qt6::Sql dfee_core)
 set_target_properties(DFEE PROPERTIES WIN32_EXECUTABLE ON)
+
+# The build tree carries a partial Qt deployment (Qt6Core.dll + platforms/ beside the
+# exe), so Qt resolves plugins next to the executable. Give the build-tree app and the
+# unit tests the SQL module and the SQLite driver the edit catalog needs.
+add_custom_command(TARGET DFEE POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:DFEE>/sqldrivers
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::Sql> $<TARGET_FILE_DIR:DFEE>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::QSQLiteDriverPlugin>
+            $<TARGET_FILE_DIR:DFEE>/sqldrivers)
+
+# Desktop unit tests (Qt Test). Pure desktop logic only -- no engine session.
+enable_testing()
+qt_add_executable(desktop_tests
+    tests/edit_store_test.cpp
+    src/EditStore.cpp
+    src/EditStore.h
+)
+target_include_directories(desktop_tests PRIVATE src)
+target_link_libraries(desktop_tests PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+target_compile_definitions(desktop_tests PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+add_test(NAME desktop_tests COMMAND desktop_tests)
+add_custom_command(TARGET desktop_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:desktop_tests>/sqldrivers
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::QSQLiteDriverPlugin>
+            $<TARGET_FILE_DIR:desktop_tests>/sqldrivers)
