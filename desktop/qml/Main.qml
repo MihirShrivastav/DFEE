@@ -76,8 +76,11 @@ Window {
     // True while any text field has focus — bare-letter/character shortcuts are
     // suppressed then so typing never triggers them.
     // Hand keyboard focus back to the window after a popup closes, so window
-    // shortcuts never depend on where a dialog left focus.
-    function returnFocus() { root.contentItem.forceActiveFocus(); }
+    // shortcuts never depend on where a dialog left focus. Focus goes to a plain
+    // Item: forcing focus onto contentItem (a focus scope) just hands it back to the
+    // scope's last focused child -- e.g. the hidden stock search field.
+    function returnFocus() { keySink.forceActiveFocus(); }
+    Item { id: keySink }
     // Bare arrow keys navigate photos only when nothing else wants them: a focused
     // slider nudges its value with them, a text field moves its caret.
     readonly property bool arrowKeysFree: !textEntry
@@ -95,7 +98,8 @@ Window {
         if (next < 0 || next >= files.length || next === at) return;
         engine.openFile(Qt.resolvedUrl("file:///" + files[next].path));
     }
-    readonly property bool textEntry: stockSearch.activeFocus || printSearch.activeFocus || presetNameField.activeFocus
+    readonly property bool textEntry: (stockSearch.activeFocus && stockSearch.visible)
+        || (printSearch.activeFocus && printSearch.visible) || presetNameField.activeFocus
         || newGroupField.activeFocus || editNameField.activeFocus
         || editNewGroupField.activeFocus || groupRenameField.activeFocus
 
@@ -170,12 +174,12 @@ Window {
     }
     Shortcut {
         sequence: "\\"                       // toggle before/after
-        enabled: engine.hasBefore && !stockSearch.activeFocus
+        enabled: engine.hasBefore && !root.textEntry
         onActivated: { previewCanvas.compareMode = 0; root.peekBefore = !root.peekBefore; }
     }
     Shortcut {
         sequence: "B"                        // cycle Edited → Split → Side by side
-        enabled: engine.hasBefore && !stockSearch.activeFocus
+        enabled: engine.hasBefore && !root.textEntry
         onActivated: { root.peekBefore = false; previewCanvas.compareMode = (previewCanvas.compareMode + 1) % 3; }
     }
     Shortcut {
@@ -185,17 +189,17 @@ Window {
     }
     Shortcut {
         sequences: ["Ctrl+F", "F"]           // focus the film-stock search
-        enabled: !stockSearch.activeFocus
+        enabled: !root.textEntry
         onActivated: stockBox.popup.open()
     }
     Shortcut {
         sequence: "Ctrl+Z"                   // undo
-        enabled: engine.canUndo && !stockSearch.activeFocus && !presetNameField.activeFocus
+        enabled: engine.canUndo && !root.textEntry
         onActivated: engine.undo()
     }
     Shortcut {
         sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]   // redo
-        enabled: engine.canRedo && !stockSearch.activeFocus && !presetNameField.activeFocus
+        enabled: engine.canRedo && !root.textEntry
         onActivated: engine.redo()
     }
     Shortcut {
@@ -2968,6 +2972,8 @@ Window {
 
                             ComboBox {
                                 id: stockBox
+                                objectName: "stockBox"
+                                focusPolicy: Qt.NoFocus
                                 width: parent.width
                                 height: 42
                                 model: engine.stockModel
@@ -3122,7 +3128,7 @@ Window {
                                 }
                                 popup: Popup {
                                     id: stockPopup
-                                    onClosed: root.returnFocus()
+                                    onClosed: { stockSearch.focus = false; Qt.callLater(root.returnFocus); }
                                     y: stockBox.height + 4
                                     width: stockBox.width
                                     implicitHeight: Math.min(searchCol.implicitHeight + 8, 400)
@@ -3176,6 +3182,7 @@ Window {
                                         }
                                         ListView {
                                             id: stockList
+                                            objectName: "stockList"
                                             width: parent.width
                                             height: Math.min(contentHeight, 340)
                                             clip: true
@@ -3307,6 +3314,7 @@ Window {
 
                             ComboBox {
                                 id: printBox
+                                focusPolicy: Qt.NoFocus
                                 width: parent.width
                                 height: 36
                                 model: engine.printStockNames
@@ -3408,7 +3416,7 @@ Window {
                                 indicator: ChevronToggle { x: printBox.width - 26; y: (printBox.height - 14) / 2; open: printBox.popup.visible }
                                 popup: Popup {
                                     id: printPopup
-                                    onClosed: root.returnFocus()
+                                    onClosed: { printSearch.focus = false; Qt.callLater(root.returnFocus); }
                                     y: printBox.height + 4
                                     width: printBox.width
                                     implicitHeight: Math.min(printList.contentHeight + 8, 300)

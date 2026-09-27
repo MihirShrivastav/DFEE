@@ -10,11 +10,57 @@
 #include <QCommandLineParser>
 #include <QFile>
 #include <QTextStream>
+#include <QKeyEvent>
+#include <QMouseEvent>
+#include <QQuickItem>
 #include "EngineController.h"
 #include "DesktopDiagnostics.h"
 #include "PreviewImageProvider.h"
 #include "ThumbnailImageProvider.h"
 #include "LibraryController.h"
+
+// Dev hook: DFEE_UI_SCRIPT drives the window from inside the process by posting
+// synthetic events to it (never system-wide input), for reproducing focus and
+// shortcut bugs headlessly -- run with QT_QPA_PLATFORM=offscreen plus
+// DFEE_SCREENSHOT/_OPEN/_DELAY. Steps, ';'-separated:
+//   wait:<ms>   click:<objectName>[@fx,fy]   key:<Qt::Key int>[+ctrl]
+static void runUiScript(QQuickWindow* win, QStringList steps) {
+    if (steps.isEmpty()) return;
+    const QString step = steps.takeFirst();
+    int delay = 150;
+    const auto post = [win](QEvent* e) { QCoreApplication::postEvent(win, e); };
+    if (step.startsWith("wait:")) {
+        delay = step.mid(5).toInt();
+    } else if (step.startsWith("click:")) {
+        const QString spec = step.mid(6);
+        const QString name = spec.section('@', 0, 0);
+        const QString frac = spec.section('@', 1, 1);
+        auto* item = win->contentItem()->findChild<QQuickItem*>(name);
+        if (!item) {
+            for (QObject* o : win->findChildren<QObject*>()) {
+                if (o->objectName() == name) { item = qobject_cast<QQuickItem*>(o); if (item) break; }
+            }
+        }
+        if (!item) { qInfo() << "UISCRIPT missing" << name; }
+        else {
+            const double fx = frac.isEmpty() ? 0.5 : frac.section(',', 0, 0).toDouble();
+            const double fy = frac.isEmpty() ? 0.5 : frac.section(',', 1, 1).toDouble();
+            const QPointF p = item->mapToScene(QPointF(item->width() * fx, item->height() * fy));
+            post(new QMouseEvent(QEvent::MouseButtonPress, p, p, win->mapToGlobal(p), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
+            post(new QMouseEvent(QEvent::MouseButtonRelease, p, p, win->mapToGlobal(p), Qt::LeftButton, Qt::NoButton, Qt::NoModifier));
+            qInfo() << "UISCRIPT click" << name << p;
+        }
+    } else if (step.startsWith("key:")) {
+        const QString spec = step.mid(4);
+        const int key = spec.section('+', 0, 0).toInt();
+        const Qt::KeyboardModifiers mods = spec.contains("+ctrl") ? Qt::ControlModifier : Qt::NoModifier;
+        const QString text = (key >= 0x20 && key < 0x7f && mods == Qt::NoModifier) ? QString(QChar(key)) : QString();
+        post(new QKeyEvent(QEvent::KeyPress, key, mods, text));
+        post(new QKeyEvent(QEvent::KeyRelease, key, mods, text));
+        qInfo() << "UISCRIPT key" << key << mods;
+    }
+    QTimer::singleShot(delay, win, [win, steps]() { runUiScript(win, steps); });
+}
 
 int main(int argc, char* argv[]) {
     // Native Windows controls cannot be safely restyled from QML.  Basic keeps
@@ -171,6 +217,11 @@ int main(int argc, char* argv[]) {
                 controller.exportImage();
             });
         }
+    }
+
+    if (qEnvironmentVariableIsSet("DFEE_UI_SCRIPT")) {
+        auto* win = qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst());
+        runUiScript(win, qEnvironmentVariable("DFEE_UI_SCRIPT").split(';', Qt::SkipEmptyParts));
     }
 
     // Headless UI screenshot: set DFEE_SCREENSHOT=<png-path> to grab the window
