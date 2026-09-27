@@ -61,8 +61,14 @@ QVariant readTarget(const ScriptState& s, const QString& target, bool* found)
     QVariant value = root->property(parts.at(1).toUtf8().constData());
     for (int i = 2; i < parts.size(); ++i) {
         const QString& key = parts.at(i);
+        bool isIndex = false;
+        const int index = key.toInt(&isIndex);
         if (key == QLatin1String("length") && value.canConvert<QVariantList>()) {
             value = value.toList().size();
+        } else if (isIndex && value.canConvert<QVariantList>()) {
+            const QVariantList list = value.toList();
+            if (index < 0 || index >= list.size()) return {};
+            value = list.at(index);
         } else if (value.canConvert<QVariantMap>()) {
             const QVariantMap map = value.toMap();
             if (!map.contains(key)) return {};

@@ -1,6 +1,7 @@
 #include "EngineController.h"
 #include "RenderWorker.h"
 #include "PreviewImageProvider.h"
+#include "StockCatalog.h"
 
 #include "dfee/session.hpp"
 #include "dfee/bridge_types.hpp"
@@ -215,6 +216,12 @@ void EngineController::loadStocks()
         if (t == "monochrome") return QStringLiteral("Monochrome");
         return QStringLiteral("Other");
     };
+    const QHash<QString, StockInfo> catalog = loadStockCatalog(QStringLiteral(":/stocks/catalog.json"));
+    const auto fallbackGroup = [](const std::string& t) -> QString {
+        if (t == "color_reversal") return QStringLiteral("slide");
+        if (t == "monochrome") return QStringLiteral("bw");
+        return QStringLiteral("negative");
+    };
     for (const char* cat : {"color_negative", "color_reversal", "monochrome"}) {
         for (const auto& s : profiles.stocks) {
             if (s.stock_type != cat) continue;
@@ -223,6 +230,12 @@ void EngineController::loadStocks()
             m["name"] = QString::fromStdString(s.stock_name);
             m["type"] = QString::fromStdString(s.stock_type);
             m["typeLabel"] = typeLabel(s.stock_type);
+            const StockInfo info = catalog.value(m["id"].toString());
+            const QString group = info.group.isEmpty() ? fallbackGroup(s.stock_type) : info.group;
+            m["group"] = group;
+            m["groupLabel"] = stockGroupLabel(group);
+            m["iso"] = info.iso;
+            m["blurb"] = info.blurb;
             stockModel_.append(m);
         }
     }

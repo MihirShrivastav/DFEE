@@ -32,6 +32,8 @@ qt_add_executable(DFEE
     src/EditStore.h
     src/ImageInfo.cpp
     src/ImageInfo.h
+    src/StockCatalog.cpp
+    src/StockCatalog.h
 )
 
 qt_add_qml_module(DFEE
@@ -54,6 +56,7 @@ qt_add_resources(DFEE "app_assets"
         resources/fonts/Geist-SemiBold.ttf
         ${DFEE_BOXART}
         ${DFEE_ICONS}
+        resources/stocks/catalog.json
 )
 
 target_compile_definitions(DFEE PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
@@ -93,3 +96,13 @@ qt_add_executable(image_info_tests
 target_include_directories(image_info_tests PRIVATE src ${CMAKE_CURRENT_SOURCE_DIR}/../cpp_engine/include)
 target_link_libraries(image_info_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME image_info_tests COMMAND image_info_tests)
+
+qt_add_executable(stock_catalog_tests
+    tests/stock_catalog_test.cpp
+    src/StockCatalog.cpp
+    src/StockCatalog.h
+)
+target_include_directories(stock_catalog_tests PRIVATE src)
+target_link_libraries(stock_catalog_tests PRIVATE Qt6::Core Qt6::Test)
+target_compile_definitions(stock_catalog_tests PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+add_test(NAME stock_catalog_tests COMMAND stock_catalog_tests)

@@ -1,4 +1,6 @@
 open:${SAMPLE_A}
 waitfor:engine.imageInfo.camera=Sony ILCE-7CR,30000
 expect:engine.imageInfo.inputKind=developed_raw
+expect:engine.stockModel.length=34
+expect:engine.stockModel.1.groupLabel=Color negative
 quit
