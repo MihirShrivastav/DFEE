@@ -18,6 +18,8 @@ Rectangle {
     signal openRequested()
     signal addFolderRequested()
     signal cycleStockRequested(int dir)
+    signal exportRequested()
+    signal resetAllRequested()
     height: Theme.toolbarHeight
     color: Theme.toolbar
 
@@ -114,10 +116,11 @@ Rectangle {
         }
         FlIconButton { objectName: "cropButton"; iconName: "crop"; tip: "Crop (C)"; active: bar.cropActive; enabled: engine.hasImage && !engine.lightroomRoundTrip; onClicked: bar.cropRequested() }
         FlButton {
+            objectName: "exportButton"
             kind: "accent"
             text: engine.lightroomRoundTrip ? "Save & Return" : "Export…"
             enabled: engine.hasImage && !engine.exporting
-            onClicked: engine.exportImage()
+            onClicked: bar.exportRequested()
         }
         FlIconButton { iconName: "question"; tip: "Keyboard shortcuts (?)"; onClicked: bar.helpRequested() }
     }
@@ -132,12 +135,14 @@ Rectangle {
         Action { text: "Open…"; property string keys: "Ctrl+O"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.openRequested() }
         Action { text: "Add Folder…"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.addFolderRequested() }
         MenuSeparator {}
-        Action { text: engine.lightroomRoundTrip ? "Save & Return" : "Export"; property string keys: "Ctrl+S"; enabled: engine.hasImage && !engine.exporting; onTriggered: engine.exportImage() }
+        Action { text: engine.lightroomRoundTrip ? "Save & Return" : "Export"; property string keys: "Ctrl+S"; enabled: engine.hasImage && !engine.exporting; onTriggered: bar.exportRequested() }
     }
     FlMenu {
         id: editMenu
         Action { text: "Undo"; property string keys: "Ctrl+Z"; enabled: engine.canUndo; onTriggered: engine.undo() }
         Action { text: "Redo"; property string keys: "Ctrl+Y"; enabled: engine.canRedo; onTriggered: engine.redo() }
+        MenuSeparator {}
+        Action { text: "Reset All Edits…"; property string keys: "Ctrl+Shift+R"; enabled: engine.hasImage; onTriggered: bar.resetAllRequested() }
     }
     FlMenu {
         id: photoMenu

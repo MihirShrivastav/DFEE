@@ -1,0 +1,46 @@
+# ? and F1 open the shortcuts sheet, Esc closes it; Export… and Ctrl+S open the
+# export sheet (no export is run); Ctrl+Shift+R asks before resetting everything.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+key:63
+wait:300
+expect:shortcutsSheet.visible=true
+key:16777216
+wait:300
+expect:shortcutsSheet.visible=false
+key:16777264
+wait:300
+expect:shortcutsSheet.visible=true
+key:16777264
+wait:300
+expect:shortcutsSheet.visible=false
+click:exportButton@0.5,0.5
+wait:300
+expect:exportSheet.visible=true
+click:exportFormatSegmented@0.1,0.5
+wait:200
+expect:engine.exportFormat=jpeg
+expect:jpegQualityRow.visible=true
+click:exportFormatSegmented@0.9,0.5
+wait:200
+expect:engine.exportFormat=tiff
+expect:exportDpiField.visible=true
+expect:engine.exporting=false
+key:16777216
+wait:300
+expect:exportSheet.visible=false
+key:83+ctrl
+wait:300
+expect:exportSheet.visible=true
+key:16777216
+wait:300
+control:film_contrast=150
+key:82+ctrl+shift
+wait:300
+expect:resetSheet.visible=true
+click:resetConfirm@0.5,0.5
+wait:300
+expect:resetSheet.visible=false
+expect:engine.filmControls.film_contrast=100
+expect:engine.history.0.label=Reset all
+quit

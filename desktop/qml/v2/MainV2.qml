@@ -43,6 +43,11 @@ ApplicationWindow {
         if (canvas.cropMode) canvas.applyCropMode();
         engine.openFile(url);
     }
+    // Lightroom Edit-In saves straight back; standalone shows the export sheet.
+    function exportRequested() {
+        if (engine.lightroomRoundTrip) engine.exportImage();
+        else exportSheet.open();
+    }
     function navigatePhoto(step) {
         const files = library.files;
         if (files.length === 0) return;
@@ -56,7 +61,7 @@ ApplicationWindow {
         root.openPhoto(Qt.resolvedUrl("file:///" + files[next].path));
     }
 
-    Shortcut { sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]; enabled: engine.hasImage && !engine.exporting; onActivated: engine.exportImage() }
+    Shortcut { sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]; enabled: engine.hasImage && !engine.exporting; onActivated: root.exportRequested() }
     Shortcut { sequence: "Ctrl+O"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: openDialog.open() }
     Shortcut { sequence: "\\"; enabled: engine.hasBefore && !root.textEntry; onActivated: { root.compareMode = 0; root.peekBefore = !root.peekBefore; } }
     Shortcut { sequence: "B"; enabled: engine.hasBefore && !root.textEntry; onActivated: { root.peekBefore = false; root.compareMode = (root.compareMode + 1) % 3; } }
@@ -71,6 +76,8 @@ ApplicationWindow {
     Shortcut { sequence: "Right"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(1) }
     Shortcut { sequence: "Ctrl+Left"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(-1) }
     Shortcut { sequence: "Ctrl+Right"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(1) }
+    Shortcut { sequences: ["?", "F1"]; enabled: !root.textEntry; onActivated: shortcutsSheet.open() }
+    Shortcut { sequence: "Ctrl+Shift+R"; enabled: engine.hasImage && !root.textEntry; onActivated: resetSheet.open() }
     Shortcut { sequences: ["F", "Ctrl+F"]; enabled: !root.textEntry; onActivated: tray.showFilmsSearch() }
     Shortcut { sequence: "Ctrl+0"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.resetZoom() }
     Shortcut { sequence: "Ctrl+1"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2) }
@@ -91,6 +98,31 @@ ApplicationWindow {
         onRejected: root.returnFocus()
     }
     FlLookDialog { id: lookDialog }
+    FlExportSheet { id: exportSheet }
+    FlShortcutsSheet { id: shortcutsSheet }
+    FlResetSheet { id: resetSheet }
+
+    // While exporting: a quiet veil with progress (ported from v1).
+    Rectangle {
+        objectName: "exportOverlay"
+        anchors.fill: parent
+        z: 10
+        visible: engine.exporting
+        color: "#d9101114"
+        MouseArea { anchors.fill: parent }        // swallow clicks while saving
+        Column {
+            anchors.centerIn: parent
+            spacing: 12
+            BusyIndicator { anchors.horizontalCenter: parent.horizontalCenter; running: engine.exporting; width: 36; height: 36 }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: engine.lightroomRoundTrip ? "Saving to Lightroom…" : "Exporting…"
+                color: Theme.text
+                font.pixelSize: Theme.fontTitle
+                font.weight: Font.DemiBold
+            }
+        }
+    }
 
     FlToolbar {
         id: toolbar
@@ -103,6 +135,9 @@ ApplicationWindow {
         onOpenRequested: openDialog.open()
         onAddFolderRequested: folderDialog.open()
         onCycleStockRequested: (dir) => root.cycleStock(dir)
+        onExportRequested: root.exportRequested()
+        onResetAllRequested: resetSheet.open()
+        onHelpRequested: shortcutsSheet.open()
         zoom: canvas.zoom
         cropActive: canvas.cropMode
         onFitRequested: canvas.resetZoom()

@@ -141,7 +141,10 @@ void postClick(ScriptState& s, const QString& spec, bool doubleClick = false)
 void postKey(ScriptState& s, const QString& spec)
 {
     const int key = spec.section('+', 0, 0).toInt();
-    const Qt::KeyboardModifiers mods = spec.contains("+ctrl") ? Qt::ControlModifier : Qt::NoModifier;
+    Qt::KeyboardModifiers mods = Qt::NoModifier;
+    if (spec.contains("+ctrl")) mods |= Qt::ControlModifier;
+    if (spec.contains("+shift")) mods |= Qt::ShiftModifier;
+    if (spec.contains("+alt")) mods |= Qt::AltModifier;
     const QString text = (key >= 0x20 && key < 0x7f && mods == Qt::NoModifier) ? QString(QChar(key)) : QString();
     QCoreApplication::postEvent(s.window, new QKeyEvent(QEvent::KeyPress, key, mods, text));
     QCoreApplication::postEvent(s.window, new QKeyEvent(QEvent::KeyRelease, key, mods, text));
