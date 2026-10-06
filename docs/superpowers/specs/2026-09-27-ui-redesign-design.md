@@ -127,7 +127,7 @@ Ctrl+Shift+S sync.
 
 0. Foundations: golden hashes + request dump, profile cache, proxy API, metadata to QML,
    EditStore (fixes carry-over), stock catalog, UI-script extensions. (0A desktop items done.)
-1. New shell on the existing API, built directly as component files under `desktop/qml/`
+1. (Done 2026-10-07: plans 1A–1C; v1 Main.qml retired.) New shell on the existing API, built directly as component files under `desktop/qml/`
    (theme singleton, controls, shell, canvas, inspector, tray, dialogs) to the approved v2
    design: top bar, sidebar, canvas + minimal crop mode, minimal export sheet, inspector chain,
    tray v1 with static Films tiles, menu bar. The planned pixel-identical split of the old

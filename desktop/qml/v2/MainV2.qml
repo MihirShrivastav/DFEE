@@ -80,7 +80,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+R"; enabled: engine.hasImage && !root.textEntry; onActivated: resetSheet.open() }
     Shortcut { sequences: ["F", "Ctrl+F"]; enabled: !root.textEntry; onActivated: tray.showFilmsSearch() }
     Shortcut { sequence: "Ctrl+0"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.resetZoom() }
-    Shortcut { sequence: "Ctrl+1"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2) }
+    Shortcut { sequence: "Ctrl+1"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.zoomCentered(2.0) }
 
     FileDialog {
         id: openDialog
@@ -141,7 +141,7 @@ ApplicationWindow {
         zoom: canvas.zoom
         cropActive: canvas.cropMode
         onFitRequested: canvas.resetZoom()
-        onActualSizeRequested: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2)
+        onActualSizeRequested: canvas.zoomCentered(2.0)
         onCropRequested: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode()
     }
 

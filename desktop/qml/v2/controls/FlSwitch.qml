@@ -42,6 +42,15 @@ Item {
         }
     }
     HoverHandler { id: hover }
-    MouseArea { anchors.fill: parent; enabled: sw.enabled; onClicked: sw.toggled() }
+    MouseArea {
+        anchors.fill: parent
+        enabled: sw.enabled
+        onClicked: {
+            // A slider keeps the arrows only until something else is clicked.
+            const w = sw.Window.window;
+            if (w && w.activeFocusItem && w.activeFocusItem.keepsArrowKeys === true && w.returnFocus) w.returnFocus();
+            sw.toggled();
+        }
+    }
     FlTip { visible: hover.hovered && sw.tip.length > 0; text: sw.tip }
 }

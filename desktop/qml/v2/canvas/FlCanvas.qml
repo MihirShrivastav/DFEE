@@ -34,6 +34,8 @@ Rectangle {
 
     function resetZoom() { imageArea.resetZoom(); }
     function setZoom(z, fx, fy) { imageArea.setZoom(z, fx, fy); }
+    // Zoom about the photo's centre (imageArea coordinates, not the canvas's).
+    function zoomCentered(z) { imageArea.setZoom(z, imageArea.width / 2, imageArea.height / 2); }
     function imageAspect() {
         return (afterImg.paintedHeight > 0) ? (afterImg.paintedWidth / afterImg.paintedHeight) : 1.0;
     }

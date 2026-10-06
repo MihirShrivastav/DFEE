@@ -14,6 +14,7 @@ Popup {
     width: 268
     height: Math.min(list.contentHeight + 12, 420)
     padding: 6
+    margins: 8                     // stay inside the window
     focus: true
     closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
     function indexOf(id) {

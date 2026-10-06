@@ -188,14 +188,14 @@ Rectangle {
     }
     FlMenu {
         id: viewMenu
-        Action { text: "Edited"; onTriggered: bar.compareChosen(0) }
-        Action { text: "Split"; property string keys: "B"; onTriggered: bar.compareChosen(1) }
-        Action { text: "Side by Side"; onTriggered: bar.compareChosen(2) }
+        Action { text: "Edited"; enabled: engine.hasImage; onTriggered: bar.compareChosen(0) }
+        Action { text: "Split"; enabled: engine.hasImage && engine.hasBefore; onTriggered: bar.compareChosen(1) }
+        Action { text: "Side by Side"; enabled: engine.hasImage && engine.hasBefore; onTriggered: bar.compareChosen(2) }
         MenuSeparator {}
-        Action { text: "Fit"; property string keys: "Ctrl+0"; onTriggered: bar.fitRequested() }
-        Action { text: "Actual Size"; property string keys: "Ctrl+1"; onTriggered: bar.actualSizeRequested() }
+        Action { objectName: "zoomFitAction"; text: "Fit"; property string keys: "Ctrl+0"; enabled: engine.hasImage; onTriggered: bar.fitRequested() }
+        Action { objectName: "zoomActualAction"; text: "Zoom to 200%"; property string keys: "Ctrl+1"; enabled: engine.hasImage; onTriggered: bar.actualSizeRequested() }
         MenuSeparator {}
-        Action { text: "Show or Hide Sidebar"; onTriggered: bar.sidebarToggled() }
+        Action { text: "Show or Hide Sidebar"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.sidebarToggled() }
     }
     FlMenu {
         id: helpMenu
@@ -204,6 +204,6 @@ Rectangle {
     FlMenu {
         id: zoomMenu
         Action { text: "Fit"; property string keys: "Ctrl+0"; onTriggered: bar.fitRequested() }
-        Action { text: "Actual Size"; property string keys: "Ctrl+1"; onTriggered: bar.actualSizeRequested() }
+        Action { text: "Zoom to 200%"; property string keys: "Ctrl+1"; onTriggered: bar.actualSizeRequested() }
     }
 }

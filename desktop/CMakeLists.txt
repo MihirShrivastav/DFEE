@@ -44,7 +44,6 @@ qt_add_qml_module(DFEE
     URI DFEE
     VERSION 1.0
     QML_FILES
-        qml/Main.qml
         qml/v2/MainV2.qml
         qml/v2/Theme.qml
         qml/v2/controls/FlIcon.qml

@@ -7,7 +7,7 @@
 
 namespace {
 // Supported input extensions for the library (RAW + rendered TIFF). Keep in sync with
-// the open dialog's nameFilters in Main.qml.
+// the open dialog's nameFilters in qml/v2/MainV2.qml.
 const QStringList kNameFilters = {
     "*.tif", "*.tiff", "*.arw", "*.nef", "*.cr2", "*.cr3",
     "*.raf", "*.rw2", "*.dng", "*.orf", "*.pef", "*.srw", "*.3fr"

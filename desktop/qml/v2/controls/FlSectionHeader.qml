@@ -16,7 +16,15 @@ Item {
     height: Theme.sectionRow
     HoverHandler { id: hover }
     // Controlled: the owner flips `open` in response to toggled().
-    MouseArea { anchors.fill: parent; onClicked: h.toggled() }
+    MouseArea {
+        anchors.fill: parent
+        onClicked: {
+            // A slider keeps the arrows only until something else is clicked.
+            const w = h.Window.window;
+            if (w && w.activeFocusItem && w.activeFocusItem.keepsArrowKeys === true && w.returnFocus) w.returnFocus();
+            h.toggled();
+        }
+    }
     Row {
         anchors.left: parent.left
         anchors.leftMargin: 16

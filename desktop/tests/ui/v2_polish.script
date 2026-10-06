@@ -1,0 +1,19 @@
+# Clicking a switch after a slider gives the arrows back; zoom menu items wait for a
+# photo; Ctrl+1 zooms about the photo's centre; pickers keep inside the window.
+expect:zoomActualAction.enabled=false
+expect:stockPicker.margins=8
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:zoomActualAction.enabled=true
+click:slider_film_contrast@0.5,0.5
+wait:150
+expect:v2Root.arrowKeysFree=false
+click:adaptiveSwitch@0.95,0.5
+wait:150
+expect:v2Root.arrowKeysFree=true
+key:49+ctrl
+wait:300
+expect:photoCanvas.zoom=2
+expect:imageArea.panX=0
+expect:imageArea.panY=0
+quit

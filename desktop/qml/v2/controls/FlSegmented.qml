@@ -38,7 +38,12 @@ Rectangle {
                 HoverHandler { id: hover }
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: seg.activated(index)   // owner sets currentIndex; keeps its binding
+                    onClicked: {
+                        // A slider keeps the arrows only until something else is clicked.
+                        const w = seg.Window.window;
+                        if (w && w.activeFocusItem && w.activeFocusItem.keepsArrowKeys === true && w.returnFocus) w.returnFocus();
+                        seg.activated(index)   // owner sets currentIndex; keeps its binding
+                    }
                 }
             }
         }

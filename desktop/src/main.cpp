@@ -92,13 +92,10 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
-    // FILMLAB_UI=v2 loads the redesigned window (docs/superpowers/specs/
-    // 2026-09-27-ui-redesign-design.md); "gallery" loads the v2 control gallery.
-    const QString ui = qEnvironmentVariable("FILMLAB_UI");
-    const bool v2 = ui == QLatin1String("v2") || ui == QLatin1String("gallery");
-    engine.loadFromModule("DFEE", ui == QLatin1String("v2") ? "MainV2"
-                                 : ui == QLatin1String("gallery") ? "ControlsGallery" : "Main");
-    if (v2 && !engine.rootObjects().isEmpty()) {
+    // FILMLAB_UI=gallery opens the v2 control gallery (development); otherwise the app.
+    const bool gallery = qEnvironmentVariable("FILMLAB_UI") == QLatin1String("gallery");
+    engine.loadFromModule("DFEE", gallery ? "ControlsGallery" : "MainV2");
+    if (!engine.rootObjects().isEmpty()) {
         applyWindowChrome(qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst()));
     }
 

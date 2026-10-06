@@ -117,7 +117,15 @@ Rectangle {
         font.pixelSize: Theme.fontCaption
     }
     HoverHandler { id: hover }
-    MouseArea { anchors.fill: parent; onClicked: scope.switchRequested() }
+    MouseArea {
+        anchors.fill: parent
+        onClicked: {
+            // A slider keeps the arrows only until something else is clicked.
+            const w = scope.Window.window;
+            if (w && w.activeFocusItem && w.activeFocusItem.keepsArrowKeys === true && w.returnFocus) w.returnFocus();
+            scope.switchRequested();
+        }
+    }
     FlTip {
         visible: hover.hovered
         text: scope.mode === "histogram" ? "Click for the vectorscope" : "Click for the histogram"
