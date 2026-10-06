@@ -45,7 +45,7 @@ Item {
             kind: "quiet"
             text: bar.presets[bar.presetIndex].label
             anchors.verticalCenter: parent.verticalCenter
-            onClicked: aspectPicker.open()
+            onClicked: aspectPicker.visible ? aspectPicker.close() : aspectPicker.open()
             FlListPopup {
                 id: aspectPicker
                 objectName: "aspectPicker"

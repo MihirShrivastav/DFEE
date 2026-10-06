@@ -16,7 +16,8 @@ Popup {
     padding: 6
     margins: 8                     // stay inside the window
     focus: true
-    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    // Not on presses on the box that opened it: that box toggles the picker itself.
+    closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutsideParent
     function indexOf(id) {
         for (let i = 0; i < rows.length; ++i) if (rows[i].id === id) return i;
         return -1;

@@ -10,6 +10,8 @@ Slider {
     id: control
     // MainV2.arrowKeysFree: a focused slider keeps Left/Right for nudging.
     readonly property bool keepsArrowKeys: true
+    // The accent ring is for keyboard focus only (Tab), never after a mouse click.
+    readonly property bool showsFocusRing: visualFocus
     property real neutral: 0
     property bool bipolar: false
     property var trackPalette: null          // {start, middle, end} for informational tracks
@@ -91,7 +93,7 @@ Slider {
         height: 14
         radius: 7
         color: Theme.knob
-        border.width: control.activeFocus ? 3 : 0
+        border.width: control.showsFocusRing ? 3 : 0
         border.color: "#730a84ff"                      // accent focus ring at ~45%
         Rectangle { z: -1; anchors.fill: parent; anchors.topMargin: 1; anchors.bottomMargin: -1; radius: 7; color: "#80000000" }
     }

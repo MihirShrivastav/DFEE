@@ -7,6 +7,13 @@ expect:filmCardName.text=No film
 click:filmCard@0.5,0.5
 wait:300
 expect:stockPicker.visible=true
+# Clicking the card again closes the picker.
+click:filmCard@0.5,0.5
+wait:300
+expect:stockPicker.visible=false
+click:filmCard@0.5,0.5
+wait:300
+expect:stockPicker.visible=true
 click:stock_cinestill_400d@0.5,0.5
 wait:300
 expect:engine.stock=cinestill_400d
@@ -22,6 +29,8 @@ expect:filmSection.open=false
 click:slider_film_contrast@0.75,0.5
 wait:200
 expect:engine.filmControls.film_contrast=150
+# A mouse click focuses the slider without drawing the keyboard focus ring.
+expect:slider_film_contrast.showsFocusRing=false
 expect:toneSection.edited=true
 expect:v2Root.arrowKeysFree=false
 key:16777234

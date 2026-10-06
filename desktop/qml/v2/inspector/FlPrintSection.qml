@@ -35,7 +35,7 @@ FlInspectorSection {
             radius: Theme.radiusControl
             color: fieldHover.hovered ? Theme.controlHover : Theme.control
             HoverHandler { id: fieldHover }
-            MouseArea { anchors.fill: parent; onClicked: printPicker.open() }
+            MouseArea { anchors.fill: parent; onClicked: printPicker.visible ? printPicker.close() : printPicker.open() }
             Text {
                 anchors.left: parent.left
                 anchors.leftMargin: 10

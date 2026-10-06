@@ -25,7 +25,7 @@ FlInspectorSection {
         border.width: 1
         border.color: "#0dffffff"
         HoverHandler { id: cardHover }
-        MouseArea { anchors.fill: parent; onClicked: picker.open() }
+        MouseArea { anchors.fill: parent; onClicked: picker.visible ? picker.close() : picker.open() }
         Rectangle {
             id: art
             x: 10
