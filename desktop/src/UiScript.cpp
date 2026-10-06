@@ -191,6 +191,11 @@ void runNext(std::shared_ptr<ScriptState> s)
         QMetaObject::invokeMethod(engine, "setFilmControl",
             Q_ARG(QString, arg.section('=', 0, 0)),
             Q_ARG(QVariant, parseValue(arg.section('=', 1))));
+    } else if (verb == QLatin1String("crop")) {  // crop:x,y,w,h (normalised)
+        const QStringList v = arg.split(',');
+        QMetaObject::invokeMethod(engine, "setCrop",
+            Q_ARG(double, v.value(0).toDouble()), Q_ARG(double, v.value(1).toDouble()),
+            Q_ARG(double, v.value(2).toDouble()), Q_ARG(double, v.value(3).toDouble()));
     } else if (verb == QLatin1String("expect")) {
         bool found = false;
         const QString target = arg.section('=', 0, 0);

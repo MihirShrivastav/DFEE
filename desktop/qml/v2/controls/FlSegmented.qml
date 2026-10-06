@@ -2,7 +2,7 @@ import QtQuick
 import DFEE
 
 // Segmented control: inset track, active segment raised. Only for switching views
-// of the same thing; one per region.
+// of the same thing; one per region. Controlled: clicking only emits activated(index).
 Rectangle {
     id: seg
     property var model: []
@@ -38,7 +38,7 @@ Rectangle {
                 HoverHandler { id: hover }
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: { seg.currentIndex = index; seg.activated(index); }
+                    onClicked: seg.activated(index)   // owner sets currentIndex; keeps its binding
                 }
             }
         }

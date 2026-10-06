@@ -49,10 +49,17 @@ Column {
         from: row.from
         to: row.to
         stepSize: row.stepSize
-        value: row.value
         neutral: row.neutral
         bipolar: row.bipolar
         trackPalette: row.trackPalette
         onValueMoved: (v) => row.moved(v)
+    }
+    // A drag assigns the slider's value directly, which would break a plain
+    // `value: row.value` binding; Binding re-applies on every outside change
+    // (undo, reset, another stock), so the knob always follows the row.
+    Binding {
+        target: s
+        property: "value"
+        value: row.value
     }
 }

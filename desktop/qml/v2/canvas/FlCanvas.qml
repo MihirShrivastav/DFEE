@@ -20,6 +20,12 @@ Rectangle {
     property real cropW: 1
     property real cropH: 1
 
+    // Crop mode belongs to one photo; never carry it (or its rectangle) to the next.
+    Connections {
+        target: engine
+        function onCurrentFileChanged() { canvas.cropMode = false; }
+    }
+
     function resetZoom() { imageArea.resetZoom(); }
     function setZoom(z, fx, fy) { imageArea.setZoom(z, fx, fy); }
     function imageAspect() {

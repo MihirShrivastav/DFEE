@@ -37,6 +37,12 @@ ApplicationWindow {
 
     readonly property bool arrowKeysFree: !textEntry
         && !(activeFocusItem && activeFocusItem.objectName === "inspectorSlider")
+    // Every v2 photo switch goes through here: leaving crop mode applies the crop,
+    // so the outgoing photo is saved with it (not with crop mode's full frame).
+    function openPhoto(url) {
+        if (canvas.cropMode) canvas.applyCropMode();
+        engine.openFile(url);
+    }
     function navigatePhoto(step) {
         const files = library.files;
         if (files.length === 0) return;
@@ -47,7 +53,7 @@ ApplicationWindow {
         }
         const next = at < 0 ? (step > 0 ? 0 : files.length - 1) : at + step;
         if (next < 0 || next >= files.length || next === at) return;
-        engine.openFile(Qt.resolvedUrl("file:///" + files[next].path));
+        root.openPhoto(Qt.resolvedUrl("file:///" + files[next].path));
     }
 
     Shortcut { sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]; enabled: engine.hasImage && !engine.exporting; onActivated: engine.exportImage() }
@@ -72,7 +78,7 @@ ApplicationWindow {
         nameFilters: ["Supported images (*.tif *.tiff *.arw *.nef *.cr2 *.cr3 *.raf *.rw2 *.dng *.orf *.pef *.srw *.3fr)",
                       "RAW photos (*.arw *.nef *.cr2 *.cr3 *.raf *.rw2 *.dng *.orf *.pef *.srw *.3fr)",
                       "TIFF images (*.tif *.tiff)"]
-        onAccepted: engine.openFile(selectedFile)
+        onAccepted: root.openPhoto(selectedFile)
         onRejected: root.returnFocus()
     }
     FolderDialog {
@@ -94,6 +100,7 @@ ApplicationWindow {
         onAddFolderRequested: folderDialog.open()
         onCycleStockRequested: (dir) => root.cycleStock(dir)
         zoom: canvas.zoom
+        cropActive: canvas.cropMode
         onFitRequested: canvas.resetZoom()
         onActualSizeRequested: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2)
         onCropRequested: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode()

@@ -1,0 +1,19 @@
+# Leaving a photo while cropping must keep that photo's crop, and crop mode must
+# not follow onto the next photo (review I3). Arrow navigation needs the library's
+# current folder to hold SAMPLE_A (E:/new_raws on the dev machine).
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+crop:0,0,0.5,1
+waitfor:engine.filmControls.crop_w=0.5,5000
+key:67
+wait:200
+expect:photoCanvas.cropMode=true
+expect:cropButton.active=true
+expect:engine.filmControls.crop_w=1
+key:16777236
+waitfor:photoCanvas.cropMode=false,15000
+expect:cropButton.active=false
+open:${SAMPLE_A}
+waitfor:engine.currentFile=${SAMPLE_A},15000
+waitfor:engine.filmControls.crop_w=0.5,15000
+quit

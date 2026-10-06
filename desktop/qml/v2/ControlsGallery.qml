@@ -22,7 +22,8 @@ ApplicationWindow {
             spacing: 10
             FlButton { kind: "accent"; text: "Export…" }
             FlButton { kind: "quiet"; text: "Copy look" }
-            FlButton { kind: "text"; text: "Reset" }
+            // Changes the row from outside, as undo or a stock change would (review I2).
+            FlButton { objectName: "galleryExternalReset"; kind: "text"; text: "Reset"; onClicked: contrastRow.value = 50 }
             FlIconButton { iconName: "crop"; tip: "Crop (C)" }
         }
         Row {
@@ -32,7 +33,7 @@ ApplicationWindow {
                 delegate: FlIcon { name: modelData; color: Theme.textSecondary }
             }
         }
-        FlSegmented { objectName: "gallerySegmented"; model: ["Roll", "Films", "Looks"]; currentIndex: 1 }
+        FlSegmented { objectName: "gallerySegmented"; model: ["Roll", "Films", "Looks"]; currentIndex: 1; onActivated: (i) => currentIndex = i }
         Column {
             width: 300
             spacing: 0
@@ -43,6 +44,7 @@ ApplicationWindow {
                 width: 268
                 spacing: 14
                 FlSliderRow {
+                    id: contrastRow
                     width: parent.width
                     label: "Film contrast"
                     from: 0; to: 100; neutral: 50

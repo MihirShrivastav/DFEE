@@ -8,6 +8,7 @@ Rectangle {
     id: bar
     property int compareMode: 0
     property real zoom: 1.0
+    property bool cropActive: false
     signal compareChosen(int mode)
     signal cropRequested()
     signal helpRequested()
@@ -111,7 +112,7 @@ Rectangle {
             enabled: engine.hasImage
             onClicked: zoomMenu.popup(zoomButton, 0, zoomButton.height + 4)
         }
-        FlIconButton { iconName: "crop"; tip: "Crop (C)"; enabled: engine.hasImage && !engine.lightroomRoundTrip; onClicked: bar.cropRequested() }
+        FlIconButton { objectName: "cropButton"; iconName: "crop"; tip: "Crop (C)"; active: bar.cropActive; enabled: engine.hasImage && !engine.lightroomRoundTrip; onClicked: bar.cropRequested() }
         FlButton {
             kind: "accent"
             text: engine.lightroomRoundTrip ? "Save & Return" : "Export…"

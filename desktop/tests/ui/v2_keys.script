@@ -19,5 +19,12 @@ waitfor:engine.stock=none,5000
 key:66
 wait:150
 expect:v2Root.compareMode=1
+# A click on the control, then B: the control must keep tracking the mode (I1).
+click:compareSegmented@0.1,0.5
+wait:150
+key:66
+wait:150
+expect:v2Root.compareMode=1
+expect:compareSegmented.currentIndex=1
 expect:v2Root.arrowKeysFree=true
 quit

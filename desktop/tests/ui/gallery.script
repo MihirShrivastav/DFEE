@@ -15,5 +15,12 @@ expect:gallerySegmented.currentIndex=2
 click:galleryHeader@0.2,0.5
 wait:150
 expect:galleryHeader.open=false
+# After a drag, an outside change to the row must still move the knob (I2).
+click:gallerySlider@0.75,0.5
+wait:150
+expect:gallerySlider.value=75
+click:galleryExternalReset@0.5,0.5
+wait:150
+expect:gallerySlider.value=50
 shot:${TEMP}/gallery.png
 quit
