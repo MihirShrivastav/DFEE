@@ -36,7 +36,7 @@ ApplicationWindow {
     }
 
     readonly property bool arrowKeysFree: !textEntry
-        && !(activeFocusItem && activeFocusItem.objectName === "inspectorSlider")
+        && !(activeFocusItem && activeFocusItem.keepsArrowKeys === true)
     // Every v2 photo switch goes through here: leaving crop mode applies the crop,
     // so the outgoing photo is saved with it (not with crop mode's full frame).
     function openPhoto(url) {

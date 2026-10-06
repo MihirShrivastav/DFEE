@@ -13,6 +13,8 @@ ApplicationWindow {
     font.family: Theme.fontFamily
     function returnFocus() { keySink.forceActiveFocus(); }
     Item { id: keySink }
+    property bool galleryHeaderOpen: true
+    property bool gallerySwitchOn: false
 
     Column {
         anchors.fill: parent
@@ -24,6 +26,7 @@ ApplicationWindow {
             FlButton { kind: "quiet"; text: "Copy look" }
             // Changes the row from outside, as undo or a stock change would (review I2).
             FlButton { objectName: "galleryExternalReset"; kind: "text"; text: "Reset"; onClicked: contrastRow.value = 50 }
+            FlButton { objectName: "galleryOpenHeader"; kind: "quiet"; text: "Open"; onClicked: root.galleryHeaderOpen = true }
             FlIconButton { iconName: "crop"; tip: "Crop (C)" }
         }
         Row {
@@ -37,7 +40,7 @@ ApplicationWindow {
         Column {
             width: 300
             spacing: 0
-            FlSectionHeader { objectName: "galleryHeader"; title: "Tone"; edited: true; summary: "Off" }
+            FlSectionHeader { objectName: "galleryHeader"; title: "Tone"; edited: true; summary: "Off"; open: root.galleryHeaderOpen; onToggled: root.galleryHeaderOpen = !root.galleryHeaderOpen }
             Item { width: 1; height: 10 }
             Column {
                 x: 16
@@ -54,6 +57,8 @@ ApplicationWindow {
                 }
                 FlSliderRow { width: parent.width; label: "Shadow lift"; from: -100; to: 100; neutral: 0; bipolar: true; value: 24 }
                 FlSliderRow { width: parent.width; label: "Temperature"; from: -100; to: 100; neutral: 0; bipolar: true; value: -10; trackPalette: Theme.colorTrackPalette("temp") }
+                FlSwitch { objectName: "gallerySwitch"; label: "Adaptive scene tone"; checked: root.gallerySwitchOn; onToggled: root.gallerySwitchOn = !root.gallerySwitchOn }
+                FlFilmSlider { controlKey: "film_contrast"; label: "Film contrast (engine)"; from: 0; to: 200; neutral: 100; tip: "Bound to engine.filmControls.film_contrast." }
             }
         }
     }

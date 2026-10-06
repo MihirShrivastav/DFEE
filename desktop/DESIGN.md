@@ -88,6 +88,19 @@ Never below 11px. Sentence case for labels; US spelling ("Color").
 - **Slider row:** label left, value right; 4px `control` track, `sliderFill`
   amount (bipolar sliders fill from a centre tick), 14px `knob`. Double-click
   resets; keyboard focus shows an accent ring around the knob.
+- **Switch:** label left (12, `textSecondary`), 26×16 track right — `control`
+  off, `accent` on, 12px `knob`. For on/off film behaviours (Adaptive scene tone,
+  Match grain to film speed).
+- **Inspector section:** section header (above) over a body padded 16 / 14,
+  rows 14 apart, hairline under the whole section. Subgroups inside a section get
+  an 11/600 caption ("Grain", "Halation"), never a nested header.
+- **Picker popover:** popover surface, rows 28 (40 with box art), group captions
+  11/600, current row bold with an accent check; hover `rowSelected`.
+- **Scope:** `inset` well, radius 6, pinned above the inspector sections;
+  histogram 64 tall (R/G/B fills at ~0.3 alpha), click switches to the
+  vectorscope (152 tall).
+- **Color wheel:** hue ring fading to `inset` at the centre, 13px handle with a
+  `knob` ring; drag from the centre to tint, double-click clears.
 - **Film card:** 8px-radius raised row (`#2A2A2D`, inner hairline): box art 40,
   film name, "type · ISO", chevron; opens the Films tray. Blurb below in caption.
 - **Tiles (Films/Looks/Roll):** radius 6; hover = 1px light ring and a live

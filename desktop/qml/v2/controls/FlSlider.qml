@@ -8,7 +8,8 @@ import DFEE
 // accent focus ring.
 Slider {
     id: control
-    objectName: "inspectorSlider"   // MainV2.arrowKeysFree: a focused slider keeps the arrows
+    // MainV2.arrowKeysFree: a focused slider keeps Left/Right for nudging.
+    readonly property bool keepsArrowKeys: true
     property real neutral: 0
     property bool bipolar: false
     property var trackPalette: null          // {start, middle, end} for informational tracks
@@ -99,6 +100,7 @@ Slider {
         anchors.fill: parent
         anchors.topMargin: -6
         anchors.bottomMargin: -6
+        preventStealing: true
         cursorShape: Qt.PointingHandCursor
         property real startX: 0
         property real startValue: 0
@@ -115,4 +117,10 @@ Slider {
     }
     Keys.onLeftPressed: (e) => { control.commit(control.value - control.step * control.modifierScale(e.modifiers)); e.accepted = true; }
     Keys.onRightPressed: (e) => { control.commit(control.value + control.step * control.modifierScale(e.modifiers)); e.accepted = true; }
+    // Esc gives the arrow keys back to photo navigation.
+    Keys.onEscapePressed: (e) => {
+        const w = control.Window.window;
+        if (w && w.returnFocus) w.returnFocus();
+        e.accepted = true;
+    }
 }

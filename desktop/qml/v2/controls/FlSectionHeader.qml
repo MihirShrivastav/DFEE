@@ -2,19 +2,21 @@ import QtQuick
 import DFEE
 
 // 40px section header: title 13/600, edited dot, one-word summary when collapsed,
-// Reset on hover when edited, chevron (down = open, right = closed), hairline below.
+// Reset on hover when edited, chevron (down = open, right = closed). Controlled.
 Item {
     id: h
     property string title: ""
     property bool open: true
     property bool edited: false
     property string summary: ""
+    property bool showHairline: true
     signal toggled()
     signal resetRequested()
     width: parent ? parent.width : 300
     height: Theme.sectionRow
     HoverHandler { id: hover }
-    MouseArea { anchors.fill: parent; onClicked: { h.open = !h.open; h.toggled(); } }
+    // Controlled: the owner flips `open` in response to toggled().
+    MouseArea { anchors.fill: parent; onClicked: h.toggled() }
     Row {
         anchors.left: parent.left
         anchors.leftMargin: 16
@@ -53,5 +55,5 @@ Item {
             Behavior on rotation { NumberAnimation { duration: Theme.motionFast; easing.type: Easing.OutCubic } }
         }
     }
-    FlHairline { anchors.bottom: parent.bottom }
+    FlHairline { anchors.bottom: parent.bottom; visible: h.showHairline }
 }

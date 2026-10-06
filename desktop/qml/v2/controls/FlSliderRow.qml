@@ -16,6 +16,7 @@ Column {
     property bool available: true
     property string autoText: ""             // e.g. "Auto": shown instead of the number
     property var trackPalette: null
+    property string tip: ""
     property alias slider: s
     signal moved(real value)
     width: parent ? parent.width : 240
@@ -27,12 +28,16 @@ Column {
         height: 15
         Text {
             anchors.left: parent.left
+            anchors.right: valueText.left
+            anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             text: row.label
             color: Theme.textSecondary
             font.pixelSize: Theme.fontLabel
+            elide: Text.ElideRight
         }
         Text {
+            id: valueText
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             text: row.autoText.length ? row.autoText
@@ -41,6 +46,8 @@ Column {
             font.pixelSize: Theme.fontLabel
             font.features: { "tnum": 1 }
         }
+        HoverHandler { id: labelHover }
+        FlTip { visible: labelHover.hovered && row.tip.length > 0 && !s.pressed; text: row.tip }
     }
     FlSlider {
         id: s
