@@ -1,7 +1,8 @@
 # Film Lab desktop UI redesign — design
 
-Date: 2026-09-27. Status: approved (design + phasing). Supersedes the inspector layout of
-`desktop/DESIGN.md` v1 (a v2 revision ships with Phase 1).
+Date: 2026-09-27. Status: approved (design + phasing). Visual language approved
+2026-10-06: `desktop/DESIGN.md` v2 (dark, macOS-grade) and the mockup at
+https://claude.ai/artifact/595M73HfHvmwkhUFEiJQpB.
 
 ## Why
 
@@ -124,10 +125,14 @@ Ctrl+Shift+S sync.
 
 ## Phasing
 
-0. Foundations: QML split (pixel-identical), golden hashes + request dump, profile cache, proxy API,
-   metadata to QML, EditStore (fixes carry-over), stock catalog, UI-script extensions.
-1. New shell on the existing API (top bar, left panel, canvas + minimal crop mode, minimal export
-   sheet, inspector chain, tray v1 with static Films tiles, DESIGN.md v2).
+0. Foundations: golden hashes + request dump, profile cache, proxy API, metadata to QML,
+   EditStore (fixes carry-over), stock catalog, UI-script extensions. (0A desktop items done.)
+1. New shell on the existing API, built directly as component files under `desktop/qml/`
+   (theme singleton, controls, shell, canvas, inspector, tray, dialogs) to the approved v2
+   design: top bar, sidebar, canvas + minimal crop mode, minimal export sheet, inspector chain,
+   tray v1 with static Films tiles, menu bar. The planned pixel-identical split of the old
+   `Main.qml` is dropped: every component is restyled anyway, so logic is ported piece by piece
+   into the new files instead.
 2. Live Films browser (scheduler, proxy tiles, hover peek).
 3. Looks in the tray (presets rendered, Save current, Last look).
 4. Finish crop and export.

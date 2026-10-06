@@ -1,83 +1,109 @@
-# DFEE Desktop — "Graphite" Design Reference
+# Film Lab desktop — design language (v2)
 
-The single source of truth for the native app's look. **Every UI element must
-follow this** — no default Qt Quick Controls (Basic) styling is allowed to show
-through. When adding or changing a control, restyle it here-first and reuse the
-shared components in `qml/Main.qml`.
+The single source of truth for the native app's look. **Every UI element follows
+this**; no default Qt Quick Controls (Basic) styling may show through. Approved
+mockup (main window, crop mode, component sheet):
+https://claude.ai/artifact/595M73HfHvmwkhUFEiJQpB — layout and behaviour are in
+`docs/superpowers/specs/2026-09-27-ui-redesign-design.md`.
 
-Core principle: **monochrome charcoal + tactile/skeuomorphic depth.** Colour only
-ever comes from the photo, the boxart, the histogram, and the colour-grading
-wheels. Nothing in the chrome is pure white; "active" is a *raised dark bevel
-chip*, never a white fill (the sole exception is the checkbox tick glyph).
+Character: **dark, quiet, structured — macOS-grade.** The photo is the only thing
+allowed to be loud. Supersedes v1 "Graphite" (bevels, gradient cards, 38px
+buttons, pill tab rows), which is retired.
 
-## Palette tokens (defined on `root` in Main.qml)
+## Principles
+
+1. **The photo leads.** Neutral graphite chrome; the only color is the photo, the
+   film tiles and one accent.
+2. **One place for each thing.** Films and looks in the tray, adjustments in the
+   inspector, files in the sidebar. Never tab rows inside tab rows.
+3. **Lines, not boxes.** Panels meet at 1px hairlines. Rounded cards only for
+   things you pick up: tiles, the film card, popovers.
+4. **Quiet until changed.** Defaults read dim, edits read brighter, edited
+   sections carry a dot.
+5. **Every action, two ways.** Each command is in the menu bar with its shortcut;
+   tooltips name the key.
+
+## Color tokens (`theme/Theme.qml`)
 
 | token | value | use |
-|-------|-------|-----|
-| `bg` / `canvas` | `#0f0f10` | window + rail background, preview canvas |
-| `panel` | `#1a1a1c` | (legacy) flat panel |
-| `panelRaised` | `#202023` | popups / raised surfaces |
-| `inset` | `#141416` | recessed fields: slider grooves, spinbox/combobox field, tab track |
-| `border` | `#26262b` | stronger 1px divider |
-| `hair` | `#14ffffff` | ~0.08 white hairline (AARRGGBB) — default 1px border |
-| `textPrimary` | `#c7c7cc` | primary text (softened, never pure white) |
-| `textSecondary` | `#8b8b90` | labels |
-| `textMuted` | `#5a5a60` | disabled / captions |
-| `textValue` | `#74747a` | dim right-hand slider read-outs |
-| `accent` | `#e9e9ec` | reserved: checkbox tick chip only |
-| `danger` | `#e0655b` | error text |
+|---|---|---|
+| `window` | `#1C1C1E` | window, tray |
+| `panel` | `#202022` | sidebar, inspector |
+| `toolbar` | `#242426` | unified title + toolbar |
+| `canvas` | `#131314` | photo surround |
+| `inset` | `#161618` | recessed: segmented track, search field, scopes |
+| `control` | `#3A3A3C` | quiet button fill, slider track |
+| `selected` | `#4A4A4E` | active segment |
+| `rowSelected` | `rgba(255,255,255,0.08)` | selected sidebar / history row |
+| `hairline` | `rgba(255,255,255,0.07)` | every panel/section separator |
+| `accent` | `#0A84FF` | selection ring, focus ring, the one commit button per view, edited dot |
+| `text` | `#D4D4D8` | titles, edited values, primary text (never pure white) |
+| `textSecondary` | `#949499` | control labels |
+| `textCaption` | `#8E8E93` | captions, group headers, default values |
+| `textTertiary` | `#6E6E73` | counts, hints, ISO lines |
+| `sliderFill` | `#636368` | slider amount (tempered, never bright) |
+| `knob` | `#CFCFD4` | slider knob, with `0 1px 3px rgba(0,0,0,.5)` shadow |
+| `danger` | `#E0655B` | errors only |
 
-## Surfaces
+White text appears only on the accent fill (commit button, highlighted menu item).
 
-- **Card (module / group):** radius `14`; gradient `#1d1d20 → #191a1c` (top-lit);
-  `border 1px hair`; a 1px top-highlight rectangle `#12ffffff` inset by 1.
-  Content inset `x:16 y:16`, `width parent-32`, inner spacing `12–14`.
-- **Recessed field / track:** `color inset`, `border 1px hair`, radius `8–9`.
-- **Popup:** `color panelRaised`, `border 1px border`, radius `10`.
-- **Tooltip:** `color #232327`, `border 1px hair`, radius `7`, wraps at 260px,
-  parented+anchored to its control (see `GraphiteTip`).
+## Type (Geist, bundled)
 
-## The raised bevel chip (the one tactile primitive)
+| role | size · weight · color |
+|---|---|
+| Titles, section headers, film name | 13 · 600 · `text` |
+| Body, sidebar rows | 13 · 400 · `text` / `#B8B8BD` |
+| Control labels | 12 · 400 · `textSecondary` |
+| Values | 12 · tabular figures · `text` if edited, `textCaption` if default |
+| Captions, camera line | 11 · 400 · `textCaption` |
+| Group headers (Library, History) | 11 · 600 · `textCaption`, sentence case |
+| Empty-state title | 28 · 600 |
 
-Used by buttons, tab/segmented active state, checkbox-on, and spinbox ± buttons:
-- gradient `#34343a → #242429` (pressed: `#26262b → #1d1d20`; disabled: flat `panel`)
-- `border 1px hair`
-- 1px top-highlight `#16ffffff` inset by 1
-- radius 7–8, text `textPrimary`
+Never below 11px. Sentence case for labels; US spelling ("Color").
 
-## Component rules
+## Space, shape, motion
 
-- **PrimaryButton:** raised bevel chip, full width, h38.
-- **SecondaryButton:** flat `inset` fill + hair border, h38.
-- **Segmented / Tabs:** recessed `inset` track (h34, radius9, 3px margin), active
-  option = raised bevel chip; inactive = transparent, text `textSecondary`.
-- **Checkbox (`GraphiteCheck`):** 18px, radius5. Off = recessed `inset`. On =
-  raised bevel chip + light tick drawn in `#d7d7db`. Never a flat white box.
-- **Slider (`FilmSlider`/`InspectorSlider`):** recessed groove `inset` (h4) with
-  fill `#3c3c41`; raised metallic knob (`#cdcdd2 → #9a9aa1`, dark border). Label
-  row is **fixed height 18** with vertically-centred children so the Reset button
-  appearing never shifts the slider.
-- **ComboBox:** `inset` field + hair border, `ChevronToggle` indicator, popup per
-  Popup spec, highlighted delegate `#16ffffff`.
-- **SpinBox (`GraphiteSpin`):** recessed `inset` field, value centred in
-  `textPrimary`; − / + are raised bevel chips at the field edges. No white.
-- **ScrollBar / indicators:** slim, `textMuted`-ish translucent handle on
-  transparent track — never the Basic light bar.
-- **BusyIndicator:** monochrome (`textSecondary`), no default blue.
+- 4px grid. Control height 26; segment height 24; section header row 40;
+  slider row = 12px label line + 7px gap + 4px track.
+- Radii: controls 6, segmented track 7 (segments 5), cards/tiles 6–8, popovers
+  and window 10.
+- Panel widths: sidebar 232, inspector 300; tray 176; toolbar 52.
+- Motion 120–160ms ease-out, opacity and position only. No bounce.
+- Icons: Phosphor, 16px, ~1.6 stroke, tinted `textSecondary`; every icon-only
+  button has a tooltip naming its shortcut.
 
-## Typography
+## Components
 
-- Family: **Geist** (bundled). Antialiased.
-- Window/app title `20 / Medium`. Card title `13 / Medium`. Section sub-label
-  (`InspectorLabel`) `12 / Medium` `textSecondary`. Value read-out `12`.
-  Tooltip / caption `11`.
-- **Module names + "Film Lab" are Title Case.** Control labels are sentence case.
-- **US spelling everywhere: "Color", not "Colour".**
+- **Toolbar (unified):** sidebar toggle + "Film Lab"; file name (13/600) over a
+  camera line (11, `textCaption`, tabular); centred compare segmented control;
+  zoom; Crop, Export (accent), help; window controls.
+- **Segmented control:** `inset` track with 1px inner hairline, active segment
+  `selected` fill + `0 1px 2px rgba(0,0,0,.4)`. Only for switching views of the
+  same thing; never stacked; one per region.
+- **Buttons:** accent filled (one per view, the commit), quiet (`control` fill),
+  text-only (`textSecondary`), icon (transparent, hover `rowSelected`).
+- **Section header:** 40px row, title 13/600, chevron (down = open, right =
+  closed), edited dot (accent, 5px), Reset on hover, optional one-word state
+  ("Off", "Auto grain") when collapsed; hairline below. Never boxed.
+- **Slider row:** label left, value right; 4px `control` track, `sliderFill`
+  amount (bipolar sliders fill from a centre tick), 14px `knob`. Double-click
+  resets; keyboard focus shows an accent ring around the knob.
+- **Film card:** 8px-radius raised row (`#2A2A2D`, inner hairline): box art 40,
+  film name, "type · ISO", chevron; opens the Films tray. Blurb below in caption.
+- **Tiles (Films/Looks/Roll):** radius 6; hover = 1px light ring and a live
+  preview on the canvas; selected = 2px gap + 2px accent ring. Box-art badge
+  18px bottom-left on film tiles; edited badge on roll tiles.
+- **Sidebar rows:** 28px, radius 6, selected `rowSelected`; folder icon tinted
+  accent when selected; counts in `textTertiary`.
+- **Floating mode toolbar (crop):** 44px, radius 12, `rgba(36,36,38,.92)` with
+  shadow and inner hairline, centred at the canvas bottom; inspector dims to ~0.4.
+- **Menu bar:** File · Edit · Photo · View · Help; every command with its
+  shortcut; highlighted item = accent fill, white text.
+- **Tooltips, popovers:** `#2A2A2D`, radius 8 (tooltip) / 10 (popover), inner
+  hairline, wrap at 260px.
 
-## Motion / behaviour
+## Behaviour rules (kept from v1)
 
-- Collapse chevron points **down when collapsed** (expand), up when expanded.
-- Conditional controls are **disabled (dimmed to ~0.35–0.5), not hidden**, when
-  not applicable (Lightroom-style) — e.g. "Preserve rendered tone" on RAW.
-- Mode-aware: in Lightroom edit-in mode, the Library pane, tab bar and Export tab
-  are hidden; only Develop + "Save & Return to Lightroom" show.
+- Controls that do not apply are dimmed (~0.4), not hidden.
+- Lightroom Edit-In mode: no sidebar library, tray shows Films | Looks only,
+  the commit button reads "Save & Return".
