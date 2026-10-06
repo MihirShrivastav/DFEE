@@ -18,4 +18,17 @@ expect:engine.history.0.label=Reset Tone
 call:resetControlGroup=fine_tune
 expect:engine.filmControls.hsl_red_s=0
 expect:engine.history.0.label=Reset Fine-tune
+# History speaks the inspector's language (effect-named labels).
+control:emulsion_color_density=14
+expect:engine.history.0.label=Color boost 14
+control:film_color_density=123
+expect:engine.history.0.label=Color density 123
+control:print_black_point=10
+expect:engine.history.0.label=Paper black 10
+control:cg_crossbalance=20
+expect:engine.history.0.label=Split toning 20
+control:flip_h=true
+expect:engine.history.0.label=Flip horizontal on
+control:hsl_red_s=5
+expect:engine.history.0.label=Color mixer
 quit

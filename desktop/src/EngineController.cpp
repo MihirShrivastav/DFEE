@@ -397,7 +397,7 @@ bool EngineController::updateNumericFilmControl(const QString& key, double value
     emit filmControlsChanged();
     // Grouped controls (color grading / HSL / crop) read cleaner without a raw
     // per-sub-band number; scalar controls carry their value.
-    const bool grouped = key.startsWith(QStringLiteral("cg_"))
+    const bool grouped = (key.startsWith(QStringLiteral("cg_")) && key != QStringLiteral("cg_crossbalance"))
                       || key.startsWith(QStringLiteral("hsl_"))
                       || key.startsWith(QStringLiteral("crop_"));
     recordHistory(grouped ? friendlyLabel(key)
@@ -1053,31 +1053,34 @@ bool EngineController::isGeometryKey(const QString& key)
 
 QString EngineController::friendlyLabel(const QString& key)
 {
+    // History labels use the inspector's names (desktop/qml/v2/inspector), so a step
+    // reads the same as the control that made it.
     static const QHash<QString, QString> names = {
         {"exposure_placement", "Exposure placement"}, {"film_exposure_ev", "Film exposure"},
-        {"adaptive", "Adaptive"}, {"rendered_input", "Preserve rendered tone"},
+        {"adaptive", "Adaptive scene tone"}, {"rendered_input", "Preserve rendered tone"},
         {"highlight_rolloff", "Highlight rolloff"}, {"film_contrast", "Film contrast"},
         {"crossover", "Crossover"}, {"profile_strength", "Film strength"},
-        {"shadow_lift", "Shadow lift"}, {"film_color_density", "Film color density"},
-        {"emulsion_color_density", "Emulsion density"}, {"highlight_color_hold", "Highlight color"},
-        {"shadow_color_retention", "Shadow color"}, {"grain_strength", "Grain strength"},
+        {"shadow_lift", "Shadow lift"}, {"film_color_density", "Color density"},
+        {"emulsion_color_density", "Color boost"}, {"highlight_color_hold", "Highlight saturation"},
+        {"shadow_color_retention", "Shadow saturation"}, {"grain_strength", "Grain strength"},
         {"grain_size", "Grain size"}, {"grain_roughness", "Grain roughness"},
-        {"halation_strength", "Halation"}, {"halation_threshold", "Halation threshold"},
+        {"halation_strength", "Halation strength"}, {"halation_threshold", "Halation threshold"},
         {"bloom", "Bloom"}, {"exposure", "Exposure"}, {"contrast", "Contrast"},
         {"highlights", "Highlights"}, {"shadows", "Shadows"}, {"whites", "Whites"},
         {"blacks", "Blacks"}, {"midtones", "Midtones"}, {"temp", "Temperature"},
         {"tint", "Tint"}, {"saturation", "Saturation"}, {"vibrance", "Vibrance"},
         {"texture", "Texture"}, {"clarity", "Clarity"}, {"dehaze", "Dehaze"},
-        {"sharpness", "Sharpness"}, {"sharpness_mask", "Sharpen mask"},
-        {"print_stock", "Print finish"}, {"print_strength", "Print strength"},
-        {"print_c", "Print cyan"}, {"print_m", "Print magenta"}, {"print_y", "Print yellow"},
-        {"print_contrast", "Print contrast"}, {"print_black_point", "Print black point"},
-        {"straighten_deg", "Straighten"},
+        {"sharpness", "Sharpening"}, {"sharpness_mask", "Sharpening mask"},
+        {"print_stock", "Print stock"}, {"print_strength", "Print strength"},
+        {"print_c", "Color head: cyan"}, {"print_m", "Color head: magenta"}, {"print_y", "Color head: yellow"},
+        {"print_contrast", "Print contrast"}, {"print_black_point", "Paper black"},
+        {"straighten_deg", "Straighten"}, {"cg_crossbalance", "Split toning"},
+        {"flip_h", "Flip horizontal"}, {"flip_v", "Flip vertical"}, {"grain_auto", "Auto grain"},
     };
     const auto it = names.constFind(key);
     if (it != names.cend()) return it.value();
     if (key.startsWith(QStringLiteral("cg_"))) return QStringLiteral("Color grading");
-    if (key.startsWith(QStringLiteral("hsl_"))) return QStringLiteral("HSL");
+    if (key.startsWith(QStringLiteral("hsl_"))) return QStringLiteral("Color mixer");
     if (key.startsWith(QStringLiteral("crop_"))) return QStringLiteral("Crop");
     return key;
 }
