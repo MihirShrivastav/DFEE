@@ -43,7 +43,42 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.sidebarWidth - 10
         spacing: 2
-        FlIconButton { iconName: "sidebar-simple"; tip: "Show or hide sidebar"; onClicked: bar.sidebarToggled() }
+        FlIconButton {
+            visible: !engine.lightroomRoundTrip
+            iconName: "sidebar-simple"
+            tip: "Show or hide sidebar"
+            onClicked: bar.sidebarToggled()
+        }
+        FlIconButton {
+            id: historyButton
+            objectName: "historyButton"
+            visible: engine.lightroomRoundTrip
+            iconName: "clock-counter-clockwise"
+            tip: "History"
+            active: historyPopover.visible
+            onClicked: historyPopover.open()
+            Popup {
+                id: historyPopover
+                objectName: "historyPopover"
+                y: historyButton.height + 8
+                width: 260
+                height: Math.min(popoverList.contentHeight + 16, 360)
+                padding: 8
+                focus: true
+                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                onClosed: Qt.callLater(function() {
+                    const w = bar.Window.window;
+                    if (w && w.returnFocus) w.returnFocus();
+                })
+                background: Rectangle {
+                    color: Theme.popover
+                    radius: Theme.radiusPopover
+                    border.width: 1
+                    border.color: Theme.hairline
+                }
+                contentItem: FlHistoryList { id: popoverList; objectName: "historyPopoverList" }
+            }
+        }
         Repeater {
             model: [
                 { title: "File", menu: fileMenu, name: "menuFile" },

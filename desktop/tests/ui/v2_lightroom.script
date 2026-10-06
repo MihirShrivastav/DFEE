@@ -1,0 +1,17 @@
+# Lightroom Edit-In: no library sidebar and no Roll; History opens from the toolbar;
+# the commit button reads Save & Return.
+waitfor:engine.hasImage=true,30000
+expect:engine.lightroomRoundTrip=true
+expect:sidebar.visible=false
+expect:historyButton.visible=true
+expect:tray.tabNames.length=2
+expect:tray.activeTab=films
+expect:exportButton.text=Save & Return
+click:historyButton@0.5,0.5
+wait:300
+expect:historyPopover.visible=true
+expect:historyPopoverList.count=1
+key:16777216
+wait:300
+expect:historyPopover.visible=false
+quit

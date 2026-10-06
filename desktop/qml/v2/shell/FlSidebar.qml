@@ -80,32 +80,11 @@ Rectangle {
                 height: 24
                 Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: "History"; color: Theme.textCaption; font.pixelSize: Theme.fontCaption; font.weight: Font.DemiBold }
             }
-            ListView {
+            FlHistoryList {
                 id: historyList
                 objectName: "historyList"
                 width: parent.width
                 height: side.height - y - 40
-                clip: true
-                model: engine.history
-                spacing: 2
-                delegate: Rectangle {
-                    readonly property bool current: index === engine.historyIndex
-                    readonly property bool future: index < engine.historyIndex
-                    width: historyList.width
-                    height: 26
-                    radius: Theme.radiusControl
-                    color: current ? Theme.rowSelected : (hh.hovered ? Theme.rowHover : "transparent")
-                    HoverHandler { id: hh }
-                    MouseArea { anchors.fill: parent; onClicked: engine.jumpToHistory(index) }
-                    Row {
-                        anchors.left: parent.left
-                        anchors.leftMargin: 8
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 8
-                        Rectangle { width: 5; height: 5; radius: 3; anchors.verticalCenter: parent.verticalCenter; color: parent.parent.current ? Theme.accent : "#2effffff" }
-                        Text { text: modelData.label; font.pixelSize: Theme.fontLabel; color: parent.parent.current ? Theme.text : (parent.parent.future ? Theme.textTertiary : Theme.textSecondary) }
-                    }
-                }
             }
         }
     }

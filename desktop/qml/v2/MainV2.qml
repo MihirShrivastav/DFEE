@@ -147,11 +147,12 @@ ApplicationWindow {
 
     FlSidebar {
         id: sidebar
+        objectName: "sidebar"
         anchors.left: parent.left
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
         onAddFolderRequested: folderDialog.open()
-        width: root.sidebarOpen ? Theme.sidebarWidth : 0
+        width: root.sidebarOpen && !engine.lightroomRoundTrip ? Theme.sidebarWidth : 0
         visible: width > 0
         Behavior on width { NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic } }
     }
