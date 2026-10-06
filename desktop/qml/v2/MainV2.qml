@@ -62,6 +62,10 @@ ApplicationWindow {
         onOpenRequested: openDialog.open()
         onAddFolderRequested: folderDialog.open()
         onCycleStockRequested: (dir) => root.cycleStock(dir)
+        zoom: canvas.zoom
+        onFitRequested: canvas.resetZoom()
+        onActualSizeRequested: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2)
+        onCropRequested: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode()
     }
 
     FlSidebar {
@@ -75,14 +79,16 @@ ApplicationWindow {
         Behavior on width { NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic } }
     }
 
-    // Centre column (canvas + tray) and inspector arrive in Task 4 / plans 1B-1C.
-    Rectangle {
-        id: centre
+    // Inspector (plan 1B) and tray (plan 1C) join the canvas later.
+    FlCanvas {
+        id: canvas
         anchors.left: sidebar.right
         anchors.right: inspectorSlot.left
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
-        color: Theme.canvas
+        compareMode: root.compareMode
+        peekBefore: root.peekBefore
+        onCompareModeRequested: (m) => { root.peekBefore = false; root.compareMode = m; }
     }
     Rectangle {
         id: inspectorSlot

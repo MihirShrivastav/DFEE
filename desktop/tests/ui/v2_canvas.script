@@ -1,0 +1,16 @@
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:imageArea.visible=true
+wait:2500
+shot:${TEMP}/v2_canvas.png
+click:compareSegmented@0.85,0.5
+wait:150
+expect:photoCanvas.compareMode=2
+wait:1500
+shot:${TEMP}/v2_canvas_sbs.png
+click:compareSegmented@0.1,0.5
+open:${TEMP}/not-an-image.arw
+waitfor:engine.hasImage=false,15000
+expect:imageArea.visible=false
+shot:${TEMP}/v2_canvas_failed.png
+quit

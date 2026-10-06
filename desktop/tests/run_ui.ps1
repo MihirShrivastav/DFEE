@@ -16,6 +16,7 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $exe = if ($Exe) { $Exe } else { Join-Path $repo "desktop\out\build\Release\DFEE.exe" }
 $work = Join-Path ([IO.Path]::GetTempPath()) ("filmlab-ui-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $work | Out-Null
+[IO.File]::WriteAllText((Join-Path $work "not-an-image.arw"), "not a raw file")
 $tempTiff = Join-Path $work "lr-working.tif"
 if (Test-Path $SampleTiff) { Copy-Item $SampleTiff $tempTiff }
 $body = (Get-Content $Script -Raw).Replace('${SAMPLE_A}', $SampleA).Replace('${SAMPLE_B}', $SampleB).

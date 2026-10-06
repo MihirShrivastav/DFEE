@@ -51,6 +51,7 @@ qt_add_qml_module(DFEE
         qml/v2/ControlsGallery.qml
         qml/v2/shell/FlToolbar.qml
         qml/v2/shell/FlSidebar.qml
+        qml/v2/canvas/FlCanvas.qml
         qml/v2/controls/FlButton.qml
         qml/v2/controls/FlIconButton.qml
         qml/v2/controls/FlSegmented.qml
