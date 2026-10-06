@@ -8,8 +8,14 @@ Menu {
     id: menu
     padding: 6
     onClosed: Qt.callLater(function() {
-        const w = menu.parent ? menu.parent.Window.window : null;
-        if (w && w.returnFocus) w.returnFocus();
+        const host = menu.parent;
+        const w = host ? host.Window.window : null;
+        if (!w || !w.returnFocus) return;
+        // An item may have opened a sheet or dialog that took focus (Rename…, Export):
+        // leave it there. Only focus outside every popup goes back to the window.
+        const overlay = host.Overlay.overlay;
+        for (let it = w.activeFocusItem; it; it = it.parent) if (it === overlay) return;
+        w.returnFocus();
     })
     background: Rectangle {
         implicitWidth: 240
@@ -20,6 +26,7 @@ Menu {
     }
     delegate: MenuItem {
         id: item
+        objectName: item.action && item.action.objectName.length > 0 ? item.action.objectName + "Item" : ""
         implicitHeight: 26
         contentItem: Item {
             Text {

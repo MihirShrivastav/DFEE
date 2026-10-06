@@ -11,6 +11,8 @@ Rectangle {
     color: Theme.window
     implicitHeight: Theme.trayHeight
     signal openRequested(url fileUrl)
+    signal saveLookRequested()
+    signal renameLookRequested(string id, string name, string group)
     readonly property var tabNames: engine.lightroomRoundTrip ? ["films", "looks"] : ["roll", "films", "looks"]
     readonly property var tabLabels: engine.lightroomRoundTrip ? ["Films", "Looks"] : ["Roll", "Films", "Looks"]
     readonly property string activeTab: tabNames.indexOf(prefs.tab) >= 0 ? prefs.tab : "films"
@@ -112,5 +114,17 @@ Rectangle {
         anchors.bottom: parent.bottom
         visible: tray.activeTab === "films"
         query: search.text
+    }
+    FlLooksStrip {
+        id: looks
+        objectName: "looksStrip"
+        anchors.top: header.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        visible: tray.activeTab === "looks"
+        query: search.text
+        onSaveRequested: tray.saveLookRequested()
+        onRenameRequested: (id, name, group) => tray.renameLookRequested(id, name, group)
     }
 }

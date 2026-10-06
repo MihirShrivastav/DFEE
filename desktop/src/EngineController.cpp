@@ -1265,8 +1265,12 @@ void EngineController::jumpToHistory(int displayRow)
 
 QString EngineController::presetsDir() const
 {
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    const QString dir = base + QStringLiteral("/Film Lab/Presets");
+    // DFEE_PRESETS_DIR keeps UI tests out of the user's Documents.
+    const QString override = qEnvironmentVariable("DFEE_PRESETS_DIR");
+    const QString dir = !override.isEmpty()
+        ? override
+        : QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+              + QStringLiteral("/Film Lab/Presets");
     QDir().mkpath(dir);
     return dir;
 }
@@ -1322,6 +1326,7 @@ void EngineController::refreshPresets()
             m["id"] = group.isEmpty() ? base : (group + QStringLiteral("/") + base);
             m["name"] = obj.value("name").toString(base);
             m["group"] = group;
+            m["stock"] = obj.value("stock").toString();
             presets_.append(m);
         }
     };

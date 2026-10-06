@@ -30,6 +30,7 @@ $env:QT_QPA_PLATFORM = "offscreen"
 $env:FILMLAB_UI = $Ui
 # v2 inspector state goes to a throwaway ini unless a test shares one across runs.
 $env:DFEE_UI_SETTINGS = if ($UiSettings) { $UiSettings } else { Join-Path $work "ui-settings.ini" }
+$env:DFEE_PRESETS_DIR = Join-Path $work "presets"
 $env:DFEE_UI_SCRIPT = "@" + $scriptFile
 $env:DFEE_CATALOG_PATH = Join-Path $work "catalog.sqlite"
 $env:PATH = (Join-Path $repo "cpp_engine\out\build\windows-msvc-vcpkg\vcpkg_installed\x64-windows\bin") + ";" + $env:PATH

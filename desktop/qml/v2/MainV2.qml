@@ -88,6 +88,7 @@ ApplicationWindow {
         onAccepted: library.addFolder(selectedFolder)
         onRejected: root.returnFocus()
     }
+    FlLookDialog { id: lookDialog }
 
     FlToolbar {
         id: toolbar
@@ -137,6 +138,8 @@ ApplicationWindow {
         anchors.bottom: parent.bottom
         height: Theme.trayHeight
         onOpenRequested: (u) => root.openPhoto(u)
+        onSaveLookRequested: lookDialog.openNew()
+        onRenameLookRequested: (id, name, group) => lookDialog.openRename(id, name, group)
     }
     FlInspector {
         id: inspector
