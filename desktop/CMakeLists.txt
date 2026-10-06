@@ -65,6 +65,12 @@ qt_add_qml_module(DFEE
         qml/v2/controls/FlFilmSlider.qml
         qml/v2/controls/FlGroupLabel.qml
         qml/v2/controls/FlInspectorSection.qml
+        qml/v2/controls/FlListPopup.qml
+        qml/v2/inspector/FlInspector.qml
+        qml/v2/inspector/FlScope.qml
+        qml/v2/inspector/FlFilmSection.qml
+        qml/v2/inspector/FlExposureSection.qml
+        qml/v2/inspector/FlToneSection.qml
 )
 
 # Bundled assets: Geist (Swiss grotesque) + film-stock boxart tiles. BASE "resources"
@@ -96,6 +102,13 @@ add_custom_command(TARGET DFEE POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::Sql> $<TARGET_FILE_DIR:DFEE>
     COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt6::QSQLiteDriverPlugin>
             $<TARGET_FILE_DIR:DFEE>/sqldrivers)
+# The v2 inspector persists its section state with QtCore's Settings type; the
+# build tree's partial deployment lacks that QML module (deploy.ps1 ships it).
+add_custom_command(TARGET DFEE POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}/Qt6QmlCore.dll" $<TARGET_FILE_DIR:DFEE>
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_QML}/QtCore" $<TARGET_FILE_DIR:DFEE>/qml/QtCore)
 
 # Desktop unit tests (Qt Test). Pure desktop logic only -- no engine session.
 enable_testing()

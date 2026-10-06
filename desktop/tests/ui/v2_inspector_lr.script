@@ -1,0 +1,14 @@
+# Lightroom Edit-In: the film picker and sliders work; nothing reaches the catalog.
+waitfor:engine.hasImage=true,30000
+expect:engine.lightroomRoundTrip=true
+click:filmCard@0.5,0.5
+wait:300
+click:stock_cinestill_400d@0.5,0.5
+wait:300
+expect:engine.stock=cinestill_400d
+click:slider_film_contrast@0.75,0.5
+wait:300
+expect:engine.filmControls.film_contrast=150
+wait:1200
+expect:editStore.recordCount=0
+quit

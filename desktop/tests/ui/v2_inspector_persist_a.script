@@ -1,0 +1,9 @@
+# First launch: collapse Tone, switch the scope. Settings are saved on quit.
+expect:toneSection.open=true
+click:toneSectionHeader@0.2,0.5
+wait:200
+expect:toneSection.open=false
+click:scope@0.5,0.5
+wait:200
+expect:scope.mode=vectorscope
+quit

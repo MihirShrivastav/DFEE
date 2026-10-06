@@ -10,6 +10,7 @@
 #include <QCommandLineParser>
 #include <QFile>
 #include <QTextStream>
+#include <QUrl>
 #include "EngineController.h"
 #include "DesktopDiagnostics.h"
 #include "PreviewImageProvider.h"
@@ -83,6 +84,11 @@ int main(int argc, char* argv[]) {
     engine.rootContext()->setContextProperty("engine", &controller);
     engine.rootContext()->setContextProperty("library", &library);
     engine.rootContext()->setContextProperty("editStore", &editStore);
+    // v2 inspector state (QtCore Settings) lives in the app's QSettings; UI tests
+    // point it at a throwaway ini with DFEE_UI_SETTINGS.
+    const QString uiSettings = qEnvironmentVariable("DFEE_UI_SETTINGS");
+    engine.rootContext()->setContextProperty("uiSettingsLocation",
+        uiSettings.isEmpty() ? QUrl() : QUrl::fromLocalFile(uiSettings));
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);

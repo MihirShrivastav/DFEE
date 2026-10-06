@@ -1,0 +1,5 @@
+# Second launch with the same settings file: the state came back.
+expect:toneSection.open=false
+expect:scope.mode=vectorscope
+expect:filmSection.open=true
+quit

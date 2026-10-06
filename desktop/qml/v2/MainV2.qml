@@ -121,21 +121,20 @@ ApplicationWindow {
     FlCanvas {
         id: canvas
         anchors.left: sidebar.right
-        anchors.right: inspectorSlot.left
+        anchors.right: inspector.left
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
         compareMode: root.compareMode
         peekBefore: root.peekBefore
         onCompareModeRequested: (m) => { root.peekBefore = false; root.compareMode = m; }
+        onBackgroundPressed: root.returnFocus()
     }
-    Rectangle {
-        id: inspectorSlot
+    FlInspector {
+        id: inspector
         anchors.right: parent.right
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
         width: Theme.inspectorWidth
-        color: Theme.panel
-        Rectangle { anchors.left: parent.left; width: 1; height: parent.height; color: Theme.hairline }
     }
 
     // Test hook: `--min-size` starts at the minimum window size (Review Focus 3).

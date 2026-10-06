@@ -9,7 +9,8 @@ param(
     [string]$SampleTiff = "E:/new_raws/3071874357.tif",
     [int]$TimeoutSec = 120,
     [string]$Exe = "",
-    [string]$Ui = ""
+    [string]$Ui = "",
+    [string]$UiSettings = ""
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -27,6 +28,8 @@ $resolvedArgs = $AppArgs | ForEach-Object { $_.Replace('${SAMPLE_TIFF}', $tempTi
 
 $env:QT_QPA_PLATFORM = "offscreen"
 $env:FILMLAB_UI = $Ui
+# v2 inspector state goes to a throwaway ini unless a test shares one across runs.
+$env:DFEE_UI_SETTINGS = if ($UiSettings) { $UiSettings } else { Join-Path $work "ui-settings.ini" }
 $env:DFEE_UI_SCRIPT = "@" + $scriptFile
 $env:DFEE_CATALOG_PATH = Join-Path $work "catalog.sqlite"
 $env:PATH = (Join-Path $repo "cpp_engine\out\build\windows-msvc-vcpkg\vcpkg_installed\x64-windows\bin") + ";" + $env:PATH

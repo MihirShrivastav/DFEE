@@ -11,6 +11,7 @@ Rectangle {
     property bool peekBefore: false
     property alias zoom: imageArea.zoom
     signal compareModeRequested(int mode)
+    signal backgroundPressed()
 
     // ── Crop state ───────────────────────────────────────────────────
     property bool cropMode: false
@@ -313,6 +314,7 @@ Rectangle {
             property real startPanX: 0
             property real startPanY: 0
             onPressed: (mouse) => {
+                canvas.backgroundPressed();
                 if (!imageArea.zoomed) { mouse.accepted = false; return; }
                 startX = mouse.x; startY = mouse.y;
                 startPanX = imageArea.panX; startPanY = imageArea.panY;
