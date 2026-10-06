@@ -1,0 +1,5 @@
+open:${SAMPLE_B}
+waitfor:engine.hasImage=true,30000
+expect:v2Root.width=960
+shot:${TEMP}/v2_min.png
+quit

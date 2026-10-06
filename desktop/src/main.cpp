@@ -50,6 +50,8 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption lightroomEditOption(
         "lightroom-edit", "Open a Lightroom-provided TIFF and save back to that exact working file.", "tiff");
     commandLine.addOption(lightroomEditOption);
+    // Read by the v2 window (Qt.application.arguments) for minimum-size UI checks.
+    commandLine.addOption(QCommandLineOption("min-size", "Start at the minimum window size (UI tests)."));
     commandLine.addPositionalArgument(
         "tiff", "A Lightroom-provided TIFF working file. This is the standard Additional External Editor launch form.");
     commandLine.process(app);

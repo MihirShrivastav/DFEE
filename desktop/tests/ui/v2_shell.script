@@ -1,0 +1,11 @@
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:toolbarTitle.text=3071874357.arw
+waitfor:engine.imageInfo.camera=Sony ILCE-7CR,15000
+expect:toolbarCamera.visible=true
+expect:historyList.count=1
+click:compareSegmented@0.5,0.5
+wait:150
+expect:v2Root.compareMode=1
+shot:${TEMP}/v2_shell.png
+quit
