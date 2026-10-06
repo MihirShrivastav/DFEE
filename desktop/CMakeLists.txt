@@ -34,12 +34,20 @@ qt_add_executable(DFEE
     src/ImageInfo.h
     src/StockCatalog.cpp
     src/StockCatalog.h
+    src/WindowChrome.cpp
+    src/WindowChrome.h
 )
+
+set_source_files_properties(qml/v2/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt_add_qml_module(DFEE
     URI DFEE
     VERSION 1.0
-    QML_FILES qml/Main.qml
+    QML_FILES
+        qml/Main.qml
+        qml/v2/MainV2.qml
+        qml/v2/Theme.qml
+        qml/v2/controls/FlIcon.qml
 )
 
 # Bundled assets: Geist (Swiss grotesque) + film-stock boxart tiles. BASE "resources"
@@ -60,7 +68,7 @@ qt_add_resources(DFEE "app_assets"
 )
 
 target_compile_definitions(DFEE PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
-target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent Qt6::QuickControls2 Qt6::Sql dfee_core)
+target_link_libraries(DFEE PRIVATE Qt6::Quick Qt6::Gui Qt6::Concurrent Qt6::QuickControls2 Qt6::Sql dfee_core $<$<PLATFORM_ID:Windows>:dwmapi>)
 set_target_properties(DFEE PROPERTIES WIN32_EXECUTABLE ON)
 
 # The build tree carries a partial Qt deployment (Qt6Core.dll + platforms/ beside the

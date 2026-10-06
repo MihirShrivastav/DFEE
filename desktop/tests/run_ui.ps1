@@ -1,5 +1,5 @@
 # Runs a UI script against the Release build, offscreen, with a throwaway catalog.
-# Usage: powershell -File desktop/tests/run_ui.ps1 -Script desktop/tests/ui/smoke.script [-AppArgs @('--lightroom-edit','x.tif')]
+# Usage: powershell -File desktop/tests/run_ui.ps1 -Script desktop/tests/ui/smoke.script [-AppArgs @('--lightroom-edit','x.tif')] [-Ui v2|gallery]
 # Scripts may use ${SAMPLE_A}, ${SAMPLE_B}, ${SAMPLE_TIFF}, ${TEMP} placeholders.
 param(
     [Parameter(Mandatory = $true)][string]$Script,
@@ -8,7 +8,8 @@ param(
     [string]$SampleB = "E:/new_raws/7033866904.arw",
     [string]$SampleTiff = "E:/new_raws/3071874357.tif",
     [int]$TimeoutSec = 120,
-    [string]$Exe = ""
+    [string]$Exe = "",
+    [string]$Ui = ""
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
@@ -24,6 +25,7 @@ $scriptFile = Join-Path $work "script.txt"
 $resolvedArgs = $AppArgs | ForEach-Object { $_.Replace('${SAMPLE_TIFF}', $tempTiff) }
 
 $env:QT_QPA_PLATFORM = "offscreen"
+$env:FILMLAB_UI = $Ui
 $env:DFEE_UI_SCRIPT = "@" + $scriptFile
 $env:DFEE_CATALOG_PATH = Join-Path $work "catalog.sqlite"
 $env:PATH = (Join-Path $repo "cpp_engine\out\build\windows-msvc-vcpkg\vcpkg_installed\x64-windows\bin") + ";" + $env:PATH

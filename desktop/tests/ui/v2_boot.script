@@ -1,0 +1,5 @@
+# The v2 window loads, uses the theme, and keeps the v1 controller API reachable.
+expect:v2Root.visible=true
+expect:v2Root.color=#1c1c1e
+expect:engine.stock=none
+quit

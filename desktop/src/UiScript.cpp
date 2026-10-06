@@ -42,6 +42,7 @@ QObject* resolveRoot(const ScriptState& s, const QString& name)
 {
     const QVariant ctx = s.engine->rootContext()->contextProperty(name);
     if (auto* obj = ctx.value<QObject*>()) return obj;
+    if (s.window->objectName() == name) return s.window;
     for (QObject* o : s.window->findChildren<QObject*>()) {
         if (o->objectName() == name) return o;
     }

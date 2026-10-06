@@ -17,6 +17,7 @@
 #include "LibraryController.h"
 #include "UiScript.h"
 #include "EditStore.h"
+#include "WindowChrome.h"
 
 int main(int argc, char* argv[]) {
     // Native Windows controls cannot be safely restyled from QML.  Basic keeps
@@ -83,7 +84,15 @@ int main(int argc, char* argv[]) {
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed,
         &app, []() { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
-    engine.loadFromModule("DFEE", "Main");
+    // FILMLAB_UI=v2 loads the redesigned window (docs/superpowers/specs/
+    // 2026-09-27-ui-redesign-design.md); "gallery" loads the v2 control gallery.
+    const QString ui = qEnvironmentVariable("FILMLAB_UI");
+    const bool v2 = ui == QLatin1String("v2") || ui == QLatin1String("gallery");
+    engine.loadFromModule("DFEE", ui == QLatin1String("v2") ? "MainV2"
+                                 : ui == QLatin1String("gallery") ? "ControlsGallery" : "Main");
+    if (v2 && !engine.rootObjects().isEmpty()) {
+        applyWindowChrome(qobject_cast<QQuickWindow*>(engine.rootObjects().constFirst()));
+    }
 
     const QStringList positionalArguments = commandLine.positionalArguments();
     if (commandLine.isSet(lightroomEditOption) && !positionalArguments.isEmpty()) {
