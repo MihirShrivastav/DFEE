@@ -196,6 +196,9 @@ void runNext(std::shared_ptr<ScriptState> s)
         QMetaObject::invokeMethod(engine, "setCrop",
             Q_ARG(double, v.value(0).toDouble()), Q_ARG(double, v.value(1).toDouble()),
             Q_ARG(double, v.value(2).toDouble()), Q_ARG(double, v.value(3).toDouble()));
+    } else if (verb == QLatin1String("call")) {  // call:<method>=<string arg>
+        QMetaObject::invokeMethod(engine, arg.section('=', 0, 0).toUtf8().constData(),
+                                  Q_ARG(QString, arg.section('=', 1)));
     } else if (verb == QLatin1String("expect")) {
         bool found = false;
         const QString target = arg.section('=', 0, 0);

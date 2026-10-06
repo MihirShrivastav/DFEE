@@ -1,0 +1,21 @@
+# v2 section groups: edited flags follow the controls, Reset is one step with a
+# readable label, grade color is one step per zone.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:engine.editedGroups.tone=false
+expect:engine.editedGroups.grain_light=false
+expect:engine.editedGroups.fine_tune=false
+control:film_contrast=150
+expect:engine.editedGroups.tone=true
+expect:engine.editedGroups.film_tone=true
+expect:engine.editedGroups.color=false
+control:hsl_red_s=20
+expect:engine.editedGroups.fine_tune=true
+call:resetControlGroup=tone
+expect:engine.filmControls.film_contrast=100
+expect:engine.editedGroups.tone=false
+expect:engine.history.0.label=Reset Tone
+call:resetControlGroup=fine_tune
+expect:engine.filmControls.hsl_red_s=0
+expect:engine.history.0.label=Reset Fine-tune
+quit

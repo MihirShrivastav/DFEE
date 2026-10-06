@@ -65,6 +65,9 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantList presets READ presets NOTIFY presetsChanged)
     // User group names (first-level subdirectories), sorted.
     Q_PROPERTY(QStringList presetGroups READ presetGroups NOTIFY presetsChanged)
+    // Per-group "has edits" flags for the v2 inspector's section dots:
+    // {film, exposure, tone, color, grain_light, print, fine_tune, + v1 group names} -> bool.
+    Q_PROPERTY(QVariantMap editedGroups READ editedGroups NOTIFY filmControlsChanged)
 
 public:
     // provider must be non-null; it must outlive EngineController (the
@@ -113,6 +116,10 @@ public:
     Q_INVOKABLE void resetAllEdits();
     // Restore a named editing group from the same defaults used by Reset All.
     Q_INVOKABLE void resetControlGroup(const QString& group);
+    QVariantMap editedGroups() const;
+    // Set one color-grading zone's hue (degrees) and saturation (0..100) as a single
+    // history step; zone is shadow, midtone, highlight or global.
+    Q_INVOKABLE void setGradeColor(const QString& zone, double hue, double sat);
     // Geometry (Phase 1). setCrop takes a normalized rect on the
     // flipped/rotated/straightened image; rotateQuadrant advances the 90-degree
     // orientation; resetGeometry clears crop/straighten/rotate/flip only.

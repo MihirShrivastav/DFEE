@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <system_error>
 
@@ -466,38 +467,84 @@ void EngineController::resetAllEdits()
     scheduleRender();
 }
 
+namespace {
+
+// Control groups for section Reset and the edited dots. The v2 inspector's sections
+// come first; the v1 names stay until the v1 window is retired.
+const QHash<QString, QStringList>& controlGroups()
+{
+    static const QStringList light = {"exposure", "contrast", "highlights", "shadows",
+        "whites", "blacks", "midtones", "texture", "clarity", "dehaze", "sharpness",
+        "sharpness_mask"};
+    static const QStringList grade = {"cg_shadow_hue", "cg_shadow_sat", "cg_shadow_lum",
+        "cg_midtone_hue", "cg_midtone_sat", "cg_midtone_lum", "cg_highlight_hue",
+        "cg_highlight_sat", "cg_highlight_lum", "cg_global_hue", "cg_global_sat",
+        "cg_global_lum", "cg_balance", "cg_blending"};
+    static const QStringList hsl = [] {
+        QStringList keys;
+        for (const char* band : {"red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"})
+            for (const char* part : {"h", "s", "l"})
+                keys << QStringLiteral("hsl_%1_%2").arg(QLatin1String(band), QLatin1String(part));
+        return keys;
+    }();
+    static const QStringList grainLight = {"grain_auto", "grain_strength", "grain_size",
+        "grain_roughness", "halation_strength", "halation_threshold", "bloom"};
+    static const QStringList print = {"print_stock", "print_strength", "print_c", "print_m",
+        "print_y", "print_contrast", "print_black_point"};
+    static const QHash<QString, QStringList> groups = {
+        // v2 inspector sections
+        {"film", {"profile_strength"}},
+        {"exposure", {"exposure_placement", "film_exposure_ev"}},
+        {"tone", {"rendered_input", "adaptive", "highlight_rolloff", "film_contrast", "shadow_lift"}},
+        {"color", {"film_color_density", "emulsion_color_density", "highlight_color_hold",
+                   "shadow_color_retention", "crossover", "cg_crossbalance", "temp", "tint",
+                   "vibrance", "saturation"}},
+        {"grain_light", grainLight},
+        {"print", print},
+        {"fine_tune", light + grade + hsl},
+        // v1 groups
+        {"film_tone", {"rendered_input", "adaptive", "profile_strength", "highlight_rolloff",
+                       "film_contrast", "shadow_lift"}},
+        {"color_character", {"film_color_density", "emulsion_color_density",
+                             "highlight_color_hold", "shadow_color_retention", "crossover",
+                             "cg_crossbalance"}},
+        {"material", grainLight},
+        {"light", light},
+        {"color_balance", {"temp", "tint", "vibrance", "saturation"}},
+        {"grade", grade},
+    };
+    return groups;
+}
+
+QString groupLabel(const QString& group)
+{
+    static const QHash<QString, QString> labels = {
+        {"film", "Film"}, {"exposure", "Exposure"}, {"tone", "Tone"}, {"color", "Color"},
+        {"grain_light", "Grain & light"}, {"print", "Print"}, {"fine_tune", "Fine-tune"},
+        {"film_tone", "Film tone"}, {"color_character", "Color character"},
+        {"material", "Material finish"}, {"light", "Light"}, {"color_balance", "Color balance"},
+        {"grade", "Color grading"},
+    };
+    return labels.value(group, group);
+}
+
+// Controls hold doubles, ints, bools and strings; numbers compare by value.
+bool sameControlValue(const QVariant& a, const QVariant& b)
+{
+    const auto numeric = [](const QVariant& v) {
+        const int id = v.metaType().id();
+        return id == QMetaType::Double || id == QMetaType::Int || id == QMetaType::LongLong
+            || id == QMetaType::UInt || id == QMetaType::Float;
+    };
+    if (numeric(a) && numeric(b)) return qAbs(a.toDouble() - b.toDouble()) < 1e-6;
+    return a == b;
+}
+
+} // namespace
+
 void EngineController::resetControlGroup(const QString& group)
 {
-    static const QHash<QString, QStringList> groups = {
-        {QStringLiteral("film_tone"), {QStringLiteral("rendered_input"), QStringLiteral("adaptive"),
-            QStringLiteral("profile_strength"), QStringLiteral("highlight_rolloff"),
-            QStringLiteral("film_contrast"), QStringLiteral("shadow_lift")}},
-        {QStringLiteral("color_character"), {QStringLiteral("film_color_density"),
-            QStringLiteral("emulsion_color_density"), QStringLiteral("highlight_color_hold"),
-            QStringLiteral("shadow_color_retention"), QStringLiteral("crossover"),
-            QStringLiteral("cg_crossbalance")}},
-        {QStringLiteral("print"), {QStringLiteral("print_stock"), QStringLiteral("print_strength"),
-            QStringLiteral("print_c"), QStringLiteral("print_m"), QStringLiteral("print_y"),
-            QStringLiteral("print_contrast"), QStringLiteral("print_black_point")}},
-        {QStringLiteral("material"), {QStringLiteral("grain_auto"), QStringLiteral("grain_strength"),
-            QStringLiteral("grain_size"), QStringLiteral("grain_roughness"),
-            QStringLiteral("halation_strength"), QStringLiteral("halation_threshold"),
-            QStringLiteral("bloom")}},
-        {QStringLiteral("light"), {QStringLiteral("exposure"), QStringLiteral("contrast"),
-            QStringLiteral("highlights"), QStringLiteral("shadows"), QStringLiteral("whites"),
-            QStringLiteral("blacks"), QStringLiteral("midtones"), QStringLiteral("texture"),
-            QStringLiteral("clarity"), QStringLiteral("dehaze"), QStringLiteral("sharpness"),
-            QStringLiteral("sharpness_mask")}},
-        {QStringLiteral("color_balance"), {QStringLiteral("temp"), QStringLiteral("tint"),
-            QStringLiteral("vibrance"), QStringLiteral("saturation")}},
-        {QStringLiteral("grade"), {QStringLiteral("cg_shadow_hue"), QStringLiteral("cg_shadow_sat"),
-            QStringLiteral("cg_shadow_lum"), QStringLiteral("cg_midtone_hue"),
-            QStringLiteral("cg_midtone_sat"), QStringLiteral("cg_midtone_lum"),
-            QStringLiteral("cg_highlight_hue"), QStringLiteral("cg_highlight_sat"),
-            QStringLiteral("cg_highlight_lum"), QStringLiteral("cg_global_hue"),
-            QStringLiteral("cg_global_sat"), QStringLiteral("cg_global_lum"),
-            QStringLiteral("cg_balance"), QStringLiteral("cg_blending")}},
-    };
+    const auto& groups = controlGroups();
     const auto it = groups.constFind(group);
     if (it == groups.cend()) return;
 
@@ -511,12 +558,53 @@ void EngineController::resetControlGroup(const QString& group)
         }
     }
     if (!changed) return;
-    if (group == QStringLiteral("material")) {
+    if (group == QStringLiteral("material") || group == QStringLiteral("grain_light")) {
         grainResolving_ = false;
         emit grainResolvingChanged();
     }
     emit filmControlsChanged();
-    recordHistory(QStringLiteral("Reset %1").arg(group));
+    recordHistory(QStringLiteral("Reset %1").arg(groupLabel(group)));
+    scheduleRender();
+}
+
+QVariantMap EngineController::editedGroups() const
+{
+    const QVariantMap defaults = defaultFilmControls();
+    // While Auto grain is on, the amount keys are the engine's, not the user's.
+    const bool autoGrain = filmControls_.value("grain_auto").toBool();
+    QVariantMap result;
+    const auto& groups = controlGroups();
+    for (auto it = groups.cbegin(); it != groups.cend(); ++it) {
+        bool edited = false;
+        for (const QString& key : it.value()) {
+            if (autoGrain && key.startsWith(QLatin1String("grain_")) && key != QLatin1String("grain_auto"))
+                continue;
+            if (!sameControlValue(filmControls_.value(key), defaults.value(key))) {
+                edited = true;
+                break;
+            }
+        }
+        result.insert(it.key(), edited);
+    }
+    return result;
+}
+
+void EngineController::setGradeColor(const QString& zone, double hue, double sat)
+{
+    static const QHash<QString, QString> labels = {
+        {"shadow", "Shadow tint"}, {"midtone", "Midtone tint"},
+        {"highlight", "Highlight tint"}, {"global", "Global tint"}};
+    if (!labels.contains(zone)) return;
+    const QString hueKey = QStringLiteral("cg_%1_hue").arg(zone);
+    const QString satKey = QStringLiteral("cg_%1_sat").arg(zone);
+    const double h = std::fmod(std::fmod(hue, 360.0) + 360.0, 360.0);
+    const double s = std::clamp(sat, 0.0, 100.0);
+    if (sameControlValue(filmControls_.value(hueKey), h) && sameControlValue(filmControls_.value(satKey), s))
+        return;
+    filmControls_.insert(hueKey, h);
+    filmControls_.insert(satKey, s);
+    emit filmControlsChanged();
+    recordHistory(labels.value(zone), QStringLiteral("grade_") + zone);
     scheduleRender();
 }
 
