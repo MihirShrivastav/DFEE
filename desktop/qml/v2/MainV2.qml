@@ -20,8 +20,8 @@ ApplicationWindow {
     // never to contentItem (a focus scope that returns it to its last child).
     function returnFocus() { keySink.forceActiveFocus(); }
     Item { id: keySink }
-    // True while a text field has focus: bare-key shortcuts stay off.
-    property bool textEntry: false
+    // True while a text field (FlTextField) has focus: bare-key shortcuts stay off.
+    readonly property bool textEntry: activeFocusItem !== null && activeFocusItem.flTextEntry === true
 
     property bool sidebarOpen: true
     property int compareMode: 0          // 0 Edited, 1 Split, 2 Side by side
@@ -69,6 +69,7 @@ ApplicationWindow {
     Shortcut { sequence: "Right"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(1) }
     Shortcut { sequence: "Ctrl+Left"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(-1) }
     Shortcut { sequence: "Ctrl+Right"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(1) }
+    Shortcut { sequences: ["F", "Ctrl+F"]; enabled: !root.textEntry; onActivated: tray.showFilmsSearch() }
     Shortcut { sequence: "Ctrl+0"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.resetZoom() }
     Shortcut { sequence: "Ctrl+1"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2) }
 
@@ -123,11 +124,19 @@ ApplicationWindow {
         anchors.left: sidebar.right
         anchors.right: inspector.left
         anchors.top: toolbar.bottom
-        anchors.bottom: parent.bottom
+        anchors.bottom: tray.top
         compareMode: root.compareMode
         peekBefore: root.peekBefore
         onCompareModeRequested: (m) => { root.peekBefore = false; root.compareMode = m; }
         onBackgroundPressed: root.returnFocus()
+    }
+    FlTray {
+        id: tray
+        anchors.left: sidebar.right
+        anchors.right: inspector.left
+        anchors.bottom: parent.bottom
+        height: Theme.trayHeight
+        onOpenRequested: (u) => root.openPhoto(u)
     }
     FlInspector {
         id: inspector

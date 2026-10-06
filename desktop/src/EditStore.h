@@ -47,6 +47,8 @@ public:
     // so merely viewing photos never grows the catalog.
     bool save(const QString& photoPath, const EditRecord& record, bool edited);
     int recordCount() const;
+    // True when the photo has a catalog row marked edited (drives the Roll badge).
+    Q_INVOKABLE bool isEdited(const QString& photoPath) const;
 
 signals:
     void changed();

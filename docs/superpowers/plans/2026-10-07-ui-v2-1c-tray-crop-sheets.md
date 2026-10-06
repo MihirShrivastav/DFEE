@@ -131,11 +131,16 @@ click:traySegmented@0.1,0.5
 wait:300
 expect:tray.activeTab=roll
 expect:rollStrip.visible=true
+# The folder holds many photos: find each sample by name, as a user would.
+set:traySearch.text=7033866904
+wait:300
 click:rollTile_7033866904_arw@0.5,0.5
 waitfor:engine.currentFile=${SAMPLE_B},15000
 expect:rollTile_7033866904_arw.current=true
-waitfor:rollTile_3071874357_arw.edited=true,5000
 expect:rollTile_7033866904_arw.edited=false
+set:traySearch.text=3071874357
+wait:300
+waitfor:rollTile_3071874357_arw.edited=true,5000
 shot:${TEMP}/v2_tray.png
 quit
 ```

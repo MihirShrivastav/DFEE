@@ -111,6 +111,19 @@ private slots:
         EditStore again(dir.filePath("catalog.sqlite"));
         QCOMPARE(again.load("E:/shoot/F.ARW")->stock, QString("ektar_100"));
     }
+
+    void reportsEditedPhotos()
+    {
+        QTemporaryDir dir;
+        EditStore store(dir.filePath("catalog.sqlite"));
+        EditRecord r; r.stock = "portra_400"; r.history = {{"Import", "", "none", {}}}; r.historyIndex = 0;
+        QVERIFY(store.save("E:/shoot/A.ARW", r, true));
+        QVERIFY(store.isEdited("e:\\shoot\\a.arw"));
+        QVERIFY(!store.isEdited("E:/shoot/B.ARW"));
+        EditRecord clean; clean.stock = "none"; clean.history = {{"Import", "", "none", {}}}; clean.historyIndex = 0;
+        QVERIFY(store.save("E:/shoot/A.ARW", clean, false));   // edits undone: row stays, not edited
+        QVERIFY(!store.isEdited("E:/shoot/A.ARW"));
+    }
 };
 
 QTEST_GUILESS_MAIN(EditStoreTest)

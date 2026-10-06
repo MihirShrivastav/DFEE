@@ -161,3 +161,12 @@ int EditStore::recordCount() const
     if (!q.exec(QStringLiteral("SELECT COUNT(*) FROM photos")) || !q.next()) return 0;
     return q.value(0).toInt();
 }
+
+bool EditStore::isEdited(const QString& photoPath) const
+{
+    if (!open_) return false;
+    QSqlQuery q(QSqlDatabase::database(connection_));
+    q.prepare(QStringLiteral("SELECT edited FROM photos WHERE path_key = ?"));
+    q.addBindValue(pathKey(photoPath));
+    return q.exec() && q.next() && q.value(0).toInt() == 1;
+}

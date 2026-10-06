@@ -1,0 +1,45 @@
+# Films: F focuses the tray search; typing never fires shortcuts (two R's here);
+# a film tile applies the stock. Roll: tiles open photos and show an edited badge.
+# Roll navigation needs the library's current folder to hold SAMPLE_A (E:/new_raws).
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:tray.visible=true
+expect:tray.activeTab=films
+expect:filmTile_none.current=true
+key:70
+wait:200
+expect:v2Root.textEntry=true
+key:80
+key:79
+key:82
+key:84
+key:82
+key:65
+wait:300
+expect:traySearch.text=PORTRA
+expect:photoCanvas.cropMode=false
+click:filmTile_portra_400@0.5,0.3
+wait:300
+expect:engine.stock=portra_400
+expect:filmTile_portra_400.current=true
+key:16777216
+wait:150
+expect:v2Root.textEntry=false
+expect:traySearch.text=PORTRA
+set:traySearch.text=
+click:traySegmented@0.1,0.5
+wait:300
+expect:tray.activeTab=roll
+expect:rollStrip.visible=true
+# The folder holds many photos: find each sample by name, as a user would.
+set:traySearch.text=7033866904
+wait:300
+click:rollTile_7033866904_arw@0.5,0.5
+waitfor:engine.currentFile=${SAMPLE_B},15000
+expect:rollTile_7033866904_arw.current=true
+expect:rollTile_7033866904_arw.edited=false
+set:traySearch.text=3071874357
+wait:300
+waitfor:rollTile_3071874357_arw.edited=true,5000
+shot:${TEMP}/v2_tray.png
+quit
