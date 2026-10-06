@@ -88,6 +88,11 @@ Rectangle {
                 open: prefs.printOpen
                 onToggled: prefs.printOpen = !prefs.printOpen
             }
+            FlFineTuneSection {
+                objectName: "fineTuneSection"
+                open: prefs.fineTuneOpen
+                onToggled: prefs.fineTuneOpen = !prefs.fineTuneOpen
+            }
         }
     }
     Rectangle { anchors.left: parent.left; width: 1; height: parent.height; color: Theme.hairline }

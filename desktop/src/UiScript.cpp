@@ -199,6 +199,13 @@ void runNext(std::shared_ptr<ScriptState> s)
     } else if (verb == QLatin1String("call")) {  // call:<method>=<string arg>
         QMetaObject::invokeMethod(engine, arg.section('=', 0, 0).toUtf8().constData(),
                                   Q_ARG(QString, arg.section('=', 1)));
+    } else if (verb == QLatin1String("set")) {  // set:<object>.<property>=<value>
+        const QString target = arg.section('=', 0, 0);
+        QObject* obj = resolveRoot(*s, target.section('.', 0, 0));
+        if (!obj || !obj->setProperty(target.section('.', 1).toUtf8().constData(),
+                                      parseValue(arg.section('=', 1)))) {
+            fail(*s, step, "cannot set");
+        }
     } else if (verb == QLatin1String("expect")) {
         bool found = false;
         const QString target = arg.section('=', 0, 0);
