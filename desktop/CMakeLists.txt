@@ -48,6 +48,16 @@ qt_add_qml_module(DFEE
         qml/v2/MainV2.qml
         qml/v2/Theme.qml
         qml/v2/controls/FlIcon.qml
+        qml/v2/ControlsGallery.qml
+        qml/v2/controls/FlButton.qml
+        qml/v2/controls/FlIconButton.qml
+        qml/v2/controls/FlSegmented.qml
+        qml/v2/controls/FlSlider.qml
+        qml/v2/controls/FlSliderRow.qml
+        qml/v2/controls/FlSectionHeader.qml
+        qml/v2/controls/FlHairline.qml
+        qml/v2/controls/FlTip.qml
+        qml/v2/controls/FlMenu.qml
 )
 
 # Bundled assets: Geist (Swiss grotesque) + film-stock boxart tiles. BASE "resources"

@@ -1,0 +1,19 @@
+# Slider: click sets, double-click resets, arrow nudges; segmented switches; header toggles.
+click:gallerySlider@0.75,0.5
+wait:200
+expect:gallerySlider.value=75
+dclick:gallerySlider@0.75,0.5
+wait:200
+expect:gallerySlider.value=50
+click:gallerySlider@0.5,0.5
+key:16777236
+wait:150
+expect:gallerySlider.value=51
+click:gallerySegmented@0.85,0.5
+wait:150
+expect:gallerySegmented.currentIndex=2
+click:galleryHeader@0.2,0.5
+wait:150
+expect:galleryHeader.open=false
+shot:${TEMP}/gallery.png
+quit

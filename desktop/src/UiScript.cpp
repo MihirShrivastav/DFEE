@@ -97,20 +97,32 @@ void fail(ScriptState& s, const QString& step, const QString& actual)
     qWarning().noquote() << "UISCRIPT FAIL" << step << "(got '" + actual + "')";
 }
 
-void postClick(ScriptState& s, const QString& spec)
+void postClick(ScriptState& s, const QString& spec, bool doubleClick = false)
 {
     const QString name = spec.section('@', 0, 0);
     const QString frac = spec.section('@', 1, 1);
     auto* item = qobject_cast<QQuickItem*>(resolveRoot(s, name));
-    if (!item) { fail(s, "click:" + spec, "missing"); return; }
+    if (!item) { fail(s, (doubleClick ? "dclick:" : "click:") + spec, "missing"); return; }
     const double fx = frac.isEmpty() ? 0.5 : frac.section(',', 0, 0).toDouble();
     const double fy = frac.isEmpty() ? 0.5 : frac.section(',', 1, 1).toDouble();
     const QPointF p = item->mapToScene(QPointF(item->width() * fx, item->height() * fy));
     const QPointF g = s.window->mapToGlobal(p);
-    QCoreApplication::postEvent(s.window, new QMouseEvent(QEvent::MouseButtonPress, p, p, g,
-        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier));
-    QCoreApplication::postEvent(s.window, new QMouseEvent(QEvent::MouseButtonRelease, p, p, g,
-        Qt::LeftButton, Qt::NoButton, Qt::NoModifier));
+    // Delivered synchronously with increasing timestamps: Qt Quick tracks each press
+    // and release against the device's persistent point state, which hand-posted
+    // events with ts=0 corrupt (the release lost its scene position).
+    static ulong timestamp = 1000;
+    const auto post = [&](QEvent::Type type, Qt::MouseButtons held) {
+        QMouseEvent event(type, p, p, g, Qt::LeftButton, held, Qt::NoModifier);
+        event.setTimestamp(timestamp += 20);
+        QCoreApplication::sendEvent(s.window, &event);
+    };
+    post(QEvent::MouseButtonPress, Qt::LeftButton);
+    post(QEvent::MouseButtonRelease, Qt::NoButton);
+    if (doubleClick) {  // Qt 6 order: press, release, press, dblclick, release
+        post(QEvent::MouseButtonPress, Qt::LeftButton);
+        post(QEvent::MouseButtonDblClick, Qt::LeftButton);
+        post(QEvent::MouseButtonRelease, Qt::NoButton);
+    }
 }
 
 void postKey(ScriptState& s, const QString& spec)
@@ -154,6 +166,8 @@ void runNext(std::shared_ptr<ScriptState> s)
         delay = arg.toInt();
     } else if (verb == QLatin1String("click")) {
         postClick(*s, arg);
+    } else if (verb == QLatin1String("dclick")) {
+        postClick(*s, arg, true);
     } else if (verb == QLatin1String("key")) {
         postKey(*s, arg);
     } else if (verb == QLatin1String("open")) {
