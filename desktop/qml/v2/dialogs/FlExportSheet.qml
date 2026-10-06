@@ -67,6 +67,8 @@ FlSheet {
                 horizontalAlignment: TextInput.AlignRight
                 text: String(engine.exportDpi)
                 validator: IntValidator { bottom: 72; top: 1200 }
+                // Live, so Export counts a typed value without Enter.
+                onTextEdited: if (acceptableInput) engine.exportDpi = parseInt(text)
                 onEditingFinished: if (acceptableInput) engine.exportDpi = parseInt(text)
             }
             Text {

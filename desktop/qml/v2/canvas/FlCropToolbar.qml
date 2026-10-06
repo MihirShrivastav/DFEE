@@ -88,12 +88,27 @@ Item {
             onClicked: engine.rotateQuadrant(-1)
         }
         FlIconButton {
+            objectName: "rotateRightButton"
+            anchors.verticalCenter: parent.verticalCenter
+            iconName: "arrow-clockwise"
+            tip: "Rotate right 90°"
+            onClicked: engine.rotateQuadrant(1)
+        }
+        FlIconButton {
             objectName: "flipButton"
             anchors.verticalCenter: parent.verticalCenter
             iconName: "flip-horizontal"
             tip: "Flip horizontal"
             active: engine.filmControls.flip_h === true
             onClicked: engine.setFilmControl("flip_h", engine.filmControls.flip_h !== true)
+        }
+        FlIconButton {
+            objectName: "flipVerticalButton"
+            anchors.verticalCenter: parent.verticalCenter
+            iconName: "flip-vertical"
+            tip: "Flip vertical"
+            active: engine.filmControls.flip_v === true
+            onClicked: engine.setFilmControl("flip_v", engine.filmControls.flip_v !== true)
         }
         FlButton {
             objectName: "cropResetButton"

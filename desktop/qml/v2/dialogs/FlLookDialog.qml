@@ -7,13 +7,19 @@ FlSheet {
     id: dlg
     objectName: "lookDialog"
     property string editId: ""
+    property string originalName: ""
+    property string originalGroup: ""
     title: editId.length > 0 ? "Rename look" : "Save look"
     readonly property string name: nameField.text.trim()
     readonly property string group: groupField.text.trim()
-    readonly property bool replaces: editId.length === 0 && name.length > 0 && engine.presetExists(name, group)
+    // Saving or renaming onto another look's name replaces that look: say so.
+    readonly property bool replaces: name.length > 0 && engine.presetExists(name, group)
+        && (editId.length === 0 || name !== originalName || group !== originalGroup)
 
     function openNew() {
         editId = "";
+        originalName = "";
+        originalGroup = "";
         nameField.text = "";
         groupField.text = "";
         open();
@@ -21,6 +27,8 @@ FlSheet {
     }
     function openRename(id, name, group) {
         editId = id;
+        originalName = name;
+        originalGroup = group;
         nameField.text = name;
         groupField.text = group;
         open();

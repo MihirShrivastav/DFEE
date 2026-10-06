@@ -25,6 +25,10 @@ Rectangle {
     property real cropStartY: 0
     property real cropStartW: 1
     property real cropStartH: 1
+    property real straightenStart: 0
+    property int quadrantStart: 0
+    property bool flipHStart: false
+    property bool flipVStart: false
 
     // Crop mode belongs to one photo; never carry it (or its rectangle) to the next.
     Connections {
@@ -46,6 +50,11 @@ Rectangle {
         cropW = engine.filmControls.crop_w;
         cropH = engine.filmControls.crop_h;
         cropStartX = cropX; cropStartY = cropY; cropStartW = cropW; cropStartH = cropH;
+        straightenStart = Number(engine.filmControls.straighten_deg);
+        quadrantStart = Number(engine.filmControls.rotate_quadrant);
+        flipHStart = engine.filmControls.flip_h === true;
+        flipVStart = engine.filmControls.flip_v === true;
+        cropAspect = 0;                     // each session starts free, like the toolbar
         compareModeRequested(0);
         cropMode = true;
         engine.setCrop(0, 0, 1, 1);
@@ -54,8 +63,14 @@ Rectangle {
         cropMode = false;
         engine.setCrop(cropX, cropY, cropW, cropH);
     }
+    // Esc: put back everything crop mode can change — rectangle, straighten,
+    // rotation and flips — as they were when the session started.
     function cancelCropMode() {
         cropMode = false;
+        engine.setFilmControl("straighten_deg", straightenStart);
+        engine.setFilmControl("rotate_quadrant", quadrantStart);
+        engine.setFilmControl("flip_h", flipHStart);
+        engine.setFilmControl("flip_v", flipVStart);
         engine.setCrop(cropStartX, cropStartY, cropStartW, cropStartH);
     }
     function resetCropMode() {

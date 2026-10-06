@@ -45,6 +45,7 @@ ApplicationWindow {
     }
     // Lightroom Edit-In saves straight back; standalone shows the export sheet.
     function exportRequested() {
+        if (canvas.cropMode) canvas.applyCropMode();   // export what the user framed
         if (engine.lightroomRoundTrip) engine.exportImage();
         else exportSheet.open();
     }

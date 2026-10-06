@@ -54,4 +54,45 @@ expect:engine.filmControls.flip_h=false
 click:cropDoneButton@0.5,0.5
 wait:300
 expect:photoCanvas.cropMode=false
+# Review fixes. I3: a new crop session starts free. I1: Esc also undoes rotate and
+# straighten. I6: rotate right and flip vertical exist. I2: export applies a pending
+# crop first.
+crop:0.1,0.1,0.5,0.5
+waitfor:engine.filmControls.crop_w=0.5,5000
+key:67
+wait:300
+click:aspectButton@0.5,0.5
+wait:300
+click:aspect_3@0.5,0.5
+wait:300
+expect:photoCanvas.cropAspect=1
+key:16777220
+wait:300
+key:67
+wait:300
+expect:photoCanvas.cropAspect=0
+click:rotateLeftButton@0.5,0.5
+wait:200
+click:straightenSlider@0.75,0.5
+wait:200
+key:16777216
+wait:300
+expect:photoCanvas.cropMode=false
+expect:engine.filmControls.rotate_quadrant=0
+expect:engine.filmControls.straighten_deg=0
+key:67
+wait:300
+click:rotateRightButton@0.5,0.5
+wait:200
+expect:engine.filmControls.rotate_quadrant=1
+click:flipVerticalButton@0.5,0.5
+wait:200
+expect:engine.filmControls.flip_v=true
+key:83+ctrl
+wait:300
+expect:photoCanvas.cropMode=false
+expect:exportSheet.visible=true
+expect:engine.filmControls.rotate_quadrant=1
+key:16777216
+wait:300
 quit
