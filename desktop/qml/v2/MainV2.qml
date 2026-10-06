@@ -35,6 +35,37 @@ ApplicationWindow {
         engine.stock = m[(cur + dir + m.length) % m.length].id;
     }
 
+    readonly property bool arrowKeysFree: !textEntry
+        && !(activeFocusItem && activeFocusItem.objectName === "inspectorSlider")
+    function navigatePhoto(step) {
+        const files = library.files;
+        if (files.length === 0) return;
+        const cur = engine.currentFile.toLowerCase();
+        let at = -1;
+        for (let i = 0; i < files.length; ++i) {
+            if (files[i].path.toLowerCase() === cur) { at = i; break; }
+        }
+        const next = at < 0 ? (step > 0 ? 0 : files.length - 1) : at + step;
+        if (next < 0 || next >= files.length || next === at) return;
+        engine.openFile(Qt.resolvedUrl("file:///" + files[next].path));
+    }
+
+    Shortcut { sequences: ["Ctrl+S", "Ctrl+Return", "Ctrl+Enter"]; enabled: engine.hasImage && !engine.exporting; onActivated: engine.exportImage() }
+    Shortcut { sequence: "Ctrl+O"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: openDialog.open() }
+    Shortcut { sequence: "\\"; enabled: engine.hasBefore && !root.textEntry; onActivated: { root.compareMode = 0; root.peekBefore = !root.peekBefore; } }
+    Shortcut { sequence: "B"; enabled: engine.hasBefore && !root.textEntry; onActivated: { root.peekBefore = false; root.compareMode = (root.compareMode + 1) % 3; } }
+    Shortcut { sequence: "Ctrl+Z"; enabled: engine.canUndo && !root.textEntry; onActivated: engine.undo() }
+    Shortcut { sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]; enabled: engine.canRedo && !root.textEntry; onActivated: engine.redo() }
+    Shortcut { sequence: "["; enabled: engine.hasImage && !root.textEntry; onActivated: root.cycleStock(-1) }
+    Shortcut { sequence: "]"; enabled: engine.hasImage && !root.textEntry; onActivated: root.cycleStock(1) }
+    Shortcut { sequence: "C"; enabled: engine.hasImage && !engine.lightroomRoundTrip && !root.textEntry; onActivated: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode() }
+    Shortcut { sequence: "Left"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(-1) }
+    Shortcut { sequence: "Right"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(1) }
+    Shortcut { sequence: "Ctrl+Left"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(-1) }
+    Shortcut { sequence: "Ctrl+Right"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(1) }
+    Shortcut { sequence: "Ctrl+0"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.resetZoom() }
+    Shortcut { sequence: "Ctrl+1"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.setZoom(2.0, canvas.width / 2, canvas.height / 2) }
+
     FileDialog {
         id: openDialog
         title: "Open image"

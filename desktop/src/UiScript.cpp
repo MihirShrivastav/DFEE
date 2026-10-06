@@ -38,6 +38,18 @@ QVariant parseValue(const QString& text)
     return text;
 }
 
+// Repeater/ListView delegates are visual children only (not QObject children), so
+// findChild misses them; walk the item tree as well.
+QQuickItem* findItem(QQuickItem* item, const QString& name)
+{
+    if (!item) return nullptr;
+    if (item->objectName() == name) return item;
+    for (QQuickItem* child : item->childItems()) {
+        if (QQuickItem* hit = findItem(child, name)) return hit;
+    }
+    return nullptr;
+}
+
 QObject* resolveRoot(const ScriptState& s, const QString& name)
 {
     const QVariant ctx = s.engine->rootContext()->contextProperty(name);
@@ -48,6 +60,7 @@ QObject* resolveRoot(const ScriptState& s, const QString& name)
     }
     if (s.window->contentItem()) {
         if (auto* item = s.window->contentItem()->findChild<QQuickItem*>(name)) return item;
+        if (auto* item = findItem(s.window->contentItem(), name)) return item;
     }
     return nullptr;
 }

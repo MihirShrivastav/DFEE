@@ -127,6 +127,7 @@ Rectangle {
     // Shortcut items (Task 5), so no key is bound twice.
     FlMenu {
         id: fileMenu
+        objectName: "fileMenu"
         Action { text: "Open…"; property string keys: "Ctrl+O"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.openRequested() }
         Action { text: "Add Folder…"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.addFolderRequested() }
         MenuSeparator {}

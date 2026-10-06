@@ -1,0 +1,23 @@
+# `]` changes the film; a menu opened and dismissed with Esc must hand focus back
+# so `[` still works (Review Focus 5); B cycles compare; arrows are free for photo
+# navigation while nothing editable has focus. (Consecutive film changes coalesce
+# into one history step, so the second check reads the stock, not the history.)
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:engine.history.length=1
+expect:engine.stockModel.0.id=none
+key:93
+waitfor:engine.history.length=2,5000
+click:menuFile@0.5,0.5
+wait:250
+expect:fileMenu.visible=true
+key:16777216
+wait:250
+expect:fileMenu.visible=false
+key:91
+waitfor:engine.stock=none,5000
+key:66
+wait:150
+expect:v2Root.compareMode=1
+expect:v2Root.arrowKeysFree=true
+quit
