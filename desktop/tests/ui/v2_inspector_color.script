@@ -34,6 +34,9 @@ wait:300
 click:swatch_shadow@0.2,0.5
 wait:300
 expect:swatchPopup_shadow.visible=true
+# The popover wraps its 120px wheel (review I2).
+expect:swatchPopup_shadow.width=148
+expect:swatchPopup_shadow.height=168
 click:swatchWheel_shadowDisc@0.9,0.5
 wait:200
 expect:engine.filmControls.cg_shadow_hue=0

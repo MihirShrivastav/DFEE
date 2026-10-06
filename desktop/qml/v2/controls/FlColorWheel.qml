@@ -9,6 +9,9 @@ Item {
     property string zone: ""
     property string label: ""
     property int diameter: 96
+    // Implicit size too, so a Popup that hosts the wheel (FlToneSwatch) sizes to it.
+    implicitWidth: diameter
+    implicitHeight: diameter + 20
     width: diameter
     height: diameter + 20
     readonly property real hueVal: Number(engine.filmControls["cg_" + zone + "_hue"])

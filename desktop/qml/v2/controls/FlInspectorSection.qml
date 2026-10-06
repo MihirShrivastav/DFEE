@@ -15,6 +15,15 @@ Column {
     signal toggled()
     readonly property bool edited: group.length > 0 && engine.editedGroups[group] === true
     width: parent ? parent.width : Theme.inspectorWidth
+    // Hidden items keep keyboard focus in Qt; when collapsing a section that holds
+    // it (a slider), hand focus back so the arrows navigate photos again.
+    onOpenChanged: {
+        if (open) return;
+        const w = section.Window.window;
+        let item = w ? w.activeFocusItem : null;
+        while (item && item !== bodyHolder) item = item.parent;
+        if (item && w.returnFocus) w.returnFocus();
+    }
     FlSectionHeader {
         objectName: section.objectName.length > 0 ? section.objectName + "Header" : ""
         width: parent.width
@@ -27,6 +36,7 @@ Column {
         onResetRequested: engine.resetControlGroup(section.group)
     }
     Item {
+        id: bodyHolder
         width: parent.width
         height: section.open ? body.implicitHeight + 28 : 0
         visible: section.open

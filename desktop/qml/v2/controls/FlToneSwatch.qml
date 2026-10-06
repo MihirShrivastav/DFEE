@@ -38,6 +38,7 @@ Item {
         objectName: "swatchPopup_" + sw.zone
         y: sw.height + 6
         padding: 14
+        margins: 8                     // stay inside the window near its edges
         focus: true
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onClosed: Qt.callLater(function() {
