@@ -20,6 +20,11 @@ Rectangle {
     property real cropY: 0
     property real cropW: 1
     property real cropH: 1
+    // The crop the photo had when crop mode started (Esc restores it).
+    property real cropStartX: 0
+    property real cropStartY: 0
+    property real cropStartW: 1
+    property real cropStartH: 1
 
     // Crop mode belongs to one photo; never carry it (or its rectangle) to the next.
     Connections {
@@ -38,6 +43,7 @@ Rectangle {
         cropY = engine.filmControls.crop_y;
         cropW = engine.filmControls.crop_w;
         cropH = engine.filmControls.crop_h;
+        cropStartX = cropX; cropStartY = cropY; cropStartW = cropW; cropStartH = cropH;
         compareModeRequested(0);
         cropMode = true;
         engine.setCrop(0, 0, 1, 1);
@@ -45,6 +51,15 @@ Rectangle {
     function applyCropMode() {
         cropMode = false;
         engine.setCrop(cropX, cropY, cropW, cropH);
+    }
+    function cancelCropMode() {
+        cropMode = false;
+        engine.setCrop(cropStartX, cropStartY, cropStartW, cropStartH);
+    }
+    function resetCropMode() {
+        engine.resetGeometry();
+        cropAspect = 0;
+        cropX = 0; cropY = 0; cropW = 1; cropH = 1;
     }
     function selectAspect(r) {
         if (r < 0) {
@@ -55,8 +70,10 @@ Rectangle {
         }
         if (!cropMode) enterCropMode();
         if (r === 0) { cropAspect = 0; return; }
-        cropAspect = r;
         const A = imageAspect();
+        // Presets follow the photo's orientation: 3:2 on a portrait photo crops 2:3.
+        if ((A < 1) !== (r < 1) && Math.abs(r - 1) > 0.0001) r = 1 / r;
+        cropAspect = r;
         const R = r / A;
         let wN, hN;
         if (R >= 1) { wN = 1; hN = 1 / R; } else { hN = 1; wN = R; }
@@ -334,6 +351,17 @@ Rectangle {
                 else imageArea.setZoom(2.0, mouse.x, mouse.y);
             }
         }
+    }
+
+    FlCropToolbar {
+        visible: canvas.cropMode
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 18 + statusBar.height
+        compact: canvas.width < 560
+        onAspectChosen: (r) => canvas.selectAspect(r)
+        onResetRequested: canvas.resetCropMode()
+        onDoneRequested: canvas.applyCropMode()
     }
 
     Column {

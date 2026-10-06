@@ -64,7 +64,9 @@ ApplicationWindow {
     Shortcut { sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]; enabled: engine.canRedo && !root.textEntry; onActivated: engine.redo() }
     Shortcut { sequence: "["; enabled: engine.hasImage && !root.textEntry; onActivated: root.cycleStock(-1) }
     Shortcut { sequence: "]"; enabled: engine.hasImage && !root.textEntry; onActivated: root.cycleStock(1) }
-    Shortcut { sequence: "C"; enabled: engine.hasImage && !engine.lightroomRoundTrip && !root.textEntry; onActivated: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode() }
+    Shortcut { sequences: ["C", "R"]; enabled: engine.hasImage && !engine.lightroomRoundTrip && !root.textEntry; onActivated: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode() }
+    Shortcut { sequences: ["Return", "Enter"]; enabled: canvas.cropMode && !root.textEntry; onActivated: canvas.applyCropMode() }
+    Shortcut { sequence: "Esc"; enabled: canvas.cropMode; onActivated: canvas.cancelCropMode() }
     Shortcut { sequence: "Left"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(-1) }
     Shortcut { sequence: "Right"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(1) }
     Shortcut { sequence: "Ctrl+Left"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(-1) }
@@ -147,6 +149,9 @@ ApplicationWindow {
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
         width: Theme.inspectorWidth
+        enabled: !canvas.cropMode
+        opacity: canvas.cropMode ? 0.4 : 1.0
+        Behavior on opacity { NumberAnimation { duration: Theme.motionNormal } }
     }
 
     // Test hook: `--min-size` starts at the minimum window size (Review Focus 3).
