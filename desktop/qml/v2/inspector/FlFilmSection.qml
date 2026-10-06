@@ -95,8 +95,7 @@ FlInspectorSection {
                 id: s.id,
                 name: s.name,
                 group: s.id === "none" ? "" : (s.groupLabel || ""),
-                detail: s.id === "none" ? "No film look"
-                    : ((s.iso > 0 ? "ISO " + s.iso : "") + (s.iso > 0 && s.blurb ? " · " : "") + (s.blurb || "")),
+                detail: "",                     // names only: the card shows type, ISO and look
                 art: s.id === "none" ? "" : "qrc:/boxart/" + s.id + ".svg"
             }))
             onPicked: (id) => engine.stock = id
