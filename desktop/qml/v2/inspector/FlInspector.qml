@@ -73,6 +73,21 @@ Rectangle {
                 open: prefs.toneOpen
                 onToggled: prefs.toneOpen = !prefs.toneOpen
             }
+            FlColorSection {
+                objectName: "colorSection"
+                open: prefs.colorOpen
+                onToggled: prefs.colorOpen = !prefs.colorOpen
+            }
+            FlGrainLightSection {
+                objectName: "grainSection"
+                open: prefs.grainOpen
+                onToggled: prefs.grainOpen = !prefs.grainOpen
+            }
+            FlPrintSection {
+                objectName: "printSection"
+                open: prefs.printOpen
+                onToggled: prefs.printOpen = !prefs.printOpen
+            }
         }
     }
     Rectangle { anchors.left: parent.left; width: 1; height: parent.height; color: Theme.hairline }
