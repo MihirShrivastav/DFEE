@@ -1,14 +1,16 @@
 import QtQuick
+import QtQuick.Dialogs
 import DFEE
 
-// Export: format, JPEG quality or TIFF resolution, and where the file goes (next to
-// the original; choosing a folder comes with Phase 4). Lightroom mode never opens
-// this sheet — it exports straight back.
+// Export: where the file goes (remembered folder, favourites, recents, or next to the
+// original), its name (a template with a live example), what happens when the name is
+// taken, and the format. Lightroom mode never opens this sheet; it saves straight back.
 FlSheet {
     id: sheet
     objectName: "exportSheet"
     title: "Export"
-    width: 440
+    width: 520
+    readonly property int labelWidth: 112
     readonly property var formats: [
         { id: "jpeg", label: "JPEG" }, { id: "png8", label: "8-bit PNG" },
         { id: "png16", label: "16-bit PNG" }, { id: "tiff", label: "16-bit TIFF" }
@@ -27,6 +29,205 @@ FlSheet {
         for (let i = 0; i < formats.length; ++i) if (formats[i].id === exportPrefs.format) return i;
         return 0;
     }
+    function folderName(p) { const parts = p.split("/"); return parts[parts.length - 1] || p; }
+    function shortPath(p) {
+        const parts = p.split("/");
+        return parts.length > 3 ? "…/" + parts.slice(-2).join("/") : p;
+    }
+    readonly property var folderRows: {
+        const rows = [];
+        for (const p of exportPrefs.favorites)
+            rows.push({ id: "path:" + p, name: folderName(p), detail: p, group: "Favourites" });
+        for (const p of exportPrefs.recents)
+            if (!exportPrefs.isFavorite(p))
+                rows.push({ id: "path:" + p, name: folderName(p), detail: p, group: "Recent" });
+        rows.push({ id: "default", name: "Film Lab Exports", detail: exportPrefs.defaultFolder, group: "Folders" });
+        rows.push({ id: "next", name: "Next to the original", detail: "The photo's own folder", group: "Folders" });
+        rows.push({ id: "choose", name: "Choose folder…", detail: "", group: "Folders" });
+        return rows;
+    }
+    function pickFolder(id) {
+        if (id === "choose") folderDialog.open();
+        else if (id === "next") exportPrefs.useNextToOriginal();
+        else if (id === "default") exportPrefs.useDefaultFolder();
+        else if (id.startsWith("path:")) exportPrefs.useFolder(id.slice(5));
+    }
+    FolderDialog {
+        id: folderDialog
+        title: "Export to folder"
+        currentFolder: "file:///" + exportPrefs.folderPath
+        onAccepted: exportPrefs.useFolderUrl(selectedFolder)
+    }
+
+    Item {                                   // Save to: folder dropdown + favourite star
+        width: parent.width
+        height: Theme.controlHeight
+        Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Save to"
+            color: Theme.textSecondary
+            font.pixelSize: Theme.fontLabel
+        }
+        Rectangle {
+            id: folderBox
+            objectName: "exportFolderBox"
+            x: sheet.labelWidth
+            width: parent.width - sheet.labelWidth - favButton.width - 6
+            height: Theme.controlHeight
+            radius: Theme.radiusControl
+            color: Theme.inset
+            FlIcon {
+                id: folderIcon
+                x: 8
+                anchors.verticalCenter: parent.verticalCenter
+                name: "folder-simple"
+                size: 14
+                color: Theme.textSecondary
+            }
+            Text {
+                objectName: "exportFolderLabel"
+                anchors.left: folderIcon.right
+                anchors.leftMargin: 6
+                anchors.right: caret.left
+                anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                text: exportPrefs.nextToOriginal ? "Next to the original" : sheet.shortPath(exportPrefs.folderPath)
+                elide: Text.ElideMiddle
+                color: Theme.text
+                font.pixelSize: Theme.fontLabel
+            }
+            FlIcon {
+                id: caret
+                anchors.right: parent.right
+                anchors.rightMargin: 8
+                anchors.verticalCenter: parent.verticalCenter
+                name: "caret-down"
+                size: 12
+                color: Theme.textTertiary
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: folderPicker.visible ? folderPicker.close() : folderPicker.open()
+            }
+            FlListPopup {
+                id: folderPicker
+                objectName: "exportFolderPicker"
+                y: parent.height + 4
+                width: parent.width
+                rowPrefix: "exportFolder_"
+                rows: sheet.folderRows
+                currentId: exportPrefs.nextToOriginal ? "next" : "path:" + exportPrefs.folderPath
+                focusReturn: sheet.contentItem
+                onPicked: (id) => sheet.pickFolder(id)
+            }
+        }
+        FlIconButton {
+            id: favButton
+            objectName: "exportFavoriteButton"
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !exportPrefs.nextToOriginal
+            readonly property bool favorite: { exportPrefs.favorites; return exportPrefs.isFavorite(exportPrefs.folderPath); }
+            iconName: favorite ? "star-fill" : "star"
+            tip: favorite ? "Remove from favourites" : "Add to favourites"
+            onClicked: exportPrefs.toggleFavorite(exportPrefs.folderPath)
+        }
+    }
+    Item {                                   // File name: template field
+        width: parent.width
+        height: Theme.controlHeight
+        Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "File name"
+            color: Theme.textSecondary
+            font.pixelSize: Theme.fontLabel
+        }
+        FlTextField {
+            id: nameField
+            objectName: "exportNameField"
+            x: sheet.labelWidth
+            width: parent.width - sheet.labelWidth
+            tabStop: true
+            escReturnsFocus: false
+            text: exportPrefs.nameTemplate
+            onTextEdited: exportPrefs.nameTemplate = text
+        }
+    }
+    Row {                                    // tokens insert at the cursor
+        x: sheet.labelWidth
+        spacing: 6
+        Repeater {
+            model: ["{name}", "{film}", "{date}", "{seq}", "{camera}"]
+            delegate: Rectangle {
+                objectName: "exportToken_" + modelData.slice(1, -1)
+                width: tokenText.implicitWidth + 14
+                height: 22
+                radius: Theme.radiusControl
+                color: tokenArea.containsMouse ? Theme.rowSelected : Theme.inset
+                Text {
+                    id: tokenText
+                    anchors.centerIn: parent
+                    text: modelData
+                    color: Theme.textSecondary
+                    font.pixelSize: Theme.fontCaption
+                }
+                MouseArea {
+                    id: tokenArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: {
+                        nameField.insert(nameField.cursorPosition, modelData);
+                        exportPrefs.nameTemplate = nameField.text;
+                    }
+                }
+            }
+        }
+    }
+    Text {
+        objectName: "exportNameExample"
+        x: sheet.labelWidth
+        width: parent.width - sheet.labelWidth
+        text: sheet.target.fileName || ""
+        elide: Text.ElideMiddle
+        color: Theme.textCaption
+        font.pixelSize: Theme.fontCaption
+    }
+    Text {
+        objectName: "exportTargetNote"
+        x: sheet.labelWidth
+        width: parent.width - sheet.labelWidth
+        visible: text.length > 0
+        wrapMode: Text.Wrap
+        text: !sheet.target.exists ? ""
+            : sheet.target.skip ? "A file with this name exists, so it will be skipped."
+            : sheet.target.replaces ? "Will replace the existing file."
+            : "A file with this name exists, so a number is added."
+        color: sheet.target.skip || sheet.target.replaces ? Theme.danger : Theme.textCaption
+        font.pixelSize: Theme.fontCaption
+    }
+    Item {                                   // If the name exists
+        width: parent.width
+        height: Theme.segmentHeight + 4
+        Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "If the name exists"
+            color: Theme.textSecondary
+            font.pixelSize: Theme.fontLabel
+        }
+        FlSegmented {
+            objectName: "exportCollisionSegmented"
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            readonly property var rules: ["number", "replace", "skip"]
+            model: ["Add number", "Replace", "Skip"]
+            currentIndex: Math.max(0, rules.indexOf(exportPrefs.collision))
+            onActivated: (i) => exportPrefs.collision = rules[i]
+        }
+    }
+    FlHairline { width: parent.width }
 
     Item {
         width: parent.width
@@ -88,26 +289,6 @@ FlSheet {
                 font.pixelSize: Theme.fontLabel
             }
         }
-    }
-    Text {
-        objectName: "exportNameExample"
-        width: parent.width
-        text: sheet.target.fileName || ""
-        elide: Text.ElideMiddle
-        color: Theme.textCaption
-        font.pixelSize: Theme.fontCaption
-    }
-    Text {
-        objectName: "exportTargetNote"
-        width: parent.width
-        visible: text.length > 0
-        wrapMode: Text.Wrap
-        text: !sheet.target.exists ? ""
-            : sheet.target.skip ? "A file with this name exists, so it will be skipped."
-            : sheet.target.replaces ? "Will replace the existing file."
-            : "A file with this name exists, so a number is added."
-        color: sheet.target.skip || sheet.target.replaces ? Theme.danger : Theme.textCaption
-        font.pixelSize: Theme.fontCaption
     }
     Text {
         visible: exportPrefs.format === "tiff"

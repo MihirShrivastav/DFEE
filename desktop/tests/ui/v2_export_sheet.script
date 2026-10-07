@@ -1,0 +1,43 @@
+# Export sheet: pick folders from the dropdown, favourite one, insert name tokens,
+# choose the taken-name rule; Esc still closes the sheet after using the picker.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+key:83+ctrl
+wait:300
+expect:exportSheet.visible=true
+click:exportFolderBox@0.5,0.5
+wait:300
+expect:exportFolderPicker.visible=true
+click:exportFolder_next@0.5,0.5
+wait:300
+expect:exportFolderPicker.visible=false
+expect:exportPrefs.nextToOriginal=true
+expect:exportFolderLabel.text=Next to the original
+expect:exportFavoriteButton.visible=false
+click:exportFolderBox@0.5,0.5
+wait:300
+click:exportFolder_default@0.5,0.5
+wait:300
+expect:exportPrefs.nextToOriginal=false
+expect:exportFavoriteButton.visible=true
+click:exportFavoriteButton@0.5,0.5
+wait:200
+expect:exportPrefs.favorites.length=1
+expect:exportFavoriteButton.iconName=star-fill
+click:exportNameField@0.5,0.5
+key:16777233
+click:exportToken_seq@0.5,0.5
+wait:200
+expect:exportPrefs.nameTemplate={name}_{film}{seq}
+expect:exportNameExample.text=3071874357_0001.jpg
+click:exportCollisionSegmented@0.85,0.5
+wait:200
+expect:exportPrefs.collision=skip
+click:exportCollisionSegmented@0.15,0.5
+wait:200
+expect:exportPrefs.collision=number
+shot:${TEMP}/v2_export_sheet.png
+key:16777216
+wait:300
+expect:exportSheet.visible=false
+quit

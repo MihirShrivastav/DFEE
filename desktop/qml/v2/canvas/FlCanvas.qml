@@ -436,13 +436,24 @@ Rectangle {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             anchors.leftMargin: 16
-            anchors.rightMargin: 16
+            anchors.rightMargin: showInFolderButton.visible ? showInFolderButton.width + 28 : 16
             wrapMode: Text.Wrap
             maximumLineCount: 3
             elide: Text.ElideRight
             text: engine.status
             color: engine.status.startsWith("Open failed:") || engine.status.startsWith("Render failed:") || engine.status.startsWith("Export failed:") ? Theme.danger : Theme.textSecondary
             font.pixelSize: Theme.fontLabel
+        }
+        FlButton {
+            id: showInFolderButton
+            objectName: "showInFolderButton"
+            kind: "text"
+            text: "Show in folder"
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            visible: engine.status.startsWith("Exported:") && engine.lastExportPath.length > 0
+            onClicked: engine.showLastExport()
         }
     }
 }

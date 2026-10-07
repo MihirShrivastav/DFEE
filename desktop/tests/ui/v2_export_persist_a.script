@@ -1,0 +1,13 @@
+# Run a then b with the same -UiSettings ini: export choices survive a restart.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+set:exportPrefs.nameTemplate={date}_{name}
+set:exportPrefs.collision=skip
+set:exportPrefs.format=tiff
+set:exportPrefs.dpi=600
+key:83+ctrl
+wait:300
+click:exportFavoriteButton@0.5,0.5
+wait:200
+expect:exportPrefs.favorites.length=1
+quit

@@ -1,0 +1,7 @@
+# Second half of v2_export_persist_a (same -UiSettings ini).
+expect:exportPrefs.nameTemplate={date}_{name}
+expect:exportPrefs.collision=skip
+expect:exportPrefs.format=tiff
+expect:exportPrefs.dpi=600
+expect:exportPrefs.favorites.length=1
+quit

@@ -10,6 +10,7 @@ Popup {
     property var rows: []
     property string currentId: ""
     property string rowPrefix: "row_"
+    property Item focusReturn: null   // inside a sheet: give focus back there, not to the window
     signal picked(string id)
     width: 268
     height: Math.min(list.contentHeight + 12, 420)
@@ -24,6 +25,7 @@ Popup {
     }
     onOpened: list.positionViewAtIndex(Math.max(0, indexOf(currentId)), ListView.Contain)
     onClosed: Qt.callLater(function() {
+        if (pop.focusReturn) { pop.focusReturn.forceActiveFocus(); return; }
         const w = pop.parent ? pop.parent.Window.window : null;
         if (w && w.returnFocus) w.returnFocus();
     })
