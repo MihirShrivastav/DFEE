@@ -19,7 +19,8 @@ ListView {
     spacing: 8
     leftMargin: 16
     rightMargin: 16
-    topMargin: 8
+    // Horizontal views ignore topMargin, so tiles start `tileTop` down to leave room for the selection ring.
+    readonly property int tileTop: 8
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -34,9 +35,9 @@ ListView {
         // recordCount's NOTIFY (EditStore::changed) fires on every save, so this re-reads.
         readonly property bool edited: { editStore.recordCount; return editStore.isEdited(modelData.path); }
         width: 128
-        height: 96
+        height: strip.tileTop + 96 + 22
         Rectangle {
-            x: -4; y: -4
+            x: -4; y: strip.tileTop - 4
             width: 136; height: 104
             radius: 9
             color: "transparent"
@@ -45,7 +46,10 @@ ListView {
             visible: tile.current
         }
         Rectangle {
-            anchors.fill: parent
+            id: thumb
+            y: strip.tileTop
+            width: 128
+            height: 96
             radius: 5
             color: Theme.inset
             clip: true
@@ -60,12 +64,23 @@ ListView {
         }
         Rectangle {
             visible: tile.edited
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
+            anchors.right: thumb.right
+            anchors.bottom: thumb.bottom
             anchors.margins: 5
             width: 16; height: 16; radius: 8
             color: "#99000000"
             FlIcon { anchors.centerIn: parent; name: "pencil-simple"; size: 10; color: Theme.text }
+        }
+        Text {
+            objectName: "rollName_" + modelData.name.replace(/\./g, "_")
+            anchors.top: thumb.bottom
+            anchors.topMargin: 5
+            width: parent.width
+            text: modelData.name
+            elide: Text.ElideMiddle                 // keep the number and extension
+            color: tile.current ? Theme.text : Theme.textTertiary
+            font.pixelSize: Theme.fontCaption
+            font.features: { "tnum": 1 }
         }
         HoverHandler { id: tileHover }
         FlTip { visible: tileHover.hovered; text: modelData.name }

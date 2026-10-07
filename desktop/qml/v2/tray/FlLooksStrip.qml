@@ -13,7 +13,8 @@ ListView {
     spacing: 14
     leftMargin: 16
     rightMargin: 16
-    topMargin: 8
+    // Horizontal views ignore topMargin, so tiles start `tileTop` down to leave room for the selection ring.
+    readonly property int tileTop: 8
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -31,9 +32,10 @@ ListView {
         readonly property bool isSave: modelData.kind === "save"
         objectName: isSave ? "lookSave" : "lookTile_" + modelData.id
         width: 124
-        height: 116
+        height: strip.tileTop + 118
         Rectangle {
             id: art
+            y: strip.tileTop
             width: 124
             height: 82
             radius: Theme.radiusTile
@@ -102,7 +104,7 @@ ListView {
             visible: !tile.isSave
             opacity: tileHover.hovered || menu.visible ? 1.0 : 0.0
             x: art.width - width - 4
-            y: 4
+            y: art.y + 4
             width: 24
             height: 22
             iconName: "dots-three"

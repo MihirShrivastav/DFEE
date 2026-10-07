@@ -35,7 +35,8 @@ ListView {
     spacing: 14
     leftMargin: 16
     rightMargin: 16
-    topMargin: 8
+    // Horizontal views ignore topMargin, so tiles start `tileTop` down to leave room for the selection ring.
+    readonly property int tileTop: 8
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
@@ -59,9 +60,9 @@ ListView {
         readonly property bool live: tileEpoch > 0
         readonly property bool fresh: live && tileEpoch === engine.lookEpoch
         width: 124
-        height: 116
+        height: strip.tileTop + 118
         Rectangle {                                   // selection ring: 2px gap + 2px accent
-            x: -4; y: -4
+            x: -4; y: strip.tileTop - 4
             width: 132; height: 90
             radius: 9
             color: "transparent"
@@ -71,6 +72,7 @@ ListView {
         }
         Rectangle {
             id: art
+            y: strip.tileTop
             width: 124
             height: 82
             radius: Theme.radiusTile
@@ -107,7 +109,7 @@ ListView {
         Image {                                   // box-art badge on a live tile
             visible: tile.live && modelData.id !== "none"
             x: 6
-            y: art.height - height - 6
+            y: art.y + art.height - height - 6
             width: 18
             height: 18
             source: visible ? "qrc:/boxart/" + modelData.id + ".svg" : ""

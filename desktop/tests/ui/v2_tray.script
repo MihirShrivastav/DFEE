@@ -38,6 +38,8 @@ click:rollTile_7033866904_arw@0.5,0.5
 waitfor:engine.currentFile=${SAMPLE_B},15000
 expect:rollTile_7033866904_arw.current=true
 expect:rollTile_7033866904_arw.edited=false
+# Each thumbnail carries its file name.
+expect:rollName_7033866904_arw.text=7033866904.arw
 set:traySearch.text=3071874357
 wait:300
 waitfor:rollTile_3071874357_arw.edited=true,5000

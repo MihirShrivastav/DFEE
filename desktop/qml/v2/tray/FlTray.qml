@@ -3,7 +3,7 @@ import QtQuick.Controls
 import QtCore
 import DFEE
 
-// Bottom tray (176): Roll | Films | Looks with a filter field. Lightroom Edit-In
+// Bottom tray (184): Roll | Films | Looks with a filter field. Lightroom Edit-In
 // shows Films | Looks only. The tab persists (QtCore Settings, category "tray").
 Rectangle {
     id: tray

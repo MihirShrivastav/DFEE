@@ -42,7 +42,7 @@ QtObject {
     readonly property int toolbarHeight: 52
     readonly property int sidebarWidth: 232
     readonly property int inspectorWidth: 300
-    readonly property int trayHeight: 176
+    readonly property int trayHeight: 184
     readonly property int controlHeight: 26
     readonly property int segmentHeight: 24
     readonly property int sectionRow: 40
