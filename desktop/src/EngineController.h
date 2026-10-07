@@ -75,6 +75,9 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantMap lookTiles READ lookTiles NOTIFY lookTilesChanged)
     Q_PROPERTY(int lookEpoch READ lookEpoch NOTIFY lookTilesChanged)
     Q_PROPERTY(int lookTilesPending READ lookTilesPending NOTIFY lookTilesChanged)
+    // A film shown on the canvas while hovering its tile: changes only the preview
+    // request — no history, no catalog write — until it is applied with setStock.
+    Q_PROPERTY(QString peekStock READ peekStock NOTIFY peekChanged)
 
 public:
     // provider must be non-null; it must outlive EngineController (the
@@ -159,6 +162,9 @@ public:
     int lookEpoch() const { return static_cast<int>(lookEpoch_); }
     int lookTilesPending() const { return int(tileQueue_.size()) + (tileInFlight_.isEmpty() ? 0 : 1); }
     void setLookProvider(LookPreviewProvider* provider) { lookProvider_ = provider; }
+    QString peekStock() const { return peekStock_; }
+    Q_INVOKABLE void beginPeek(const QString& stockId);
+    Q_INVOKABLE void endPeek();
     // The tiles the tray shows right now (visible group, in order). Empty stops tiles.
     Q_INVOKABLE void requestLookTiles(const QStringList& stockIds);
     Q_INVOKABLE void onLookProxyReady(const QString& stockId, qulonglong epoch, const QImage& image);
@@ -221,6 +227,7 @@ signals:
     void historyChanged();
     void presetsChanged();
     void lookTilesChanged();
+    void peekChanged();
 
 private:
     // Factory for the default film-control values — the single source of truth
@@ -333,4 +340,5 @@ private:
     QStringList wantedTiles_;
     QStringList tileQueue_;
     QString tileInFlight_;
+    QString peekStock_;
 };

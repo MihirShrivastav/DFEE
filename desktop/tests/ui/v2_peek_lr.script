@@ -1,0 +1,13 @@
+# Lightroom Edit-In: tiles render and peek works in the round-trip window too.
+waitfor:engine.hasImage=true,30000
+expect:engine.lightroomRoundTrip=true
+expect:tray.activeTab=films
+waitfor:engine.lookTilesPending=0,60000
+expect:filmTile_cinestill_400d.live=true
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
+key:16777216
+wait:200
+expect:engine.peekStock=
+expect:engine.stock=none
+quit

@@ -370,6 +370,33 @@ Rectangle {
         }
     }
 
+    // While a film tile is hovered: say what the canvas shows and how to keep it.
+    Rectangle {
+        objectName: "peekChip"
+        visible: engine.peekStock.length > 0
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 12
+        width: peekText.implicitWidth + 24
+        height: 26
+        radius: 13
+        color: "#e6242426"
+        border.width: 1
+        border.color: Theme.hairline
+        readonly property string filmName: {
+            const m = engine.stockModel;
+            for (let i = 0; i < m.length; ++i) if (m[i].id === engine.peekStock) return m[i].name;
+            return engine.peekStock;
+        }
+        Text {
+            id: peekText
+            anchors.centerIn: parent
+            text: "Previewing " + parent.filmName + " · click to apply · Esc to cancel"
+            color: Theme.text
+            font.pixelSize: Theme.fontCaption
+        }
+    }
+
     FlCropToolbar {
         visible: canvas.cropMode
         anchors.horizontalCenter: parent.horizontalCenter

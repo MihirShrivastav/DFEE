@@ -73,6 +73,7 @@ ApplicationWindow {
     Shortcut { sequences: ["C", "R"]; enabled: engine.hasImage && !engine.lightroomRoundTrip && !root.textEntry; onActivated: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode() }
     Shortcut { sequences: ["Return", "Enter"]; enabled: canvas.cropMode && !root.textEntry; onActivated: canvas.applyCropMode() }
     Shortcut { sequence: "Esc"; enabled: canvas.cropMode; onActivated: canvas.cancelCropMode() }
+    Shortcut { sequence: "Esc"; enabled: engine.peekStock.length > 0 && !canvas.cropMode; onActivated: engine.endPeek() }
     Shortcut { sequence: "Left"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(-1) }
     Shortcut { sequence: "Right"; enabled: !engine.lightroomRoundTrip && root.arrowKeysFree; onActivated: root.navigatePhoto(1) }
     Shortcut { sequence: "Ctrl+Left"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(-1) }

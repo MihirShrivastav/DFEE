@@ -138,6 +138,23 @@ void postClick(ScriptState& s, const QString& spec, bool doubleClick = false)
     }
 }
 
+// A mouse move with no button: drives HoverHandlers (enter on the target, leave
+// on whatever was hovered before).
+void postHover(ScriptState& s, const QString& spec)
+{
+    const QString name = spec.section('@', 0, 0);
+    const QString frac = spec.section('@', 1, 1);
+    auto* item = qobject_cast<QQuickItem*>(resolveRoot(s, name));
+    if (!item) { fail(s, "hover:" + spec, "missing"); return; }
+    const double fx = frac.isEmpty() ? 0.5 : frac.section(',', 0, 0).toDouble();
+    const double fy = frac.isEmpty() ? 0.5 : frac.section(',', 1, 1).toDouble();
+    const QPointF p = item->mapToScene(QPointF(item->width() * fx, item->height() * fy));
+    static ulong timestamp = 500000;
+    QMouseEvent event(QEvent::MouseMove, p, p, s.window->mapToGlobal(p), Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+    event.setTimestamp(timestamp += 20);
+    QCoreApplication::sendEvent(s.window, &event);
+}
+
 void postKey(ScriptState& s, const QString& spec)
 {
     const int key = spec.section('+', 0, 0).toInt();
@@ -184,6 +201,8 @@ void runNext(std::shared_ptr<ScriptState> s)
         postClick(*s, arg);
     } else if (verb == QLatin1String("dclick")) {
         postClick(*s, arg, true);
+    } else if (verb == QLatin1String("hover")) {
+        postHover(*s, arg);
     } else if (verb == QLatin1String("key")) {
         postKey(*s, arg);
     } else if (verb == QLatin1String("open")) {

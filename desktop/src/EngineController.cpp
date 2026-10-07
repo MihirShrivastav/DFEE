@@ -248,6 +248,11 @@ void EngineController::loadStocks()
 
 void EngineController::setStock(const QString& id)
 {
+    if (!peekStock_.isEmpty()) {          // applying a film ends its peek
+        peekStock_.clear();
+        emit peekChanged();
+        if (stockId_ == id) { scheduleRender(); return; }
+    }
     if (stockId_ == id) return;
     stockId_ = id;
     emit stockChanged();
@@ -721,6 +726,7 @@ void EngineController::openFile(const QUrl& url)
     imageInfo_.clear();
     emit imageInfoChanged();
     resetLookTiles();
+    if (!peekStock_.isEmpty()) { peekStock_.clear(); emit peekChanged(); }
     loadEditsFor(file);                   // before the first preview request
     workerBusy_  = true;
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
@@ -764,7 +770,7 @@ dfee::NativePreviewRenderRequest EngineController::buildPreviewRequest() const
 {
     dfee::NativePreviewRenderRequest request;
     request.filename = currentFile_.toStdString();
-    request.stock = stockId_.toStdString();
+    request.stock = (peekStock_.isEmpty() ? stockId_ : peekStock_).toStdString();
     request.effect_pipeline_version = "filmic_v4"; // A/B eval: display-referred film tone (Portra 400 / Tri-X 400 / Kodachrome 64 have curve blocks)
     request.exposure_placement = filmControls_.value("exposure_placement").toString().toStdString();
     request.film_exposure_ev = static_cast<float>(filmControls_.value("film_exposure_ev").toDouble());
@@ -920,6 +926,7 @@ void EngineController::exportImage()
 {
     if (currentFile_.isEmpty()) return;
     if (exporting_) return;
+    endPeek();                            // export the applied film, never a hovered one
     flushEdits();
     // The export snapshot is built below, so a queued preview would only spend
     // memory and CPU on an image the user is about to save at full resolution.
@@ -1030,6 +1037,7 @@ void EngineController::onWorkerBusyChanged(bool busy)
             imageInfo_.clear();
             emit imageInfoChanged();
             resetLookTiles();
+            if (!peekStock_.isEmpty()) { peekStock_.clear(); emit peekChanged(); }
             loadEditsFor(currentFile_);
 
             workerBusy_ = true;
@@ -1045,6 +1053,25 @@ void EngineController::onWorkerBusyChanged(bool busy)
     } else if (!busy) {
         pumpLookTiles();
     }
+}
+
+// ── Peek ────────────────────────────────────────────────────────────────
+
+void EngineController::beginPeek(const QString& stockId)
+{
+    if (stockId == stockId_) { endPeek(); return; }   // hovering the applied film
+    if (peekStock_ == stockId || currentFile_.isEmpty()) return;
+    peekStock_ = stockId;
+    emit peekChanged();
+    scheduleRender();
+}
+
+void EngineController::endPeek()
+{
+    if (peekStock_.isEmpty()) return;
+    peekStock_.clear();
+    emit peekChanged();
+    scheduleRender();
 }
 
 // ── Films tiles ─────────────────────────────────────────────────────────

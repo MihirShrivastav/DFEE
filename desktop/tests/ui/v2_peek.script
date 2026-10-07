@@ -1,0 +1,31 @@
+# Hover a film for ~120 ms: the canvas previews it, nothing is recorded; moving away
+# or Esc restores; a click applies it as one history step. The catalog is untouched.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:engine.history.length=1
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
+expect:peekChip.visible=true
+expect:engine.stock=none
+waitfor:engine.previewRevision=2,15000
+expect:engine.history.length=1
+hover:photoCanvas@0.5,0.5
+waitfor:engine.peekStock=,3000
+expect:peekChip.visible=false
+hover:filmTile_cinestill_50d@0.5,0.3
+waitfor:engine.peekStock=cinestill_50d,3000
+key:16777216
+wait:200
+expect:engine.peekStock=
+expect:engine.stock=none
+expect:engine.history.length=1
+wait:600
+expect:editStore.recordCount=0
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
+click:filmTile_cinestill_400d@0.5,0.3
+wait:300
+expect:engine.stock=cinestill_400d
+expect:engine.peekStock=
+expect:engine.history.length=2
+quit

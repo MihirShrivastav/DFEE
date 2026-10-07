@@ -21,8 +21,16 @@ ListView {
     readonly property var wantedIds: (model || []).map(r => r.id)
     function requestTiles() { engine.requestLookTiles(visible ? wantedIds : []); }
     onWantedIdsChanged: requestTiles()
-    onVisibleChanged: requestTiles()
+    onVisibleChanged: { requestTiles(); if (!visible) { hoverId = ""; engine.endPeek(); } }
     Component.onCompleted: requestTiles()
+    // Hover ~120 ms to preview a film on the canvas; leaving the tiles restores.
+    property string hoverId: ""
+    Timer {
+        id: peekTimer
+        interval: 120
+        onTriggered: strip.hoverId.length > 0 ? engine.beginPeek(strip.hoverId) : engine.endPeek()
+    }
+    onHoverIdChanged: peekTimer.restart()
     orientation: ListView.Horizontal
     spacing: 14
     leftMargin: 16
@@ -125,7 +133,13 @@ ListView {
                 font.features: { "tnum": 1 }
             }
         }
-        HoverHandler { id: tileHover }
+        HoverHandler {
+            id: tileHover
+            onHoveredChanged: {
+                if (hovered) strip.hoverId = modelData.id;
+                else if (strip.hoverId === modelData.id) strip.hoverId = "";
+            }
+        }
         MouseArea { anchors.fill: parent; onClicked: engine.stock = modelData.id }
     }
 }
