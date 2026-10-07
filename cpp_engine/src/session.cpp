@@ -2776,7 +2776,7 @@ std::optional<Image> EngineSession::run_film_pipeline(
         }
         {
             ScopedStageTimer substage(engine, p + "_film_stage_acutance");
-            rendered = renderer.apply_acutance_shaping(rendered, render_plan.material_effects);
+            rendered = renderer.apply_acutance_shaping(rendered, render_plan.material_effects, options.pixel_scale);
         }
         {
             ScopedStageTimer substage(engine, p + "_film_stage_halation_bloom");
@@ -2909,6 +2909,10 @@ NativeLookProxyResponse EngineSession::render_look_proxy(const NativeLookProxyRe
         options.include_grain = request.include_grain;
         options.apply_geometry = request.apply_geometry;
         options.dump_stages = false;
+        if (request.scale_pixel_effects && preview_cache_->rgb_linear.width > 0) {
+            options.pixel_scale = static_cast<float>(cached.rgb_linear.width) /
+                                  static_cast<float>(preview_cache_->rgb_linear.width);
+        }
 
         Image rendered;
         if (request.look.stock == "none") {

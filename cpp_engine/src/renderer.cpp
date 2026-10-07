@@ -1696,7 +1696,8 @@ Image FilmRenderer::apply_hue_saturation(
 
 Image FilmRenderer::apply_acutance_shaping(
     const Image& rgb_linear,
-    const MaterialEffectsPlan& effects) const {
+    const MaterialEffectsPlan& effects,
+    const float pixel_scale) const {
     if (rgb_linear.channels != 3) {
         throw std::invalid_argument("apply_acutance_shaping expects a 3-channel RGB image");
     }
@@ -1710,12 +1711,19 @@ Image FilmRenderer::apply_acutance_shaping(
     }
 
     const int short_edge = std::min(oklab.width, oklab.height);
-    const int k_low = odd_kernel_size(19, 3, short_edge);
+    // Kernels are tuned for the ~1024 px preview; a smaller render (a look proxy)
+    // passes pixel_scale < 1 so the same detail band is shaped. 1.0 is unchanged.
+    const int k_low = odd_kernel_size(static_cast<int>(std::lround(19.0F * pixel_scale)), 3, short_edge);
     cv::Mat low_blur;
     cv::GaussianBlur(lightness, low_blur, cv::Size(k_low, k_low), 0.0);
 
+    const int k_mid = static_cast<int>(std::lround(5.0F * pixel_scale)) | 1;
     cv::Mat mid_blur;
-    cv::GaussianBlur(lightness, mid_blur, cv::Size(5, 5), 0.0);
+    if (k_mid >= 3) {
+        cv::GaussianBlur(lightness, mid_blur, cv::Size(k_mid, k_mid), 0.0);
+    } else {
+        mid_blur = lightness;               // below 3 px the mid band vanishes
+    }
 
     cv::Mat processed(lightness.rows, lightness.cols, CV_32F);
     for (int y = 0; y < lightness.rows; ++y) {
@@ -1733,7 +1741,8 @@ Image FilmRenderer::apply_acutance_shaping(
         cv::copyMakeBorder(processed, padded, 1, 1, 1, 1, cv::BORDER_REFLECT_101);
 
         cv::Mat sharpened = processed.clone();
-        const float sharp_val = clampf(effects.sharpness, 0.0F, 1.0F);
+        const float sharpness = effects.sharpness * std::min(1.0F, pixel_scale);
+        const float sharp_val = clampf(sharpness, 0.0F, 1.0F);
         const float peak = 8.0F - 3.0F * sharp_val;
 
         for (int y = 0; y < processed.rows; ++y) {
@@ -1765,7 +1774,7 @@ Image FilmRenderer::apply_acutance_shaping(
                 const float l_sharp = clamp01((window * weight + e) * rcp_weight);
                 const float luma_mask = 1.0F - effects.sharpness_mask *
                     (1.0F - std::pow(std::sin(std::numbers::pi_v<float> * e), 2.0F));
-                sharpened.at<float>(y, x) = clamp01(e + (l_sharp - e) * luma_mask * effects.sharpness);
+                sharpened.at<float>(y, x) = clamp01(e + (l_sharp - e) * luma_mask * sharpness);
             }
         }
         processed = std::move(sharpened);

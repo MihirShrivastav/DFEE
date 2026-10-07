@@ -63,6 +63,16 @@ cv::Mat make_scene(int kind, int width, int height) {
                 }
                 const double dx = u - 0.7, dy = v - 0.2;
                 if (dx * dx + dy * dy < 0.006) { r = g = b = 1.0; }
+            } else if (kind == 3) {
+                // Fine detail where acutance matters: 3 px stripes above, a 12 px
+                // checker below, light hash noise everywhere, on a mid grey.
+                const unsigned hash = (static_cast<unsigned>(x) * 73856093u) ^ (static_cast<unsigned>(y) * 19349663u);
+                const double noise = static_cast<double>((hash >> 8) & 0xFFu) / 255.0 - 0.5;
+                const double stripes = ((x / 3) % 2 == 0) ? 0.08 : -0.08;
+                const double checker = (((x / 12) + (y / 12)) % 2 == 0) ? 0.10 : -0.10;
+                r = g = b = 0.45 + (v < 0.5 ? stripes : checker) + 0.06 * noise;
+                r *= 1.05;
+                b *= 0.95;
             } else {
                 r = g = b = 0.04 + 0.08 * u * v;
                 b += 0.02;
@@ -377,6 +387,29 @@ void test_proxy_refreshes_after_redecode() {
     std::filesystem::remove(file);
 }
 
+// A proxy is ~1/4 of the preview's size: fixed-pixel detail shaping must scale with
+// it, or tiles over-state sharpening on textured photos.
+void test_proxy_fidelity_textured() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_scene("proxy_texture", 3, 1600, 1066);
+    auto look = grain_free(base_request(file, "portra_400"));
+    look.sharpness = 1.0F;
+    auto scaled = proxy_request(look);
+    auto unscaled = proxy_request(look);
+    unscaled.scale_pixel_effects = false;
+    const auto proxy_scaled = session.render_look_proxy(scaled);
+    const auto proxy_unscaled = session.render_look_proxy(unscaled);
+    expect(proxy_scaled.ok && proxy_unscaled.ok, "textured proxies render");
+    const cv::Mat preview = preview_at(session, look, {proxy_scaled.width, proxy_scaled.height});
+    const auto d_scaled = compare_images(proxy_to_bgr(proxy_scaled), preview);
+    const auto d_unscaled = compare_images(proxy_to_bgr(proxy_unscaled), preview);
+    std::cout << "  textured proxy vs preview: scaled mean " << d_scaled.mean_abs
+              << ", unscaled mean " << d_unscaled.mean_abs << "\n";
+    expect(d_scaled.mean_abs < d_unscaled.mean_abs, "scaling pixel effects brings tiles closer to the preview");
+    expect(d_scaled.mean_abs <= 6.0, "textured proxy looks like the preview");
+    std::filesystem::remove(file);
+}
+
 }  // namespace
 
 int main() {
@@ -384,6 +417,7 @@ int main() {
         test_preview_golden();
         test_profile_cache();
         test_proxy_matches_preview();
+        test_proxy_fidelity_textured();
         test_proxy_geometry_framing();
         test_proxy_follows_the_photo();
         test_proxy_errors();

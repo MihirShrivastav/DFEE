@@ -127,6 +127,7 @@ private:
         bool include_grain = true;
         bool apply_geometry = true;
         bool dump_stages = true;                       // DFEE_STAGE_DUMP debugging
+        float pixel_scale = 1.0F;                      // render size / preview size
     };
     // The film look: profiles -> plan -> film stages -> post -> geometry. Returns the
     // final scene-linear image, or nullopt with `error` set when a profile cannot load.

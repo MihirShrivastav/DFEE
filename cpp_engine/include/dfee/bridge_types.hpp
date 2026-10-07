@@ -337,6 +337,9 @@ struct NativeLookProxyRequest {
     int max_edge = 256;
     bool include_grain = false;
     bool apply_geometry = true;
+    // Scale fixed-pixel effects (acutance kernels) by the proxy's size so a tile
+    // shows the same detail shaping as the preview. Off only for comparisons.
+    bool scale_pixel_effects = true;
 };
 
 struct NativeLookProxyResponse {

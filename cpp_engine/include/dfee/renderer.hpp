@@ -120,7 +120,8 @@ public:
 
     [[nodiscard]] Image apply_acutance_shaping(
         const Image& rgb_linear,
-        const MaterialEffectsPlan& effects) const;
+        const MaterialEffectsPlan& effects,
+        float pixel_scale = 1.0F) const;
 
     [[nodiscard]] Image apply_clarity(
         const Image& rgb_linear,
