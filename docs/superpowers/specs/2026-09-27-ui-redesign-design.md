@@ -133,7 +133,7 @@ Ctrl+Shift+S sync.
    tray v1 with static Films tiles, menu bar. The planned pixel-identical split of the old
    `Main.qml` is dropped: every component is restyled anyway, so logic is ported piece by piece
    into the new files instead.
-2. Live Films browser (scheduler, proxy tiles, hover peek).
+2. (Done 2026-10-07: plan 2026-10-07-phase2-live-films.) Live Films browser (scheduler, proxy tiles, hover peek).
 3. Looks in the tray (presets rendered, Save current, Last look).
 4. Finish crop and export.
 5. Roll workflow (selection, copy/paste, sync with Undo).
