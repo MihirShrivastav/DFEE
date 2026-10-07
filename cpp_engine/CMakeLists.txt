@@ -161,6 +161,11 @@ if(DFEE_BUILD_TESTS)
         set_tests_properties(dfee_tests PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin;PATH=path_list_prepend:${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/debug/bin")
     endif()
+    # Session-level tests: golden preview references, profile cache, look proxies.
+    add_executable(dfee_session_tests tests/test_session.cpp)
+    target_link_libraries(dfee_session_tests PRIVATE dfee_core)
+    target_compile_definitions(dfee_session_tests PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
+    add_test(NAME dfee_session_tests COMMAND dfee_session_tests)
 endif()
 
 if(DFEE_BUILD_PYTHON)
