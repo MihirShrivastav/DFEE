@@ -410,6 +410,42 @@ void test_proxy_fidelity_textured() {
     std::filesystem::remove(file);
 }
 
+// The desktop app picks the file and keeps no JSON report beside the photo; the
+// Python/server callers keep today's report. No temp file survives an export.
+void test_export_destination_and_report() {
+    const auto file = write_scene("export", 0, 240, 160);
+    const auto out_dir = std::filesystem::temp_directory_path() / "dfee_session_export_test";
+    std::filesystem::remove_all(out_dir);
+    std::filesystem::create_directories(out_dir);
+    const auto report = file.parent_path() / (file.stem().string() + "_portra_400_report.json");
+    std::filesystem::remove(report);
+    dfee::EngineSession session(kRepoRoot);
+
+    dfee::NativeExportRequest r;
+    static_cast<dfee::NativePreviewRenderRequest&>(r) = base_request(file, "portra_400");
+    r.export_format = "jpeg";
+    r.output_path = out_dir / "chosen name.jpg";
+    r.write_report = false;
+    auto res = session.export_image(r);
+    expect(res.ok, "export to a chosen path: " + res.error.detail);
+    expect(std::filesystem::exists(out_dir / "chosen name.jpg"), "file lands at output_path");
+    expect(!std::filesystem::exists(report), "no report when write_report=false");
+    const cv::Mat img = cv::imread((out_dir / "chosen name.jpg").string(), cv::IMREAD_UNCHANGED);
+    expect(img.cols == 240 && img.rows == 160, "full-size export");
+
+    r.write_report = true;
+    res = session.export_image(r);
+    expect(res.ok, "second export: " + res.error.detail);
+    expect(std::filesystem::exists(report), "report still written by default");
+    for (const auto& e : std::filesystem::directory_iterator(out_dir)) {
+        expect(e.path().filename().string().find(".dfee-writing-") == std::string::npos,
+               "no temp file left: " + e.path().string());
+    }
+    std::filesystem::remove(report);
+    std::filesystem::remove_all(out_dir);
+    std::filesystem::remove(file);
+}
+
 }  // namespace
 
 int main() {
@@ -423,6 +459,7 @@ int main() {
         test_proxy_errors();
         test_proxy_refreshes_after_redecode();
         test_proxy_speed_and_preview_untouched();
+        test_export_destination_and_report();
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << "\n";
         return 1;

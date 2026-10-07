@@ -121,6 +121,7 @@ void fill_metadata_from_raw_processor(NativeRawMetadata& metadata, const LibRaw&
     metadata.shutter_speed_str = format_shutter_speed(metadata.shutter_speed);
     metadata.aperture = other.aperture > 0.0F ? other.aperture : 4.0;
     metadata.focal_length = other.focal_len > 0.0F ? other.focal_len : 0.0;
+    metadata.capture_timestamp = other.timestamp > 0 ? static_cast<std::int64_t>(other.timestamp) : 0;
     metadata.white_balance_multipliers = {
         static_cast<double>(color.cam_mul[0] > 0.0F ? color.cam_mul[0] : 1.0F),
         static_cast<double>(color.cam_mul[1] > 0.0F ? color.cam_mul[1] : 1.0F),

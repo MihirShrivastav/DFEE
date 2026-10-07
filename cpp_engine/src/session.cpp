@@ -3591,6 +3591,15 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                  temporary_output_suffix() + response.output_path.extension().string());
             std::error_code cleanup_error;
             std::filesystem::remove(temporary_output, cleanup_error);
+            // Every exit below (encode or metadata failure, or success after the atomic
+            // replace has moved the file away) leaves no half-written temp file behind.
+            struct TemporaryOutputCleanup {
+                const std::filesystem::path& path;
+                ~TemporaryOutputCleanup() {
+                    std::error_code ec;
+                    std::filesystem::remove(path, ec);
+                }
+            } temporary_output_cleanup{temporary_output};
 
             trace_mem(project_root_, "before_output_alloc");
             cv::Mat output_mat(rendered.height, rendered.width, (canonical_format == "png8" || canonical_format == "jpeg") ? CV_8UC3 : CV_16UC3);
@@ -3683,7 +3692,8 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
             append_export_trace(project_root_, "export_image:write_output:done");
         }
 
-        if (render_plan.has_value() && solver_input.has_value() && stock_profile.has_value()) {
+        if (request.write_report && render_plan.has_value() && solver_input.has_value() &&
+            stock_profile.has_value()) {
             ScopedStageTimer stage(response.engine, "export_image_write_report");
             append_export_trace(project_root_, "export_image:write_report:start");
             response.report_path = raw_path.parent_path() / (basename + "_" + request.stock + "_report.json");

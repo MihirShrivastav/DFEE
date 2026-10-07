@@ -58,6 +58,9 @@ struct NativeRawMetadata {
     std::string shutter_speed_str;
     double aperture = 4.0;
     double focal_length = 0.0;
+    // Capture time (EXIF DateTimeOriginal as LibRaw reads it, local time, seconds since
+    // the epoch); 0 when the file has none (rendered TIFFs).
+    std::int64_t capture_timestamp = 0;
     std::vector<double> white_balance_multipliers{1.0, 1.0, 1.0, 1.0};
     int black_level = 0;
     int white_level = 0;
@@ -363,6 +366,9 @@ struct NativeExportRequest : NativePreviewRenderRequest {
     // exact destination. The exporter writes a temporary sibling first and
     // replaces this path only after encoding and metadata work both succeed.
     std::filesystem::path output_path;
+    // The JSON feature report beside the source (diagnostics for the Python/server
+    // callers). The desktop app keeps its own records and turns it off.
+    bool write_report = true;
 };
 
 struct NativeExportResponse {
