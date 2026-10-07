@@ -31,6 +31,8 @@ qt_add_executable(DFEE
     src/UiScript.h
     src/EditStore.cpp
     src/EditStore.h
+    src/ExportNaming.cpp
+    src/ExportNaming.h
     src/ImageInfo.cpp
     src/ImageInfo.h
     src/StockCatalog.cpp
@@ -164,3 +166,12 @@ target_include_directories(stock_catalog_tests PRIVATE src)
 target_link_libraries(stock_catalog_tests PRIVATE Qt6::Core Qt6::Test)
 target_compile_definitions(stock_catalog_tests PRIVATE DFEE_REPO_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/..")
 add_test(NAME stock_catalog_tests COMMAND stock_catalog_tests)
+
+qt_add_executable(export_tests
+    tests/export_test.cpp
+    src/ExportNaming.cpp
+    src/ExportNaming.h
+)
+target_include_directories(export_tests PRIVATE src)
+target_link_libraries(export_tests PRIVATE Qt6::Core Qt6::Test)
+add_test(NAME export_tests COMMAND export_tests)
