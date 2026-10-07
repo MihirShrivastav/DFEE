@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "dfee/bridge_types.hpp"
@@ -84,6 +85,12 @@ private:
         SpatialMasks spatial_masks;
     };
 
+    template <typename Profile>
+    struct CachedProfile {
+        std::filesystem::file_time_type mtime;
+        Profile profile;
+    };
+
     [[nodiscard]] std::string resolve_filename(const std::string& filename) const;
     void populate_preview_analysis_cache(
         const std::string& filename,
@@ -93,6 +100,9 @@ private:
     void enforce_session_cache_budget();
     void clear_decode_caches();
     void refresh_preview_cache_from_draft();
+    // Parsed profiles, cached by id and re-read when the YAML's mtime changes.
+    [[nodiscard]] FilmStockProfile film_profile(const std::string& stock_id);
+    [[nodiscard]] PrintStockProfile print_profile(const std::string& print_stock_id);
     [[nodiscard]] NativeRawPreviewResponse encode_raw_preview(const std::string& filename, int max_edge) const;
 
     std::filesystem::path project_root_;
@@ -106,6 +116,9 @@ private:
     std::optional<CachedRawPreviewJpeg> raw_preview_jpeg_cache_;
     std::optional<CachedPreviewAnalysis> preview_analysis_cache_;
     std::optional<CachedExportAnalysis> export_analysis_cache_;
+    std::unordered_map<std::string, CachedProfile<FilmStockProfile>> film_profile_cache_;
+    std::unordered_map<std::string, CachedProfile<PrintStockProfile>> print_profile_cache_;
+    std::size_t profile_loads_ = 0;
 };
 
 }  // namespace dfee

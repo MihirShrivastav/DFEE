@@ -205,11 +205,47 @@ void test_preview_golden() {
     run_golden(session, record);
 }
 
+// A session over a private copy of the profiles, so a test can touch files.
+std::filesystem::path make_profile_root() {
+    const auto root = std::filesystem::temp_directory_path() / "dfee_session_profile_root";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "profiles");
+    for (const char* dir : {"stocks", "print_stocks"}) {
+        std::filesystem::copy(kRepoRoot / "profiles" / dir, root / "profiles" / dir,
+                              std::filesystem::copy_options::recursive);
+    }
+    return root;
+}
+
+void test_profile_cache() {
+    const auto root = make_profile_root();
+    const auto file = write_scene("profile_cache", 0, 240, 160);
+    {
+        dfee::EngineSession session(root);
+        auto request = base_request(file, "portra_400");
+        expect(session.render_preview(request).ok, "first render");
+        expect(session.cache_state().cache.profile_loads == 1, "portra parsed once");
+        expect(session.render_preview(request).ok, "second render");
+        expect(session.cache_state().cache.profile_loads == 1, "second render reuses the parsed profile");
+        request.print_stock = "kodak_2383";
+        expect(session.render_preview(request).ok, "render with print");
+        expect(session.cache_state().cache.profile_loads == 2, "print stock parsed once");
+        expect(session.cache_state().cache.profile_cache_entries == 2, "two cached profiles");
+        const auto yaml = root / "profiles" / "stocks" / "portra_400.yaml";
+        std::filesystem::last_write_time(yaml, std::filesystem::last_write_time(yaml) + std::chrono::seconds(5));
+        expect(session.render_preview(request).ok, "render after edit");
+        expect(session.cache_state().cache.profile_loads == 3, "an edited profile is re-read");
+    }
+    std::filesystem::remove(file);
+    std::filesystem::remove_all(root);
+}
+
 }  // namespace
 
 int main() {
     try {
         test_preview_golden();
+        test_profile_cache();
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << "\n";
         return 1;

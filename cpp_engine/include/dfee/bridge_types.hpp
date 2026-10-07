@@ -171,6 +171,8 @@ struct NativeSessionCacheState {
     std::size_t export_analysis_bytes = 0;
     std::size_t total_estimated_bytes = 0;
     std::size_t cache_budget_bytes = 0;
+    std::size_t profile_cache_entries = 0;  // parsed stock + print profiles held
+    std::size_t profile_loads = 0;          // YAML parses since the session started
 };
 
 struct NativeSessionCacheStateResponse {

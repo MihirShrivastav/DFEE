@@ -2501,7 +2501,7 @@ NativeGrainResolutionResponse EngineSession::resolve_auto_grain(const NativePrev
     FilmStockProfile stock_profile;
     try {
         ScopedStageTimer stage(response.engine, "resolve_auto_grain_load_profile");
-        stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
+        stock_profile = film_profile(request.stock);
     } catch (const std::exception& ex) {
         response.status = "error";
         response.error = {
@@ -2690,9 +2690,9 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
         {
             ScopedStageTimer stage(response.engine, "render_preview_load_profiles");
             try {
-                stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
+                stock_profile = film_profile(request.stock);
                 if (request.print_stock != "none") {
-                    print_stock_profile = load_print_stock_profile(print_stocks_dir_ / (request.print_stock + ".yaml"));
+                    print_stock_profile = print_profile(request.print_stock);
                 }
             } catch (const std::exception& ex) {
                 response.status = "error";
@@ -3028,9 +3028,9 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
                             .stock_type = StockType::ColorNegative,
                         };
                     } else {
-                        stock_profile = load_film_stock_profile(stocks_dir_ / (request.stock + ".yaml"));
+                        stock_profile = film_profile(request.stock);
                         if (request.print_stock != "none") {
-                            print_stock_profile = load_print_stock_profile(print_stocks_dir_ / (request.print_stock + ".yaml"));
+                            print_stock_profile = print_profile(request.print_stock);
                         }
                     }
                 } catch (const std::exception& ex) {
@@ -3548,6 +3548,32 @@ NativeExportResponse EngineSession::export_image(const NativeExportRequest& requ
 #endif
 }
 
+FilmStockProfile EngineSession::film_profile(const std::string& stock_id) {
+    const auto path = stocks_dir_ / (stock_id + ".yaml");
+    const auto mtime = std::filesystem::last_write_time(path);  // throws when missing, like the loader
+    auto it = film_profile_cache_.find(stock_id);
+    if (it == film_profile_cache_.end() || it->second.mtime != mtime) {
+        auto profile = load_film_stock_profile(path);
+        ++profile_loads_;
+        it = film_profile_cache_.insert_or_assign(
+            stock_id, CachedProfile<FilmStockProfile>{mtime, std::move(profile)}).first;
+    }
+    return it->second.profile;
+}
+
+PrintStockProfile EngineSession::print_profile(const std::string& print_stock_id) {
+    const auto path = print_stocks_dir_ / (print_stock_id + ".yaml");
+    const auto mtime = std::filesystem::last_write_time(path);
+    auto it = print_profile_cache_.find(print_stock_id);
+    if (it == print_profile_cache_.end() || it->second.mtime != mtime) {
+        auto profile = load_print_stock_profile(path);
+        ++profile_loads_;
+        it = print_profile_cache_.insert_or_assign(
+            print_stock_id, CachedProfile<PrintStockProfile>{mtime, std::move(profile)}).first;
+    }
+    return it->second.profile;
+}
+
 NativeSessionCacheStateResponse EngineSession::cache_state() const {
     NativeSessionCacheStateResponse response;
     response.ok = true;
@@ -3597,6 +3623,8 @@ NativeSessionCacheStateResponse EngineSession::cache_state() const {
     if (const auto cache_budget = parse_env_memory_budget_bytes("DFEE_NATIVE_CACHE_BUDGET_MB")) {
         response.cache.cache_budget_bytes = static_cast<std::size_t>(*cache_budget);
     }
+    response.cache.profile_cache_entries = film_profile_cache_.size() + print_profile_cache_.size();
+    response.cache.profile_loads = profile_loads_;
     finalize_engine_metadata(response.engine);
     return response;
 }
