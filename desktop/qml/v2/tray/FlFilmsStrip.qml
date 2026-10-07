@@ -79,12 +79,14 @@ ListView {
             border.width: tileHover.hovered && !tile.current ? 1 : 0
             border.color: "#40ffffff"
             Image {
+                objectName: "filmTileImage_" + modelData.id
                 anchors.fill: parent
                 visible: tile.live
                 source: tile.live ? "image://look/" + modelData.id + "?e=" + tile.tileEpoch : ""
                 fillMode: Image.PreserveAspectCrop
                 cache: false
                 asynchronous: true
+                retainWhileLoading: true            // a refreshing tile never blinks blank
             }
             Image {
                 anchors.fill: parent

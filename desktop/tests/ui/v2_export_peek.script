@@ -1,0 +1,13 @@
+# Lightroom Edit-In, a film hovered, Ctrl+S: the export ends the peek; when the
+# save fails (run with DFEE_NATIVE_EXPORT_MEMORY_BUDGET_MB=1, refused before any
+# render or write) the canvas must return to the applied film.
+waitfor:engine.hasImage=true,30000
+waitfor:engine.lookTilesPending=0,60000
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
+waitfor:engine.previewRevision=2,15000
+key:83+ctrl
+waitfor:engine.exporting=false,60000
+expect:engine.peekStock=
+waitfor:engine.previewRevision=3,15000
+quit

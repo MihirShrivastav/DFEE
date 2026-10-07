@@ -12,6 +12,8 @@ expect:filmTile_cinestill_400d.live=true
 waitfor:engine.previewRevision=2,15000
 waitfor:engine.lookTilesPending=0,60000
 expect:filmTile_cinestill_400d.fresh=true
+# A refreshing tile keeps showing its last image instead of blinking blank.
+expect:filmTileImage_cinestill_400d.retainWhileLoading=true
 open:${SAMPLE_B}
 waitfor:engine.currentFile=${SAMPLE_B},15000
 expect:filmTile_cinestill_400d.live=false

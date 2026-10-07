@@ -959,6 +959,11 @@ void EngineController::onExportDone(const QString& msg)
         // after the editor process returns. Close only after the atomic
         // replacement has completed; failed exports intentionally stay open.
         QTimer::singleShot(350, this, []() { QCoreApplication::quit(); });
+    } else {
+        // Starting the export dropped any pending preview (an ended peek, an edit made
+        // just before): bring the canvas back to the applied look. That render going
+        // idle also restarts the Films tiles.
+        scheduleRender();
     }
 }
 
