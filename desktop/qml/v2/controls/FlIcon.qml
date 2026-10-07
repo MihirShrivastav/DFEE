@@ -8,6 +8,7 @@ Item {
     property string name: ""
     property color color: Theme.textSecondary
     property int size: 16
+    property bool mirror: false          // horizontal mirror (a right-hand panel glyph)
     implicitWidth: size
     implicitHeight: size
     Image {
@@ -17,6 +18,7 @@ Item {
         sourceSize.width: icon.size * 2
         sourceSize.height: icon.size * 2
         fillMode: Image.PreserveAspectFit
+        mirror: icon.mirror
         smooth: true
         visible: false
     }

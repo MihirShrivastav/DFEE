@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
+import QtCore
 import DFEE
 
 ApplicationWindow {
@@ -23,7 +24,44 @@ ApplicationWindow {
     // True while a text field (FlTextField) has focus: bare-key shortcuts stay off.
     readonly property bool textEntry: activeFocusItem !== null && activeFocusItem.flTextEntry === true
 
-    property bool sidebarOpen: true
+    // Panel layout (VS Code style), remembered between launches.
+    Settings {
+        id: layout
+        category: "layout"
+        location: uiSettingsLocation
+        property bool sidebarOpen: true
+        property bool trayOpen: true
+        property bool inspectorOpen: true
+    }
+    // What Tab hid, so a second Tab brings back exactly that (null: nothing hidden).
+    property var hiddenPanels: null
+    function toggleAllPanels() {
+        if (hiddenPanels === null) {
+            const open = { sidebar: layout.sidebarOpen, tray: layout.trayOpen, inspector: layout.inspectorOpen };
+            if (!open.sidebar && !open.tray && !open.inspector) {
+                layout.sidebarOpen = true;          // nothing open: show everything
+                layout.trayOpen = true;
+                layout.inspectorOpen = true;
+                return;
+            }
+            hiddenPanels = open;
+            layout.sidebarOpen = false;
+            layout.trayOpen = false;
+            layout.inspectorOpen = false;
+        } else {
+            layout.sidebarOpen = hiddenPanels.sidebar;
+            layout.trayOpen = hiddenPanels.tray;
+            layout.inspectorOpen = hiddenPanels.inspector;
+            hiddenPanels = null;
+        }
+    }
+    // A single toggle after Tab starts from the current layout.
+    function togglePanel(name) {
+        hiddenPanels = null;
+        if (name === "sidebar") layout.sidebarOpen = !layout.sidebarOpen;
+        else if (name === "tray") layout.trayOpen = !layout.trayOpen;
+        else layout.inspectorOpen = !layout.inspectorOpen;
+    }
     property int compareMode: 0          // 0 Edited, 1 Split, 2 Side by side
     property bool peekBefore: false
 
@@ -80,6 +118,11 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Right"; enabled: !engine.lightroomRoundTrip && !root.textEntry; onActivated: root.navigatePhoto(1) }
     Shortcut { sequences: ["?", "F1"]; enabled: !root.textEntry; onActivated: shortcutsSheet.open() }
     Shortcut { sequence: "Ctrl+Shift+R"; enabled: engine.hasImage && !root.textEntry; onActivated: resetSheet.open() }
+    Shortcut { sequence: "Ctrl+B"; enabled: !engine.lightroomRoundTrip; onActivated: root.togglePanel("sidebar") }
+    Shortcut { sequence: "Ctrl+J"; onActivated: root.togglePanel("tray") }
+    Shortcut { sequence: "Ctrl+Alt+B"; onActivated: root.togglePanel("inspector") }
+    // Tab hides every panel for a clean look at the photo; Tab again restores them.
+    Shortcut { sequence: "Tab"; enabled: !root.textEntry; onActivated: root.toggleAllPanels() }
     Shortcut { sequences: ["F", "Ctrl+F"]; enabled: !root.textEntry; onActivated: tray.showFilmsSearch() }
     Shortcut { sequence: "Ctrl+0"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.resetZoom() }
     Shortcut { sequence: "Ctrl+1"; enabled: engine.hasImage && !root.textEntry; onActivated: canvas.zoomCentered(2.0) }
@@ -133,7 +176,13 @@ ApplicationWindow {
         anchors.top: parent.top
         compareMode: root.compareMode
         onCompareChosen: (m) => { root.peekBefore = false; root.compareMode = m; }
-        onSidebarToggled: root.sidebarOpen = !root.sidebarOpen
+        onSidebarToggled: root.togglePanel("sidebar")
+        onTrayToggled: root.togglePanel("tray")
+        onInspectorToggled: root.togglePanel("inspector")
+        onAllPanelsToggled: root.toggleAllPanels()
+        sidebarOpen: layout.sidebarOpen
+        trayOpen: layout.trayOpen
+        inspectorOpen: layout.inspectorOpen
         onOpenRequested: openDialog.open()
         onAddFolderRequested: folderDialog.open()
         onCycleStockRequested: (dir) => root.cycleStock(dir)
@@ -154,7 +203,7 @@ ApplicationWindow {
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
         onAddFolderRequested: folderDialog.open()
-        width: root.sidebarOpen && !engine.lightroomRoundTrip ? Theme.sidebarWidth : 0
+        width: layout.sidebarOpen && !engine.lightroomRoundTrip ? Theme.sidebarWidth : 0
         visible: width > 0
         Behavior on width { NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic } }
     }
@@ -176,7 +225,10 @@ ApplicationWindow {
         anchors.left: sidebar.right
         anchors.right: inspector.left
         anchors.bottom: parent.bottom
-        height: Theme.trayHeight
+        height: layout.trayOpen ? Theme.trayHeight : 0
+        visible: height > 0
+        clip: true
+        Behavior on height { NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic } }
         onOpenRequested: (u) => root.openPhoto(u)
         onSaveLookRequested: lookDialog.openNew()
         onRenameLookRequested: (id, name, group) => lookDialog.openRename(id, name, group)
@@ -186,7 +238,10 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
-        width: Theme.inspectorWidth
+        width: layout.inspectorOpen ? Theme.inspectorWidth : 0
+        visible: width > 0
+        clip: true
+        Behavior on width { NumberAnimation { duration: Theme.motionNormal; easing.type: Easing.OutCubic } }
         enabled: !canvas.cropMode
         opacity: canvas.cropMode ? 0.4 : 1.0
         Behavior on opacity { NumberAnimation { duration: Theme.motionNormal } }

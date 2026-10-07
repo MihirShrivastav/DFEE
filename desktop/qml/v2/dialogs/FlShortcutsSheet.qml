@@ -22,6 +22,12 @@ FlSheet {
                 { keys: ["←", "→"], desc: "Previous / next photo" },
                 { keys: ["Ctrl", "←", "→"], desc: "Previous / next (from a slider)" }
             ]},
+            { title: "Panels", items: [
+                { keys: ["Ctrl", "B"], desc: "Library and history" },
+                { keys: ["Ctrl", "J"], desc: "Roll, films and looks" },
+                { keys: ["Ctrl", "Alt", "B"], desc: "Adjustments" },
+                { keys: ["Tab"], desc: "Hide or show all panels" }
+            ]},
             { title: "Help", items: [
                 { keys: ["?"], desc: "Show this help" }
             ]}

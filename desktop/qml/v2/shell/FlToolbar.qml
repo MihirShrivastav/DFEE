@@ -19,6 +19,12 @@ Rectangle {
     signal addFolderRequested()
     signal cycleStockRequested(int dir)
     signal exportRequested()
+    signal trayToggled()
+    signal inspectorToggled()
+    signal allPanelsToggled()
+    property bool sidebarOpen: true
+    property bool trayOpen: true
+    property bool inspectorOpen: true
     signal resetAllRequested()
     height: Theme.toolbarHeight
     color: Theme.toolbar
@@ -43,12 +49,6 @@ Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.sidebarWidth - 10
         spacing: 2
-        FlIconButton {
-            visible: !engine.lightroomRoundTrip
-            iconName: "sidebar-simple"
-            tip: "Show or hide sidebar"
-            onClicked: bar.sidebarToggled()
-        }
         FlIconButton {
             id: historyButton
             objectName: "historyButton"
@@ -157,6 +157,36 @@ Rectangle {
             enabled: engine.hasImage && !engine.exporting
             onClicked: bar.exportRequested()
         }
+        Row {
+            spacing: 0
+            anchors.verticalCenter: parent.verticalCenter
+            FlPanelToggle {
+                objectName: "toggleSidebar"
+                visible: !engine.lightroomRoundTrip
+                iconName: "sidebar-simple"
+                checkedIconName: "sidebar-simple-fill"
+                checked: bar.sidebarOpen
+                tip: "Library and history (Ctrl+B)"
+                onClicked: bar.sidebarToggled()
+            }
+            FlPanelToggle {
+                objectName: "toggleTray"
+                iconName: "square-half-bottom"
+                checkedIconName: "square-half-bottom-fill"
+                checked: bar.trayOpen
+                tip: "Roll, films and looks (Ctrl+J)"
+                onClicked: bar.trayToggled()
+            }
+            FlPanelToggle {
+                objectName: "toggleInspector"
+                iconName: "sidebar-simple"
+                checkedIconName: "sidebar-simple-fill"
+                flipGlyph: true
+                checked: bar.inspectorOpen
+                tip: "Adjustments (Ctrl+Alt+B)"
+                onClicked: bar.inspectorToggled()
+            }
+        }
         FlIconButton { iconName: "question"; tip: "Keyboard shortcuts (?)"; onClicked: bar.helpRequested() }
     }
 
@@ -195,7 +225,10 @@ Rectangle {
         Action { objectName: "zoomFitAction"; text: "Fit"; property string keys: "Ctrl+0"; enabled: engine.hasImage; onTriggered: bar.fitRequested() }
         Action { objectName: "zoomActualAction"; text: "Zoom to 200%"; property string keys: "Ctrl+1"; enabled: engine.hasImage; onTriggered: bar.actualSizeRequested() }
         MenuSeparator {}
-        Action { text: "Show or Hide Sidebar"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.sidebarToggled() }
+        Action { text: "Library and History"; property string keys: "Ctrl+B"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.sidebarToggled() }
+        Action { text: "Roll, Films and Looks"; property string keys: "Ctrl+J"; onTriggered: bar.trayToggled() }
+        Action { text: "Adjustments"; property string keys: "Ctrl+Alt+B"; onTriggered: bar.inspectorToggled() }
+        Action { text: "Hide All Panels"; property string keys: "Tab"; onTriggered: bar.allPanelsToggled() }
     }
     FlMenu {
         id: helpMenu

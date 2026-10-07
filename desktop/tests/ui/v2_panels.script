@@ -1,0 +1,36 @@
+# VS Code-style panels: Ctrl+B sidebar, Ctrl+J tray, Ctrl+Alt+B inspector, the
+# toolbar toggles, and Tab hiding everything / restoring what was open.
+expect:sidebar.visible=true
+expect:tray.visible=true
+expect:inspector.visible=true
+key:66+ctrl
+wait:400
+expect:sidebar.visible=false
+expect:toggleSidebar.checked=false
+key:74+ctrl
+wait:400
+expect:tray.visible=false
+key:66+ctrl+alt
+wait:400
+expect:inspector.visible=false
+key:66+ctrl
+wait:400
+expect:sidebar.visible=true
+click:toggleTray@0.5,0.5
+wait:400
+expect:tray.visible=true
+expect:toggleTray.checked=true
+key:16777217
+wait:400
+expect:sidebar.visible=false
+expect:tray.visible=false
+expect:inspector.visible=false
+key:16777217
+wait:400
+expect:sidebar.visible=true
+expect:tray.visible=true
+expect:inspector.visible=false
+click:toggleInspector@0.5,0.5
+wait:400
+expect:inspector.visible=true
+quit

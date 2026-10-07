@@ -10,6 +10,10 @@ TextField {
     readonly property bool flTextEntry: true
     property string iconName: ""
     property bool escReturnsFocus: true
+    // In the main window Tab hides the panels, so fields join the Tab order only
+    // inside dialogs (tabStop: true there).
+    property bool tabStop: false
+    activeFocusOnTab: tabStop
     implicitHeight: Theme.controlHeight
     leftPadding: iconName.length > 0 ? 26 : 8
     rightPadding: 8

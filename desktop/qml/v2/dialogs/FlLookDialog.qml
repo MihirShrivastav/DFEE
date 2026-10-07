@@ -51,6 +51,7 @@ FlSheet {
     FlTextField {
         id: nameField
         objectName: "lookNameField"
+        tabStop: true
         width: parent.width
         placeholderText: "Look name"
         escReturnsFocus: false
@@ -59,6 +60,7 @@ FlSheet {
     FlTextField {
         id: groupField
         objectName: "lookGroupField"
+        tabStop: true
         width: parent.width
         placeholderText: "Group (optional)"
         escReturnsFocus: false

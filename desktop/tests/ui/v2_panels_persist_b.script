@@ -1,0 +1,5 @@
+# Second launch with the same settings: the layout came back.
+expect:tray.visible=false
+expect:inspector.visible=false
+expect:sidebar.visible=true
+quit

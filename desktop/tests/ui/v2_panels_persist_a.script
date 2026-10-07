@@ -1,0 +1,6 @@
+# First launch: hide the tray and the inspector. Saved on quit.
+key:74+ctrl
+key:66+ctrl+alt
+wait:400
+expect:tray.visible=false
+quit
