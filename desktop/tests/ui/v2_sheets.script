@@ -19,11 +19,11 @@ wait:300
 expect:exportSheet.visible=true
 click:exportFormatSegmented@0.1,0.5
 wait:200
-expect:engine.exportFormat=jpeg
+expect:exportPrefs.format=jpeg
 expect:jpegQualityRow.visible=true
 click:exportFormatSegmented@0.9,0.5
 wait:200
-expect:engine.exportFormat=tiff
+expect:exportPrefs.format=tiff
 expect:exportDpiField.visible=true
 # A typed DPI counts without pressing Enter (review I4).
 click:exportDpiField@0.5,0.5
@@ -32,7 +32,7 @@ key:54
 key:48
 key:48
 wait:200
-expect:engine.exportDpi=600
+expect:exportPrefs.dpi=600
 expect:engine.exporting=false
 key:16777216
 wait:300

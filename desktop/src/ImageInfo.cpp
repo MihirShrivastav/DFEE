@@ -1,5 +1,6 @@
 #include "ImageInfo.h"
 
+#include <QDateTime>
 #include <QString>
 
 #include <cmath>
@@ -24,5 +25,7 @@ QVariantMap imageInfoFromMetadata(const dfee::NativeRawMetadata& md)
     if (!md.shutter_speed_str.empty()) m["shutter"] = QString::fromStdString(md.shutter_speed_str);
     if (md.aperture > 0.0) m["aperture"] = QStringLiteral("f/") + QString::number(md.aperture, 'g', 3);
     if (md.focal_length > 0.0) m["focal"] = QString::number(std::lround(md.focal_length)) + QStringLiteral(" mm");
+    if (md.capture_timestamp > 0)
+        m["date"] = QDateTime::fromSecsSinceEpoch(md.capture_timestamp).toString(QStringLiteral("yyyy-MM-dd"));
     return m;
 }

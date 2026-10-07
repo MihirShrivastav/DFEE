@@ -16,6 +16,7 @@
 #include "PreviewImageProvider.h"
 #include "ThumbnailImageProvider.h"
 #include "LibraryController.h"
+#include "ExportPrefs.h"
 #include "UiScript.h"
 #include "EditStore.h"
 #include "WindowChrome.h"
@@ -78,6 +79,10 @@ int main(int argc, char* argv[]) {
     EngineController controller(provider, &editStore);
 
     LibraryController library;
+    // Export choices (folder, name rule, format) are remembered; UI tests isolate them
+    // in the DFEE_UI_SETTINGS ini like the QML settings.
+    ExportPrefs exportPrefs(qEnvironmentVariable("DFEE_UI_SETTINGS"));
+    controller.setExportPrefs(&exportPrefs);
 
     QQmlApplicationEngine engine;
     engine.addImageProvider("preview", provider);   // engine takes ownership
@@ -88,6 +93,7 @@ int main(int argc, char* argv[]) {
     engine.rootContext()->setContextProperty("engine", &controller);
     engine.rootContext()->setContextProperty("library", &library);
     engine.rootContext()->setContextProperty("editStore", &editStore);
+    engine.rootContext()->setContextProperty("exportPrefs", &exportPrefs);
     // v2 inspector state (QtCore Settings) lives in the app's QSettings; UI tests
     // point it at a throwaway ini with DFEE_UI_SETTINGS.
     const QString uiSettings = qEnvironmentVariable("DFEE_UI_SETTINGS");
@@ -124,7 +130,7 @@ int main(int argc, char* argv[]) {
     if (qEnvironmentVariableIsSet("DFEE_SELFTEST")) {
         const QString pathA = qEnvironmentVariable("DFEE_SELFTEST");
         if (qEnvironmentVariableIsSet("DFEE_SELFTEST_EXPORT_FORMAT")) {
-            controller.setExportFormat(qEnvironmentVariable("DFEE_SELFTEST_EXPORT_FORMAT"));
+            exportPrefs.setFormat(qEnvironmentVariable("DFEE_SELFTEST_EXPORT_FORMAT"));
         }
         if (qEnvironmentVariableIsSet("DFEE_SELFTEST_FILM_LAB")) {
             // Exercise the native Film Lab request snapshot with controls from

@@ -16,8 +16,10 @@
 
 #include "dfee/bridge_types.hpp"
 #include "EditStore.h"
+#include "ExportNaming.h"
 
 namespace dfee { class EngineSession; }
+class ExportPrefs;
 class PreviewImageProvider;
 class LookPreviewProvider;
 class RenderWorker;
@@ -35,9 +37,7 @@ class EngineController : public QObject {
     Q_PROPERTY(QVariantMap filmControls READ filmControls NOTIFY filmControlsChanged)
     Q_PROPERTY(bool grainResolving READ grainResolving NOTIFY grainResolvingChanged)
     Q_PROPERTY(bool currentStockMonochrome READ currentStockMonochrome NOTIFY stockChanged)
-    Q_PROPERTY(QString exportFormat READ exportFormat WRITE setExportFormat NOTIFY exportSettingsChanged)
-    Q_PROPERTY(int jpegQuality READ jpegQuality WRITE setJpegQuality NOTIFY exportSettingsChanged)
-    Q_PROPERTY(int exportDpi READ exportDpi WRITE setExportDpi NOTIFY exportSettingsChanged)
+    Q_PROPERTY(QString lastExportPath READ lastExportPath NOTIFY lastExportPathChanged)
     Q_PROPERTY(bool exporting READ exporting NOTIFY exportingChanged)
     Q_PROPERTY(bool lightroomRoundTrip READ lightroomRoundTrip NOTIFY lightroomRoundTripChanged)
     Q_PROPERTY(bool hasImage READ hasImage NOTIFY hasImageChanged)
@@ -101,12 +101,8 @@ public:
     QVariantMap filmControls() const { return filmControls_; }
     bool grainResolving() const { return grainResolving_; }
     bool currentStockMonochrome() const;
-    QString exportFormat() const { return exportFormat_; }
-    void setExportFormat(const QString& format);
-    int jpegQuality() const { return jpegQuality_; }
-    void setJpegQuality(int quality);
-    int exportDpi() const { return exportDpi_; }
-    void setExportDpi(int dpi);
+    void setExportPrefs(ExportPrefs* prefs) { exportPrefs_ = prefs; }
+    QString lastExportPath() const { return lastExportPath_; }
     bool exporting() const { return exporting_; }
     bool lightroomRoundTrip() const { return lightroomRoundTrip_; }
 
@@ -119,6 +115,11 @@ public:
 
     Q_INVOKABLE void openFile(const QUrl& url);
     Q_INVOKABLE void exportImage();
+    // Where the next export of the open photo goes:
+    // {path, fileName, folder, exists, skip, replaces}. Empty map without a photo.
+    Q_INVOKABLE QVariantMap exportTarget() const;
+    // Opens Explorer with the last exported file selected.
+    Q_INVOKABLE void showLastExport() const;
     Q_INVOKABLE void setFilmControl(const QString& key, const QVariant& value);
     Q_INVOKABLE void setAutoGrain(bool enabled);
     // Reset every edit — film stock, exposure placement and all develop
@@ -214,7 +215,7 @@ signals:
     void paramsChanged();
     void filmControlsChanged();
     void grainResolvingChanged();
-    void exportSettingsChanged();
+    void lastExportPathChanged();
     void exportingChanged();
     void lightroomRoundTripChanged();
     void hasImageChanged();
@@ -307,9 +308,10 @@ private:
     double shadowLift_ = 0.0;
     QVariantMap filmControls_;
     bool grainResolving_ = false;
-    QString exportFormat_ = "png8";
-    int jpegQuality_ = 92;
-    int exportDpi_ = 300;
+    ExportNaming::Tokens exportTokens() const;
+    ExportPrefs* exportPrefs_ = nullptr;
+    QString lastExportPath_;
+    QString pendingExportPath_;   // where the export in flight writes (standalone)
     bool exporting_ = false;
     bool lightroomRoundTrip_ = false;
     EditStore* store_ = nullptr;          // not owned; null disables memory

@@ -47,6 +47,16 @@ private slots:
         QCOMPARE(imageInfoFromMetadata(md).value("aperture").toString(), QString("f/2"));
     }
 
+    void captureDateIsLocalDay()
+    {
+        dfee::NativeRawMetadata md;
+        md.input_kind = "developed_raw";
+        md.capture_timestamp = QDateTime(QDate(2026, 5, 3), QTime(12, 0)).toSecsSinceEpoch();
+        QCOMPARE(imageInfoFromMetadata(md).value("date").toString(), QString("2026-05-03"));
+        md.capture_timestamp = 0;
+        QVERIFY(!imageInfoFromMetadata(md).contains("date"));
+    }
+
     void renderedTiffHasNoCameraFields()
     {
         dfee::NativeRawMetadata md;

@@ -3,6 +3,7 @@
 #include "PreviewImageProvider.h"
 #include "LookPreviewProvider.h"
 #include "StockCatalog.h"
+#include "ExportPrefs.h"
 
 #include "dfee/session.hpp"
 #include "dfee/bridge_types.hpp"
@@ -17,6 +18,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QDateTime>
+#include <QProcess>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -282,29 +284,45 @@ bool EngineController::currentStockMonochrome() const
     return monochromeStocks_.value(stockId_, false);
 }
 
-void EngineController::setExportFormat(const QString& format)
+ExportNaming::Tokens EngineController::exportTokens() const
 {
-    static const QStringList formats{"png8", "png16", "tiff", "jpeg"};
-    const QString canonical = formats.contains(format) ? format : "png8";
-    if (exportFormat_ == canonical) return;
-    exportFormat_ = canonical;
-    emit exportSettingsChanged();
+    ExportNaming::Tokens t;
+    const QFileInfo source(currentFile_);
+    t.name = source.completeBaseName();
+    if (stockId_ != QLatin1String("none")) {
+        const int i = stockIds_.indexOf(stockId_);
+        t.film = i >= 0 ? stockNames_.at(i) : stockId_;
+    }
+    t.date = imageInfo_.value(QStringLiteral("date")).toString();
+    if (t.date.isEmpty()) t.date = source.lastModified().toString(QStringLiteral("yyyy-MM-dd"));
+    t.camera = imageInfo_.value(QStringLiteral("camera")).toString();
+    t.sequence = exportPrefs_ ? exportPrefs_->sequence() : 1;
+    return t;
 }
 
-void EngineController::setJpegQuality(int quality)
+QVariantMap EngineController::exportTarget() const
 {
-    const int bounded = std::clamp(quality, 1, 100);
-    if (jpegQuality_ == bounded) return;
-    jpegQuality_ = bounded;
-    emit exportSettingsChanged();
+    if (currentFile_.isEmpty() || !exportPrefs_) return {};
+    const QString folder = exportPrefs_->targetFolder(currentFile_);
+    const QString stem = ExportNaming::expand(exportPrefs_->effectiveNameTemplate(), exportTokens());
+    const auto rule = ExportNaming::collisionFromString(exportPrefs_->collision());
+    const auto target = ExportNaming::resolveTarget(
+        folder, stem, ExportNaming::extensionFor(exportPrefs_->format()), rule);
+    return {
+        {QStringLiteral("path"), target.path},
+        {QStringLiteral("fileName"), target.fileName},
+        {QStringLiteral("folder"), folder},
+        {QStringLiteral("exists"), target.exists},
+        {QStringLiteral("skip"), target.skip},
+        {QStringLiteral("replaces"), target.exists && rule == ExportNaming::Collision::Replace},
+    };
 }
 
-void EngineController::setExportDpi(int dpi)
+void EngineController::showLastExport() const
 {
-    const int bounded = std::clamp(dpi, 1, 65535);
-    if (exportDpi_ == bounded) return;
-    exportDpi_ = bounded;
-    emit exportSettingsChanged();
+    if (lastExportPath_.isEmpty()) return;
+    QProcess::startDetached(QStringLiteral("explorer.exe"),
+                            {QStringLiteral("/select,"), QDir::toNativeSeparators(lastExportPath_)});
 }
 
 void EngineController::beginLightroomRoundTrip(const QString& tiffPath)
@@ -318,10 +336,8 @@ void EngineController::beginLightroomRoundTrip(const QString& tiffPath)
         return;
     }
 
-    lightroomRoundTrip_ = true;
-    exportFormat_ = "tiff";
+    lightroomRoundTrip_ = true;   // buildExportRequest forces 16-bit TIFF back to this file
     currentFile_ = source.absoluteFilePath();
-    emit exportSettingsChanged();
     emit lightroomRoundTripChanged();
     qInfo() << "DFEE Lightroom round-trip opened" << currentFile_;
     openFile(QUrl::fromLocalFile(currentFile_));
@@ -879,12 +895,17 @@ dfee::NativeExportRequest EngineController::buildExportRequest() const
 {
     dfee::NativeExportRequest request;
     static_cast<dfee::NativePreviewRenderRequest&>(request) = buildPreviewRequest();
-    request.export_format = exportFormat_.toStdString();
-    request.jpeg_quality = jpegQuality_;
-    request.export_dpi = exportDpi_;
+    request.write_report = false;   // the desktop keeps no JSON report beside photos
+    if (exportPrefs_) {
+        request.export_format = exportPrefs_->format().toStdString();
+        request.jpeg_quality = exportPrefs_->jpegQuality();
+        request.export_dpi = exportPrefs_->dpi();
+    }
     if (lightroomRoundTrip_) {
         request.export_format = "tiff";
         request.output_path = std::filesystem::path(currentFile_.toStdString());
+    } else if (!pendingExportPath_.isEmpty()) {
+        request.output_path = std::filesystem::path(QDir::toNativeSeparators(pendingExportPath_).toStdWString());
     }
     return request;
 }
@@ -926,6 +947,24 @@ void EngineController::exportImage()
 {
     if (currentFile_.isEmpty()) return;
     if (exporting_) return;
+    pendingExportPath_.clear();
+    if (!lightroomRoundTrip_) {
+        const QVariantMap target = exportTarget();
+        if (target.value(QStringLiteral("skip")).toBool()) {
+            status_ = QStringLiteral("Skipped: %1 already exists in %2")
+                          .arg(target.value(QStringLiteral("fileName")).toString(),
+                               QDir::toNativeSeparators(target.value(QStringLiteral("folder")).toString()));
+            emit statusChanged();
+            return;
+        }
+        const QString folder = target.value(QStringLiteral("folder")).toString();
+        if (!QDir().mkpath(folder)) {
+            status_ = QStringLiteral("Export failed: can't create the folder %1").arg(QDir::toNativeSeparators(folder));
+            emit statusChanged();
+            return;
+        }
+        pendingExportPath_ = target.value(QStringLiteral("path")).toString();
+    }
     endPeek();                            // export the applied film, never a hovered one
     flushEdits();
     // The export snapshot is built below, so a queued preview would only spend
@@ -950,6 +989,12 @@ void EngineController::onExportDone(const QString& msg)
 {
     exporting_ = false;
     emit exportingChanged();
+    if (!lightroomRoundTrip_ && msg.startsWith(QLatin1String("Exported:")) && !pendingExportPath_.isEmpty()) {
+        lastExportPath_ = pendingExportPath_;
+        emit lastExportPathChanged();
+        if (exportPrefs_) exportPrefs_->noteExported(lastExportPath_);
+    }
+    pendingExportPath_.clear();
     const bool savedToLightroom = lightroomRoundTrip_ && msg.startsWith("Exported:");
     status_ = savedToLightroom ? "Saved. Returning to Lightroom..." : msg;
     emit statusChanged();

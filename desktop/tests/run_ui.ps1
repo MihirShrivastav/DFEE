@@ -18,6 +18,10 @@ $exe = if ($Exe) { $Exe } else { Join-Path $repo "desktop\out\build\Release\DFEE
 $work = Join-Path ([IO.Path]::GetTempPath()) ("filmlab-ui-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force $work | Out-Null
 [IO.File]::WriteAllText((Join-Path $work "not-an-image.arw"), "not a raw file")
+# Exports default to a throwaway folder; "taken.jpg" lets scripts check the taken-name rules.
+New-Item -ItemType Directory -Force (Join-Path $work "exports") | Out-Null
+[IO.File]::WriteAllText((Join-Path $work "exports\taken.jpg"), "")
+$env:DFEE_EXPORT_DIR = Join-Path $work "exports"
 $tempTiff = Join-Path $work "lr-working.tif"
 if (Test-Path $SampleTiff) { Copy-Item $SampleTiff $tempTiff }
 $body = (Get-Content $Script -Raw).Replace('${SAMPLE_A}', $SampleA).Replace('${SAMPLE_B}', $SampleB).

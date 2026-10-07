@@ -1,0 +1,32 @@
+# The export target follows ExportPrefs: default folder (DFEE_EXPORT_DIR), the name
+# template with the film, and the taken-name rules (run_ui.ps1 creates exports/taken.jpg).
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:exportPrefs.folderPath=${TEMP}/exports
+expect:exportPrefs.format=jpeg
+key:83+ctrl
+wait:300
+expect:exportSheet.visible=true
+expect:exportNameExample.text=3071874357.jpg
+stock:portra_400
+wait:300
+expect:exportNameExample.text=3071874357_Kodak Portra 400.jpg
+set:exportPrefs.nameTemplate={seq} {name}
+wait:200
+expect:exportNameExample.text=0001 3071874357.jpg
+set:exportPrefs.nameTemplate=taken
+wait:200
+expect:exportNameExample.text=taken-2.jpg
+set:exportPrefs.collision=replace
+wait:200
+expect:exportNameExample.text=taken.jpg
+expect:exportTargetNote.text=Will replace the existing file.
+set:exportPrefs.collision=skip
+wait:200
+expect:exportConfirm.enabled=false
+set:exportPrefs.collision=number
+set:exportPrefs.nameTemplate={name}_{film}
+key:16777216
+wait:300
+expect:exportSheet.visible=false
+quit
