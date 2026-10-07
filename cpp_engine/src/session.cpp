@@ -3958,6 +3958,9 @@ void EngineSession::clear_decode_caches() {
 }
 
 void EngineSession::refresh_preview_cache_from_draft() {
+    // Proxies are a downscale of the preview source: never outlive it (a re-decode of
+    // the same file after an export or eviction may carry new pixels).
+    proxy_source_cache_.reset();
     if (!draft_decode_cache_.has_value()) {
         preview_cache_.reset();
         raw_preview_jpeg_cache_.reset();

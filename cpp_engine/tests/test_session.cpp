@@ -348,6 +348,35 @@ void test_proxy_speed_and_preview_untouched() {
     run_golden(session, false);
 }
 
+// The same file rewritten on disk (e.g. a Lightroom save-back) and decoded again:
+// its tiles must show the new pixels, not the old cached downscale.
+void test_proxy_refreshes_after_redecode() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_scene("proxy_redecode", 0, 1200, 800);
+    const auto look = grain_free(base_request(file, "portra_400"));
+    expect(session.render_look_proxy(proxy_request(look)).ok, "proxy before rewrite");
+    expect(cv::imwrite(file.string(), make_scene(2, 1200, 800)), "rewrite fixture");
+    // A tiny cache budget evicts the draft and preview after this render, as an export
+    // or memory pressure does; the next request re-reads the rewritten file.
+#if defined(_WIN32)
+    expect(_putenv_s("DFEE_NATIVE_CACHE_BUDGET_MB", "1") == 0, "set cache budget");
+#else
+    expect(setenv("DFEE_NATIVE_CACHE_BUDGET_MB", "1", 1) == 0, "set cache budget");
+#endif
+    expect(session.render_preview(look).ok, "render that triggers eviction");
+#if defined(_WIN32)
+    expect(_putenv_s("DFEE_NATIVE_CACHE_BUDGET_MB", "") == 0, "clear cache budget");
+#else
+    unsetenv("DFEE_NATIVE_CACHE_BUDGET_MB");
+#endif
+    expect(!session.cache_state().cache.draft_decode_cached, "draft was evicted");
+    const auto proxy = session.render_look_proxy(proxy_request(look));
+    expect(proxy.ok, "proxy after rewrite");
+    const auto d = compare_images(proxy_to_bgr(proxy), preview_at(session, look, {proxy.width, proxy.height}));
+    expect(d.mean_abs <= 6.0, "proxy shows the rewritten file (mean " + std::to_string(d.mean_abs) + ")");
+    std::filesystem::remove(file);
+}
+
 }  // namespace
 
 int main() {
@@ -358,6 +387,7 @@ int main() {
         test_proxy_geometry_framing();
         test_proxy_follows_the_photo();
         test_proxy_errors();
+        test_proxy_refreshes_after_redecode();
         test_proxy_speed_and_preview_untouched();
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << "\n";
