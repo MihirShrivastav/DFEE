@@ -33,6 +33,8 @@ qt_add_executable(DFEE
     src/EditStore.h
     src/ExportNaming.cpp
     src/ExportNaming.h
+    src/ExportPrefs.cpp
+    src/ExportPrefs.h
     src/ImageInfo.cpp
     src/ImageInfo.h
     src/StockCatalog.cpp
@@ -171,6 +173,8 @@ qt_add_executable(export_tests
     tests/export_test.cpp
     src/ExportNaming.cpp
     src/ExportNaming.h
+    src/ExportPrefs.cpp
+    src/ExportPrefs.h
 )
 target_include_directories(export_tests PRIVATE src)
 target_link_libraries(export_tests PRIVATE Qt6::Core Qt6::Test)
