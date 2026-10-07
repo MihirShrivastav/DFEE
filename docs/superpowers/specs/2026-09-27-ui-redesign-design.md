@@ -92,6 +92,7 @@ Monochrome stocks dim (not hide) the color controls.
 ### Export
 A sheet: format (8-bit PNG, 16-bit PNG, 16-bit TIFF, JPEG), quality, DPI, destination. Ctrl+S opens
 it in standalone mode; in Lightroom mode Ctrl+S / Save & Return exports directly.
+Detailed in `2026-10-07-export-design.md`.
 
 ### Keyboard (kept)
 Left/Right photo (when no slider/text field has focus), Ctrl+Left/Right, `[` `]` stock, `\`

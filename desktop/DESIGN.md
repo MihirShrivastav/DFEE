@@ -114,6 +114,15 @@ Never below 11px. Sentence case for labels; US spelling ("Color").
   shortcut; highlighted item = accent fill, white text.
 - **Tooltips, popovers:** `#2A2A2D`, radius 8 (tooltip) / 10 (popover), inner
   hairline, wrap at 260px.
+- **Export sheet (520 wide, labels in a 112px column):** *Save to* — inset folder
+  box (folder icon, path elided in the middle, caret) opening a picker grouped
+  Favourites / Recent / Folders (Film Lab Exports, Next to the original, Choose
+  folder…), plus a star to pin the folder. *File name* — template field, token
+  chips `{name} {film} {date} {seq} {camera}` that insert at the cursor, the
+  resulting name in caption below, and a note when the name is taken (danger colour
+  for Replace/Skip). *If the name exists* — Add number / Replace / Skip. A hairline,
+  then Format, Quality or Resolution. Every choice is remembered (`exportPrefs`).
+  After an export the canvas status line offers **Show in folder**.
 
 ## Behaviour rules (kept from v1)
 
