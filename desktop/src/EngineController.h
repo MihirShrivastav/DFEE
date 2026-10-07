@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <QImage>
 #include <QHash>
+#include <QSet>
 #include <QVariant>
 #include <QVariantMap>
 #include <QVariantList>
@@ -18,6 +19,7 @@
 
 namespace dfee { class EngineSession; }
 class PreviewImageProvider;
+class LookPreviewProvider;
 class RenderWorker;
 
 class EngineController : public QObject {
@@ -68,6 +70,11 @@ class EngineController : public QObject {
     // Per-group "has edits" flags for the v2 inspector's section dots:
     // {film, exposure, tone, color, grain_light, print, fine_tune, + v1 group names} -> bool.
     Q_PROPERTY(QVariantMap editedGroups READ editedGroups NOTIFY filmControlsChanged)
+    // Films tiles: stock id -> epoch of its ready tile image (image://look/<id>?e=<epoch>);
+    // lookEpoch changes with every adjustment; pending = queued + in flight.
+    Q_PROPERTY(QVariantMap lookTiles READ lookTiles NOTIFY lookTilesChanged)
+    Q_PROPERTY(int lookEpoch READ lookEpoch NOTIFY lookTilesChanged)
+    Q_PROPERTY(int lookTilesPending READ lookTilesPending NOTIFY lookTilesChanged)
 
 public:
     // provider must be non-null; it must outlive EngineController (the
@@ -148,6 +155,13 @@ public:
     bool canUndo() const { return historyIndex_ > 0; }
     bool canRedo() const { return historyIndex_ >= 0 && historyIndex_ < int(history_.size()) - 1; }
     QVariantList presets() const { return presets_; }
+    QVariantMap lookTiles() const;
+    int lookEpoch() const { return static_cast<int>(lookEpoch_); }
+    int lookTilesPending() const { return int(tileQueue_.size()) + (tileInFlight_.isEmpty() ? 0 : 1); }
+    void setLookProvider(LookPreviewProvider* provider) { lookProvider_ = provider; }
+    // The tiles the tray shows right now (visible group, in order). Empty stops tiles.
+    Q_INVOKABLE void requestLookTiles(const QStringList& stockIds);
+    Q_INVOKABLE void onLookProxyReady(const QString& stockId, qulonglong epoch, const QImage& image);
     QStringList presetGroups() const { return presetGroups_; }
 
     // Edit history navigation. jumpToHistory takes a display row (0 = newest).
@@ -206,6 +220,7 @@ signals:
     void histogramChanged();
     void historyChanged();
     void presetsChanged();
+    void lookTilesChanged();
 
 private:
     // Factory for the default film-control values — the single source of truth
@@ -307,4 +322,15 @@ private:
     // the latest immutable request after a short quiet period so the native
     // worker spends its time rendering useful previews rather than stale ones.
     QTimer previewDebounceTimer_;
+    void bumpLookEpoch();            // adjustments changed: tiles stale, re-queue
+    void resetLookTiles();           // a new photo: drop every tile
+    void rebuildTileQueue();
+    void pumpLookTiles();            // dispatch one tile when the worker is idle
+    LookPreviewProvider* lookProvider_ = nullptr;
+    quint64 lookEpoch_ = 1;
+    QHash<QString, quint64> tileEpochs_;   // stock -> epoch of its ready image
+    QSet<QString> failedTiles_;            // failed this epoch: don't retry
+    QStringList wantedTiles_;
+    QStringList tileQueue_;
+    QString tileInFlight_;
 };

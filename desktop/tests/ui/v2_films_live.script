@@ -1,0 +1,22 @@
+# Films tiles render the open photo per stock, go stale on an edit (old tiles stay
+# up) and refresh; previews still win the worker; a new photo starts empty.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+expect:tray.activeTab=films
+waitfor:engine.lookTilesPending=0,60000
+expect:filmTile_none.live=true
+expect:filmTile_cinestill_400d.live=true
+expect:filmTile_cinestill_400d.fresh=true
+control:film_contrast=150
+expect:filmTile_cinestill_400d.live=true
+expect:filmTile_cinestill_400d.fresh=false
+waitfor:engine.previewRevision=2,15000
+waitfor:engine.lookTilesPending=0,60000
+expect:filmTile_cinestill_400d.fresh=true
+open:${SAMPLE_B}
+waitfor:engine.currentFile=${SAMPLE_B},15000
+expect:filmTile_cinestill_400d.live=false
+waitfor:engine.lookTilesPending=0,60000
+expect:filmTile_cinestill_400d.live=true
+shot:${TEMP}/v2_films_live.png
+quit

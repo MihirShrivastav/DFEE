@@ -271,3 +271,29 @@ void RenderWorker::doRender(const dfee::NativePreviewRenderRequest& request)
     QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
                               Qt::QueuedConnection, Q_ARG(bool, false));
 }
+
+void RenderWorker::renderLookProxy(const dfee::NativeLookProxyRequest& request,
+                                   const QString& stockId,
+                                   qulonglong epoch)
+{
+    QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
+                              Qt::QueuedConnection, Q_ARG(bool, true));
+    QImage image;
+    try {
+        const dfee::NativeLookProxyResponse proxy = session_->render_look_proxy(request);
+        if (proxy.ok && proxy.width > 0 && proxy.height > 0) {
+            image = QImage(proxy.rgb8.data(), proxy.width, proxy.height, proxy.width * 3,
+                           QImage::Format_RGB888).copy();   // own the pixels
+        } else {
+            qWarning().noquote() << "DFEE look tile failed" << stockId
+                                 << QString::fromStdString(proxy.error.code)
+                                 << QString::fromStdString(proxy.error.detail);
+        }
+    } catch (const std::exception& e) {
+        qWarning().noquote() << "DFEE look tile failed" << stockId << e.what();
+    }
+    QMetaObject::invokeMethod(controller_, "onLookProxyReady", Qt::QueuedConnection,
+                              Q_ARG(QString, stockId), Q_ARG(qulonglong, epoch), Q_ARG(QImage, image));
+    QMetaObject::invokeMethod(controller_, "onWorkerBusyChanged",
+                              Qt::QueuedConnection, Q_ARG(bool, false));
+}

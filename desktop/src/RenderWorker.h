@@ -32,6 +32,9 @@ public slots:
     // Resolves Auto grain through the same native solver without rendering.
     void resolveAutoGrain(const dfee::NativePreviewRenderRequest& request);
 
+    // A small render of the open photo in another stock (a Films tile).
+    void renderLookProxy(const dfee::NativeLookProxyRequest& request, const QString& stockId, qulonglong epoch);
+
 private:
     void doRender(const dfee::NativePreviewRenderRequest& request);
 

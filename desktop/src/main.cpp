@@ -19,6 +19,7 @@
 #include "UiScript.h"
 #include "EditStore.h"
 #include "WindowChrome.h"
+#include "LookPreviewProvider.h"
 
 int main(int argc, char* argv[]) {
     // Native Windows controls cannot be safely restyled from QML.  Basic keeps
@@ -81,6 +82,9 @@ int main(int argc, char* argv[]) {
     QQmlApplicationEngine engine;
     engine.addImageProvider("preview", provider);   // engine takes ownership
     engine.addImageProvider("thumb", new ThumbnailImageProvider());  // engine takes ownership
+    auto* lookProvider = new LookPreviewProvider();
+    engine.addImageProvider("look", lookProvider);   // engine takes ownership
+    controller.setLookProvider(lookProvider);
     engine.rootContext()->setContextProperty("engine", &controller);
     engine.rootContext()->setContextProperty("library", &library);
     engine.rootContext()->setContextProperty("editStore", &editStore);

@@ -217,19 +217,19 @@ waitfor:engine.hasImage=true,30000
 expect:tray.activeTab=films
 waitfor:engine.lookTilesPending=0,60000
 expect:filmTile_none.live=true
-expect:filmTile_portra_400.live=true
-expect:filmTile_portra_400.fresh=true
+expect:filmTile_cinestill_400d.live=true
+expect:filmTile_cinestill_400d.fresh=true
 control:film_contrast=150
-expect:filmTile_portra_400.live=true
-expect:filmTile_portra_400.fresh=false
+expect:filmTile_cinestill_400d.live=true
+expect:filmTile_cinestill_400d.fresh=false
 waitfor:engine.previewRevision=2,15000
 waitfor:engine.lookTilesPending=0,60000
-expect:filmTile_portra_400.fresh=true
+expect:filmTile_cinestill_400d.fresh=true
 open:${SAMPLE_B}
 waitfor:engine.currentFile=${SAMPLE_B},15000
-expect:filmTile_portra_400.live=false
+expect:filmTile_cinestill_400d.live=false
 waitfor:engine.lookTilesPending=0,60000
-expect:filmTile_portra_400.live=true
+expect:filmTile_cinestill_400d.live=true
 shot:${TEMP}/v2_films_live.png
 quit
 ```
@@ -605,8 +605,8 @@ and in `runNext`, after the `dclick` branch:
 open:${SAMPLE_A}
 waitfor:engine.hasImage=true,30000
 expect:engine.history.length=1
-hover:filmTile_portra_400@0.5,0.3
-waitfor:engine.peekStock=portra_400,3000
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
 expect:peekChip.visible=true
 expect:engine.stock=none
 waitfor:engine.previewRevision=2,15000
@@ -614,8 +614,8 @@ expect:engine.history.length=1
 hover:photoCanvas@0.5,0.5
 waitfor:engine.peekStock=,3000
 expect:peekChip.visible=false
-hover:filmTile_ektar_100@0.5,0.3
-waitfor:engine.peekStock=ektar_100,3000
+hover:filmTile_cinestill_50d@0.5,0.3
+waitfor:engine.peekStock=cinestill_50d,3000
 key:16777216
 wait:200
 expect:engine.peekStock=
@@ -623,11 +623,11 @@ expect:engine.stock=none
 expect:engine.history.length=1
 wait:600
 expect:editStore.recordCount=0
-hover:filmTile_portra_400@0.5,0.3
-waitfor:engine.peekStock=portra_400,3000
-click:filmTile_portra_400@0.5,0.3
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
+click:filmTile_cinestill_400d@0.5,0.3
 wait:300
-expect:engine.stock=portra_400
+expect:engine.stock=cinestill_400d
 expect:engine.peekStock=
 expect:engine.history.length=2
 quit
@@ -641,9 +641,9 @@ waitfor:engine.hasImage=true,30000
 expect:engine.lightroomRoundTrip=true
 expect:tray.activeTab=films
 waitfor:engine.lookTilesPending=0,60000
-expect:filmTile_portra_400.live=true
-hover:filmTile_portra_400@0.5,0.3
-waitfor:engine.peekStock=portra_400,3000
+expect:filmTile_cinestill_400d.live=true
+hover:filmTile_cinestill_400d@0.5,0.3
+waitfor:engine.peekStock=cinestill_400d,3000
 key:16777216
 wait:200
 expect:engine.peekStock=
@@ -652,7 +652,7 @@ quit
 ```
 
 Run: `cmake --build desktop/out/build --config Release` then `powershell -ExecutionPolicy Bypass -File desktop/tests/run_ui.ps1 -Script desktop/tests/ui/v2_peek.script`
-Expected: FAIL at `waitfor:engine.peekStock=portra_400` (`<missing>`).
+Expected: FAIL at `waitfor:engine.peekStock=cinestill_400d` (`<missing>`).
 
 - [ ] **Step 3: Controller peek**
 

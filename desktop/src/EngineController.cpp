@@ -1,6 +1,7 @@
 #include "EngineController.h"
 #include "RenderWorker.h"
 #include "PreviewImageProvider.h"
+#include "LookPreviewProvider.h"
 #include "StockCatalog.h"
 
 #include "dfee/session.hpp"
@@ -93,6 +94,8 @@ EngineController::EngineController(PreviewImageProvider* provider,
     workerThread_.start();
 
     refreshPresets();
+    // Every adjustment changes what a tile shows (tiles are "what a click gives").
+    connect(this, &EngineController::filmControlsChanged, this, &EngineController::bumpLookEpoch);
 }
 
 QVariantMap EngineController::defaultFilmControls()
@@ -717,6 +720,7 @@ void EngineController::openFile(const QUrl& url)
     emit currentFileChanged();
     imageInfo_.clear();
     emit imageInfoChanged();
+    resetLookTiles();
     loadEditsFor(file);                   // before the first preview request
     workerBusy_  = true;
     const dfee::NativePreviewRenderRequest request = buildPreviewRequest();
@@ -1025,6 +1029,7 @@ void EngineController::onWorkerBusyChanged(bool busy)
             emit currentFileChanged();
             imageInfo_.clear();
             emit imageInfoChanged();
+            resetLookTiles();
             loadEditsFor(currentFile_);
 
             workerBusy_ = true;
@@ -1037,7 +1042,98 @@ void EngineController::onWorkerBusyChanged(bool busy)
             // file is already decoded — a render-only kick is correct.
             scheduleRender();
         }
+    } else if (!busy) {
+        pumpLookTiles();
     }
+}
+
+// ── Films tiles ─────────────────────────────────────────────────────────
+
+namespace { constexpr int kLookTileEdge = 256; }
+
+QVariantMap EngineController::lookTiles() const
+{
+    QVariantMap tiles;
+    for (auto it = tileEpochs_.cbegin(); it != tileEpochs_.cend(); ++it) {
+        tiles.insert(it.key(), static_cast<int>(it.value()));
+    }
+    return tiles;
+}
+
+void EngineController::requestLookTiles(const QStringList& stockIds)
+{
+    wantedTiles_ = stockIds;
+    rebuildTileQueue();
+    pumpLookTiles();
+}
+
+void EngineController::bumpLookEpoch()
+{
+    ++lookEpoch_;
+    failedTiles_.clear();
+    rebuildTileQueue();                  // old tiles stay visible until replaced
+    // Not now: the edit that bumped the epoch schedules its preview right after this
+    // signal returns. Pumping on the next turn sees that preview's debounce and lets
+    // it go first.
+    QTimer::singleShot(0, this, &EngineController::pumpLookTiles);
+}
+
+void EngineController::resetLookTiles()
+{
+    ++lookEpoch_;
+    tileEpochs_.clear();
+    failedTiles_.clear();
+    if (lookProvider_) lookProvider_->clear();
+    rebuildTileQueue();
+}
+
+void EngineController::rebuildTileQueue()
+{
+    tileQueue_.clear();
+    for (const QString& id : std::as_const(wantedTiles_)) {
+        if (id == tileInFlight_ || failedTiles_.contains(id)) continue;
+        if (tileEpochs_.value(id, 0) != lookEpoch_) tileQueue_.append(id);
+    }
+    emit lookTilesChanged();
+}
+
+// Tiles are the lowest priority: only when the worker is idle and nothing else
+// waits — a pending open/preview (dirty_), a slider debounce, an export or an
+// auto-grain resolve all go first. One tile in flight at a time.
+void EngineController::pumpLookTiles()
+{
+    if (workerBusy_ || dirty_ || exporting_ || grainResolving_ || !hasImage_ || !lookProvider_ ||
+        currentFile_.isEmpty() || previewDebounceTimer_.isActive() || tileQueue_.isEmpty()) {
+        return;
+    }
+    const QString stock = tileQueue_.takeFirst();
+    tileInFlight_ = stock;
+    workerBusy_ = true;
+    dfee::NativeLookProxyRequest request;
+    request.look = buildPreviewRequest();
+    request.look.stock = stock.toStdString();
+    request.max_edge = kLookTileEdge;
+    const qulonglong epoch = lookEpoch_;
+    QMetaObject::invokeMethod(worker_, [worker = worker_, request, stock, epoch]() {
+        worker->renderLookProxy(request, stock, epoch);
+    }, Qt::QueuedConnection);
+    emit lookTilesChanged();
+}
+
+void EngineController::onLookProxyReady(const QString& stockId, qulonglong epoch, const QImage& image)
+{
+    tileInFlight_.clear();
+    if (epoch == lookEpoch_) {
+        if (image.isNull()) {
+            failedTiles_.insert(stockId);
+        } else {
+            if (lookProvider_) lookProvider_->setImage(stockId, image);
+            tileEpochs_.insert(stockId, epoch);
+        }
+    } else if (wantedTiles_.contains(stockId) && !tileQueue_.contains(stockId)) {
+        tileQueue_.append(stockId);      // rendered for an older look: do it again
+    }
+    emit lookTilesChanged();
 }
 
 // ── Edit history ────────────────────────────────────────────────────────

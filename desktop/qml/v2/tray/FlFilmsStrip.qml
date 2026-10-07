@@ -17,6 +17,12 @@ ListView {
         return g;
     }
     readonly property string activeGroup: group.length > 0 ? group : (groups.length > 0 ? groups[0] : "")
+    // Ask the engine for exactly the tiles on show; none while the strip is hidden.
+    readonly property var wantedIds: (model || []).map(r => r.id)
+    function requestTiles() { engine.requestLookTiles(visible ? wantedIds : []); }
+    onWantedIdsChanged: requestTiles()
+    onVisibleChanged: requestTiles()
+    Component.onCompleted: requestTiles()
     orientation: ListView.Horizontal
     spacing: 14
     leftMargin: 16
@@ -41,6 +47,9 @@ ListView {
         id: tile
         objectName: "filmTile_" + modelData.id
         readonly property bool current: engine.stock === modelData.id
+        readonly property int tileEpoch: engine.lookTiles[modelData.id] || 0
+        readonly property bool live: tileEpoch > 0
+        readonly property bool fresh: live && tileEpoch === engine.lookEpoch
         width: 124
         height: 116
         Rectangle {                                   // selection ring: 2px gap + 2px accent
@@ -63,7 +72,15 @@ ListView {
             border.color: "#40ffffff"
             Image {
                 anchors.fill: parent
-                visible: modelData.id !== "none"
+                visible: tile.live
+                source: tile.live ? "image://look/" + modelData.id + "?e=" + tile.tileEpoch : ""
+                fillMode: Image.PreserveAspectCrop
+                cache: false
+                asynchronous: true
+            }
+            Image {
+                anchors.fill: parent
+                visible: modelData.id !== "none" && !tile.live
                 source: modelData.id !== "none" ? "qrc:/boxart/" + modelData.id + ".svg" : ""
                 sourceSize: Qt.size(248, 164)
                 fillMode: Image.PreserveAspectCrop
@@ -71,11 +88,21 @@ ListView {
             }
             Text {
                 anchors.centerIn: parent
-                visible: modelData.id === "none"
+                visible: modelData.id === "none" && !tile.live
                 text: "No film"
                 color: Theme.textCaption
                 font.pixelSize: Theme.fontLabel
             }
+        }
+        Image {                                   // box-art badge on a live tile
+            visible: tile.live && modelData.id !== "none"
+            x: 6
+            y: art.height - height - 6
+            width: 18
+            height: 18
+            source: visible ? "qrc:/boxart/" + modelData.id + ".svg" : ""
+            sourceSize: Qt.size(36, 36)
+            fillMode: Image.PreserveAspectCrop
         }
         Column {
             anchors.top: art.bottom
