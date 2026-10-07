@@ -64,7 +64,7 @@ What the code gives us (surveyed):
 - **After export:** "Show in folder" in the status line (opens Explorer with the file selected).
 
 ### File name
-- **Template** built from tokens: `{name}` (original stem), `{film}`, `{look}`, `{date}`
+- **Template** built from tokens (`{look}` arrives with Phase 3, `{size}` with E2): `{name}` (original stem), `{film}`, `{look}`, `{date}`
   (capture date, falling back to the file date), `{seq}` (zero-padded counter), `{camera}`,
   `{size}` (e.g. 8x10) and free text.
 - **Default:** `{name}_{film}`.
@@ -187,12 +187,17 @@ Split the work so each side does what it is good at.
   `imgdata.other.timestamp`, and pass it into `imageInfo.date` for `{date}`.
 
 ### Persistence
-- **Where settings live:** QtCore `Settings { category: "export"; location: uiSettingsLocation }`
-  in the sheet, so tests isolate them automatically.
-- **What it holds:** `lastOptions` (JSON), `lastFolder`, `favoriteFolders` (list),
-  `recentFolders` (most recent first, up to 6) and `userPresets` (JSON).
-- Format, quality and dpi move from `EngineController` members into these options. The
+- **Where settings live:** a C++ `ExportPrefs` object (context property `exportPrefs`), saved
+  with `QSettings` group `export`. It writes to the `DFEE_UI_SETTINGS` ini when that is set
+  (tests), else the app's settings. *Amended 2026-10-07 (E1 plan): C++ rather than a QML
+  `Settings`, because the export request is built in C++ and needs the folder, name rule and
+  format without a QML round trip.*
+- **What it holds:** folder (or next-to-original), name template, collision rule, format,
+  JPEG quality, dpi, favourite folders, recent folders (most recent first, up to 6), the
+  `{seq}` counter, and later the size/border options and user presets.
+- Format, quality and dpi move from `EngineController` members into `ExportPrefs`. The
   Lightroom path keeps forcing 16-bit TIFF.
+- `DFEE_EXPORT_DIR` overrides the default folder (tests never touch the real Pictures folder).
 
 ## Phases (each shipped, tested, and the installer rebuilt)
 
