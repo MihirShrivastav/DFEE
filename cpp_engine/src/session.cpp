@@ -15,6 +15,7 @@
 #include "dfee/solver.hpp"
 #include "dfee/version.hpp"
 
+#include <cstring>
 #include <algorithm>
 #include <atomic>
 #include <array>
@@ -873,6 +874,42 @@ DecodedRawChannelMasks resize_clipping_masks(
         .blue = resize_one(source_masks.blue),
     };
 }
+
+#if DFEE_HAS_OPENCV
+// Area downscale for proxies (masks and the working image alike).
+Image resize_image_area(const Image& source, int width, int height) {
+    cv::Mat in(source.height, source.width, CV_32FC3, const_cast<float*>(source.pixels.data()));
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(width, height), 0, 0, cv::INTER_AREA);
+    Image result(width, height, 3);
+    std::memcpy(result.pixels.data(), out.ptr<float>(), result.pixels.size() * sizeof(float));
+    return result;
+}
+
+LuminanceImage resize_luminance_area(const LuminanceImage& source, int width, int height) {
+    if (source.empty()) return {};
+    cv::Mat in(source.height, source.width, CV_32FC1, const_cast<float*>(source.values.data()));
+    cv::Mat out;
+    cv::resize(in, out, cv::Size(width, height), 0, 0, cv::INTER_AREA);
+    LuminanceImage result(width, height);
+    std::memcpy(result.values.data(), out.ptr<float>(), result.values.size() * sizeof(float));
+    return result;
+}
+
+// Scene-linear -> packed sRGB RGB8, the same transfer and rounding as the preview JPEG.
+std::vector<std::uint8_t> to_srgb8_rgb(const Image& image) {
+    std::vector<std::uint8_t> out(static_cast<std::size_t>(image.width) * image.height * 3);
+    std::size_t i = 0;
+    for (int y = 0; y < image.height; ++y) {
+        for (int x = 0; x < image.width; ++x) {
+            for (int c = 0; c < 3; ++c) {
+                out[i++] = static_cast<std::uint8_t>(std::clamp(linear_to_srgb_channel(image.at(x, y, c)) * 255.0F, 0.0F, 255.0F));
+            }
+        }
+    }
+    return out;
+}
+#endif
 
 NativeRawPreviewResponse encode_preview_jpeg_bytes(const Image& preview_rgb, const std::string& filename) {
     NativeRawPreviewResponse response;
@@ -2795,6 +2832,112 @@ std::optional<Image> EngineSession::run_film_pipeline(
     return rendered;
 }
 
+NativeLookProxyResponse EngineSession::render_look_proxy(const NativeLookProxyRequest& request) {
+    NativeLookProxyResponse response;
+    response.engine = build_engine_metadata();
+#if !DFEE_HAS_OPENCV
+    response.status = "unavailable";
+    response.error = {
+        .code = "OPENCV_UNAVAILABLE",
+        .user_message = "Look previews are not available in this build.",
+        .detail = "DFEE was built without OpenCV discovery.",
+    };
+    finalize_engine_metadata(response.engine);
+    return response;
+#else
+    const auto fail = [&](NativeError error, std::string status = "error") {
+        response.ok = false;
+        response.status = std::move(status);
+        response.error = std::move(error);
+        finalize_engine_metadata(response.engine);
+        return response;
+    };
+    try {
+        ScopedStageTimer total(response.engine, "render_look_proxy_total");
+        const std::string filename = resolve_filename(request.look.filename);
+        if (filename.empty()) {
+            return fail({.code = "RAW_FILENAME_MISSING", .user_message = "Select a photo before continuing.",
+                         .detail = "render_look_proxy received an empty filename."});
+        }
+        if (request.max_edge < 16) {
+            return fail({.code = "PROXY_SIZE_INVALID", .user_message = "The look preview size is too small.",
+                         .detail = "max_edge must be at least 16, got " + std::to_string(request.max_edge)});
+        }
+        if (const auto version_error = validate_effect_pipeline_version_impl(request.look.effect_pipeline_version)) {
+            return fail(*version_error);
+        }
+        {
+            ScopedStageTimer stage(response.engine, "render_look_proxy_ensure_source");
+            if (!draft_decode_cache_.has_value() || draft_decode_cache_->filename != filename ||
+                !preview_cache_.has_value() || preview_cache_->filename != filename) {
+                const auto decode = decode_raw({.filename = filename, .draft_mode = true});
+                if (!decode.ok) return fail(decode.error, decode.status);
+            }
+            SolverInput solver_input;
+            ZoneMasks zone_masks;
+            SpatialMasks spatial_masks;
+            populate_preview_analysis_cache(filename, solver_input, zone_masks, spatial_masks);
+            if (!proxy_source_cache_.has_value() || proxy_source_cache_->filename != filename ||
+                proxy_source_cache_->max_edge != request.max_edge) {
+                const Image& full = preview_cache_->rgb_linear;
+                const double scale = std::min(1.0, static_cast<double>(request.max_edge) / std::max(full.width, full.height));
+                const int width = std::max(1, static_cast<int>(std::lround(full.width * scale)));
+                const int height = std::max(1, static_cast<int>(std::lround(full.height * scale)));
+                CachedProxySource cached;
+                cached.filename = filename;
+                cached.max_edge = request.max_edge;
+                cached.rgb_linear = scale < 1.0 ? resize_image_area(full, width, height) : full;
+                for (std::size_t z = 0; z < zone_masks.zones.size(); ++z) {
+                    cached.zone_masks.zones[z] = resize_luminance_area(zone_masks.zones[z], width, height);
+                }
+                cached.spatial_masks.grain_receptivity_mask = resize_luminance_area(spatial_masks.grain_receptivity_mask, width, height);
+                cached.spatial_masks.halation_source_mask = resize_luminance_area(spatial_masks.halation_source_mask, width, height);
+                cached.spatial_masks.halation_receiver_mask = resize_luminance_area(spatial_masks.halation_receiver_mask, width, height);
+                proxy_source_cache_ = std::move(cached);
+            }
+        }
+        const auto& cached = *proxy_source_cache_;
+        const PipelineSource source{
+            .rgb_linear = &cached.rgb_linear,
+            .rendered_input = preview_cache_->rendered_input,
+            .solver_input = &preview_analysis_cache_->solver_input,
+            .zone_masks = &cached.zone_masks,
+            .spatial_masks = &cached.spatial_masks,
+        };
+        PipelineOptions options;
+        options.stage_prefix = "render_look_proxy";
+        options.include_grain = request.include_grain;
+        options.apply_geometry = request.apply_geometry;
+        options.dump_stages = false;
+
+        Image rendered;
+        if (request.look.stock == "none") {
+            rendered = run_neutral_pipeline(request.look, source, options, response.engine);
+        } else {
+            NativeError error;
+            auto out = run_film_pipeline(request.look, filename, source, options, response.engine, error);
+            if (!out.has_value()) return fail(error);
+            rendered = std::move(*out);
+        }
+        {
+            ScopedStageTimer stage(response.engine, "render_look_proxy_encode_rgb8");
+            response.width = rendered.width;
+            response.height = rendered.height;
+            response.rgb8 = to_srgb8_rgb(rendered);
+        }
+        response.ok = true;
+        response.status = "rendered";
+    } catch (const NativeException& ex) {
+        return fail(ex.error());
+    } catch (const std::exception& ex) {
+        return fail({.code = "PROXY_RENDER_FAILED", .user_message = "The look preview could not be rendered.",
+                     .detail = ex.what()});
+    }
+    finalize_engine_metadata(response.engine);
+    return response;
+#endif
+}
+
 NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRenderRequest& request) {
     NativePreviewRenderResponse response;
     response.filename = resolve_filename(request.filename);
@@ -3649,6 +3792,11 @@ NativeSessionCacheStateResponse EngineSession::cache_state() const {
     if (const auto cache_budget = parse_env_memory_budget_bytes("DFEE_NATIVE_CACHE_BUDGET_MB")) {
         response.cache.cache_budget_bytes = static_cast<std::size_t>(*cache_budget);
     }
+    if (proxy_source_cache_.has_value()) {
+        response.cache.proxy_source_cached = true;
+        response.cache.proxy_width = proxy_source_cache_->rgb_linear.width;
+        response.cache.proxy_height = proxy_source_cache_->rgb_linear.height;
+    }
     response.cache.profile_cache_entries = film_profile_cache_.size() + print_profile_cache_.size();
     response.cache.profile_loads = profile_loads_;
     finalize_engine_metadata(response.engine);
@@ -3806,6 +3954,7 @@ void EngineSession::clear_decode_caches() {
     raw_preview_jpeg_cache_.reset();
     preview_analysis_cache_.reset();
     export_analysis_cache_.reset();
+    proxy_source_cache_.reset();
 }
 
 void EngineSession::refresh_preview_cache_from_draft() {

@@ -240,12 +240,125 @@ void test_profile_cache() {
     std::filesystem::remove_all(root);
 }
 
+cv::Mat proxy_to_bgr(const dfee::NativeLookProxyResponse& proxy) {
+    expect(proxy.width > 0 && proxy.height > 0, "proxy has a size");
+    expect(proxy.rgb8.size() == static_cast<std::size_t>(proxy.width) * proxy.height * 3, "proxy rgb8 is width*height*3");
+    cv::Mat rgb(proxy.height, proxy.width, CV_8UC3, const_cast<std::uint8_t*>(proxy.rgb8.data()));
+    cv::Mat bgr;
+    cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
+    return bgr;
+}
+
+// The preview, area-downscaled to the proxy's size: what a tile should look like.
+cv::Mat preview_at(dfee::EngineSession& session, const dfee::NativePreviewRenderRequest& request, cv::Size size) {
+    const auto preview = session.render_preview(request);
+    expect(preview.ok, "preview renders: " + preview.error.detail);
+    cv::Mat small;
+    cv::resize(decode_jpeg(preview.jpeg_bytes), small, size, 0, 0, cv::INTER_AREA);
+    return small;
+}
+
+dfee::NativeLookProxyRequest proxy_request(const dfee::NativePreviewRenderRequest& look) {
+    dfee::NativeLookProxyRequest r;
+    r.look = look;
+    r.max_edge = 256;
+    return r;
+}
+
+// Grain is off in proxies, so compare against a grain-free preview.
+dfee::NativePreviewRenderRequest grain_free(dfee::NativePreviewRenderRequest r) {
+    r.grain_strength = 0.0F;
+    return r;
+}
+
+void test_proxy_matches_preview() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_scene("proxy", 0, 1200, 800);
+    for (const std::string stock : {"none", "portra_400", "tri_x_400", "velvia_50"}) {
+        const auto look = grain_free(base_request(file, stock));
+        const auto proxy = session.render_look_proxy(proxy_request(look));
+        expect(proxy.ok, "proxy " + stock + ": " + proxy.error.detail);
+        expect(std::max(proxy.width, proxy.height) == 256, "proxy " + stock + " fits 256");
+        const auto d = compare_images(proxy_to_bgr(proxy), preview_at(session, look, {proxy.width, proxy.height}));
+        std::cout << "  proxy vs preview " << stock << ": mean " << d.mean_abs << ", max " << d.max_abs << "\n";
+        expect(d.mean_abs <= 6.0, "proxy " + stock + " looks like the preview (mean " + std::to_string(d.mean_abs) + ")");
+    }
+    std::filesystem::remove(file);
+}
+
+void test_proxy_geometry_framing() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_scene("proxy_geometry", 1, 1200, 800);
+    auto look = grain_free(base_request(file, "portra_400"));
+    look.crop_x = 0.1F; look.crop_y = 0.2F; look.crop_w = 0.5F; look.crop_h = 0.7F;
+    look.rotate_quadrant = 1;
+    const auto proxy = session.render_look_proxy(proxy_request(look));
+    expect(proxy.ok, "geometry proxy: " + proxy.error.detail);
+    const auto preview = decode_jpeg(session.render_preview(look).jpeg_bytes);
+    const double proxy_aspect = static_cast<double>(proxy.width) / proxy.height;
+    const double preview_aspect = static_cast<double>(preview.cols) / preview.rows;
+    expect(std::abs(proxy_aspect - preview_aspect) < 0.03, "proxy framing follows the crop and rotation");
+    std::filesystem::remove(file);
+}
+
+void test_proxy_follows_the_photo() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file_a = write_scene("proxy_a", 0, 1200, 800);
+    const auto file_b = write_scene("proxy_b", 2, 1200, 800);
+    expect(session.render_look_proxy(proxy_request(grain_free(base_request(file_a, "portra_400")))).ok, "proxy A");
+    const auto look_b = grain_free(base_request(file_b, "portra_400"));
+    const auto proxy_b = session.render_look_proxy(proxy_request(look_b));
+    expect(proxy_b.ok, "proxy B");
+    const auto d = compare_images(proxy_to_bgr(proxy_b), preview_at(session, look_b, {proxy_b.width, proxy_b.height}));
+    expect(d.mean_abs <= 6.0, "photo B's proxy is photo B (mean " + std::to_string(d.mean_abs) + ")");
+    std::filesystem::remove(file_a);
+    std::filesystem::remove(file_b);
+}
+
+void test_proxy_errors() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_scene("proxy_errors", 0, 600, 400);
+    const auto bad_stock = session.render_look_proxy(proxy_request(base_request(file, "no_such_stock")));
+    expect(!bad_stock.ok && bad_stock.error.code == "PROFILE_LOAD_FAILED", "unknown stock is a profile error");
+    auto tiny = proxy_request(base_request(file, "portra_400"));
+    tiny.max_edge = 4;
+    const auto too_small = session.render_look_proxy(tiny);
+    expect(!too_small.ok && too_small.error.code == "PROXY_SIZE_INVALID", "max_edge below 16 is refused");
+    std::filesystem::remove(file);
+}
+
+void test_proxy_speed_and_preview_untouched() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_scene("proxy_speed", 0, 1800, 1200);
+    expect(session.render_look_proxy(proxy_request(base_request(file, "portra_400"))).ok, "warm-up proxy");
+    std::vector<double> ms;
+    for (const auto& recipe : golden_recipes()) {
+        const auto start = std::chrono::steady_clock::now();
+        const auto proxy = session.render_look_proxy(proxy_request(recipe_request(file, recipe)));
+        ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+        expect(proxy.ok, "proxy " + recipe.name);
+    }
+    std::sort(ms.begin(), ms.end());
+    const double p50 = ms[ms.size() / 2];
+    std::cout << "  proxy p50 " << p50 << " ms (target <= 60), max " << ms.back() << " ms\n";
+    expect(p50 <= 250.0, "proxy p50 within 250 ms");
+    expect(session.cache_state().cache.proxy_source_cached, "proxy source is cached");
+    std::filesystem::remove(file);
+    // Proxies must not disturb previews: the golden references still match.
+    run_golden(session, false);
+}
+
 }  // namespace
 
 int main() {
     try {
         test_preview_golden();
         test_profile_cache();
+        test_proxy_matches_preview();
+        test_proxy_geometry_framing();
+        test_proxy_follows_the_photo();
+        test_proxy_errors();
+        test_proxy_speed_and_preview_untouched();
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << "\n";
         return 1;

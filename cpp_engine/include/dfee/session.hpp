@@ -42,6 +42,7 @@ public:
     [[nodiscard]] NativeRawPreviewResponse raw_preview(const NativeRawPreviewRequest& request);
     [[nodiscard]] NativeGrainResolutionResponse resolve_auto_grain(const NativePreviewRenderRequest& request);
     [[nodiscard]] NativePreviewRenderResponse render_preview(const NativePreviewRenderRequest& request);
+    [[nodiscard]] NativeLookProxyResponse render_look_proxy(const NativeLookProxyRequest& request);
     [[nodiscard]] NativeExportResponse export_image(const NativeExportRequest& request);
     [[nodiscard]] NativeSessionCacheStateResponse cache_state() const;
     [[nodiscard]] CudaStatus cuda_status() const noexcept;
@@ -81,6 +82,15 @@ private:
     struct CachedExportAnalysis {
         std::string filename;
         SolverInput solver_input;
+        ZoneMasks zone_masks;
+        SpatialMasks spatial_masks;
+    };
+
+    // The preview source downscaled for proxies (one photo, one size at a time).
+    struct CachedProxySource {
+        std::string filename;
+        int max_edge = 0;
+        Image rgb_linear;
         ZoneMasks zone_masks;
         SpatialMasks spatial_masks;
     };
@@ -149,6 +159,7 @@ private:
     std::unordered_map<std::string, CachedProfile<FilmStockProfile>> film_profile_cache_;
     std::unordered_map<std::string, CachedProfile<PrintStockProfile>> print_profile_cache_;
     std::size_t profile_loads_ = 0;
+    std::optional<CachedProxySource> proxy_source_cache_;
 };
 
 }  // namespace dfee

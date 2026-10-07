@@ -173,6 +173,9 @@ struct NativeSessionCacheState {
     std::size_t cache_budget_bytes = 0;
     std::size_t profile_cache_entries = 0;  // parsed stock + print profiles held
     std::size_t profile_loads = 0;          // YAML parses since the session started
+    bool proxy_source_cached = false;
+    int proxy_width = 0;
+    int proxy_height = 0;
 };
 
 struct NativeSessionCacheStateResponse {
@@ -323,6 +326,25 @@ struct NativeGrainResolutionResponse {
     float grain_strength = 0.0F;
     float grain_size = 0.0F;
     float grain_roughness = 0.0F;
+    NativeError error;
+    NativeEngineMetadata engine;
+};
+
+// A small render of the open photo through any recipe — a Films / Looks tile.
+// Reuses the preview's analysis; grain is off unless asked for.
+struct NativeLookProxyRequest {
+    NativePreviewRenderRequest look;   // the recipe; look.filename picks the photo
+    int max_edge = 256;
+    bool include_grain = false;
+    bool apply_geometry = true;
+};
+
+struct NativeLookProxyResponse {
+    bool ok = false;
+    std::string status;
+    int width = 0;
+    int height = 0;
+    std::vector<std::uint8_t> rgb8;    // packed RGB, row-major, width * height * 3, sRGB
     NativeError error;
     NativeEngineMetadata engine;
 };
