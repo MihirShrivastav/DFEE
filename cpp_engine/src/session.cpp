@@ -2540,6 +2540,261 @@ NativeGrainResolutionResponse EngineSession::resolve_auto_grain(const NativePrev
     return response;
 }
 
+Image EngineSession::run_neutral_pipeline(
+    const NativePreviewRenderRequest& request,
+    const PipelineSource& source,
+    const PipelineOptions& options,
+    NativeEngineMetadata& engine) {
+    const std::string& p = options.stage_prefix;
+    RenderPlan render_plan;
+    {
+        ScopedStageTimer stage(engine, p + "_neutral_scene_placement");
+        render_plan = RenderPlanSolver().solve_neutral(*source.solver_input, build_solver_controls(request));
+    }
+    FilmRenderer renderer;
+    Image rendered;
+    {
+        ScopedStageTimer stage(engine, p + "_neutral_pre_film");
+        rendered = apply_pre_film_preview_sliders(*source.rgb_linear, request, render_plan);
+        rendered = renderer.apply_pre_film_normalization(rendered, *source.zone_masks, render_plan.pre_film_normalization);
+        // RAW baseline develop: give flat scene-linear RAW a camera-standard
+        // tone so a no-stock preview looks like a developed photo, not linear.
+        if (!source.rendered_input && is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
+            rendered = apply_raw_baseline_develop(rendered);
+        }
+    }
+    {
+        ScopedStageTimer stage(engine, p + "_neutral_post");
+        rendered = apply_post_film_light_panel(rendered, request);
+        rendered = apply_post_film_color(rendered, request);
+        rendered = apply_curves(rendered, request.curves);
+        rendered = apply_hsl(rendered, request);
+        apply_color_grading(rendered, make_color_grade_params(request, render_plan.film_response));
+        rendered = renderer.apply_clarity(rendered, request.clarity);
+        rendered = renderer.apply_texture(rendered, request.texture);
+        rendered = renderer.apply_dehaze(rendered, request.dehaze);
+        rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+            ? apply_post_bloom_filmic(rendered, request.bloom)
+            : apply_post_bloom(rendered, request.bloom);
+        if (options.apply_geometry) {
+            rendered = apply_geometry(rendered, make_geometry_params(request));
+        }
+    }
+    return rendered;
+}
+
+std::optional<Image> EngineSession::run_film_pipeline(
+    const NativePreviewRenderRequest& request,
+    const std::string& filename,
+    const PipelineSource& source,
+    const PipelineOptions& options,
+    NativeEngineMetadata& engine,
+    NativeError& error) {
+    const std::string& p = options.stage_prefix;
+    FilmStockProfile stock_profile;
+    std::optional<PrintStockProfile> print_stock_profile;
+    {
+        ScopedStageTimer stage(engine, p + "_load_profiles");
+        try {
+            stock_profile = film_profile(request.stock);
+            if (request.print_stock != "none") {
+                print_stock_profile = print_profile(request.print_stock);
+            }
+        } catch (const std::exception& ex) {
+            error = {
+                .code = "PROFILE_LOAD_FAILED",
+                .user_message = "The selected film or print profile could not be loaded.",
+                .detail = ex.what(),
+            };
+            return std::nullopt;
+        }
+    }
+
+    RenderPlan render_plan;
+    {
+        ScopedStageTimer stage(engine, p + "_solve_plan");
+        SolverControls controls;
+        controls.adaptation_strength = request.adaptation;
+        if (request.exposure_placement == "auto_balanced") {
+            controls.exposure_intent = "Auto";
+        } else if (request.exposure_placement == "as_shot") {
+            controls.exposure_intent = "Preserve";
+        } else {
+            throw std::invalid_argument("Unsupported exposure_placement: " + request.exposure_placement);
+        }
+        controls.grain_amount = request.grain;
+        controls.grain_strength = request.grain_strength;
+        controls.grain_size = request.grain_size;
+        controls.grain_roughness = request.grain_roughness;
+        controls.halation_amount = request.halation;
+        controls.sharpness = request.sharpness;
+        controls.sharpness_mask = request.sharpness_mask;
+        controls.film_color = request.film_color;
+        controls.highlight_color_hold = request.highlight_color_hold;
+        controls.shadow_color_retention = request.shadow_color_retention;
+        controls.palette_range = request.palette_range;
+        controls.emulsion_color_density = request.emulsion_color_density;
+        controls.film_color_density = request.film_color_density;
+        controls.film_color_compression = request.film_color_compression;
+        controls.highlight_rolloff = request.highlight_rolloff;
+        controls.film_contrast = request.film_contrast;
+        controls.crossover = request.crossover;
+        controls.profile_strength = request.profile_strength;
+        controls.adaptive = request.adaptive;
+        controls.subtractive_pipeline = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
+        controls.characteristic_pipeline = is_characteristic_curve_pipeline_impl(request.effect_pipeline_version);
+        controls.film_exposure_ev = request.film_exposure_ev;
+        controls.halation_strength = request.halation_strength;
+        controls.halation_threshold = request.halation_threshold;
+        controls.shadow_lift = request.shadow_lift;
+        controls.print_strength = request.print_strength;
+        controls.print_c = request.print_c;
+        controls.print_m = request.print_m;
+        controls.print_y = request.print_y;
+        controls.print_contrast = request.print_contrast;
+        controls.print_black_point = request.print_black_point;
+
+        RenderPlanSolver solver;
+        render_plan = solver.solve(
+            *source.solver_input,
+            stock_profile,
+            controls,
+            print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
+        render_plan.material_effects.grain_seed = compute_stable_grain_seed(
+            filename,
+            request.stock,
+            request.print_stock,
+            render_plan.material_effects);
+    }
+
+    const auto& zone_masks = *source.zone_masks;
+    const auto& spatial_masks = *source.spatial_masks;
+    Image rendered;
+    FilmRenderer renderer;
+    FilmicHalationSource halation_source;
+    {
+        ScopedStageTimer stage(engine, p + "_apply_pre_film_sliders");
+        if (source.rendered_input) {
+            apply_rendered_input_adjustments(render_plan, request.rendered_input);
+        }
+        rendered = apply_pre_film_preview_sliders(*source.rgb_linear, request, render_plan);
+    }
+    {
+        ScopedStageTimer stage(engine, p + "_film_pipeline");
+        {
+            ScopedStageTimer substage(engine, p + "_film_stage_pre_film_normalization");
+            rendered = renderer.apply_pre_film_normalization(rendered, zone_masks, render_plan.pre_film_normalization);
+            // RAW baseline develop establishes the working baseline, but RAW has
+            // no baked display curve to protect. The stock must therefore retain
+            // its full tone response. `rendered_input` applies to display-referred
+            // inputs only (TIFF, developed RAW).
+            if (!source.rendered_input && is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
+                rendered = apply_raw_baseline_develop(rendered);
+            }
+            if (is_filmic_effect_pipeline(request.effect_pipeline_version)) {
+                ScopedStageTimer source_stage(engine, p + "_film_stage_halation_source");
+                halation_source = renderer.build_filmic_halation_source(
+                    rendered,
+                    render_plan.film_response.scene_exposure_shift,
+                    render_plan.material_effects);
+            }
+            if (options.dump_stages) dump_stage(rendered, "10_baseline");
+        }
+        if (render_plan.stock_type == "monochrome") {
+            ScopedStageTimer substage(engine, p + "_film_stage_panchromatic");
+            rendered = renderer.apply_panchromatic_conversion(rendered, render_plan.film_response);
+        }
+        {
+            ScopedStageTimer substage(engine, p + "_film_stage_tone_response");
+            rendered = renderer.apply_film_tone_response(rendered, render_plan.film_response);
+        }
+        if (options.dump_stages) dump_stage(rendered, "20_tone");
+        {
+            ScopedStageTimer substage(engine, p + "_film_stage_dye_contamination");
+            rendered = renderer.apply_dye_contamination(rendered, render_plan.film_response);
+        }
+        if (render_plan.stock_type != "monochrome") {
+            const std::string color_stage = p + "_film_stage_color_response";
+            ScopedStageTimer substage(engine, color_stage);
+            rendered = renderer.apply_color_response_and_coupling(
+                rendered,
+                zone_masks,
+                render_plan.film_response,
+                &engine,
+                color_stage.c_str());
+        }
+        if (options.dump_stages) dump_stage(rendered, "30_color");
+        if (render_plan.stock_type != "monochrome" && is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
+            ScopedStageTimer substage(engine, p + "_film_stage_density");
+            rendered = renderer.apply_subtractive_density(rendered, render_plan.film_response);
+        }
+        if (render_plan.stock_type != "monochrome" && is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
+            // Before compression, so its chroma shoulder self-limits any hue over-boost.
+            ScopedStageTimer substage(engine, p + "_film_stage_hue_saturation");
+            rendered = renderer.apply_hue_saturation(rendered, render_plan.film_response);
+        }
+        if (render_plan.stock_type != "monochrome" && is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
+            ScopedStageTimer substage(engine, p + "_film_stage_compression");
+            rendered = renderer.apply_color_compression(rendered, render_plan.film_response);
+        }
+        {
+            ScopedStageTimer substage(engine, p + "_film_stage_acutance");
+            rendered = renderer.apply_acutance_shaping(rendered, render_plan.material_effects);
+        }
+        {
+            ScopedStageTimer substage(engine, p + "_film_stage_halation_bloom");
+            rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                ? renderer.apply_filmic_halation_bloom(rendered, halation_source, zone_masks, spatial_masks, render_plan.material_effects)
+                : renderer.apply_halation_bloom(rendered, zone_masks, spatial_masks, render_plan.material_effects);
+        }
+        if (options.include_grain) {
+            ScopedStageTimer substage(engine, p + "_film_stage_grain");
+            rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                ? renderer.apply_filmic_grain(rendered, spatial_masks, render_plan.material_effects)
+                : renderer.apply_film_grain(rendered, spatial_masks, render_plan.material_effects);
+        }
+        if (render_plan.print_finish.has_value()) {
+            ScopedStageTimer substage(engine, p + "_film_stage_print_finish");
+            rendered = renderer.apply_print_finish(rendered, *render_plan.print_finish);
+        }
+    }
+    {
+        ScopedStageTimer stage(engine, p + "_post_color");
+        rendered = apply_post_film_light_panel(rendered, request);
+        rendered = apply_post_film_color(rendered, request);
+    }
+    {
+        ScopedStageTimer stage(engine, p + "_post_effects");
+        rendered = apply_curves(rendered, request.curves);
+        rendered = apply_hsl(rendered, request);
+        apply_color_grading(rendered, make_color_grade_params(request, render_plan.film_response));
+        {
+            ScopedStageTimer substage(engine, p + "_post_stage_clarity");
+            rendered = renderer.apply_clarity(rendered, request.clarity);
+        }
+        {
+            ScopedStageTimer substage(engine, p + "_post_stage_texture");
+            rendered = renderer.apply_texture(rendered, request.texture);
+        }
+        {
+            ScopedStageTimer substage(engine, p + "_post_stage_dehaze");
+            rendered = renderer.apply_dehaze(rendered, request.dehaze);
+        }
+        {
+            ScopedStageTimer substage(engine, p + "_post_stage_bloom");
+            rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
+                ? apply_post_bloom_filmic(rendered, request.bloom)
+                : apply_post_bloom(rendered, request.bloom);
+        }
+    }
+    if (options.apply_geometry) {
+        ScopedStageTimer stage(engine, p + "_geometry");
+        rendered = apply_geometry(rendered, make_geometry_params(request));
+    }
+    if (options.dump_stages) dump_stage(rendered, "40_final");
+    return rendered;
+}
+
 NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRenderRequest& request) {
     NativePreviewRenderResponse response;
     response.filename = resolve_filename(request.filename);
@@ -2618,43 +2873,14 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
                 populate_preview_analysis_cache(response.filename, solver_input, zone_masks, spatial_masks);
             }
 
-            RenderPlan render_plan;
-            {
-                ScopedStageTimer stage(response.engine, "render_preview_neutral_scene_placement");
-                render_plan = RenderPlanSolver().solve_neutral(solver_input, build_solver_controls(request));
-            }
-
-            FilmRenderer renderer;
-            Image rendered;
-            {
-                ScopedStageTimer stage(response.engine, "render_preview_neutral_pre_film");
-                rendered = apply_pre_film_preview_sliders(preview_cache_->rgb_linear, request, render_plan);
-                rendered = renderer.apply_pre_film_normalization(
-                    rendered,
-                    zone_masks,
-                    render_plan.pre_film_normalization);
-                // RAW baseline develop: give flat scene-linear RAW a camera-standard
-                // tone so a no-stock preview looks like a developed photo, not linear.
-                if (!preview_cache_->rendered_input &&
-                    is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
-                    rendered = apply_raw_baseline_develop(rendered);
-                }
-            }
-            {
-                ScopedStageTimer stage(response.engine, "render_preview_neutral_post");
-                rendered = apply_post_film_light_panel(rendered, request);
-                rendered = apply_post_film_color(rendered, request);
-                rendered = apply_curves(rendered, request.curves);
-                rendered = apply_hsl(rendered, request);
-                apply_color_grading(rendered, make_color_grade_params(request, render_plan.film_response));
-                rendered = renderer.apply_clarity(rendered, request.clarity);
-                rendered = renderer.apply_texture(rendered, request.texture);
-                rendered = renderer.apply_dehaze(rendered, request.dehaze);
-                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
-                    ? apply_post_bloom_filmic(rendered, request.bloom)
-                    : apply_post_bloom(rendered, request.bloom);
-                rendered = apply_geometry(rendered, make_geometry_params(request));
-            }
+            const PipelineSource source{
+                .rgb_linear = &preview_cache_->rgb_linear,
+                .rendered_input = preview_cache_->rendered_input,
+                .solver_input = &solver_input,
+                .zone_masks = &zone_masks,
+                .spatial_masks = &spatial_masks,
+            };
+            const Image rendered = run_neutral_pipeline(request, source, PipelineOptions{}, response.engine);
             {
                 ScopedStageTimer stage(response.engine, "render_preview_neutral_encode_jpeg");
                 const auto encoded = encode_preview_jpeg_bytes(rendered, response.filename);
@@ -2685,27 +2911,6 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             }
         }
 
-        FilmStockProfile stock_profile;
-        std::optional<PrintStockProfile> print_stock_profile;
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_load_profiles");
-            try {
-                stock_profile = film_profile(request.stock);
-                if (request.print_stock != "none") {
-                    print_stock_profile = print_profile(request.print_stock);
-                }
-            } catch (const std::exception& ex) {
-                response.status = "error";
-                response.error = {
-                    .code = "PROFILE_LOAD_FAILED",
-                    .user_message = "The selected film or print profile could not be loaded.",
-                    .detail = ex.what(),
-                };
-                finalize_engine_metadata(response.engine);
-                return response;
-            }
-        }
-
         const auto& preview = *preview_cache_;
 
         SolverInput solver_input;
@@ -2716,201 +2921,22 @@ NativePreviewRenderResponse EngineSession::render_preview(const NativePreviewRen
             populate_preview_analysis_cache(response.filename, solver_input, zone_masks, spatial_masks);
         }
 
-        RenderPlan render_plan;
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_solve_plan");
-            SolverControls controls;
-            controls.adaptation_strength = request.adaptation;
-            if (request.exposure_placement == "auto_balanced") {
-                controls.exposure_intent = "Auto";
-            } else if (request.exposure_placement == "as_shot") {
-                controls.exposure_intent = "Preserve";
-            } else {
-                throw std::invalid_argument("Unsupported exposure_placement: " + request.exposure_placement);
-            }
-            controls.grain_amount = request.grain;
-            controls.grain_strength = request.grain_strength;
-            controls.grain_size = request.grain_size;
-            controls.grain_roughness = request.grain_roughness;
-            controls.halation_amount = request.halation;
-            controls.sharpness = request.sharpness;
-            controls.sharpness_mask = request.sharpness_mask;
-            controls.film_color = request.film_color;
-            controls.highlight_color_hold = request.highlight_color_hold;
-            controls.shadow_color_retention = request.shadow_color_retention;
-            controls.palette_range = request.palette_range;
-            controls.emulsion_color_density = request.emulsion_color_density;
-            controls.film_color_density = request.film_color_density;
-            controls.film_color_compression = request.film_color_compression;
-            controls.highlight_rolloff = request.highlight_rolloff;
-            controls.film_contrast = request.film_contrast;
-            controls.crossover = request.crossover;
-            controls.profile_strength = request.profile_strength;
-            controls.adaptive = request.adaptive;
-            controls.subtractive_pipeline = is_subtractive_effect_pipeline_impl(request.effect_pipeline_version);
-            controls.characteristic_pipeline = is_characteristic_curve_pipeline_impl(request.effect_pipeline_version);
-            controls.film_exposure_ev = request.film_exposure_ev;
-            controls.halation_strength = request.halation_strength;
-            controls.halation_threshold = request.halation_threshold;
-            controls.shadow_lift = request.shadow_lift;
-            controls.print_strength = request.print_strength;
-            controls.print_c = request.print_c;
-            controls.print_m = request.print_m;
-            controls.print_y = request.print_y;
-            controls.print_contrast = request.print_contrast;
-            controls.print_black_point = request.print_black_point;
-
-            RenderPlanSolver solver;
-            render_plan = solver.solve(
-                solver_input,
-                stock_profile,
-                controls,
-                print_stock_profile.has_value() ? &*print_stock_profile : nullptr);
-            render_plan.material_effects.grain_seed = compute_stable_grain_seed(
-                response.filename,
-                request.stock,
-                request.print_stock,
-                render_plan.material_effects);
+        const PipelineSource source{
+            .rgb_linear = &preview.rgb_linear,
+            .rendered_input = preview.rendered_input,
+            .solver_input = &solver_input,
+            .zone_masks = &zone_masks,
+            .spatial_masks = &spatial_masks,
+        };
+        NativeError pipeline_error;
+        auto pipeline = run_film_pipeline(request, response.filename, source, PipelineOptions{}, response.engine, pipeline_error);
+        if (!pipeline.has_value()) {
+            response.status = "error";
+            response.error = pipeline_error;
+            finalize_engine_metadata(response.engine);
+            return response;
         }
-
-        Image rendered = preview.rgb_linear;
-        FilmRenderer renderer;
-        FilmicHalationSource halation_source;
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_apply_pre_film_sliders");
-            if (preview.rendered_input) {
-                apply_rendered_input_adjustments(render_plan, request.rendered_input);
-            }
-            rendered = apply_pre_film_preview_sliders(preview.rgb_linear, request, render_plan);
-        }
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_film_pipeline");
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_pre_film_normalization");
-                rendered = renderer.apply_pre_film_normalization(
-                    rendered,
-                    zone_masks,
-                    render_plan.pre_film_normalization);
-                // RAW baseline develop establishes the working baseline, but RAW has
-                // no baked display curve to protect. The stock must therefore retain
-                // its full tone response. `rendered_input` applies to display-referred
-                // inputs only (TIFF, developed RAW).
-                if (!preview.rendered_input &&
-                    is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
-                    rendered = apply_raw_baseline_develop(rendered);
-                }
-                if (is_filmic_effect_pipeline(request.effect_pipeline_version)) {
-                    ScopedStageTimer source_stage(response.engine, "render_preview_film_stage_halation_source");
-                    halation_source = renderer.build_filmic_halation_source(
-                        rendered,
-                        render_plan.film_response.scene_exposure_shift,
-                        render_plan.material_effects);
-                }
-                dump_stage(rendered, "10_baseline");
-            }
-            if (render_plan.stock_type == "monochrome") {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_panchromatic");
-                rendered = renderer.apply_panchromatic_conversion(rendered, render_plan.film_response);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_tone_response");
-                rendered = renderer.apply_film_tone_response(rendered, render_plan.film_response);
-            }
-            dump_stage(rendered, "20_tone");
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_dye_contamination");
-                rendered = renderer.apply_dye_contamination(rendered, render_plan.film_response);
-            }
-            if (render_plan.stock_type != "monochrome") {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_color_response");
-                rendered = renderer.apply_color_response_and_coupling(
-                    rendered,
-                    zone_masks,
-                    render_plan.film_response,
-                    &response.engine,
-                    "render_preview_film_stage_color_response");
-            }
-            dump_stage(rendered, "30_color");
-            if (render_plan.stock_type != "monochrome" &&
-                is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_density");
-                rendered = renderer.apply_subtractive_density(rendered, render_plan.film_response);
-            }
-            if (render_plan.stock_type != "monochrome" &&
-                is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
-                // Before compression, so its chroma shoulder self-limits any hue over-boost.
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_hue_saturation");
-                rendered = renderer.apply_hue_saturation(rendered, render_plan.film_response);
-            }
-            if (render_plan.stock_type != "monochrome" &&
-                is_subtractive_effect_pipeline_impl(request.effect_pipeline_version)) {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_compression");
-                rendered = renderer.apply_color_compression(rendered, render_plan.film_response);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_acutance");
-                rendered = renderer.apply_acutance_shaping(rendered, render_plan.material_effects);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_halation_bloom");
-                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
-                    ? renderer.apply_filmic_halation_bloom(
-                        rendered,
-                        halation_source,
-                        zone_masks,
-                        spatial_masks,
-                        render_plan.material_effects)
-                    : renderer.apply_halation_bloom(
-                        rendered,
-                        zone_masks,
-                        spatial_masks,
-                        render_plan.material_effects);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_grain");
-                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
-                    ? renderer.apply_filmic_grain(rendered, spatial_masks, render_plan.material_effects)
-                    : renderer.apply_film_grain(rendered, spatial_masks, render_plan.material_effects);
-            }
-            if (render_plan.print_finish.has_value()) {
-                ScopedStageTimer substage(response.engine, "render_preview_film_stage_print_finish");
-                rendered = renderer.apply_print_finish(rendered, *render_plan.print_finish);
-            }
-        }
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_post_color");
-            rendered = apply_post_film_light_panel(rendered, request);
-            rendered = apply_post_film_color(rendered, request);
-        }
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_post_effects");
-            rendered = apply_curves(rendered, request.curves);
-            rendered = apply_hsl(rendered, request);
-            apply_color_grading(rendered, make_color_grade_params(request, render_plan.film_response));
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_post_stage_clarity");
-                rendered = renderer.apply_clarity(rendered, request.clarity);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_post_stage_texture");
-                rendered = renderer.apply_texture(rendered, request.texture);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_post_stage_dehaze");
-                rendered = renderer.apply_dehaze(rendered, request.dehaze);
-            }
-            {
-                ScopedStageTimer substage(response.engine, "render_preview_post_stage_bloom");
-                rendered = is_filmic_effect_pipeline(request.effect_pipeline_version)
-                    ? apply_post_bloom_filmic(rendered, request.bloom)
-                    : apply_post_bloom(rendered, request.bloom);
-            }
-        }
-        {
-            ScopedStageTimer stage(response.engine, "render_preview_geometry");
-            rendered = apply_geometry(rendered, make_geometry_params(request));
-        }
-        dump_stage(rendered, "40_final");
+        const Image rendered = std::move(*pipeline);
         {
             ScopedStageTimer stage(response.engine, "render_preview_encode_jpeg");
             const auto encoded = encode_preview_jpeg_bytes(rendered, response.filename);

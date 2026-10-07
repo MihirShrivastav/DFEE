@@ -103,6 +103,36 @@ private:
     // Parsed profiles, cached by id and re-read when the YAML's mtime changes.
     [[nodiscard]] FilmStockProfile film_profile(const std::string& stock_id);
     [[nodiscard]] PrintStockProfile print_profile(const std::string& print_stock_id);
+    // A cached render source: the scene-linear working image plus the analysis that
+    // drives the solver and the masks at the same resolution.
+    struct PipelineSource {
+        const Image* rgb_linear = nullptr;
+        bool rendered_input = false;
+        const SolverInput* solver_input = nullptr;
+        const ZoneMasks* zone_masks = nullptr;
+        const SpatialMasks* spatial_masks = nullptr;
+    };
+    struct PipelineOptions {
+        std::string stage_prefix = "render_preview";  // stage timer names: <prefix>_<stage>
+        bool include_grain = true;
+        bool apply_geometry = true;
+        bool dump_stages = true;                       // DFEE_STAGE_DUMP debugging
+    };
+    // The film look: profiles -> plan -> film stages -> post -> geometry. Returns the
+    // final scene-linear image, or nullopt with `error` set when a profile cannot load.
+    [[nodiscard]] std::optional<Image> run_film_pipeline(
+        const NativePreviewRenderRequest& request,
+        const std::string& filename,
+        const PipelineSource& source,
+        const PipelineOptions& options,
+        NativeEngineMetadata& engine,
+        NativeError& error);
+    // "No film": neutral scene placement, baseline develop, post and geometry.
+    [[nodiscard]] Image run_neutral_pipeline(
+        const NativePreviewRenderRequest& request,
+        const PipelineSource& source,
+        const PipelineOptions& options,
+        NativeEngineMetadata& engine);
     [[nodiscard]] NativeRawPreviewResponse encode_raw_preview(const std::string& filename, int max_edge) const;
 
     std::filesystem::path project_root_;
