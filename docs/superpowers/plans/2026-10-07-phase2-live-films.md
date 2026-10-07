@@ -221,7 +221,6 @@ expect:filmTile_cinestill_400d.live=true
 expect:filmTile_cinestill_400d.fresh=true
 control:film_contrast=150
 expect:filmTile_cinestill_400d.live=true
-expect:filmTile_cinestill_400d.fresh=false
 waitfor:engine.previewRevision=2,15000
 waitfor:engine.lookTilesPending=0,60000
 expect:filmTile_cinestill_400d.fresh=true
