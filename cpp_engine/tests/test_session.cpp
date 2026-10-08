@@ -9,6 +9,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -477,6 +478,108 @@ void test_export_unicode_destination() {
     std::filesystem::remove(file);
 }
 
+// Color mixer, Lightroom-style: bands sit at the named hues of the ordinary hue wheel,
+// greys never move, hue nudges a color towards its neighbour, and only the chosen
+// band responds. Scene: nine flat patches (grey, then the eight band colors).
+struct HsvSample { double h, s, v; };
+
+const std::vector<std::array<double, 3>>& mixer_patches() {
+    static const std::vector<std::array<double, 3>> p{
+        {0.50, 0.50, 0.50},   // grey
+        {0.80, 0.15, 0.15},   // red
+        {0.85, 0.48, 0.15},   // orange
+        {0.82, 0.78, 0.18},   // yellow
+        {0.20, 0.70, 0.22},   // green
+        {0.18, 0.72, 0.72},   // aqua
+        {0.18, 0.28, 0.82},   // blue
+        {0.50, 0.22, 0.80},   // purple
+        {0.80, 0.20, 0.70},   // magenta
+    };
+    return p;
+}
+
+std::filesystem::path write_mixer_scene() {
+    const auto& p = mixer_patches();
+    const int cell = 40;
+    cv::Mat img(cell, cell * static_cast<int>(p.size()), CV_16UC3);
+    for (int i = 0; i < static_cast<int>(p.size()); ++i) {
+        img(cv::Rect(i * cell, 0, cell, cell)).setTo(cv::Scalar(to16(p[i][2]), to16(p[i][1]), to16(p[i][0])));
+    }
+    std::filesystem::create_directories(kFixtureDir);
+    const auto path = kFixtureDir / "session_test_mixer.tif";
+    expect(cv::imwrite(path.string(), img), "write mixer scene");
+    return path;
+}
+
+// HSV (hue in degrees) of each patch centre in a rendered preview.
+std::vector<HsvSample> mixer_samples(dfee::EngineSession& session, const dfee::NativePreviewRenderRequest& r) {
+    const auto& p = mixer_patches();
+    const cv::Mat bgr = preview_at(session, r, {40 * static_cast<int>(p.size()), 40});
+    std::vector<HsvSample> out;
+    for (int i = 0; i < static_cast<int>(p.size()); ++i) {
+        const cv::Vec3b c = bgr.at<cv::Vec3b>(20, i * 40 + 20);
+        const double b = c[0] / 255.0, g = c[1] / 255.0, rr = c[2] / 255.0;
+        const double mx = std::max({rr, g, b}), mn = std::min({rr, g, b}), d = mx - mn;
+        double h = 0.0;
+        if (d > 1e-6) {
+            if (mx == rr) h = 60.0 * std::fmod((g - b) / d, 6.0);
+            else if (mx == g) h = 60.0 * ((b - rr) / d + 2.0);
+            else h = 60.0 * ((rr - g) / d + 4.0);
+            if (h < 0.0) h += 360.0;
+        }
+        out.push_back({h, mx > 0.0 ? d / mx : 0.0, mx});
+    }
+    return out;
+}
+
+double hue_delta(double from, double to) {
+    double d = std::fmod(to - from + 540.0, 360.0) - 180.0;
+    return d;
+}
+
+void test_color_mixer_like_lightroom() {
+    dfee::EngineSession session(kRepoRoot);
+    const auto file = write_mixer_scene();
+    auto base = grain_free(base_request(file, "none"));
+    const auto ref = mixer_samples(session, base);
+    enum { kGrey, kRed, kOrange, kYellow, kGreen, kAqua, kBlue, kPurple, kMagenta };
+
+    auto yellow_desat = base;
+    yellow_desat.hsl_yellow_s = -100.0F;
+    const auto ys = mixer_samples(session, yellow_desat);
+    std::cout << "  mixer yellow -100 sat: yellow " << ref[kYellow].s << " -> " << ys[kYellow].s << "\n";
+    expect(ys[kYellow].s < ref[kYellow].s * 0.25, "Yellow saturation -100 greys out yellow");
+    expect(std::abs(ys[kBlue].s - ref[kBlue].s) < 0.03 && std::abs(hue_delta(ref[kBlue].h, ys[kBlue].h)) < 3.0,
+           "Yellow saturation leaves blue alone");
+
+    auto yellow_hue = base;
+    yellow_hue.hsl_yellow_h = 100.0F;
+    const auto yh = mixer_samples(session, yellow_hue);
+    std::cout << "  mixer yellow +100 hue: " << ref[kYellow].h << " -> " << yh[kYellow].h << "\n";
+    expect(hue_delta(ref[kYellow].h, yh[kYellow].h) > 15.0, "Yellow hue +100 moves yellow towards green");
+    expect(std::abs(hue_delta(ref[kRed].h, yh[kRed].h)) < 3.0, "Yellow hue leaves red alone");
+
+    auto red_hue = base;
+    red_hue.hsl_red_h = 100.0F;
+    const auto rh = mixer_samples(session, red_hue);
+    expect(hue_delta(ref[kRed].h, rh[kRed].h) > 8.0, "Red hue +100 moves red towards orange");
+
+    auto orange_lum = base;
+    orange_lum.hsl_orange_l = 100.0F;
+    const auto ol = mixer_samples(session, orange_lum);
+    std::cout << "  mixer orange +100 lum: grey " << ref[kGrey].v << " -> " << ol[kGrey].v
+              << ", orange " << ref[kOrange].v << " -> " << ol[kOrange].v << "\n";
+    expect(std::abs(ol[kGrey].v - ref[kGrey].v) < 0.01, "Orange luminance leaves grey alone");
+    expect(ol[kOrange].v > ref[kOrange].v + 0.03, "Orange luminance +100 brightens orange");
+
+    auto green_desat = base;
+    green_desat.hsl_green_s = -100.0F;
+    const auto gs = mixer_samples(session, green_desat);
+    expect(gs[kGreen].s < ref[kGreen].s * 0.25, "Green saturation -100 greys out green");
+    expect(std::abs(gs[kYellow].s - ref[kYellow].s) < 0.05, "Green saturation leaves yellow alone");
+    std::filesystem::remove(file);
+}
+
 }  // namespace
 
 int main() {
@@ -492,6 +595,7 @@ int main() {
         test_proxy_speed_and_preview_untouched();
         test_export_destination_and_report();
         test_export_unicode_destination();
+        test_color_mixer_like_lightroom();
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << "\n";
         return 1;

@@ -1443,100 +1443,117 @@ ColorGradeParams make_color_grade_params(const NativePreviewRenderRequest& r, co
     };
 }
 
+// Color mixer, as in Lightroom / Resolve: eight bands centred on the named hues of the
+// ordinary (HSV) hue wheel — red 0°, orange 30°, yellow 60°, green 120°, aqua 180°,
+// blue 240°, purple 270°, magenta 300° — each fading linearly into its neighbours, so
+// every color belongs to one or two bands and their weights sum to one. A band's effect
+// fades out as a pixel loses color (greys never move). Hue moves a color towards the
+// neighbouring band (±100 = half-way) at the same OKLab lightness; Saturation scales
+// OKLCh chroma (−100 = grey, +100 = double); Luminance moves OKLab L.
 Image apply_hsl(
     const Image& rendered,
     const NativePreviewRenderRequest& request) {
-    const std::array<std::tuple<const char*, float, float, float, float>, 8> ranges{{
-        {"red", 0.0F, 28.0F, request.hsl_red_h, request.hsl_red_s},
-        {"orange", 30.0F, 22.0F, request.hsl_orange_h, request.hsl_orange_s},
-        {"yellow", 60.0F, 25.0F, request.hsl_yellow_h, request.hsl_yellow_s},
-        {"green", 120.0F, 38.0F, request.hsl_green_h, request.hsl_green_s},
-        {"aqua", 180.0F, 32.0F, request.hsl_aqua_h, request.hsl_aqua_s},
-        {"blue", 240.0F, 32.0F, request.hsl_blue_h, request.hsl_blue_s},
-        {"purple", 285.0F, 28.0F, request.hsl_purple_h, request.hsl_purple_s},
-        {"magenta", 330.0F, 28.0F, request.hsl_magenta_h, request.hsl_magenta_s},
-    }};
-    const std::array<float, 8> luminance_adjustments{
-        request.hsl_red_l,
-        request.hsl_orange_l,
-        request.hsl_yellow_l,
-        request.hsl_green_l,
-        request.hsl_aqua_l,
-        request.hsl_blue_l,
-        request.hsl_purple_l,
-        request.hsl_magenta_l,
+    constexpr std::size_t kBands = 8;
+    constexpr std::array<float, kBands> kCenter{0.0F, 30.0F, 60.0F, 120.0F, 180.0F, 240.0F, 270.0F, 300.0F};
+    const std::array<float, kBands> hue_shift{
+        request.hsl_red_h, request.hsl_orange_h, request.hsl_yellow_h, request.hsl_green_h,
+        request.hsl_aqua_h, request.hsl_blue_h, request.hsl_purple_h, request.hsl_magenta_h};
+    const std::array<float, kBands> sat_shift{
+        request.hsl_red_s, request.hsl_orange_s, request.hsl_yellow_s, request.hsl_green_s,
+        request.hsl_aqua_s, request.hsl_blue_s, request.hsl_purple_s, request.hsl_magenta_s};
+    const std::array<float, kBands> lum_shift{
+        request.hsl_red_l, request.hsl_orange_l, request.hsl_yellow_l, request.hsl_green_l,
+        request.hsl_aqua_l, request.hsl_blue_l, request.hsl_purple_l, request.hsl_magenta_l};
+    const auto any = [](const std::array<float, kBands>& v) {
+        return std::ranges::any_of(v, [](const float x) { return x != 0.0F; });
     };
-
-    bool any_non_zero = false;
-    for (const auto& [_, __, ___, hue_shift, sat_shift] : ranges) {
-        if (hue_shift != 0.0F || sat_shift != 0.0F) {
-            any_non_zero = true;
-            break;
-        }
-    }
-    if (!any_non_zero) {
-        for (const float value : luminance_adjustments) {
-            if (value != 0.0F) {
-                any_non_zero = true;
-                break;
-            }
-        }
-    }
-    if (!any_non_zero) {
+    if (!any(hue_shift) && !any(sat_shift) && !any(lum_shift)) {
         return rendered;
     }
 
-    // Calibration (Lightroom-like feel, less twitchy than raw degrees):
-    // Hue slider (-100..+100) maps to ~+/-50 deg of rotation; Luminance to a gentler
-    // OKLab-L swing; hue rotation is chroma-gated so near-neutral pixels don't shift.
-    constexpr float kHueDegPerPoint = 0.50F;  // +/-100 -> ~+/-50 deg
-    constexpr float kLumScale = 0.22F;        // was 0.40 (too strong)
-    constexpr float kChromaGateRef = 0.03F;   // OKLCh chroma above which hue shift is full
+    constexpr float kHueReach = 0.5F;      // ±100 moves half-way to the neighbouring band
+    constexpr float kLumScale = 0.22F;     // ±100 moves OKLab L by ±0.22
+    constexpr float kSatGateRef = 0.20F;   // HSV saturation at which a band acts fully
+    const auto band_span = [&](const std::size_t from, const std::size_t to) {
+        return std::fmod(kCenter[to] - kCenter[from] + 360.0F, 360.0F);
+    };
+    const auto to_linear = [](const float v) {
+        const float c = clamp01(v);
+        return c <= 0.04045F ? c / 12.92F : std::pow((c + 0.055F) / 1.055F, 2.4F);
+    };
 
-    Image oklab = rgb_to_oklab(rendered);
-    Image oklch = oklab_to_oklch(oklab);
-    for (std::size_t i = 0; i < oklch.pixel_count(); ++i) {
-        const float hue_rad = oklch.pixels[i * 3 + 2];
-        const float hue_deg = std::fmod(hue_rad * 180.0F / std::numbers::pi_v<float> + 360.0F, 360.0F);
-
-        float hue_delta = 0.0F;
-        float sat_delta = 0.0F;
-        float light_delta = 0.0F;
-        for (std::size_t range_index = 0; range_index < ranges.size(); ++range_index) {
-            const auto& [name, center_deg, sigma_deg, hue_shift, sat_shift] = ranges[range_index];
-            (void)name;
-            if (hue_shift == 0.0F && sat_shift == 0.0F && luminance_adjustments[range_index] == 0.0F) {
-                continue;
-            }
-            float diff = std::fmod(hue_deg - center_deg + 180.0F, 360.0F) - 180.0F;
-            if (diff < -180.0F) {
-                diff += 360.0F;
-            }
-            float weight = std::exp(-0.5F * std::pow(diff / sigma_deg, 2.0F));
-            if (range_index == 0U) {
-                float diff_wrap = std::fmod(hue_deg - (center_deg + 360.0F) + 180.0F, 360.0F) - 180.0F;
-                if (diff_wrap < -180.0F) {
-                    diff_wrap += 360.0F;
-                }
-                weight = std::max(weight, std::exp(-0.5F * std::pow(diff_wrap / sigma_deg, 2.0F)));
-            }
-            hue_delta += weight * hue_shift;
-            sat_delta += weight * sat_shift;
-            light_delta += weight * luminance_adjustments[range_index];
+    const std::size_t count = rendered.pixel_count();
+    Image rotated = rendered;                       // hue-rotated colors (linear sRGB)
+    std::vector<float> chroma_scale(count, 1.0F);
+    std::vector<float> light_delta(count, 0.0F);
+    for (std::size_t i = 0; i < count; ++i) {
+        const float r = linear_to_srgb_channel(rendered.pixels[i * 3 + 0]);
+        const float g = linear_to_srgb_channel(rendered.pixels[i * 3 + 1]);
+        const float b = linear_to_srgb_channel(rendered.pixels[i * 3 + 2]);
+        const float mx = std::max({r, g, b});
+        const float mn = std::min({r, g, b});
+        const float delta = mx - mn;
+        if (delta <= 1e-5F || mx <= 0.0F) {
+            continue;                               // grey: no band applies
         }
+        float hue = 0.0F;
+        if (mx == r) hue = 60.0F * std::fmod((g - b) / delta + 6.0F, 6.0F);
+        else if (mx == g) hue = 60.0F * ((b - r) / delta + 2.0F);
+        else hue = 60.0F * ((r - g) / delta + 4.0F);
+        const float gate = std::clamp((delta / mx) / kSatGateRef, 0.0F, 1.0F);
 
-        const float chroma_gate = std::clamp(oklch.pixels[i * 3 + 1] / kChromaGateRef, 0.0F, 1.0F);
-        const float hue_rot_rad = hue_delta * kHueDegPerPoint * chroma_gate * std::numbers::pi_v<float> / 180.0F;
-        oklch.pixels[i * 3 + 2] = std::fmod(hue_rad + hue_rot_rad + 2.0F * std::numbers::pi_v<float>, 2.0F * std::numbers::pi_v<float>);
-        oklch.pixels[i * 3 + 1] = std::max(0.0F, oklch.pixels[i * 3 + 1] * std::clamp(1.0F + sat_delta / 100.0F, 0.0F, 4.0F));
-        oklch.pixels[i * 3 + 0] = std::clamp(oklch.pixels[i * 3 + 0] + light_delta / 100.0F * kLumScale, 0.0F, 1.0F);
+        // The two bands either side of this hue, weighted linearly.
+        std::size_t lo = kBands - 1;
+        for (std::size_t k = 0; k < kBands; ++k) {
+            if (hue >= kCenter[k]) lo = k;
+        }
+        const std::size_t hi = (lo + 1) % kBands;
+        const float t = std::fmod(hue - kCenter[lo] + 360.0F, 360.0F) / band_span(lo, hi);
+        const std::array<std::pair<std::size_t, float>, 2> weights{{{lo, 1.0F - t}, {hi, t}}};
+
+        float hue_deg = 0.0F;
+        float sat = 0.0F;
+        float lum = 0.0F;
+        for (const auto& [band, w] : weights) {
+            const float shift = hue_shift[band] / 100.0F;
+            const std::size_t toward = shift >= 0.0F ? (band + 1) % kBands : (band + kBands - 1) % kBands;
+            const float reach = shift >= 0.0F ? band_span(band, toward) : band_span(toward, band);
+            hue_deg += w * shift * reach * kHueReach;
+            sat += w * sat_shift[band] / 100.0F;
+            lum += w * lum_shift[band] / 100.0F;
+        }
+        chroma_scale[i] = std::clamp(1.0F + sat * gate, 0.0F, 4.0F);
+        light_delta[i] = lum * gate * kLumScale;
+
+        const float rotation = hue_deg * gate;
+        if (rotation != 0.0F) {
+            const float h = std::fmod(hue + rotation + 360.0F, 360.0F) / 60.0F;
+            const float x = delta * (1.0F - std::abs(std::fmod(h, 2.0F) - 1.0F));
+            float rr = 0.0F, gg = 0.0F, bb = 0.0F;
+            switch (static_cast<int>(h) % 6) {
+                case 0: rr = delta; gg = x; break;
+                case 1: rr = x; gg = delta; break;
+                case 2: gg = delta; bb = x; break;
+                case 3: gg = x; bb = delta; break;
+                case 4: rr = x; bb = delta; break;
+                default: rr = delta; bb = x; break;
+            }
+            rotated.pixels[i * 3 + 0] = to_linear(rr + mn);
+            rotated.pixels[i * 3 + 1] = to_linear(gg + mn);
+            rotated.pixels[i * 3 + 2] = to_linear(bb + mn);
+        }
     }
 
-    Image adjusted_oklab = oklch_to_oklab(oklch);
-    for (std::size_t i = 0; i < adjusted_oklab.pixel_count(); ++i) {
-        adjusted_oklab.pixels[i * 3 + 0] = oklch.pixels[i * 3 + 0];
+    // Lightness comes from the original (a hue move keeps brightness), color from the
+    // rotated pixel, then chroma and lightness are adjusted per band.
+    const Image original_lab = rgb_to_oklab(rendered);
+    Image lab = rgb_to_oklab(rotated);
+    for (std::size_t i = 0; i < count; ++i) {
+        lab.pixels[i * 3 + 0] = std::clamp(original_lab.pixels[i * 3 + 0] + light_delta[i], 0.0F, 1.0F);
+        lab.pixels[i * 3 + 1] *= chroma_scale[i];
+        lab.pixels[i * 3 + 2] *= chroma_scale[i];
     }
-    return oklab_to_rgb(adjusted_oklab);
+    return oklab_to_rgb(lab);
 }
 
 Image apply_post_bloom(
