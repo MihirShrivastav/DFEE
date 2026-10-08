@@ -4,7 +4,7 @@ import DFEE
 
 // v2 slider. Ports v1 InspectorSlider behaviour: click/drag sets, modifier keys give
 // precision drag, double-click resets to `neutral`, Left/Right nudge. Restyled per
-// DESIGN.md v2: 4px track, tempered fill (from a centre tick when bipolar), 14px knob,
+// DESIGN.md v2: 4px track, tempered fill (from a centre tick when bipolar), 11px knob,
 // accent focus ring.
 Slider {
     id: control
@@ -54,14 +54,24 @@ Slider {
             radius: 2
             color: Theme.sliderTrack
             Rectangle {                               // informational color track
+                id: infoTrack
                 anchors.fill: parent
                 radius: 2
                 visible: control.trackPalette !== null
                 opacity: 0.6
+                // Quarter stops (q1, q3) are optional: a palette without them blends.
+                readonly property var p: control.trackPalette
+                function at(key, a, b) {
+                    if (!p) return "transparent";
+                    if (p[key] !== undefined) return p[key];
+                    return Qt.tint(p[a], Qt.alpha(p[b], 0.5));
+                }
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0; color: control.trackPalette ? control.trackPalette.start : "transparent" }
+                    GradientStop { position: 0.25; color: infoTrack.at("q1", "start", "middle") }
                     GradientStop { position: 0.5; color: control.trackPalette ? control.trackPalette.middle : "transparent" }
+                    GradientStop { position: 0.75; color: infoTrack.at("q3", "middle", "end") }
                     GradientStop { position: 1; color: control.trackPalette ? control.trackPalette.end : "transparent" }
                 }
             }
@@ -89,13 +99,13 @@ Slider {
     handle: Rectangle {
         x: control.visualPosition * (control.width - width)
         anchors.verticalCenter: parent.verticalCenter
-        width: 14
-        height: 14
-        radius: 7
-        color: Theme.knob
+        width: 11
+        height: 11
+        radius: 5.5
+        color: Theme.sliderKnob
         border.width: control.showsFocusRing ? 3 : 0
         border.color: "#730a84ff"                      // accent focus ring at ~45%
-        Rectangle { z: -1; anchors.fill: parent; anchors.topMargin: 1; anchors.bottomMargin: -1; radius: 7; color: "#80000000" }
+        Rectangle { z: -1; anchors.fill: parent; anchors.topMargin: 1; anchors.bottomMargin: -1; radius: 5.5; color: "#80000000" }
     }
 
     MouseArea {
