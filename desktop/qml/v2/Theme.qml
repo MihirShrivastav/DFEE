@@ -69,49 +69,34 @@ QtObject {
         if (key === "print_m") return { start: "#459466", middle: "#6e6e6e", end: "#b35295" };
         if (key === "print_y") return { start: "#4b78a9", middle: "#6e6e6e", end: "#c7ad39" };
         const hsl = /^hsl_([a-z]+)_([hsl])$/.exec(key || "");
-        if (hsl && hslBandHue[hsl[1]] !== undefined) return hslTrack(hslBandHue[hsl[1]], hsl[2]);
+        if (hsl && hslBandHue[hsl[1]] !== undefined) return hslTrack(hsl[1], hsl[2]);
         return null;
     }
 
-    // Color mixer bands: the OKLCh hue each engine band is centred on
-    // (cpp_engine/src/session.cpp apply_hsl).
+    // Color mixer bands on the ordinary hue wheel, as in Lightroom and Resolve (and the
+    // engine: cpp_engine/src/session.cpp apply_hsl). Order matters: neighbours are adjacent.
+    readonly property var hslBands: ["red", "orange", "yellow", "green", "aqua", "blue", "purple", "magenta"]
     readonly property var hslBandHue: ({ red: 0, orange: 30, yellow: 60, green: 120,
-                                         aqua: 180, blue: 240, purple: 285, magenta: 330 })
-    // A color mixer track drawn from the engine's own maths, so each end shows what
-    // that slider end does to its band: Hue rotates OKLCh hue by up to ±50°,
-    // Saturation scales chroma ×0…×2, Luminance moves OKLab L by ±0.22.
-    function hslTrack(hue, channel) {
-        const L = 0.68, C = 0.12;
+                                         aqua: 180, blue: 240, purple: 270, magenta: 300 })
+    // A color mixer track whose ends show what that slider end does: Hue reaches
+    // half-way to the neighbouring band on each side; Saturation runs grey → vivid;
+    // Luminance runs dark → light.
+    function hslTrack(band, channel) {
+        const i = hslBands.indexOf(band);
+        const hue = hslBandHue[band];
+        const prev = hslBandHue[hslBands[(i + 7) % 8]];
+        const next = hslBandHue[hslBands[(i + 1) % 8]];
+        const back = ((hue - prev) + 360) % 360 * 0.5;
+        const fwd = ((next - hue) + 360) % 360 * 0.5;
+        const c = (h, sat, val) => Qt.hsva((((h % 360) + 360) % 360) / 360, sat, val, 1);
+        const S = 0.62, V = 0.82;
         if (channel === "h")
-            return { start: oklch(L, C, hue - 50), q1: oklch(L, C, hue - 25), middle: oklch(L, C, hue),
-                     q3: oklch(L, C, hue + 25), end: oklch(L, C, hue + 50) };
+            return { start: c(hue - back, S, V), q1: c(hue - back / 2, S, V), middle: c(hue, S, V),
+                     q3: c(hue + fwd / 2, S, V), end: c(hue + fwd, S, V) };
         if (channel === "s")
-            return { start: oklch(L, 0, hue), q1: oklch(L, C * 0.5, hue), middle: oklch(L, C, hue),
-                     q3: oklch(L, C * 1.5, hue), end: oklch(L, C * 2, hue) };
-        return { start: oklch(L - 0.22, C, hue), q1: oklch(L - 0.11, C, hue), middle: oklch(L, C, hue),
-                 q3: oklch(L + 0.11, C, hue), end: oklch(L + 0.22, C, hue) };
-    }
-    // OKLCh (L 0…1, chroma, hue in degrees) → sRGB color; chroma is reduced until the
-    // color fits the sRGB gamut so the track never shows clipped, wrong-hue colors.
-    function oklch(L, C, hueDeg) {
-        const h = hueDeg * Math.PI / 180;
-        for (let c = C; c >= 0; c -= 0.005) {
-            const a = c * Math.cos(h), b = c * Math.sin(h);
-            const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
-            const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
-            const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
-            const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
-            const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-                         -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-                         -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
-            if (rgb.every(v => v >= -0.0005 && v <= 1.0005) || c <= 0) {
-                const enc = rgb.map(v => {
-                    const x = Math.max(0, Math.min(1, v));
-                    return x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
-                });
-                return Qt.rgba(enc[0], enc[1], enc[2], 1);
-            }
-        }
-        return Qt.rgba(L, L, L, 1);
+            return { start: c(hue, 0, V), q1: c(hue, S * 0.5, V), middle: c(hue, S, V),
+                     q3: c(hue, Math.min(1, S * 1.3), V), end: c(hue, Math.min(1, S * 1.55), V) };
+        return { start: c(hue, S, 0.38), q1: c(hue, S, 0.6), middle: c(hue, S, V),
+                 q3: c(hue, S * 0.7, 0.92), end: c(hue, S * 0.4, 1.0) };
     }
 }
