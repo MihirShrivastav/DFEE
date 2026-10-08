@@ -446,6 +446,37 @@ void test_export_destination_and_report() {
     std::filesystem::remove(file);
 }
 
+// The desktop app lets people pick any folder and type any name: a folder and file
+// name outside the system code page (here Japanese) must export like any other.
+void test_export_unicode_destination() {
+    const auto file = write_scene("export_unicode", 0, 240, 160);
+    const auto out_dir = std::filesystem::temp_directory_path() / std::filesystem::path(u8"dfee_写真");
+    std::filesystem::remove_all(out_dir);
+    std::filesystem::create_directories(out_dir);
+    const auto target = out_dir / std::filesystem::path(u8"東京 ロール.jpg");
+    dfee::EngineSession session(kRepoRoot);
+
+    dfee::NativeExportRequest r;
+    static_cast<dfee::NativePreviewRenderRequest&>(r) = base_request(file, "portra_400");
+    r.export_format = "jpeg";
+    r.output_path = target;
+    r.write_report = false;
+    dfee::NativeExportResponse res;
+    try {
+        res = session.export_image(r);
+    } catch (const std::exception& ex) {
+        expect(false, std::string("unicode export threw: ") + ex.what());
+    }
+    expect(res.ok, "unicode export: " + res.error.code);
+    expect(std::filesystem::exists(target), "file lands at the unicode path");
+    expect(res.output_path == target, "response reports the unicode path");
+    for (const auto& e : std::filesystem::directory_iterator(out_dir)) {
+        expect(e.path().filename().wstring().find(L".dfee-writing-") == std::wstring::npos, "no temp file left");
+    }
+    std::filesystem::remove_all(out_dir);
+    std::filesystem::remove(file);
+}
+
 }  // namespace
 
 int main() {
@@ -460,6 +491,7 @@ int main() {
         test_proxy_refreshes_after_redecode();
         test_proxy_speed_and_preview_untouched();
         test_export_destination_and_report();
+        test_export_unicode_destination();
     } catch (const std::exception& ex) {
         std::cerr << "FAILED: " << ex.what() << "\n";
         return 1;
