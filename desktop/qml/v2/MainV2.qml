@@ -106,6 +106,8 @@ ApplicationWindow {
     Shortcut { sequence: "B"; enabled: engine.hasBefore && !root.textEntry; onActivated: { root.peekBefore = false; root.compareMode = (root.compareMode + 1) % 3; } }
     Shortcut { sequence: "Ctrl+Z"; enabled: engine.canUndo && !root.textEntry; onActivated: engine.undo() }
     Shortcut { sequences: ["Ctrl+Y", "Ctrl+Shift+Z"]; enabled: engine.canRedo && !root.textEntry; onActivated: engine.redo() }
+    Shortcut { sequence: "Ctrl+Shift+C"; enabled: engine.hasImage && !root.textEntry; onActivated: engine.copyLook() }
+    Shortcut { sequence: "Ctrl+Shift+V"; enabled: engine.hasImage && engine.hasCopiedLook && !root.textEntry; onActivated: engine.pasteLook() }
     Shortcut { sequence: "["; enabled: engine.hasImage && !root.textEntry; onActivated: root.cycleStock(-1) }
     Shortcut { sequence: "]"; enabled: engine.hasImage && !root.textEntry; onActivated: root.cycleStock(1) }
     Shortcut { sequences: ["C", "R"]; enabled: engine.hasImage && !engine.lightroomRoundTrip && !root.textEntry; onActivated: canvas.cropMode ? canvas.applyCropMode() : canvas.enterCropMode() }

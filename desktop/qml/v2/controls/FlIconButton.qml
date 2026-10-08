@@ -11,6 +11,7 @@ Button {
     implicitWidth: 30
     implicitHeight: Theme.controlHeight
     focusPolicy: Qt.NoFocus
+    opacity: enabled ? 1.0 : 0.35
     Accessible.name: tip
     contentItem: Item {
         FlIcon {

@@ -1,0 +1,52 @@
+# Copy look / Paste look. B is cropped first; then A's look is copied (Ctrl+Shift+C),
+# pasted onto B from its Roll thumbnail menu without opening it, and B keeps its own
+# crop. Opening B shows the look as one undoable "Paste look" step.
+open:${SAMPLE_B}
+waitfor:engine.hasImage=true,30000
+crop:0.1,0.1,0.8,0.8
+wait:300
+open:${SAMPLE_A}
+waitfor:engine.currentFile=${SAMPLE_A},15000
+waitfor:engine.hasImage=true,30000
+expect:engine.hasCopiedLook=false
+expect:copyLookButton.enabled=true
+expect:pasteLookButton.enabled=false
+stock:portra_400
+control:film_contrast=150
+wait:300
+key:67+ctrl+shift
+wait:200
+expect:engine.hasCopiedLook=true
+expect:engine.copiedLookLabel=Kodak Portra 400
+expect:pasteLookButton.enabled=true
+call:library.selectFolder=E:/new_raws
+wait:300
+click:traySegmented@0.1,0.5
+wait:300
+set:traySearch.text=7033866904
+wait:300
+rclick:rollTile_7033866904_arw@0.5,0.5
+wait:300
+expect:rollMenu.visible=true
+click:rollPasteLookItem@0.5,0.5
+wait:300
+expect:engine.currentFile=${SAMPLE_A}
+expect:rollTile_7033866904_arw.edited=true
+click:rollTile_7033866904_arw@0.5,0.5
+waitfor:engine.currentFile=${SAMPLE_B},15000
+waitfor:engine.hasImage=true,30000
+expect:engine.stock=portra_400
+expect:engine.filmControls.film_contrast=150
+expect:engine.filmControls.crop_x=0.1
+expect:engine.filmControls.crop_w=0.8
+key:90+ctrl
+wait:300
+expect:engine.stock=none
+expect:engine.filmControls.film_contrast=100
+expect:engine.filmControls.crop_w=0.8
+# Paste on the open photo is one history step too.
+key:86+ctrl+shift
+wait:300
+expect:engine.stock=portra_400
+expect:engine.filmControls.crop_w=0.8
+quit

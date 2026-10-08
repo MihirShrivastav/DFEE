@@ -199,21 +199,29 @@ Rectangle {
         objectName: "fileMenu"
         Action { text: "Open…"; property string keys: "Ctrl+O"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.openRequested() }
         Action { text: "Add Folder…"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.addFolderRequested() }
-        MenuSeparator {}
+        FlMenuSeparator {}
         Action { text: engine.lightroomRoundTrip ? "Save & Return" : "Export"; property string keys: "Ctrl+S"; enabled: engine.hasImage && !engine.exporting; onTriggered: bar.exportRequested() }
     }
     FlMenu {
         id: editMenu
         Action { text: "Undo"; property string keys: "Ctrl+Z"; enabled: engine.canUndo; onTriggered: engine.undo() }
         Action { text: "Redo"; property string keys: "Ctrl+Y"; enabled: engine.canRedo; onTriggered: engine.redo() }
-        MenuSeparator {}
+        FlMenuSeparator {}
+        Action { text: "Copy Look"; property string keys: "Ctrl+Shift+C"; enabled: engine.hasImage; onTriggered: engine.copyLook() }
+        Action {
+            text: engine.hasCopiedLook ? "Paste Look (" + engine.copiedLookLabel + ")" : "Paste Look"
+            property string keys: "Ctrl+Shift+V"
+            enabled: engine.hasImage && engine.hasCopiedLook
+            onTriggered: engine.pasteLook()
+        }
+        FlMenuSeparator {}
         Action { text: "Reset All Edits…"; property string keys: "Ctrl+Shift+R"; enabled: engine.hasImage; onTriggered: bar.resetAllRequested() }
     }
     FlMenu {
         id: photoMenu
         Action { text: "Previous Film"; property string keys: "["; enabled: engine.hasImage; onTriggered: bar.cycleStockRequested(-1) }
         Action { text: "Next Film"; property string keys: "]"; enabled: engine.hasImage; onTriggered: bar.cycleStockRequested(1) }
-        MenuSeparator {}
+        FlMenuSeparator {}
         Action { text: "Crop"; property string keys: "C"; enabled: engine.hasImage && !engine.lightroomRoundTrip; onTriggered: bar.cropRequested() }
     }
     FlMenu {
@@ -221,10 +229,10 @@ Rectangle {
         Action { text: "Edited"; enabled: engine.hasImage; onTriggered: bar.compareChosen(0) }
         Action { text: "Split"; enabled: engine.hasImage && engine.hasBefore; onTriggered: bar.compareChosen(1) }
         Action { text: "Side by Side"; enabled: engine.hasImage && engine.hasBefore; onTriggered: bar.compareChosen(2) }
-        MenuSeparator {}
+        FlMenuSeparator {}
         Action { objectName: "zoomFitAction"; text: "Fit"; property string keys: "Ctrl+0"; enabled: engine.hasImage; onTriggered: bar.fitRequested() }
         Action { objectName: "zoomActualAction"; text: "Zoom to 200%"; property string keys: "Ctrl+1"; enabled: engine.hasImage; onTriggered: bar.actualSizeRequested() }
-        MenuSeparator {}
+        FlMenuSeparator {}
         Action { text: "Library and History"; property string keys: "Ctrl+B"; enabled: !engine.lightroomRoundTrip; onTriggered: bar.sidebarToggled() }
         Action { text: "Roll, Films and Looks"; property string keys: "Ctrl+J"; onTriggered: bar.trayToggled() }
         Action { text: "Adjustments"; property string keys: "Ctrl+Alt+B"; onTriggered: bar.inspectorToggled() }

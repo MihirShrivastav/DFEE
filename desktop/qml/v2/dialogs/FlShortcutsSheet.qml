@@ -16,6 +16,8 @@ FlSheet {
                 { keys: ["Ctrl", "Z"], desc: "Undo" },
                 { keys: ["Ctrl", "Y"], desc: "Redo" },
                 { keys: ["Ctrl", "Shift", "R"], desc: "Reset all edits" },
+                { keys: ["Ctrl", "Shift", "C"], desc: "Copy look" },
+                { keys: ["Ctrl", "Shift", "V"], desc: "Paste look" },
                 { keys: ["Ctrl", "S"], desc: engine.lightroomRoundTrip ? "Save & return to Lightroom" : "Export" }
             ]},
             { title: "Photos", items: [

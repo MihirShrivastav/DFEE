@@ -19,6 +19,7 @@
 #include <QJsonObject>
 #include <QDateTime>
 #include <QProcess>
+#include <QSettings>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -60,6 +61,17 @@ QString sanitizeComponent(const QString& s) {
 }
 }  // namespace
 
+namespace {
+// The app's settings, or the DFEE_UI_SETTINGS ini in UI tests (as ExportPrefs).
+std::unique_ptr<QSettings> uiSettings()
+{
+    const QString ini = qEnvironmentVariable("DFEE_UI_SETTINGS");
+    return ini.isEmpty() ? std::make_unique<QSettings>()
+                         : std::make_unique<QSettings>(ini, QSettings::IniFormat);
+}
+const QString kCopiedLookKey = QStringLiteral("clipboard/look");
+}  // namespace
+
 EngineController::EngineController(PreviewImageProvider* provider,
                                    EditStore* store,
                                    QObject* parent)
@@ -96,6 +108,10 @@ EngineController::EngineController(PreviewImageProvider* provider,
     workerThread_.start();
 
     refreshPresets();
+    // The copied look survives a restart (copy today, paste tomorrow).
+    const QVariantMap copied = QJsonDocument::fromJson(
+        uiSettings()->value(kCopiedLookKey).toString().toUtf8()).object().toVariantMap();
+    if (copied.contains(QStringLiteral("controls"))) copiedLook_ = copied;
     // Every adjustment changes what a tile shows (tiles are "what a click gives").
     connect(this, &EngineController::filmControlsChanged, this, &EngineController::bumpLookEpoch);
 }
@@ -1482,6 +1498,109 @@ void EngineController::applyRecipe(const QVariantMap& recipe, const QString& lab
     emit paramsChanged();
     recordHistory(label);
     scheduleRender();
+}
+
+// ── Copy look / Paste look ──────────────────────────────────────────────
+
+QString EngineController::copiedLookLabel() const
+{
+    if (copiedLook_.isEmpty()) return {};
+    const QString stock = copiedLook_.value(QStringLiteral("stock")).toString();
+    if (stock == QLatin1String("none")) return QStringLiteral("No film");
+    const int i = stockIds_.indexOf(stock);
+    return i >= 0 ? stockNames_.at(i) : stock;
+}
+
+void EngineController::setCopiedLook(const QVariantMap& look)
+{
+    copiedLook_ = look;
+    uiSettings()->setValue(kCopiedLookKey,
+        QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(look)).toJson(QJsonDocument::Compact)));
+    emit copiedLookChanged();
+}
+
+bool EngineController::isOpenPhoto(const QString& photoPath) const
+{
+    const auto norm = [](const QString& p) { return QDir::cleanPath(QDir::fromNativeSeparators(p)); };
+    return !currentFile_.isEmpty() && norm(photoPath).compare(norm(currentFile_), Qt::CaseInsensitive) == 0;
+}
+
+void EngineController::copyLook()
+{
+    if (currentFile_.isEmpty()) return;
+    setCopiedLook(captureRecipe());
+}
+
+void EngineController::copyLookFrom(const QString& photoPath)
+{
+    if (isOpenPhoto(photoPath)) { copyLook(); return; }
+    if (!store_) return;
+    const auto rec = store_->load(photoPath);
+    QVariantMap controls;
+    const QVariantMap full = mergeOnDefaults(rec ? rec->controls : QVariantMap{});
+    for (auto it = full.cbegin(); it != full.cend(); ++it) {
+        if (!isGeometryKey(it.key())) controls.insert(it.key(), it.value());
+    }
+    const QString stock = rec && stockIds_.contains(rec->stock) ? rec->stock : QStringLiteral("none");
+    setCopiedLook({{QStringLiteral("stock"), stock}, {QStringLiteral("controls"), controls}});
+}
+
+void EngineController::pasteLook()
+{
+    if (currentFile_.isEmpty() || copiedLook_.isEmpty()) return;
+    applyRecipe(copiedLook_, QStringLiteral("Paste look"));
+}
+
+void EngineController::pasteLookTo(const QString& photoPath)
+{
+    if (copiedLook_.isEmpty()) return;
+    if (isOpenPhoto(photoPath)) { pasteLook(); return; }
+    if (!store_) return;
+    const auto rec = store_->load(photoPath);
+    QVariantMap controls = mergeOnDefaults(rec ? rec->controls : QVariantMap{});  // keeps its geometry
+    const QVariantMap look = copiedLook_.value(QStringLiteral("controls")).toMap();
+    for (auto it = look.cbegin(); it != look.cend(); ++it) {
+        if (!isGeometryKey(it.key()) && controls.contains(it.key())) controls.insert(it.key(), it.value());
+    }
+    QString stock = copiedLook_.value(QStringLiteral("stock")).toString();
+    if (!stockIds_.contains(stock)) stock = QStringLiteral("none");
+    writeStepToStore(photoPath, stock, controls, QStringLiteral("Paste look"));
+}
+
+void EngineController::resetEditsOf(const QString& photoPath)
+{
+    if (isOpenPhoto(photoPath)) { resetAllEdits(); return; }
+    if (!store_ || !store_->load(photoPath)) return;   // never edited: nothing to reset
+    writeStepToStore(photoPath, QStringLiteral("none"), defaultFilmControls(), QStringLiteral("Reset all"));
+}
+
+void EngineController::writeStepToStore(const QString& photoPath, const QString& stock,
+                                        const QVariantMap& controls, const QString& label)
+{
+    if (!store_ || lightroomRoundTrip_) return;
+    EditRecord rec = store_->load(photoPath).value_or(EditRecord{});
+    if (rec.history.isEmpty()) {
+        // The state before this step becomes the baseline, as opening the photo would seed it.
+        rec.history.append({QStringLiteral("Import"), QString(),
+                            rec.stock.isEmpty() ? QStringLiteral("none") : rec.stock, rec.controls});
+        rec.historyIndex = 0;
+    }
+    // Like an edit on the open photo, a new step drops any redo branch.
+    const int keep = std::clamp(rec.historyIndex + 1, 1, int(rec.history.size()));
+    rec.history.resize(keep);
+    rec.history.append({label, QString(), stock, sparseControls(controls)});
+    rec.historyIndex = int(rec.history.size()) - 1;
+    rec.stock = stock;
+    rec.controls = sparseControls(controls);
+    const bool edited = stock != QLatin1String("none") || !sameControls(controls, defaultFilmControls());
+    store_->save(photoPath, rec, edited);
+}
+
+void EngineController::showInExplorer(const QString& photoPath) const
+{
+    if (photoPath.isEmpty()) return;
+    QProcess::startDetached(QStringLiteral("explorer.exe"),
+                            {QStringLiteral("/select,"), QDir::toNativeSeparators(photoPath)});
 }
 
 void EngineController::refreshPresets()

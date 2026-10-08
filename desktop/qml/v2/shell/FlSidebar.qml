@@ -79,6 +79,28 @@ Rectangle {
                 width: parent.width
                 height: 24
                 Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: "History"; color: Theme.textCaption; font.pixelSize: Theme.fontCaption; font.weight: Font.DemiBold }
+                Row {                                   // Copy look / Paste look
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 2
+                    FlIconButton {
+                        objectName: "copyLookButton"
+                        width: 22; height: 22
+                        iconName: "copy-simple"
+                        tip: "Copy look (Ctrl+Shift+C)"
+                        enabled: engine.hasImage
+                        onClicked: engine.copyLook()
+                    }
+                    FlIconButton {
+                        objectName: "pasteLookButton"
+                        width: 22; height: 22
+                        iconName: "clipboard-text"
+                        tip: engine.hasCopiedLook ? "Paste look: " + engine.copiedLookLabel + " (Ctrl+Shift+V)"
+                                                  : "Paste look (copy a look first)"
+                        enabled: engine.hasImage && engine.hasCopiedLook
+                        onClicked: engine.pasteLook()
+                    }
+                }
             }
             FlHistoryList {
                 id: historyList

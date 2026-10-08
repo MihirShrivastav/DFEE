@@ -70,6 +70,8 @@ class EngineController : public QObject {
     // Per-group "has edits" flags for the v2 inspector's section dots:
     // {film, exposure, tone, color, grain_light, print, fine_tune, + v1 group names} -> bool.
     Q_PROPERTY(QVariantMap editedGroups READ editedGroups NOTIFY filmControlsChanged)
+    Q_PROPERTY(bool hasCopiedLook READ hasCopiedLook NOTIFY copiedLookChanged)
+    Q_PROPERTY(QString copiedLookLabel READ copiedLookLabel NOTIFY copiedLookChanged)
     // Films tiles: stock id -> epoch of its ready tile image (image://look/<id>?e=<epoch>);
     // lookEpoch changes with every adjustment; pending = queued + in flight.
     Q_PROPERTY(QVariantMap lookTiles READ lookTiles NOTIFY lookTilesChanged)
@@ -120,6 +122,20 @@ public:
     Q_INVOKABLE QVariantMap exportTarget() const;
     // Opens Explorer with the last exported file selected.
     Q_INVOKABLE void showLastExport() const;
+
+    // Copy look / Paste look (Lightroom's Copy/Paste Settings without crop): the film
+    // and every look control; crop, straighten, rotation and flips stay with each
+    // photo. The copied look is remembered between launches. The *Of/*To/*From forms
+    // act on any photo: the open one as usual, any other straight in the catalog as
+    // one history step (no render).
+    bool hasCopiedLook() const { return !copiedLook_.isEmpty(); }
+    QString copiedLookLabel() const;
+    Q_INVOKABLE void copyLook();
+    Q_INVOKABLE void copyLookFrom(const QString& photoPath);
+    Q_INVOKABLE void pasteLook();
+    Q_INVOKABLE void pasteLookTo(const QString& photoPath);
+    Q_INVOKABLE void resetEditsOf(const QString& photoPath);
+    Q_INVOKABLE void showInExplorer(const QString& photoPath) const;
     Q_INVOKABLE void setFilmControl(const QString& key, const QVariant& value);
     Q_INVOKABLE void setAutoGrain(bool enabled);
     // Reset every edit — film stock, exposure placement and all develop
@@ -226,6 +242,7 @@ signals:
     void statusChanged();
     void histogramChanged();
     void historyChanged();
+    void copiedLookChanged();
     void presetsChanged();
     void lookTilesChanged();
     void peekChanged();
@@ -307,6 +324,13 @@ private:
     double filmExposure_ = 0.0;
     double shadowLift_ = 0.0;
     QVariantMap filmControls_;
+    QVariantMap copiedLook_;      // {stock, controls (every look key)}; empty = nothing copied
+    void setCopiedLook(const QVariantMap& look);
+    bool isOpenPhoto(const QString& photoPath) const;
+    // A photo other than the open one: append one history step leading to
+    // (stock, controls) and save it, seeding the record's history if it has none.
+    void writeStepToStore(const QString& photoPath, const QString& stock,
+                          const QVariantMap& controls, const QString& label);
     bool grainResolving_ = false;
     ExportNaming::Tokens exportTokens() const;
     ExportPrefs* exportPrefs_ = nullptr;

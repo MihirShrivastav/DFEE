@@ -1,0 +1,9 @@
+# Run a then b with the same -UiSettings ini: a copied look survives a restart.
+open:${SAMPLE_A}
+waitfor:engine.hasImage=true,30000
+stock:portra_400
+wait:300
+key:67+ctrl+shift
+wait:200
+expect:engine.hasCopiedLook=true
+quit

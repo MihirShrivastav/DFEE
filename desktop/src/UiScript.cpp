@@ -110,12 +110,16 @@ void fail(ScriptState& s, const QString& step, const QString& actual)
     qWarning().noquote() << "UISCRIPT FAIL" << step << "(got '" + actual + "')";
 }
 
-void postClick(ScriptState& s, const QString& spec, bool doubleClick = false)
+void postClick(ScriptState& s, const QString& spec, bool doubleClick = false,
+               Qt::MouseButton button = Qt::LeftButton)
 {
     const QString name = spec.section('@', 0, 0);
     const QString frac = spec.section('@', 1, 1);
     auto* item = qobject_cast<QQuickItem*>(resolveRoot(s, name));
-    if (!item) { fail(s, (doubleClick ? "dclick:" : "click:") + spec, "missing"); return; }
+    if (!item) {
+        fail(s, (doubleClick ? "dclick:" : button == Qt::RightButton ? "rclick:" : "click:") + spec, "missing");
+        return;
+    }
     const double fx = frac.isEmpty() ? 0.5 : frac.section(',', 0, 0).toDouble();
     const double fy = frac.isEmpty() ? 0.5 : frac.section(',', 1, 1).toDouble();
     const QPointF p = item->mapToScene(QPointF(item->width() * fx, item->height() * fy));
@@ -125,11 +129,11 @@ void postClick(ScriptState& s, const QString& spec, bool doubleClick = false)
     // events with ts=0 corrupt (the release lost its scene position).
     static ulong timestamp = 1000;
     const auto post = [&](QEvent::Type type, Qt::MouseButtons held) {
-        QMouseEvent event(type, p, p, g, Qt::LeftButton, held, Qt::NoModifier);
+        QMouseEvent event(type, p, p, g, button, held, Qt::NoModifier);
         event.setTimestamp(timestamp += 20);
         QCoreApplication::sendEvent(s.window, &event);
     };
-    post(QEvent::MouseButtonPress, Qt::LeftButton);
+    post(QEvent::MouseButtonPress, button);
     post(QEvent::MouseButtonRelease, Qt::NoButton);
     if (doubleClick) {  // Qt 6 order: press, release, press, dblclick, release
         post(QEvent::MouseButtonPress, Qt::LeftButton);
@@ -201,6 +205,8 @@ void runNext(std::shared_ptr<ScriptState> s)
         postClick(*s, arg);
     } else if (verb == QLatin1String("dclick")) {
         postClick(*s, arg, true);
+    } else if (verb == QLatin1String("rclick")) {  // rclick:<object>@fx,fy (right button)
+        postClick(*s, arg, false, Qt::RightButton);
     } else if (verb == QLatin1String("hover")) {
         postHover(*s, arg);
     } else if (verb == QLatin1String("key")) {

@@ -1,0 +1,4 @@
+# Second half of v2_copy_persist_a (same -UiSettings ini).
+expect:engine.hasCopiedLook=true
+expect:engine.copiedLookLabel=Kodak Portra 400
+quit

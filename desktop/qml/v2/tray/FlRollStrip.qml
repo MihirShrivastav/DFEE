@@ -86,7 +86,48 @@ ListView {
         FlTip { visible: tileHover.hovered; text: modelData.name }
         MouseArea {
             anchors.fill: parent
-            onClicked: strip.openRequested(Qt.resolvedUrl("file:///" + modelData.path.replace(/\\/g, "/")))
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onClicked: (mouse) => {
+                if (mouse.button === Qt.RightButton) {
+                    rollMenu.photoPath = modelData.path;
+                    rollMenu.photoEdited = tile.edited;
+                    rollMenu.popup(tile, mouse.x, mouse.y);
+                } else {
+                    strip.openRequested(Qt.resolvedUrl("file:///" + modelData.path.replace(/\\/g, "/")));
+                }
+            }
+        }
+    }
+    // Right-click on a thumbnail: copy its look, paste the copied look onto it (without
+    // opening it), reset its edits, or show it in Explorer.
+    FlMenu {
+        id: rollMenu
+        objectName: "rollMenu"
+        property string photoPath: ""
+        property bool photoEdited: false
+        Action {
+            objectName: "rollCopyLook"
+            text: "Copy Look"
+            enabled: rollMenu.photoEdited
+            onTriggered: engine.copyLookFrom(rollMenu.photoPath)
+        }
+        Action {
+            objectName: "rollPasteLook"
+            text: engine.hasCopiedLook ? "Paste Look (" + engine.copiedLookLabel + ")" : "Paste Look"
+            enabled: engine.hasCopiedLook
+            onTriggered: engine.pasteLookTo(rollMenu.photoPath)
+        }
+        FlMenuSeparator {}
+        Action {
+            objectName: "rollResetEdits"
+            text: "Reset Edits"
+            enabled: rollMenu.photoEdited
+            onTriggered: engine.resetEditsOf(rollMenu.photoPath)
+        }
+        Action {
+            objectName: "rollShowInExplorer"
+            text: "Show in Explorer"
+            onTriggered: engine.showInExplorer(rollMenu.photoPath)
         }
     }
     Text {
