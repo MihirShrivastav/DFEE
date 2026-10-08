@@ -17,7 +17,7 @@ ListView {
     readonly property int tileTop: 8
     clip: true
     boundsBehavior: Flickable.StopAtBounds
-    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+    ScrollBar.horizontal: FlScrollBar {}
     model: {
         const q = query.trim().toLowerCase();
         const rows = [{ kind: "save" }];

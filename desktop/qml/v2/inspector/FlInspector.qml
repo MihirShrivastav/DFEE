@@ -54,7 +54,7 @@ Rectangle {
         contentWidth: width
         contentHeight: sections.implicitHeight + 24
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        ScrollBar.vertical: FlScrollBar {}
         Column {
             id: sections
             width: flick.width

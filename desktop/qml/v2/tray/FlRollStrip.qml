@@ -23,7 +23,7 @@ ListView {
     readonly property int tileTop: 8
     clip: true
     boundsBehavior: Flickable.StopAtBounds
-    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+    ScrollBar.horizontal: FlScrollBar {}
     model: {
         const q = query.trim().toLowerCase();
         return library.files.filter(f => q.length === 0 || f.name.toLowerCase().indexOf(q) >= 0);

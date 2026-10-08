@@ -40,7 +40,7 @@ Popup {
         clip: true
         model: pop.rows
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        ScrollBar.vertical: FlScrollBar {}
         delegate: Column {
             id: rowItem
             width: list.width

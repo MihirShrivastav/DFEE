@@ -18,6 +18,8 @@ QtObject {
     readonly property color hairline: "#12ffffff"      // rgba(255,255,255,0.07)
     readonly property color card: "#2a2a2d"
     readonly property color popover: "#2a2a2d"
+    readonly property color scrollThumb: "#2c2c2f"        // a shade above `panel`
+    readonly property color scrollThumbHover: "#3a3a3c"
     // Accent + text
     readonly property color accent: "#0a84ff"
     readonly property color accentHover: "#409cff"
@@ -56,10 +58,12 @@ QtObject {
     readonly property int motionFast: 120
     readonly property int motionNormal: 160
 
-    // Informational color tracks (temperature, tint, print head, HSL), muted.
+    // Informational color tracks (temperature, tint, print head, HSL), muted. Each end
+    // shows what moving that way does: positive temperature warms (OKLab +b) and
+    // positive tint adds magenta (OKLab +a), as in Lightroom.
     function colorTrackPalette(key) {
-        if (key === "temp") return { start: "#bd842f", middle: "#6e6e6e", end: "#4d94b2" };
-        if (key === "tint") return { start: "#ad4b9b", middle: "#6e6e6e", end: "#2e9c68" };
+        if (key === "temp") return { start: "#4d94b2", middle: "#6e6e6e", end: "#bd842f" };
+        if (key === "tint") return { start: "#2e9c68", middle: "#6e6e6e", end: "#ad4b9b" };
         if (key === "print_c") return { start: "#b45d4b", middle: "#6e6e6e", end: "#348fa7" };
         if (key === "print_m") return { start: "#459466", middle: "#6e6e6e", end: "#b35295" };
         if (key === "print_y") return { start: "#4b78a9", middle: "#6e6e6e", end: "#c7ad39" };
