@@ -19,11 +19,28 @@ wait:300
 click:exportFolder_default@0.5,0.5
 wait:300
 expect:exportPrefs.nextToOriginal=false
+# Esc straight after the picker closes the sheet (focus came back inside it).
+key:16777216
+wait:300
+expect:exportSheet.visible=false
+key:83+ctrl
+wait:300
+expect:exportSheet.visible=true
 expect:exportFavoriteButton.visible=true
 click:exportFavoriteButton@0.5,0.5
 wait:200
 expect:exportPrefs.favorites.length=1
 expect:exportFavoriteButton.iconName=star-fill
+# The menu marks the current folder; the starred default folder isn't listed twice.
+click:exportFolderBox@0.5,0.5
+wait:300
+expect:exportFolder_default.current=true
+expect:exportSheet.favoriteFolders.length=0
+shot:${TEMP}/v2_export_menu.png
+key:16777216
+wait:300
+expect:exportFolderPicker.visible=false
+expect:exportSheet.visible=true
 click:exportNameField@0.5,0.5
 key:16777233
 click:exportToken_seq@0.5,0.5

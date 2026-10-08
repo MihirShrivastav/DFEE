@@ -91,6 +91,7 @@ qt_add_qml_module(DFEE
         qml/v2/canvas/FlCropToolbar.qml
         qml/v2/controls/FlKeycap.qml
         qml/v2/dialogs/FlExportSheet.qml
+        qml/v2/dialogs/FlFolderMenu.qml
         qml/v2/dialogs/FlShortcutsSheet.qml
         qml/v2/dialogs/FlResetSheet.qml
         qml/v2/shell/FlHistoryList.qml

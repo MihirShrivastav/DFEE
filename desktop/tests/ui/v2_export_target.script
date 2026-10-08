@@ -4,6 +4,12 @@ open:${SAMPLE_A}
 waitfor:engine.hasImage=true,30000
 expect:exportPrefs.folderPath=${TEMP}/exports
 expect:exportPrefs.format=jpeg
+# A closed sheet works out no target (no disk checks on every film or photo change).
+stock:cinestill_50d
+wait:300
+expect:exportNameExample.text=
+stock:none
+wait:300
 key:83+ctrl
 wait:300
 expect:exportSheet.visible=true

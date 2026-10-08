@@ -16,10 +16,12 @@ FlSheet {
         { id: "png16", label: "16-bit PNG" }, { id: "tiff", label: "16-bit TIFF" }
     ]
     // Re-read whenever anything that names the file changes, and on open (the
-    // folder's contents may have changed since).
+    // folder's contents may have changed since). Closed, it checks nothing: a
+    // remembered folder on a slow network share must not stall photo or film changes.
     property int refresh: 0
     onOpened: refresh++
     readonly property var target: {
+        if (!sheet.visible) return ({});
         refresh; exportPrefs.folderPath; exportPrefs.nextToOriginal; exportPrefs.nameTemplate;
         exportPrefs.collision; exportPrefs.format; exportPrefs.sequence;
         engine.currentFile; engine.stock; engine.imageInfo;
@@ -30,22 +32,16 @@ FlSheet {
         return 0;
     }
     function folderName(p) { const parts = p.split("/"); return parts[parts.length - 1] || p; }
-    function shortPath(p) {
-        const parts = p.split("/");
-        return parts.length > 3 ? "…/" + parts.slice(-2).join("/") : p;
+    function samePath(a, b) { return a.toLowerCase() === b.toLowerCase(); }
+    // Favourite and recent folders for the menu; the default folder always has its own
+    // row, and a favourite isn't repeated under recent.
+    readonly property var favoriteFolders: exportPrefs.favorites.filter(p => !samePath(p, exportPrefs.defaultFolder))
+    readonly property var recentFolders: {
+        exportPrefs.favorites;
+        return exportPrefs.recents.filter(p => !exportPrefs.isFavorite(p) && !samePath(p, exportPrefs.defaultFolder));
     }
-    readonly property var folderRows: {
-        const rows = [];
-        for (const p of exportPrefs.favorites)
-            rows.push({ id: "path:" + p, name: folderName(p), detail: p, group: "Favourites" });
-        for (const p of exportPrefs.recents)
-            if (!exportPrefs.isFavorite(p))
-                rows.push({ id: "path:" + p, name: folderName(p), detail: p, group: "Recent" });
-        rows.push({ id: "default", name: "Film Lab Exports", detail: exportPrefs.defaultFolder, group: "Folders" });
-        rows.push({ id: "next", name: "Next to the original", detail: "The photo's own folder", group: "Folders" });
-        rows.push({ id: "choose", name: "Choose folder…", detail: "", group: "Folders" });
-        return rows;
-    }
+    readonly property string currentFolderId: exportPrefs.nextToOriginal ? "next"
+        : exportPrefs.folder.length === 0 ? "default" : "path:" + exportPrefs.folderPath
     function pickFolder(id) {
         if (id === "choose") folderDialog.open();
         else if (id === "next") exportPrefs.useNextToOriginal();
@@ -92,8 +88,8 @@ FlSheet {
                 anchors.right: caret.left
                 anchors.rightMargin: 6
                 anchors.verticalCenter: parent.verticalCenter
-                text: exportPrefs.nextToOriginal ? "Next to the original" : sheet.shortPath(exportPrefs.folderPath)
-                elide: Text.ElideMiddle
+                text: exportPrefs.nextToOriginal ? "Next to the original" : sheet.folderName(exportPrefs.folderPath)
+                elide: Text.ElideRight
                 color: Theme.text
                 font.pixelSize: Theme.fontLabel
             }
@@ -106,18 +102,24 @@ FlSheet {
                 size: 12
                 color: Theme.textTertiary
             }
+            HoverHandler { id: folderHover }
+            FlTip {
+                visible: folderHover.hovered && !folderPicker.visible
+                text: exportPrefs.nextToOriginal ? "Each photo's own folder" : exportPrefs.folderPath
+            }
             MouseArea {
                 anchors.fill: parent
                 onClicked: folderPicker.visible ? folderPicker.close() : folderPicker.open()
             }
-            FlListPopup {
+            FlFolderMenu {
                 id: folderPicker
                 objectName: "exportFolderPicker"
                 y: parent.height + 4
                 width: parent.width
-                rowPrefix: "exportFolder_"
-                rows: sheet.folderRows
-                currentId: exportPrefs.nextToOriginal ? "next" : "path:" + exportPrefs.folderPath
+                favorites: sheet.favoriteFolders
+                recents: sheet.recentFolders
+                defaultFolder: exportPrefs.defaultFolder
+                currentId: sheet.currentFolderId
                 focusReturn: sheet.contentItem
                 onPicked: (id) => sheet.pickFolder(id)
             }
