@@ -27,6 +27,9 @@ wait:150
 expect:v2Root.textEntry=false
 expect:traySearch.text=PORTRA
 set:traySearch.text=
+# The library is the user's own; show the samples' folder whatever is pinned first.
+call:library.selectFolder=E:/new_raws
+wait:300
 click:traySegmented@0.1,0.5
 wait:300
 expect:tray.activeTab=roll

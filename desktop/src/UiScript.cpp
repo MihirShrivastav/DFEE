@@ -218,9 +218,14 @@ void runNext(std::shared_ptr<ScriptState> s)
         QMetaObject::invokeMethod(engine, "setCrop",
             Q_ARG(double, v.value(0).toDouble()), Q_ARG(double, v.value(1).toDouble()),
             Q_ARG(double, v.value(2).toDouble()), Q_ARG(double, v.value(3).toDouble()));
-    } else if (verb == QLatin1String("call")) {  // call:<method>=<string arg>
-        QMetaObject::invokeMethod(engine, arg.section('=', 0, 0).toUtf8().constData(),
-                                  Q_ARG(QString, arg.section('=', 1)));
+    } else if (verb == QLatin1String("call")) {  // call:[<object>.]<method>=<string arg> (default: engine)
+        const QString target = arg.section('=', 0, 0);
+        QObject* obj = target.contains('.') ? resolveRoot(*s, target.section('.', 0, 0)) : engine;
+        const QString method = target.contains('.') ? target.section('.', 1) : target;
+        if (!obj || !QMetaObject::invokeMethod(obj, method.toUtf8().constData(),
+                                               Q_ARG(QString, arg.section('=', 1)))) {
+            fail(*s, step, QStringLiteral("no such method"));
+        }
     } else if (verb == QLatin1String("set")) {  // set:<object>.<property>=<value>
         const QString target = arg.section('=', 0, 0);
         QObject* obj = resolveRoot(*s, target.section('.', 0, 0));
